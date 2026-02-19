@@ -12,9 +12,13 @@
 #include "CirrusAudioFixup.hpp"
 
 // ──────────────────────────────────────────────────────────────
-//  Required IOKit macro
+//  Required IOKit macros
 // ──────────────────────────────────────────────────────────────
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
+
+// In C++ IOKit kexts, 'super' is NOT a built-in keyword (unlike ObjC).
+// This #define is the standard IOKit convention used in every Apple kext.
+#define super IOService
 
 // ──────────────────────────────────────────────────────────────
 //  init — called once per matched device, before start

@@ -1,0 +1,328 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CAFE00000011 /* CirrusAudioFixup.cpp in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = CAFE00000001 /* CirrusAudioFixup.cpp */;
+		};
+		CAFE00000012 /* Kernel.framework in Frameworks */ = {
+			isa = PBXBuildFile;
+			fileRef = CAFE00000004 /* Kernel.framework */;
+		};
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		CAFE00000001 /* CirrusAudioFixup.cpp */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CirrusAudioFixup.cpp;
+			sourceTree = "<group>";
+		};
+		CAFE00000002 /* CirrusAudioFixup.hpp */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CirrusAudioFixup.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE00000003 /* Info.plist */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = Info.plist;
+			sourceTree = "<group>";
+		};
+		CAFE00000004 /* Kernel.framework */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = Kernel.framework;
+			path = System/Library/Frameworks/Kernel.framework;
+			sourceTree = SDKROOT;
+		};
+		CAFE00000005 /* CirrusAudioFixup.kext */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.cfbundle;
+			includeInIndex = 0;
+			path = CirrusAudioFixup.kext;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CAFE00000031 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAFE00000012 /* Kernel.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CAFE00000020 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				CAFE00000021 /* CirrusAudioFixup */,
+				CAFE00000022 /* Frameworks */,
+				CAFE00000023 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CAFE00000021 /* CirrusAudioFixup */ = {
+			isa = PBXGroup;
+			children = (
+				CAFE00000001 /* CirrusAudioFixup.cpp */,
+				CAFE00000002 /* CirrusAudioFixup.hpp */,
+				CAFE00000003 /* Info.plist */,
+			);
+			name = CirrusAudioFixup;
+			path = CirrusAudioFixup;
+			sourceTree = "<group>";
+		};
+		CAFE00000022 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CAFE00000004 /* Kernel.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		CAFE00000023 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CAFE00000005 /* CirrusAudioFixup.kext */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CAFE00000040 /* CirrusAudioFixup */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CAFE00000061 /* Build configuration list for PBXNativeTarget */;
+			buildPhases = (
+				CAFE00000030 /* Sources */,
+				CAFE00000031 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CirrusAudioFixup;
+			productName = CirrusAudioFixup;
+			productReference = CAFE00000005 /* CirrusAudioFixup.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CAFE00000050 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					CAFE00000040 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = CAFE00000060 /* Build configuration list for PBXProject */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CAFE00000020;
+			productRefGroup = CAFE00000023 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CAFE00000040 /* CirrusAudioFixup */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CAFE00000030 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAFE00000011 /* CirrusAudioFixup.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+
+		/* ── Project-level Debug ──────────────────────────── */
+		CAFE00000070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = x86_64;
+				CLANG_ENABLE_MODULES = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+
+		/* ── Project-level Release ───────────────────────── */
+		CAFE00000071 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = x86_64;
+				CLANG_ENABLE_MODULES = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+
+		/* ── Target-level Debug ───────────────────────────── */
+		CAFE00000072 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = x86_64;
+
+				/* Code signing — disabled for Hackintosh / CI builds */
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Manual;
+
+				/* Kext must NOT strip dead code */
+				DEAD_CODE_STRIPPING = NO;
+
+				/* C++ settings required for kext */
+				GCC_ENABLE_CPP_EXCEPTIONS = NO;
+				GCC_ENABLE_CPP_RTTI = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CLANG_CXX_LIBRARY = "libc++";
+
+				/* Kext Info.plist */
+				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+
+				/* Module identity (must match CFBundleIdentifier) */
+				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
+				MODULE_VERSION = 1;
+
+				/* Preprocessor defines needed for IOKit kernel headers */
+				OTHER_CFLAGS = (
+					"-DDEBUG=1",
+					"-DKERNEL",
+					"-DKERNEL_PRIVATE",
+					"-DDRIVER_PRIVATE",
+					"-DAPPLE",
+					"-DNeXT",
+				);
+				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
+
+				/* Linker flags for kext */
+				OTHER_LDFLAGS = (
+					"-lkmod",
+					"-lcc_kext",
+				);
+
+				PRODUCT_BUNDLE_IDENTIFIER = com.hoaugtr.CirrusAudioFixup;
+				PRODUCT_NAME = CirrusAudioFixup;
+				SDKROOT = macosx;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+
+		/* ── Target-level Release ─────────────────────────── */
+		CAFE00000073 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = x86_64;
+
+				/* Code signing — disabled for Hackintosh / CI builds */
+				CODE_SIGN_IDENTITY = "";
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Manual;
+
+				DEAD_CODE_STRIPPING = NO;
+
+				/* C++ settings required for kext */
+				GCC_ENABLE_CPP_EXCEPTIONS = NO;
+				GCC_ENABLE_CPP_RTTI = NO;
+				GCC_OPTIMIZATION_LEVEL = s;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CLANG_CXX_LIBRARY = "libc++";
+
+				/* Kext Info.plist */
+				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+
+				/* Module identity */
+				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
+				MODULE_VERSION = 1;
+
+				/* Preprocessor defines */
+				OTHER_CFLAGS = (
+					"-DKERNEL",
+					"-DKERNEL_PRIVATE",
+					"-DDRIVER_PRIVATE",
+					"-DAPPLE",
+					"-DNeXT",
+				);
+				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
+
+				/* Linker flags for kext */
+				OTHER_LDFLAGS = (
+					"-lkmod",
+					"-lcc_kext",
+				);
+
+				PRODUCT_BUNDLE_IDENTIFIER = com.hoaugtr.CirrusAudioFixup;
+				PRODUCT_NAME = CirrusAudioFixup;
+				SDKROOT = macosx;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CAFE00000060 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAFE00000070 /* Debug */,
+				CAFE00000071 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CAFE00000061 /* Build configuration list for PBXNativeTarget */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAFE00000072 /* Debug */,
+				CAFE00000073 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = CAFE00000050 /* Project object */;
+}

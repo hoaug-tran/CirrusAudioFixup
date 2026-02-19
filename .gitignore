@@ -1,0 +1,14 @@
+# Xcode build artifacts
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspace
+xcuserdata/
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Windows
+Thumbs.db
+desktop.ini

@@ -1,0 +1,93 @@
+name: Build CirrusAudioFixup Kext
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:    # Allow manual trigger from GitHub UI
+
+jobs:
+  build:
+    name: Build on macOS
+    runs-on: macos-13       # macOS Ventura runner
+
+    steps:
+      # ── 1. Checkout code ─────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Show Xcode version for debugging ──────────────
+      - name: Xcode version
+        run: xcodebuild -version
+
+      # ── 3. List schemes (useful for debugging CI) ─────────
+      - name: List schemes
+        run: |
+          xcodebuild -project CirrusAudioFixup/CirrusAudioFixup.xcodeproj \
+            -list 2>&1 || true
+
+      # ── 4. Build Release ──────────────────────────────────
+      - name: Build kext (Release)
+        run: |
+          xcodebuild \
+            -project CirrusAudioFixup/CirrusAudioFixup.xcodeproj \
+            -target CirrusAudioFixup \
+            -configuration Release \
+            -sdk macosx \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR="${GITHUB_WORKSPACE}/build/Release" \
+            build \
+            | xcpretty || xcodebuild \
+              -project CirrusAudioFixup/CirrusAudioFixup.xcodeproj \
+              -target CirrusAudioFixup \
+              -configuration Release \
+              -sdk macosx \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_ALLOWED=NO \
+              CONFIGURATION_BUILD_DIR="${GITHUB_WORKSPACE}/build/Release" \
+              build
+
+      # ── 5. Verify output ──────────────────────────────────
+      - name: Verify kext was built
+        run: |
+          echo "=== Build output ==="
+          ls -la build/Release/
+          echo ""
+          echo "=== Kext contents ==="
+          ls -la build/Release/CirrusAudioFixup.kext/Contents/
+          echo ""
+          echo "=== Info.plist ==="
+          cat build/Release/CirrusAudioFixup.kext/Contents/Info.plist
+          echo ""
+          echo "=== Binary info ==="
+          file build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup
+          otool -l build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup \
+            | grep -A3 "LC_VERSION_MIN\|LC_BUILD_VERSION" || true
+
+      # ── 6. Package kext into zip ──────────────────────────
+      - name: Package kext
+        run: |
+          cd build/Release
+          zip -r CirrusAudioFixup.zip CirrusAudioFixup.kext
+          echo "Kext zipped: $(du -sh CirrusAudioFixup.zip)"
+
+      # ── 7. Upload artifact ────────────────────────────────
+      - name: Upload kext artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CirrusAudioFixup-${{ github.sha }}
+          path: build/Release/CirrusAudioFixup.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 8. Print commit info for traceability ─────────────
+      - name: Build summary
+        run: |
+          echo "✅ Build successful!"
+          echo "Commit : ${{ github.sha }}"
+          echo "Branch : ${{ github.ref_name }}"
+          echo "Runner : $(sw_vers -productVersion)"

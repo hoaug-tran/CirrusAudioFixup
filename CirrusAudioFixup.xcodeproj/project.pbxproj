@@ -11,10 +11,11 @@
 			isa = PBXBuildFile;
 			fileRef = CAFE00000001 /* CirrusAudioFixup.cpp */;
 		};
-		CAFE00000012 /* Kernel.framework in Frameworks */ = {
-			isa = PBXBuildFile;
-			fileRef = CAFE00000004 /* Kernel.framework */;
-		};
+		// NOTE: Kernel.framework is NOT in the build phase.
+		// On Xcode 16+ / macOS SDK 15+, kernel symbols are
+		// provided implicitly via -mkernel + -lkmod + -lcc_kext.
+		// Adding Kernel.framework to the link phase causes:
+		//   ld: framework not found Kernel
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,13 +37,6 @@
 			path = Info.plist;
 			sourceTree = "<group>";
 		};
-		CAFE00000004 /* Kernel.framework */ = {
-			isa = PBXFileReference;
-			lastKnownFileType = wrapper.framework;
-			name = Kernel.framework;
-			path = System/Library/Frameworks/Kernel.framework;
-			sourceTree = SDKROOT;
-		};
 		CAFE00000005 /* CirrusAudioFixup.kext */ = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.cfbundle;
@@ -57,7 +51,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CAFE00000012 /* Kernel.framework in Frameworks */,
+				// Empty — kernel symbols come from -lkmod -lcc_kext via OTHER_LDFLAGS
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,7 +62,6 @@
 			isa = PBXGroup;
 			children = (
 				CAFE00000021 /* CirrusAudioFixup */,
-				CAFE00000022 /* Frameworks */,
 				CAFE00000023 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -84,14 +77,6 @@
 			path = CirrusAudioFixup;
 			sourceTree = "<group>";
 		};
-		CAFE00000022 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				CAFE00000004 /* Kernel.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
 		CAFE00000023 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -105,7 +90,7 @@
 /* Begin PBXNativeTarget section */
 		CAFE00000040 /* CirrusAudioFixup */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = CAFE00000061 /* Build configuration list for PBXNativeTarget */;
+			buildConfigurationList = CAFE00000061;
 			buildPhases = (
 				CAFE00000030 /* Sources */,
 				CAFE00000031 /* Frameworks */,
@@ -126,14 +111,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					CAFE00000040 = {
-						CreatedOnToolsVersion = 15.0;
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
-			buildConfigurationList = CAFE00000060 /* Build configuration list for PBXProject */;
+			buildConfigurationList = CAFE00000060;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -164,63 +149,58 @@
 
 /* Begin XCBuildConfiguration section */
 
-		/* ── Project-level Debug ──────────────────────────── */
+		/* ── Project Debug ────────────────────────────────── */
 		CAFE00000070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ARCHS = x86_64;
-				CLANG_ENABLE_MODULES = NO;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				SDKROOT = macosx;
 			};
 			name = Debug;
 		};
 
-		/* ── Project-level Release ───────────────────────── */
+		/* ── Project Release ──────────────────────────────── */
 		CAFE00000071 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ARCHS = x86_64;
-				CLANG_ENABLE_MODULES = NO;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				SDKROOT = macosx;
 			};
 			name = Release;
 		};
 
-		/* ── Target-level Debug ───────────────────────────── */
+		/* ── Target Debug ─────────────────────────────────── */
 		CAFE00000072 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
 
-				/* Code signing — disabled for Hackintosh / CI builds */
+				// ── Code signing (off for Hackintosh/CI) ──
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_STYLE = Manual;
 
-				/* Kext must NOT strip dead code */
+				// ── Required kext flags ───────────────────
 				DEAD_CODE_STRIPPING = NO;
-
-				/* C++ settings required for kext */
 				GCC_ENABLE_CPP_EXCEPTIONS = NO;
 				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-				CLANG_CXX_LIBRARY = "libc++";
 
-				/* Kext Info.plist */
+				// ── Info.plist ────────────────────────────
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
 
-				/* Module identity (must match CFBundleIdentifier) */
+				// ── Module identity ───────────────────────
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_VERSION = 1;
 
-				/* Preprocessor defines needed for IOKit kernel headers */
+				// ── Preprocessor (kernel mode headers) ────
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -231,7 +211,12 @@
 				);
 				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
 
-				/* Linker flags for kext */
+				// ── Linker flags (NO Kernel.framework ref) ─
+				// -lkmod    : kext module init/fini symbols
+				// -lcc_kext : C++ runtime for kext
+				// Do NOT add -framework Kernel here —
+				// it causes "framework not found Kernel"
+				// on Xcode 16 / SDK 15.x
 				OTHER_LDFLAGS = (
 					"-lkmod",
 					"-lcc_kext",
@@ -246,36 +231,29 @@
 			name = Debug;
 		};
 
-		/* ── Target-level Release ─────────────────────────── */
+		/* ── Target Release ───────────────────────────────── */
 		CAFE00000073 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
 
-				/* Code signing — disabled for Hackintosh / CI builds */
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_STYLE = Manual;
 
 				DEAD_CODE_STRIPPING = NO;
-
-				/* C++ settings required for kext */
 				GCC_ENABLE_CPP_EXCEPTIONS = NO;
 				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_OPTIMIZATION_LEVEL = s;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-				CLANG_CXX_LIBRARY = "libc++";
 
-				/* Kext Info.plist */
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
 
-				/* Module identity */
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_VERSION = 1;
 
-				/* Preprocessor defines */
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",
@@ -285,7 +263,6 @@
 				);
 				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
 
-				/* Linker flags for kext */
 				OTHER_LDFLAGS = (
 					"-lkmod",
 					"-lcc_kext",

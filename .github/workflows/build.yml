@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: Build on macOS
-    runs-on: macos-13       # macOS Ventura runner
+    runs-on: macos-latest   # Use latest available macOS runner
 
     steps:
       # ── 1. Checkout code ─────────────────────────────────

@@ -5,33 +5,44 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:    # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
     name: Build on macOS
-    runs-on: macos-latest   # Use latest available macOS runner
+    runs-on: macos-latest
 
     steps:
-      # ── 1. Checkout code ─────────────────────────────────
+      # ── 1. Checkout ───────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Show Xcode version for debugging ──────────────
+      # ── 2. Debug: show where we are and what exists ───────
+      - name: Show workspace structure
+        run: |
+          echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
+          echo "PWD = $(pwd)"
+          echo ""
+          echo "=== Root contents ==="
+          ls -la
+          echo ""
+          echo "=== .xcodeproj exists? ==="
+          ls -la CirrusAudioFixup.xcodeproj/ || echo "NOT FOUND at root"
+
+      # ── 3. Xcode version ──────────────────────────────────
       - name: Xcode version
         run: xcodebuild -version
 
-      # ── 3. List schemes (useful for debugging CI) ─────────
-      - name: List schemes
+      # ── 4. List targets ───────────────────────────────────
+      - name: List targets
         run: |
-          xcodebuild -project CirrusAudioFixup/CirrusAudioFixup.xcodeproj \
-            -list 2>&1 || true
+          xcodebuild -project CirrusAudioFixup.xcodeproj -list
 
-      # ── 4. Build Release ──────────────────────────────────
+      # ── 5. Build Release ──────────────────────────────────
       - name: Build kext (Release)
         run: |
           xcodebuild \
-            -project CirrusAudioFixup/CirrusAudioFixup.xcodeproj \
+            -project CirrusAudioFixup.xcodeproj \
             -target CirrusAudioFixup \
             -configuration Release \
             -sdk macosx \
@@ -39,20 +50,10 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
             CONFIGURATION_BUILD_DIR="${GITHUB_WORKSPACE}/build/Release" \
-            build \
-            | xcpretty || xcodebuild \
-              -project CirrusAudioFixup/CirrusAudioFixup.xcodeproj \
-              -target CirrusAudioFixup \
-              -configuration Release \
-              -sdk macosx \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_ALLOWED=NO \
-              CONFIGURATION_BUILD_DIR="${GITHUB_WORKSPACE}/build/Release" \
-              build
+            build
 
-      # ── 5. Verify output ──────────────────────────────────
-      - name: Verify kext was built
+      # ── 6. Verify output ──────────────────────────────────
+      - name: Verify kext
         run: |
           echo "=== Build output ==="
           ls -la build/Release/
@@ -60,23 +61,22 @@ jobs:
           echo "=== Kext contents ==="
           ls -la build/Release/CirrusAudioFixup.kext/Contents/
           echo ""
-          echo "=== Info.plist ==="
-          cat build/Release/CirrusAudioFixup.kext/Contents/Info.plist
-          echo ""
-          echo "=== Binary info ==="
+          echo "=== Binary arch ==="
           file build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup
+          echo ""
+          echo "=== Min OS version ==="
           otool -l build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup \
             | grep -A3 "LC_VERSION_MIN\|LC_BUILD_VERSION" || true
 
-      # ── 6. Package kext into zip ──────────────────────────
+      # ── 7. Package ────────────────────────────────────────
       - name: Package kext
         run: |
           cd build/Release
           zip -r CirrusAudioFixup.zip CirrusAudioFixup.kext
-          echo "Kext zipped: $(du -sh CirrusAudioFixup.zip)"
+          echo "Packaged: $(du -sh CirrusAudioFixup.zip)"
 
-      # ── 7. Upload artifact ────────────────────────────────
-      - name: Upload kext artifact
+      # ── 8. Upload artifact ────────────────────────────────
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CirrusAudioFixup-${{ github.sha }}
@@ -84,10 +84,11 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # ── 8. Print commit info for traceability ─────────────
+      # ── 9. Summary ────────────────────────────────────────
       - name: Build summary
         run: |
           echo "✅ Build successful!"
           echo "Commit : ${{ github.sha }}"
           echo "Branch : ${{ github.ref_name }}"
-          echo "Runner : $(sw_vers -productVersion)"
+          echo "macOS  : $(sw_vers -productVersion)"
+          echo "Xcode  : $(xcodebuild -version | head -1)"

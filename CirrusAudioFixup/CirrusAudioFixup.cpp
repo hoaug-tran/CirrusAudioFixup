@@ -4,6 +4,7 @@
 //
 
 #include "CirrusAudioFixup.hpp"
+#include <IOKit/IOMemoryDescriptor.h>
 
 #define super IOService
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
@@ -63,6 +64,47 @@ bool CirrusAudioFixup::start(IOService *provider) {
     mProvider = provider;
     logProviderInfo(provider);
     dumpProviderProperties(provider);
+
+    // AMD GPIO MMIO Toggle (Pin 6)
+    // AMDI0030 Memory32Fixed resource is at 0xFED81500
+    IOMemoryDescriptor *bmd = IOMemoryDescriptor::withPhysicalAddress(0xFED81500, 0x400, kIODirectionInOut);
+    if (bmd) {
+        if (bmd->prepare() == kIOReturnSuccess) {
+            IOMemoryMap *map = bmd->map();
+            if (map) {
+                volatile UInt32 *gpioBase = (volatile UInt32 *)map->getVirtualAddress();
+                
+                UInt32 val = gpioBase[6];
+                CIRRUS_LOG("AMD GPIO 6 old value: 0x%08X", val);
+                
+                // Toggle sequence: Force LOW, sleep, force HIGH, sleep
+                // Pull LOW (Reset active)
+                val &= ~(1 << 22); // OUTPUT_VALUE_OFF = 0
+                val |= (1 << 23);  // OUTPUT_ENABLE_OFF = 1
+                gpioBase[6] = val;
+                
+                UInt32 verifyLow = gpioBase[6];
+                CIRRUS_LOG("AMD GPIO 6 LOW verify = 0x%08X", verifyLow);
+                
+                IOSleep(5);
+                
+                // Pull HIGH (Reset inactive)
+                val = gpioBase[6];
+                val |= (1 << 22); // OUTPUT_VALUE_OFF = 1
+                val |= (1 << 23); // OUTPUT_ENABLE_OFF = 1
+                gpioBase[6] = val;
+                
+                UInt32 verifyHigh = gpioBase[6];
+                CIRRUS_LOG("AMD GPIO 6 HIGH verify = 0x%08X", verifyHigh);
+                
+                map->release();
+            }
+            bmd->complete();
+        }
+        bmd->release();
+    }
+    
+    IOSleep(15);
 
     if (!setupProbeTimer()) {
         CIRRUS_ERR("probe timer setup failed");

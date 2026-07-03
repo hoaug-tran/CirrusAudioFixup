@@ -593,6 +593,23 @@ bool CirrusAudioFixup::writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, 
     return success;
 }
 
+bool CirrusAudioFixup::updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source) {
+    UInt32 currentVal = 0;
+    if (!readRegister(amp, reg, &currentVal, source)) {
+        CIRRUS_LOG("updateRegisterBits failed: read error at 0x%05X", reg);
+        return false;
+    }
+    
+    UInt32 newVal = (currentVal & ~mask) | (value & mask);
+    
+    // Only write if there's a change
+    if (newVal == currentVal) {
+        return true;
+    }
+    
+    return writeRegister(amp, reg, newVal, source);
+}
+
 static uint32_t crc32_le(uint32_t crc, uint8_t const *buf, size_t len) {
     crc = ~crc;
     while (len--) {

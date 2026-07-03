@@ -146,6 +146,11 @@ private:
 
     bool cs35l41_init_mac(CS35L41Amp &amp);
     
+    // Phase 4A.2A: Test Key Unlock/Lock
+    bool cs35l41_test_key_unlock(CS35L41Amp &amp);
+    bool cs35l41_test_key_lock(CS35L41Amp &amp);
+    bool cs35l41_apply_phase4A2(CS35L41Amp &amp);
+    
     void dumpAllRegisters(CS35L41Amp &amp);
     void testRegisterConsistency(CS35L41Amp &amp);
     void runTimeBasedFSMCheck(CS35L41Amp &amp);

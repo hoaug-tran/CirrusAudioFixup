@@ -352,6 +352,10 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
         
         if (bootArgStrEquals("cirrus_phase", "4A1")) {
             cs35l41_init_mac(amp);
+        } else if (bootArgStrEquals("cirrus_phase", "4A2A")) {
+            if (cs35l41_init_mac(amp)) {
+                cs35l41_apply_phase4A2(amp);
+            }
         }
     }
 
@@ -811,4 +815,61 @@ void CirrusAudioFixup::runTimeBasedFSMCheck(CS35L41Amp &amp) {
     } else {
         CIRRUS_LOG("Amp %s: FSM is running! (CRCs differ)", amp.name);
     }
+}
+
+bool CirrusAudioFixup::cs35l41_test_key_unlock(CS35L41Amp &amp) {
+    bool ret1 = writeRegister(amp, CS35L41_TEST_KEY_CTL, 0x00000055);
+    bool ret2 = writeRegister(amp, CS35L41_TEST_KEY_CTL, 0x000000AA);
+    
+    if (!ret1 || !ret2) {
+        CIRRUS_ERR("Amp %s: Failed to unlock test key", amp.name);
+        return false;
+    }
+    
+    CIRRUS_LOG("Amp %s: Test Key Unlocked successfully.", amp.name);
+    return true;
+}
+
+bool CirrusAudioFixup::cs35l41_test_key_lock(CS35L41Amp &amp) {
+    bool ret1 = writeRegister(amp, CS35L41_TEST_KEY_CTL, 0x000000CC);
+    bool ret2 = writeRegister(amp, CS35L41_TEST_KEY_CTL, 0x00000033);
+    
+    if (!ret1 || !ret2) {
+        CIRRUS_ERR("Amp %s: Failed to lock test key", amp.name);
+        return false;
+    }
+    
+    CIRRUS_LOG("Amp %s: Test Key Locked successfully.", amp.name);
+    return true;
+}
+
+bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
+    CIRRUS_LOG("Amp %s: --- Starting Phase 4A.2A ---", amp.name);
+    
+    // 1. Unlock Test Key
+    if (!cs35l41_test_key_unlock(amp)) {
+        return false;
+    }
+    
+    UInt32 crc_unlock = calculateRegistersCRC32(amp);
+    char propName[64];
+    snprintf(propName, sizeof(propName), "Cirrus_CRC_Unlock_%s", amp.name);
+    setProperty(propName, crc_unlock, 32);
+    CIRRUS_LOG("Amp %s: CRC after Unlock -> 0x%08X", amp.name, crc_unlock);
+    
+    // TODO: 4A.2B (Errata) will go here
+    // TODO: 4A.2C (OTP) will go here
+    
+    // 4. Lock Test Key
+    if (!cs35l41_test_key_lock(amp)) {
+        return false;
+    }
+    
+    UInt32 crc_lock = calculateRegistersCRC32(amp);
+    snprintf(propName, sizeof(propName), "Cirrus_CRC_Lock_%s", amp.name);
+    setProperty(propName, crc_lock, 32);
+    CIRRUS_LOG("Amp %s: CRC after Lock -> 0x%08X", amp.name, crc_lock);
+    
+    CIRRUS_LOG("Amp %s: Phase 4A.2A completed. Unlock/Lock sequence executed.", amp.name);
+    return true;
 }

@@ -74,11 +74,16 @@ bool CirrusAudioFixup::start(IOService *provider) {
         if (iter) {
             IOService *amdi0030 = OSDynamicCast(IOService, iter->getNextObject());
             if (amdi0030) {
-                IOMemoryDescriptor *bmd0 = amdi0030->getDeviceMemoryWithIndex(0);
-                if (bmd0 && bmd0->getLength() >= 0x400) {
-                    CIRRUS_LOG("Found AMDI0030 base physical address: 0x%llX", (unsigned long long)bmd0->getPhysicalAddress());
-                    bmd0->retain();
-                    bmd = bmd0;
+                if (amdi0030->open(this)) {
+                    IOMemoryDescriptor *bmd0 = amdi0030->getDeviceMemoryWithIndex(0);
+                    if (bmd0 && bmd0->getLength() >= 0x400) {
+                        CIRRUS_LOG("Found AMDI0030 base physical address: 0x%llX", (unsigned long long)bmd0->getPhysicalAddress());
+                        bmd0->retain();
+                        bmd = bmd0;
+                    }
+                    amdi0030->close(this);
+                } else {
+                    CIRRUS_ERR("Failed to open AMDI0030");
                 }
             }
             iter->release();
@@ -135,7 +140,9 @@ bool CirrusAudioFixup::start(IOService *provider) {
     setProperty("CirrusBootArgParsed", probeEnabled ? kOSBooleanTrue : kOSBooleanFalse);
 
     if (probeEnabled) {
-        scheduleReadOnlyProbe(10000);
+        uint32_t delayMs = 100;
+        PE_parse_boot_argn("cirrus_probe_delay", &delayMs, sizeof(delayMs));
+        scheduleReadOnlyProbe(delayMs);
     } else {
         CIRRUS_LOG("passive mode; add boot-arg cirrus_probe=1 for read-only I2C probe");
     }
@@ -328,6 +335,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
 
     if (amp.present) {
         dumpRegisters(amp);
+        testRegisterConsistency(amp);
     }
 
     CIRRUS_LOG("amp %s devid=0x%08X revision=0x%08X present=%s",
@@ -443,6 +451,51 @@ void CirrusAudioFixup::dumpRegisters(CS35L41Amp &amp) {
         if (readRegister(amp, regs[i].addr, &val)) {
             snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_%s", amp.name, regs[i].name);
             setProperty(propName, val, 32);
+        }
+    }
+}
+
+void CirrusAudioFixup::testRegisterConsistency(CS35L41Amp &amp) {
+    UInt32 val1 = 0, val2 = 0;
+    
+    CIRRUS_LOG("Amp %s: Starting Register Consistency Test", amp.name);
+    
+    // Phase A: GLOBAL_ENABLE
+    if (readRegister(amp, CS35L41_PWR_CTRL1_REG, &val1)) {
+        IOSleep(5000); // 5 seconds
+        if (readRegister(amp, CS35L41_PWR_CTRL1_REG, &val2)) {
+            setProperty("Cirrus_Test_GLOBAL_ENABLE_Match", (val1 == val2) ? kOSBooleanTrue : kOSBooleanFalse);
+            CIRRUS_LOG("Amp %s Phase A: GLOBAL_ENABLE old=0x%08X new=0x%08X", amp.name, val1, val2);
+        }
+    }
+    
+    // Phase B: PWR_CTRL2
+    if (readRegister(amp, CS35L41_PWR_CTRL2_REG, &val1)) {
+        IOSleep(5000); // 5 seconds
+        if (readRegister(amp, CS35L41_PWR_CTRL2_REG, &val2)) {
+            setProperty("Cirrus_Test_PWR_CTRL2_Match", (val1 == val2) ? kOSBooleanTrue : kOSBooleanFalse);
+            CIRRUS_LOG("Amp %s Phase B: PWR_CTRL2 old=0x%08X new=0x%08X", amp.name, val1, val2);
+        }
+    }
+    
+    // Phase C: DSP_MBOX_1
+    if (readRegister(amp, CS35L41_DSP_MBOX_1_REG, &val1)) {
+        IOSleep(5000); // 5 seconds
+        if (readRegister(amp, CS35L41_DSP_MBOX_1_REG, &val2)) {
+            setProperty("Cirrus_Test_MBOX1_Match", (val1 == val2) ? kOSBooleanTrue : kOSBooleanFalse);
+            CIRRUS_LOG("Amp %s Phase C: MBOX1 old=0x%08X new=0x%08X", amp.name, val1, val2);
+        }
+    }
+    
+    // Phase D: Write Test on IRQ1_STATUS1
+    UInt32 oldIrq = 0, newIrq = 0;
+    if (readRegister(amp, CS35L41_IRQ1_STATUS1_REG, &oldIrq)) {
+        CIRRUS_LOG("Amp %s Phase D: Write Test old_IRQ=0x%08X", amp.name, oldIrq);
+        if (writeRegister(amp, CS35L41_IRQ1_STATUS1_REG, oldIrq)) {
+            if (readRegister(amp, CS35L41_IRQ1_STATUS1_REG, &newIrq)) {
+                setProperty("Cirrus_Test_Write_Success", kOSBooleanTrue);
+                CIRRUS_LOG("Amp %s Phase D: Write Test new_IRQ=0x%08X", amp.name, newIrq);
+            }
         }
     }
 }

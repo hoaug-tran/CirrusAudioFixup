@@ -28,12 +28,15 @@ bool CirrusAudioFixup::init(OSDictionary *properties) {
         return false;
     }
 
+    setProperty("CirrusReachedInit", kOSBooleanTrue);
     CIRRUS_LOG("init");
     return true;
 }
 
 IOService *CirrusAudioFixup::probe(IOService *provider, SInt32 *score) {
     IOService *result = super::probe(provider, score);
+
+    setProperty("CirrusReachedProbe", kOSBooleanTrue);
 
     CIRRUS_LOG("probe provider=%s class=%s score=%d",
                provider ? provider->getName() : "null",
@@ -48,6 +51,7 @@ IOService *CirrusAudioFixup::probe(IOService *provider, SInt32 *score) {
 }
 
 bool CirrusAudioFixup::start(IOService *provider) {
+    setProperty("CirrusReachedStart", kOSBooleanTrue);
     CIRRUS_LOG("START CALLED OK");
     CIRRUS_LOG("start");
 
@@ -187,6 +191,7 @@ bool CirrusAudioFixup::setupProbeTimer() {
         return false;
     }
 
+    setProperty("CirrusTimerCreated", kOSBooleanTrue);
     return true;
 }
 
@@ -198,6 +203,7 @@ void CirrusAudioFixup::scheduleReadOnlyProbe(UInt32 delayMs) {
 void CirrusAudioFixup::probeTimerFired(OSObject *owner, IOTimerEventSource *sender) {
     CirrusAudioFixup *self = OSDynamicCast(CirrusAudioFixup, owner);
     if (self) {
+        self->setProperty("CirrusTimerFired", kOSBooleanTrue);
         self->runReadOnlyProbe();
     }
 }
@@ -254,12 +260,14 @@ bool CirrusAudioFixup::transferToAddress(UInt8 address,
     request.readBuffer = readBuffer;
     request.readLength = readLength;
 
+    setProperty("CirrusTransferCalled", kOSBooleanTrue);
     IOReturn ret = mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS,
                                                    true,
                                                    &request,
                                                    nullptr,
                                                    nullptr,
                                                    nullptr);
+    setProperty("CirrusTransferRet", (uint64_t)ret, 32);
     if (ret != kIOReturnSuccess) {
         CIRRUS_ERR("transfer address=0x%02X write=%u read=%u ret=0x%08X",
                    address, writeLength, readLength, ret);

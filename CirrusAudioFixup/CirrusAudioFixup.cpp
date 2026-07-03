@@ -348,6 +348,10 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
     if (amp.present) {
         dumpAllRegisters(amp);
         runTimeBasedFSMCheck(amp);
+        
+        if (bootArgEnabled("cirrus_phase=4A1")) {
+            cs35l41_init_mac(amp);
+        }
     }
 
     CIRRUS_LOG("amp %s devid=0x%08X revision=0x%08X present=%s",
@@ -608,6 +612,64 @@ bool CirrusAudioFixup::updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 ma
     }
     
     return writeRegister(amp, reg, newVal, source);
+}
+
+bool CirrusAudioFixup::pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 targetVal, UInt32 timeoutMs, TraceSource source) {
+    UInt32 val = 0;
+    for (UInt32 i = 0; i < timeoutMs; i++) {
+        if (!readRegister(amp, reg, &val, source)) {
+            return false;
+        }
+        if ((val & mask) == targetVal) {
+            return true;
+        }
+        IODelay(1000); // 1 ms delay
+    }
+    CIRRUS_ERR("pollRegisterBit timeout for reg 0x%05X, mask 0x%X", reg, mask);
+    return false;
+}
+
+bool CirrusAudioFixup::cs35l41_init_mac(CS35L41Amp &amp) {
+    CIRRUS_LOG("Amp %s: Starting Soft Reset...", amp.name);
+    
+    // 1. Soft Reset
+    if (!writeRegister(amp, CS35L41_SW_RESET, CS35L41_SW_RESET_VAL)) {
+        CIRRUS_ERR("Amp %s: Failed to send SW_RESET", amp.name);
+        return false;
+    }
+    
+    // Wait for DSP to reboot
+    IOSleep(3);
+    
+    // 2. Poll OTP_BOOT_DONE
+    if (!pollRegisterBit(amp, CS35L41_IRQ1_STATUS4, CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE, 100)) {
+        CIRRUS_ERR("Amp %s: OTP_BOOT_DONE polling timeout!", amp.name);
+        return false;
+    }
+    
+    CIRRUS_LOG("Amp %s: OTP Boot Done successfully", amp.name);
+    
+    // 3. Verify Revision
+    UInt32 revid = 0;
+    if (!readRegister(amp, 0x00004, &revid)) {
+        CIRRUS_ERR("Amp %s: Failed to read REVID", amp.name);
+        return false;
+    }
+    
+    revid = revid & 0xFF; // Only keep the lower byte
+    
+    switch (revid) {
+        case 0xB0:
+        case 0xB1:
+        case 0xB2:
+            CIRRUS_LOG("Amp %s: Revision 0x%02X detected", amp.name, revid);
+            break;
+        default:
+            CIRRUS_LOG("Amp %s: Unknown Revision 0x%02X", amp.name, revid);
+            break;
+    }
+    
+    return true;
 }
 
 static uint32_t crc32_le(uint32_t crc, uint8_t const *buf, size_t len) {

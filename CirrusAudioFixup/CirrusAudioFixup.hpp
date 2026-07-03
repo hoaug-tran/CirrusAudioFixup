@@ -141,7 +141,9 @@ private:
     bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value, TraceSource source = TRACE_OTHER);
     bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, TraceSource source = TRACE_OTHER);
     bool updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source = TRACE_OTHER);
+    bool pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 targetVal, UInt32 timeoutMs, TraceSource source = TRACE_OTHER);
 
+    bool cs35l41_init_mac(CS35L41Amp &amp);
     
     void dumpAllRegisters(CS35L41Amp &amp);
     void testRegisterConsistency(CS35L41Amp &amp);

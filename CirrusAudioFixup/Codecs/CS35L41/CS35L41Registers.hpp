@@ -3,6 +3,11 @@
 
 #include <IOKit/IOLib.h>
 
+#define CS35L41_SW_RESET        0x00000000
+#define CS35L41_SW_RESET_VAL    0x00005A00
+#define CS35L41_IRQ1_STATUS4    0x0001001C
+#define CS35L41_OTP_BOOT_DONE   0x00000002
+
 struct RegisterDesc {
     uint32_t addr;
     const char* name;

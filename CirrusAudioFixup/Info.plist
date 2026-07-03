@@ -3,7 +3,6 @@
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- ── Bundle metadata ───────────────────────────────── -->
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
 
@@ -31,15 +30,6 @@
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2025 hoaugtr. All rights reserved.</string>
 
-    <!-- ── Kernel dependencies ───────────────────────────── -->
-    <!--
-        KPI versions for macOS 13 Ventura (Darwin 22.x):
-          com.apple.kpi.iokit   22.0
-          com.apple.kpi.libkern 22.0
-          com.apple.kpi.mach    22.0
-        Using 20.0 so the kext also loads on Monterey/Big Sur if needed.
-        Change to 22.0 if you want strict Ventura-only enforcement.
-    -->
     <key>OSBundleLibraries</key>
     <dict>
         <key>com.apple.kpi.iokit</key>
@@ -52,24 +42,9 @@
         <string>20.0</string>
     </dict>
 
-    <!-- ── IOKit personalities ───────────────────────────── -->
-    <!--
-        We match on VoodooI2CDeviceNub created by VoodooI2C for the
-        ACPI devices with HID "CLSA0100" (SPL/SPR in your SSDT).
-
-        IONameMatch is checked against the IOName property that
-        VoodooI2C copies from the ACPI _HID / _CID values.
-
-        Two separate personalities are declared so we explicitly
-        log which device matched (SPL = left 0x40, SPR = right 0x41).
-        Both are handled by the same IOClass; the driver reads _UID
-        at runtime to know which channel it's controlling.
-    -->
     <key>IOKitPersonalities</key>
     <dict>
-
-        <!-- Left channel (SPL, UID=0, addr 0x40) -->
-        <key>CirrusAudioFixup-SPL</key>
+        <key>CirrusAudioFixup-CLSA0100</key>
         <dict>
             <key>CFBundleIdentifier</key>
             <string>com.hoaugtr.CirrusAudioFixup</string>
@@ -77,18 +52,15 @@
             <key>IOClass</key>
             <string>CirrusAudioFixup</string>
 
-            <!-- Match any VoodooI2CDeviceNub whose ACPI name is CLSA0100 -->
             <key>IOProviderClass</key>
             <string>VoodooI2CDeviceNub</string>
 
             <key>IONameMatch</key>
             <string>CLSA0100</string>
 
-            <!-- High probe score so we win over generic drivers -->
             <key>IOProbeScore</key>
             <integer>9000</integer>
         </dict>
-
     </dict>
 </dict>
 </plist>

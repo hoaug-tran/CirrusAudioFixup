@@ -2,51 +2,79 @@
 //  CirrusAudioFixup.hpp
 //  CirrusAudioFixup
 //
-//  Skeleton kext for Cirrus Logic CS35L41 on Hackintosh
-//  Supports: macOS Ventura 13.0+
-//  Bundle: com.hoaugtr.CirrusAudioFixup
-//
 
 #ifndef CirrusAudioFixup_hpp
 #define CirrusAudioFixup_hpp
 
 #include <IOKit/IOService.h>
 #include <IOKit/IOLib.h>
+#include <IOKit/IOTimerEventSource.h>
+#include <libkern/c++/OSCollectionIterator.h>
 
-// ──────────────────────────────────────────────────────────────
-//  Log helpers
-// ──────────────────────────────────────────────────────────────
-#define LOG_PREFIX     "[CirrusAudioFixup] "
-#define CIRRUS_LOG(fmt, ...)  IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
-#define CIRRUS_ERR(fmt, ...)  IOLog(LOG_PREFIX "ERROR: " fmt "\n", ##__VA_ARGS__)
+#define LOG_PREFIX "[CirrusAudioFixup] "
+#define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
+#define CIRRUS_ERR(fmt, ...) IOLog(LOG_PREFIX "ERROR: " fmt "\n", ##__VA_ARGS__)
 
-// ──────────────────────────────────────────────────────────────
-//  CS35L41 constants
-// ──────────────────────────────────────────────────────────────
+#define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
+
 #define CS35L41_I2C_ADDR_LEFT   0x40
 #define CS35L41_I2C_ADDR_RIGHT  0x41
+#define CS35L41_DEVICE_ID       0x00035A40
+#define CS35L41_DEVID_REG       0x00000000
+#define CS35L41_REVID_REG       0x00000004
 
-// ──────────────────────────────────────────────────────────────
-//  Driver class declaration
-// ──────────────────────────────────────────────────────────────
+struct VoodooI2CAddressedTransfer {
+    UInt8 address;
+    UInt8 *writeBuffer;
+    UInt16 writeLength;
+    UInt8 *readBuffer;
+    UInt16 readLength;
+};
+
+struct CS35L41Amp {
+    const char *name;
+    UInt8 address;
+    bool present;
+    UInt32 deviceId;
+    UInt32 revisionId;
+};
+
 class CirrusAudioFixup : public IOService {
     OSDeclareDefaultStructors(CirrusAudioFixup)
 
 public:
-    // IOKit lifecycle
-    virtual bool     init(OSDictionary *properties = nullptr) override;
-    virtual IOService *probe(IOService *provider, SInt32 *score) override;
-    virtual bool     start(IOService *provider) override;
-    virtual void     stop(IOService *provider) override;
-    virtual void     free() override;
+    bool init(OSDictionary *properties = nullptr) override;
+    IOService *probe(IOService *provider, SInt32 *score) override;
+    bool start(IOService *provider) override;
+    void stop(IOService *provider) override;
+    void free() override;
 
 private:
-    // Whether this instance is the left (0x40) or right (0x41) channel
-    bool mIsLeft  { false };
-    uint8_t mI2CAddress { 0 };
+    IOService *mProvider { nullptr };
+    IOWorkLoop *mWorkLoop { nullptr };
+    IOTimerEventSource *mProbeTimer { nullptr };
 
-    // Detect which channel this instance controls via _UID
-    void detectChannel(IOService *provider);
+    CS35L41Amp mAmps[2] {
+        { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0 },
+        { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0 },
+    };
+
+    bool bootArgEnabled(const char *name);
+    void logProviderInfo(IOService *provider);
+    void dumpProviderProperties(IOService *provider);
+    bool setupProbeTimer();
+    void scheduleReadOnlyProbe(UInt32 delayMs);
+    void runReadOnlyProbe();
+    void probeAmp(CS35L41Amp &amp);
+
+    bool transferToAddress(UInt8 address,
+                           UInt8 *writeBuffer,
+                           UInt16 writeLength,
+                           UInt8 *readBuffer,
+                           UInt16 readLength);
+    bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value);
+
+    static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
 };
 
 #endif /* CirrusAudioFixup_hpp */

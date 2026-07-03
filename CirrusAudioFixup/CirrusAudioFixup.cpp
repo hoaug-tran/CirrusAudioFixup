@@ -2,147 +2,289 @@
 //  CirrusAudioFixup.cpp
 //  CirrusAudioFixup
 //
-//  Skeleton kext — only logs to verify matching.
-//  NO I2C transactions, NO GPIO access, NO blocking calls.
-//
-//  Ventura 13.0+ / macOS Hackintosh (Lenovo Legion 7 2021)
-//  CS35L41 internal speaker amplifier via VoodooI2C
-//
 
 #include "CirrusAudioFixup.hpp"
 
-// ──────────────────────────────────────────────────────────────
-//  Required IOKit macros
-// ──────────────────────────────────────────────────────────────
+#define super IOService
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
 
-// In C++ IOKit kexts, 'super' is NOT a built-in keyword (unlike ObjC).
-// This #define is the standard IOKit convention used in every Apple kext.
-#define super IOService
+static UInt32 readBE32(const UInt8 *data) {
+    return (static_cast<UInt32>(data[0]) << 24) |
+           (static_cast<UInt32>(data[1]) << 16) |
+           (static_cast<UInt32>(data[2]) << 8)  |
+            static_cast<UInt32>(data[3]);
+}
 
-// ──────────────────────────────────────────────────────────────
-//  init — called once per matched device, before start
-// ──────────────────────────────────────────────────────────────
+static void writeBE32(UInt8 *data, UInt32 value) {
+    data[0] = static_cast<UInt8>((value >> 24) & 0xFF);
+    data[1] = static_cast<UInt8>((value >> 16) & 0xFF);
+    data[2] = static_cast<UInt8>((value >> 8) & 0xFF);
+    data[3] = static_cast<UInt8>(value & 0xFF);
+}
+
 bool CirrusAudioFixup::init(OSDictionary *properties) {
     if (!super::init(properties)) {
         CIRRUS_ERR("super::init failed");
         return false;
     }
 
-    CIRRUS_LOG("init() — kext loaded and initialised");
+    CIRRUS_LOG("init");
     return true;
 }
 
-// ──────────────────────────────────────────────────────────────
-//  probe — opportunity to inspect provider before committing
-// ──────────────────────────────────────────────────────────────
 IOService *CirrusAudioFixup::probe(IOService *provider, SInt32 *score) {
     IOService *result = super::probe(provider, score);
 
-    CIRRUS_LOG("probe() — provider: %s | score: %d",
+    CIRRUS_LOG("probe provider=%s class=%s score=%d",
                provider ? provider->getName() : "null",
-               score ? (int)*score : -1);
+               provider ? provider->getMetaClass()->getClassName() : "null",
+               score ? static_cast<int>(*score) : -1);
 
-    // Boost score so we win over any generic fallback driver
-    if (score) *score += 9000;
+    if (score) {
+        *score += 9000;
+    }
 
     return result;
 }
 
-// ──────────────────────────────────────────────────────────────
-//  detectChannel  — read _UID property to identify L/R channel
-// ──────────────────────────────────────────────────────────────
-void CirrusAudioFixup::detectChannel(IOService *provider) {
-    // VoodooI2C exposes ACPI _UID as the "UID", "uid", or
-    // acpi-uid property on the nub. Try each variant.
-    OSObject *uidObj = provider->getProperty("UID");
-    if (!uidObj) uidObj = provider->getProperty("uid");
-    if (!uidObj) uidObj = provider->getProperty("acpi-uid");
-
-    OSNumber *uidNum = OSDynamicCast(OSNumber, uidObj);
-
-    if (uidNum) {
-        // SPL has _UID = 0  → left  → 0x40
-        // SPR has _UID = 1  → right → 0x41
-        mIsLeft     = (uidNum->unsigned32BitValue() == 0);
-        mI2CAddress = mIsLeft ? CS35L41_I2C_ADDR_LEFT
-                               : CS35L41_I2C_ADDR_RIGHT;
-
-        CIRRUS_LOG("detectChannel() — UID=%u → %s channel (I2C 0x%02X)",
-                   uidNum->unsigned32BitValue(),
-                   mIsLeft ? "LEFT" : "RIGHT",
-                   mI2CAddress);
-    } else {
-        // No UID property found — default to LEFT (first enumerated)
-        mIsLeft     = true;
-        mI2CAddress = CS35L41_I2C_ADDR_LEFT;
-        CIRRUS_LOG("detectChannel() — UID not found, defaulting to LEFT (0x%02X)",
-                   mI2CAddress);
-    }
-}
-
-// ──────────────────────────────────────────────────────────────
-//  start — main entry point; driver is active after this returns true
-// ──────────────────────────────────────────────────────────────
 bool CirrusAudioFixup::start(IOService *provider) {
-    CIRRUS_LOG("start() — BEGIN");
+    CIRRUS_LOG("start");
 
     if (!super::start(provider)) {
-        CIRRUS_ERR("super::start failed — aborting");
+        CIRRUS_ERR("super::start failed");
         return false;
     }
 
-    // ── 1. Identify which channel we are ────────────────────
-    detectChannel(provider);
+    mProvider = provider;
+    logProviderInfo(provider);
+    dumpProviderProperties(provider);
 
-    // ── 2. Dump provider properties for debugging ────────────
-    CIRRUS_LOG("start() — provider name   : %s", provider->getName());
-    CIRRUS_LOG("start() — provider class  : %s",
-               provider->getMetaClass()->getClassName());
-
-    // Log the ACPI path if available
-    OSObject *acpiPath = provider->getProperty("acpi-path");
-    if (auto *str = OSDynamicCast(OSString, acpiPath))
-        CIRRUS_LOG("start() — ACPI path       : %s", str->getCStringNoCopy());
-
-    // ── 3. Safety guard: check for boot-arg "cirrus=1" ──────
-    //    Without this flag the kext loads but does NOTHING.
-    //    Add "cirrus=1" to boot-args when you want real I2C work.
-    uint32_t cirrusEnabled = 0;
-    PE_parse_boot_argn("cirrus", &cirrusEnabled, sizeof(cirrusEnabled));
-
-    if (!cirrusEnabled) {
-        CIRRUS_LOG("start() — boot-arg 'cirrus=1' NOT set → passive mode");
-        CIRRUS_LOG("start() — kext is LOADED and MATCHED but will do nothing");
-        CIRRUS_LOG("start() — add boot-arg cirrus=1 to enable hardware init");
-    } else {
-        CIRRUS_LOG("start() — boot-arg 'cirrus=1' DETECTED → active mode");
-        CIRRUS_LOG("start() — %s channel ready for hardware init (I2C 0x%02X)",
-                   mIsLeft ? "LEFT" : "RIGHT", mI2CAddress);
-        // TODO: call initCS35L41() here once I2C code is ready
+    if (!setupProbeTimer()) {
+        CIRRUS_ERR("probe timer setup failed");
+        return false;
     }
 
-    // ── 4. Publish ourselves so other drivers can find us ───
-    registerService();
+    if (bootArgEnabled("cirrus_probe")) {
+        scheduleReadOnlyProbe(10000);
+    } else {
+        CIRRUS_LOG("passive mode; add boot-arg cirrus_probe=1 for read-only I2C probe");
+    }
 
-    CIRRUS_LOG("start() — SUCCESS ✓ (%s channel matched)",
-               mIsLeft ? "LEFT" : "RIGHT");
+    registerService();
     return true;
 }
 
-// ──────────────────────────────────────────────────────────────
-//  stop — called when the driver is unloaded or system sleeps
-// ──────────────────────────────────────────────────────────────
 void CirrusAudioFixup::stop(IOService *provider) {
-    CIRRUS_LOG("stop() — %s channel (I2C 0x%02X)",
-               mIsLeft ? "LEFT" : "RIGHT", mI2CAddress);
+    CIRRUS_LOG("stop");
+
+    if (mProbeTimer && mWorkLoop) {
+        mProbeTimer->cancelTimeout();
+        mWorkLoop->removeEventSource(mProbeTimer);
+    }
+
+    OSSafeReleaseNULL(mProbeTimer);
+    OSSafeReleaseNULL(mWorkLoop);
+    mProvider = nullptr;
+
     super::stop(provider);
 }
 
-// ──────────────────────────────────────────────────────────────
-//  free — final cleanup
-// ──────────────────────────────────────────────────────────────
 void CirrusAudioFixup::free() {
-    CIRRUS_LOG("free()");
+    CIRRUS_LOG("free");
     super::free();
+}
+
+bool CirrusAudioFixup::bootArgEnabled(const char *name) {
+    UInt32 value = 0;
+    return PE_parse_boot_argn(name, &value, sizeof(value)) && value != 0;
+}
+
+void CirrusAudioFixup::logProviderInfo(IOService *provider) {
+    if (!provider) {
+        CIRRUS_ERR("provider is null");
+        return;
+    }
+
+    CIRRUS_LOG("provider name=%s class=%s",
+               provider->getName(),
+               provider->getMetaClass()->getClassName());
+
+    OSObject *addrObj = provider->getProperty("i2cAddress");
+    if (OSNumber *addr = OSDynamicCast(OSNumber, addrObj)) {
+        CIRRUS_LOG("provider i2cAddress=0x%02X", addr->unsigned32BitValue());
+    }
+
+    OSObject *modeObj = provider->getProperty("Interrupt Mode");
+    if (OSString *mode = OSDynamicCast(OSString, modeObj)) {
+        CIRRUS_LOG("provider interrupt=%s", mode->getCStringNoCopy());
+    }
+
+    OSObject *pathObj = provider->getProperty("acpi-path");
+    if (OSString *path = OSDynamicCast(OSString, pathObj)) {
+        CIRRUS_LOG("provider acpi-path=%s", path->getCStringNoCopy());
+    }
+}
+
+void CirrusAudioFixup::dumpProviderProperties(IOService *provider) {
+    if (!provider) {
+        return;
+    }
+
+    CIRRUS_LOG("provider properties follow");
+
+    OSDictionary *properties = provider->getPropertyTable();
+    OSCollectionIterator *iterator = OSCollectionIterator::withCollection(properties);
+    if (!iterator) {
+        CIRRUS_ERR("property iterator failed");
+        return;
+    }
+
+    while (OSObject *key = iterator->getNextObject()) {
+        OSString *keyString = OSDynamicCast(OSString, key);
+        if (!keyString) {
+            continue;
+        }
+
+        OSObject *value = properties->getObject(keyString);
+        if (!value) {
+            continue;
+        }
+
+        if (OSString *str = OSDynamicCast(OSString, value)) {
+            CIRRUS_LOG("property %s=%s", keyString->getCStringNoCopy(), str->getCStringNoCopy());
+        } else if (OSNumber *num = OSDynamicCast(OSNumber, value)) {
+            CIRRUS_LOG("property %s=0x%llX", keyString->getCStringNoCopy(), num->unsigned64BitValue());
+        } else if (OSBoolean *boo = OSDynamicCast(OSBoolean, value)) {
+            CIRRUS_LOG("property %s=%s", keyString->getCStringNoCopy(), boo->getValue() ? "true" : "false");
+        } else {
+            CIRRUS_LOG("property %s class=%s", keyString->getCStringNoCopy(), value->getMetaClass()->getClassName());
+        }
+    }
+
+    iterator->release();
+}
+
+bool CirrusAudioFixup::setupProbeTimer() {
+    mWorkLoop = getWorkLoop();
+    if (!mWorkLoop) {
+        mWorkLoop = IOWorkLoop::workLoop();
+    } else {
+        mWorkLoop->retain();
+    }
+
+    if (!mWorkLoop) {
+        return false;
+    }
+
+    mProbeTimer = IOTimerEventSource::timerEventSource(this, probeTimerFired);
+    if (!mProbeTimer) {
+        return false;
+    }
+
+    if (mWorkLoop->addEventSource(mProbeTimer) != kIOReturnSuccess) {
+        OSSafeReleaseNULL(mProbeTimer);
+        return false;
+    }
+
+    return true;
+}
+
+void CirrusAudioFixup::scheduleReadOnlyProbe(UInt32 delayMs) {
+    CIRRUS_LOG("read-only probe scheduled in %u ms", delayMs);
+    mProbeTimer->setTimeoutMS(delayMs);
+}
+
+void CirrusAudioFixup::probeTimerFired(OSObject *owner, IOTimerEventSource *sender) {
+    CirrusAudioFixup *self = OSDynamicCast(CirrusAudioFixup, owner);
+    if (self) {
+        self->runReadOnlyProbe();
+    }
+}
+
+void CirrusAudioFixup::runReadOnlyProbe() {
+    CIRRUS_LOG("read-only probe begin");
+
+    // VoodooI2C owns the bus. This kext only asks for safe debug transfers.
+    for (unsigned i = 0; i < 2; ++i) {
+        probeAmp(mAmps[i]);
+    }
+
+    CIRRUS_LOG("read-only probe complete");
+}
+
+void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
+    UInt32 deviceId = 0;
+    UInt32 revisionId = 0;
+
+    CIRRUS_LOG("amp %s probe address=0x%02X", amp.name, amp.address);
+
+    if (!readRegister(amp, CS35L41_DEVID_REG, &deviceId)) {
+        CIRRUS_ERR("amp %s device-id read failed", amp.name);
+        return;
+    }
+
+    if (!readRegister(amp, CS35L41_REVID_REG, &revisionId)) {
+        CIRRUS_ERR("amp %s revision read failed", amp.name);
+        return;
+    }
+
+    amp.deviceId = deviceId;
+    amp.revisionId = revisionId;
+    amp.present = (deviceId == CS35L41_DEVICE_ID);
+
+    CIRRUS_LOG("amp %s devid=0x%08X revision=0x%08X present=%s",
+               amp.name, amp.deviceId, amp.revisionId, amp.present ? "yes" : "no");
+}
+
+bool CirrusAudioFixup::transferToAddress(UInt8 address,
+                                         UInt8 *writeBuffer,
+                                         UInt16 writeLength,
+                                         UInt8 *readBuffer,
+                                         UInt16 readLength) {
+    if (!mProvider) {
+        CIRRUS_ERR("transfer failed; provider is null");
+        return false;
+    }
+
+    VoodooI2CAddressedTransfer request;
+    request.address = address;
+    request.writeBuffer = writeBuffer;
+    request.writeLength = writeLength;
+    request.readBuffer = readBuffer;
+    request.readLength = readLength;
+
+    IOReturn ret = mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS,
+                                                   true,
+                                                   &request,
+                                                   nullptr,
+                                                   nullptr,
+                                                   nullptr);
+    if (ret != kIOReturnSuccess) {
+        CIRRUS_ERR("transfer address=0x%02X write=%u read=%u ret=0x%08X",
+                   address, writeLength, readLength, ret);
+        return false;
+    }
+
+    return true;
+}
+
+bool CirrusAudioFixup::readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value) {
+    if (!value) {
+        return false;
+    }
+
+    UInt8 writeBuffer[4];
+    UInt8 readBuffer[4] { 0, 0, 0, 0 };
+
+    writeBE32(writeBuffer, reg);
+
+    // CS35L41 uses 32-bit big-endian register addresses and values.
+    if (!transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), readBuffer, sizeof(readBuffer))) {
+        return false;
+    }
+
+    *value = readBE32(readBuffer);
+    CIRRUS_LOG("read amp=%s addr=0x%02X reg=0x%08X value=0x%08X",
+               amp.name, amp.address, reg, *value);
+    return true;
 }

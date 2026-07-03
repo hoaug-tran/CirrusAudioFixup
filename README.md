@@ -1,106 +1,87 @@
 # CirrusAudioFixup
 
-Skeleton kext for **Cirrus Logic CS35L41** internal speaker amplifier on Hackintosh.
+Debug kext for **Cirrus Logic CS35L41** speaker amps on Hackintosh.
 
-- **Target hardware**: Lenovo Legion 7 (2021) — CS35L41 via I2C (addr 0x40 / 0x41)
-- **Minimum macOS**: Ventura 13.0
-- **Bundle ID**: `com.hoaugtr.CirrusAudioFixup`
-- **Provider**: `VoodooI2CDeviceNub` (requires VoodooI2C loaded first)
-- **ACPI HID**: `CLSA0100` (devices SPL / SPR in custom SSDT)
+This kext does not enable speakers yet. It collects safe debug data needed to build the real driver.
 
----
+## Target
 
-## Project structure
+- Laptop: Lenovo Legion 7 2021
+- Codec: Realtek ALC287
+- Amps: Cirrus Logic CS35L41
+- I2C addresses: `0x40` and `0x41`
+- Expected device id: `0x00035A40`
+- Expected revision: `0x000000B2`
 
+## Required VoodooI2C patch
+
+`CirrusAudioFixup` needs a custom VoodooI2C build with this platform function:
+
+```text
+VoodooI2CTransferToAddress
 ```
-CirrusAudioFixup/
-├── .github/workflows/build.yml   ← GitHub Actions CI
-├── CirrusAudioFixup.xcodeproj/   ← Xcode project
-└── CirrusAudioFixup/
-    ├── Info.plist                 ← Kext metadata & IOKit personalities
-    ├── CirrusAudioFixup.hpp       ← Class declaration
-    └── CirrusAudioFixup.cpp       ← Implementation
+
+VoodooI2C stays the bus owner. This kext only asks VoodooI2C to run debug I2C transfers.
+
+## Boot args
+
+Passive mode:
+
+```text
+(no boot arg)
 ```
 
----
+Read-only probe mode:
 
-## Building
+```text
+cirrus_probe=1
+```
 
-### Via GitHub Actions (recommended — no macOS required locally)
+Probe mode waits 10 seconds, then reads:
 
-1. Push your changes to `main`  
-2. Go to **Actions** tab on GitHub  
-3. Wait ~3 minutes for build to finish  
-4. Download **CirrusAudioFixup-{sha}.zip** from the Artifacts section  
-5. Extract and place `CirrusAudioFixup.kext` into `EFI/OC/Kexts/`
+```text
+0x40 reg 0x00000000
+0x40 reg 0x00000004
+0x41 reg 0x00000000
+0x41 reg 0x00000004
+```
 
-### Locally (requires macOS + Xcode 15)
+No reset, no firmware upload, no boost config, no unmute.
+
+## OpenCore load order
+
+```text
+1. VoodooI2CController.kext
+2. VoodooI2C.kext       (custom patched build)
+3. CirrusAudioFixup.kext
+```
+
+## Logs
 
 ```bash
-cd CirrusAudioFixup
-xcodebuild \
-  -project CirrusAudioFixup.xcodeproj \
-  -target CirrusAudioFixup \
-  -configuration Release \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY="" \
-  build
-```
-
----
-
-## OpenCore config
-
-```
-EFI/OC/Kexts/ (load order matters):
-  1. VoodooI2CController.kext
-  2. VoodooI2C.kext
-  3. CirrusAudioFixup.kext   ← AFTER VoodooI2C
-```
-
-**SSDT required**: Custom SSDT that splits the ACPI speaker device into:
-- `SPL` — HID=`CLSA0100`, UID=0, I2C addr 0x40 (Left)
-- `SPR` — HID=`CLSA0100`, UID=1, I2C addr 0x41 (Right)
-- GPIO 0x0006 (reset) declared **Exclusive only in SPL**
-
----
-
-## Safety: boot-arg guard
-
-The kext loads and matches but does **nothing** unless you add `cirrus=1` to boot-args.
-
-```
-# In OpenCore config.plist → Kernel → Boot → boot-args:
-# For passive test (just verify matching):
-# (no extra args needed)
-
-# For active hardware init (future):
-cirrus=1
-```
-
-This means you can always boot safely — even if the I2C code has bugs.
-
----
-
-## Verifying it works (passive mode)
-
-After boot, run in Terminal:
-
-```bash
-# Check if kext loaded
-kextstat | grep -i cirrus
-
-# Check IOLog output
 log show --predicate 'process == "kernel" AND message CONTAINS "CirrusAudioFixup"' \
   --style compact --last 5m
 ```
 
-Expected output:
+Good result:
+
+```text
+[CirrusAudioFixup] amp left probe address=0x40
+[CirrusAudioFixup] read amp=left addr=0x40 reg=0x00000000 value=0x00035A40
+[CirrusAudioFixup] read amp=left addr=0x40 reg=0x00000004 value=0x000000B2
+[CirrusAudioFixup] amp right probe address=0x41
+[CirrusAudioFixup] read amp=right addr=0x41 reg=0x00000000 value=0x00035A40
+[CirrusAudioFixup] read amp=right addr=0x41 reg=0x00000004 value=0x000000B2
 ```
-[CirrusAudioFixup] init() — kext loaded and initialised
-[CirrusAudioFixup] probe() — provider: CLSA0100 | score: ...
-[CirrusAudioFixup] start() — BEGIN
-[CirrusAudioFixup] detectChannel() — UID=0 → LEFT channel (I2C 0x40)
-[CirrusAudioFixup] start() — boot-arg 'cirrus=1' NOT set → passive mode
-[CirrusAudioFixup] start() — SUCCESS ✓ (LEFT channel matched)
-```
+
+## Safety
+
+This is debug-only code. Speaker output needs more work:
+
+1. safe reset handling
+2. CS35L41 config sequence
+3. DSP firmware loader
+4. left/right tuning data
+5. AppleALC speaker route
+
+Do not replay raw Linux I2C traces in one loop.

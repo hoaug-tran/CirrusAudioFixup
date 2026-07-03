@@ -69,7 +69,10 @@ bool CirrusAudioFixup::start(IOService *provider) {
         return false;
     }
 
-    if (bootArgEnabled("cirrus_probe")) {
+    bool probeEnabled = bootArgEnabled("cirrus_probe");
+    setProperty("CirrusBootArgParsed", probeEnabled ? kOSBooleanTrue : kOSBooleanFalse);
+
+    if (probeEnabled) {
         scheduleReadOnlyProbe(10000);
     } else {
         CIRRUS_LOG("passive mode; add boot-arg cirrus_probe=1 for read-only I2C probe");
@@ -101,7 +104,29 @@ void CirrusAudioFixup::free() {
 
 bool CirrusAudioFixup::bootArgEnabled(const char *name) {
     UInt32 value = 0;
-    return PE_parse_boot_argn(name, &value, sizeof(value)) && value != 0;
+    if (PE_parse_boot_argn(name, &value, sizeof(value))) {
+        return value != 0;
+    }
+    
+    // Also check for the boolean flag prefix (e.g. -cirrus_probe)
+    char flagBuf[64];
+    snprintf(flagBuf, sizeof(flagBuf), "-%s", name);
+    if (PE_parse_boot_argn(flagBuf, &value, sizeof(value))) {
+        return true; // Presence of flag implies true
+    }
+    
+    // Check using VoodooI2C's checkKernelArg style (string buffer)
+    int strValue[16];
+    if (PE_parse_boot_argn(name, &strValue, sizeof(strValue))) {
+        // If it parses as a string "0", treat as false
+        char* strPtr = reinterpret_cast<char*>(&strValue);
+        if (strPtr[0] == '0' && strPtr[1] == '\0') {
+            return false;
+        }
+        return true;
+    }
+
+    return false;
 }
 
 void CirrusAudioFixup::logProviderInfo(IOService *provider) {

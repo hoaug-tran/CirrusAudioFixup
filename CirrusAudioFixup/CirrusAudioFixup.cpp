@@ -75,6 +75,7 @@ bool CirrusAudioFixup::start(IOService *provider) {
                 volatile UInt32 *gpioBase = (volatile UInt32 *)map->getVirtualAddress();
                 
                 UInt32 val = gpioBase[6];
+                setProperty("Cirrus_GPIO6_old", val, 32);
                 CIRRUS_LOG("AMD GPIO 6 old value: 0x%08X", val);
                 
                 // Toggle sequence: Force LOW, sleep, force HIGH, sleep
@@ -84,6 +85,7 @@ bool CirrusAudioFixup::start(IOService *provider) {
                 gpioBase[6] = val;
                 
                 UInt32 verifyLow = gpioBase[6];
+                setProperty("Cirrus_GPIO6_verifyLow", verifyLow, 32);
                 CIRRUS_LOG("AMD GPIO 6 LOW verify = 0x%08X", verifyLow);
                 
                 IOSleep(5);
@@ -95,6 +97,7 @@ bool CirrusAudioFixup::start(IOService *provider) {
                 gpioBase[6] = val;
                 
                 UInt32 verifyHigh = gpioBase[6];
+                setProperty("Cirrus_GPIO6_verifyHigh", verifyHigh, 32);
                 CIRRUS_LOG("AMD GPIO 6 HIGH verify = 0x%08X", verifyHigh);
                 
                 map->release();

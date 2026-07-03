@@ -22,6 +22,14 @@
 #define CS35L41_DEVICE_ID       0x00035A40
 #define CS35L41_DEVID_REG       0x00000000
 #define CS35L41_REVID_REG       0x00000004
+#define CS35L41_FABID_REG       0x00000008
+#define CS35L41_OTPID_REG       0x00000010
+#define CS35L41_PWR_CTRL1_REG   0x00002014
+#define CS35L41_PWR_CTRL2_REG   0x00002018
+#define CS35L41_PWR_CTRL3_REG   0x0000201C
+#define CS35L41_AMP_OUT_MUTE_REG 0x00002024
+#define CS35L41_PWRMGT_STS_REG  0x00002908
+#define CS35L41_IRQ1_STATUS1_REG 0x00013000
 
 struct VoodooI2CAddressedTransfer {
     UInt8 address;
@@ -72,7 +80,12 @@ private:
                            UInt16 writeLength,
                            UInt8 *readBuffer,
                            UInt16 readLength);
+                           
+    bool bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length);
+    bool bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length);
     bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value);
+    bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value);
+    void dumpRegisters(CS35L41Amp &amp);
 
     static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
 };

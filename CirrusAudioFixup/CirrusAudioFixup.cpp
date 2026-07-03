@@ -66,8 +66,25 @@ bool CirrusAudioFixup::start(IOService *provider) {
     dumpProviderProperties(provider);
 
     // AMD GPIO MMIO Toggle (Pin 6)
-    // AMDI0030 Memory32Fixed resource is at 0xFED81500
-    IOMemoryDescriptor *bmd = IOMemoryDescriptor::withPhysicalAddress(0xFED81500, 0x400, kIODirectionInOut);
+    // Find AMDI0030 device dynamically to avoid hardcoding 0xFED81500
+    IOMemoryDescriptor *bmd = nullptr;
+    OSDictionary *dict = IOService::nameMatching("AMDI0030");
+    if (dict) {
+        OSIterator *iter = IOService::getMatchingServices(dict);
+        if (iter) {
+            IOService *amdi0030 = OSDynamicCast(IOService, iter->getNextObject());
+            if (amdi0030) {
+                IOMemoryDescriptor *bmd0 = amdi0030->getDeviceMemoryWithIndex(0);
+                if (bmd0) {
+                    IOPhysicalAddress physAddr = bmd0->getPhysicalAddress();
+                    CIRRUS_LOG("Found AMDI0030 base physical address: 0x%llX", (unsigned long long)physAddr);
+                    bmd = IOMemoryDescriptor::withPhysicalAddress(physAddr, 0x400, kIODirectionInOut);
+                }
+            }
+            iter->release();
+        }
+        dict->release();
+    }
     if (bmd) {
         if (bmd->prepare() == kIOReturnSuccess) {
             IOMemoryMap *map = bmd->map();
@@ -309,12 +326,9 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
     amp.revisionId = revisionId;
     amp.present = (deviceId == CS35L41_DEVICE_ID);
 
-    char propName[64];
-    snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_DEVID", amp.name);
-    setProperty(propName, deviceId, 32);
-    
-    snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_REVID", amp.name);
-    setProperty(propName, revisionId, 32);
+    if (amp.present) {
+        dumpRegisters(amp);
+    }
 
     CIRRUS_LOG("amp %s devid=0x%08X revision=0x%08X present=%s",
                amp.name, amp.deviceId, amp.revisionId, amp.present ? "yes" : "no");
@@ -354,23 +368,65 @@ bool CirrusAudioFixup::transferToAddress(UInt8 address,
     return true;
 }
 
-bool CirrusAudioFixup::readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value) {
-    if (!value) {
-        return false;
-    }
-
+bool CirrusAudioFixup::bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length) {
     UInt8 writeBuffer[4];
-    UInt8 readBuffer[4] { 0, 0, 0, 0 };
-
     writeBE32(writeBuffer, reg);
+    return transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, length);
+}
 
-    // CS35L41 uses 32-bit big-endian register addresses and values.
-    if (!transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), readBuffer, sizeof(readBuffer))) {
+bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length) {
+    UInt8 *writeBuffer = (UInt8 *)IOMallocData(4 + length);
+    if (!writeBuffer) return false;
+    
+    writeBE32(writeBuffer, reg);
+    if (length > 0 && data) {
+        memcpy(writeBuffer + 4, data, length);
+    }
+    
+    bool ret = transferToAddress(amp.address, writeBuffer, 4 + length, nullptr, 0);
+    IOFreeData(writeBuffer, 4 + length);
+    return ret;
+}
+
+bool CirrusAudioFixup::readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value) {
+    if (!value) return false;
+    UInt8 readBuffer[4] { 0 };
+    if (!bulkRead(amp, reg, readBuffer, sizeof(readBuffer))) {
         return false;
     }
-
     *value = readBE32(readBuffer);
-    CIRRUS_LOG("read amp=%s addr=0x%02X reg=0x%08X value=0x%08X",
-               amp.name, amp.address, reg, *value);
     return true;
+}
+
+bool CirrusAudioFixup::writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value) {
+    UInt8 writeBuffer[4];
+    writeBE32(writeBuffer, value);
+    return bulkWrite(amp, reg, writeBuffer, sizeof(writeBuffer));
+}
+
+void CirrusAudioFixup::dumpRegisters(CS35L41Amp &amp) {
+    struct RegDump {
+        UInt32 addr;
+        const char *name;
+    } regs[] = {
+        { CS35L41_DEVID_REG, "DEVID" },
+        { CS35L41_REVID_REG, "REVID" },
+        { CS35L41_FABID_REG, "FABID" },
+        { CS35L41_OTPID_REG, "OTPID" },
+        { CS35L41_PWR_CTRL1_REG, "PWR_CTRL1" },
+        { CS35L41_PWR_CTRL2_REG, "PWR_CTRL2" },
+        { CS35L41_PWR_CTRL3_REG, "PWR_CTRL3" },
+        { CS35L41_AMP_OUT_MUTE_REG, "AMP_OUT_MUTE" },
+        { CS35L41_PWRMGT_STS_REG, "PWRMGT_STS" },
+        { CS35L41_IRQ1_STATUS1_REG, "IRQ1_STATUS1" }
+    };
+    
+    char propName[64];
+    for (size_t i = 0; i < sizeof(regs) / sizeof(regs[0]); i++) {
+        UInt32 val = 0;
+        if (readRegister(amp, regs[i].addr, &val)) {
+            snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_%s", amp.name, regs[i].name);
+            setProperty(propName, val, 32);
+        }
+    }
 }

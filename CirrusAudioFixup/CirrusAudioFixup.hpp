@@ -14,6 +14,7 @@
 #include <os/log.h>
 
 #include "Codecs/CS35L41/CS35L41Registers.hpp"
+#include "Codecs/CS35L41/CS35L41_OTP.hpp"
 
 #define LOG_PREFIX "CirrusAudioFixup: "
 #define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
@@ -149,6 +150,10 @@ private:
     // Phase 4A.2A: Test Key Unlock/Lock
     bool cs35l41_test_key_unlock(CS35L41Amp &amp);
     bool cs35l41_test_key_lock(CS35L41Amp &amp);
+    
+    // Phase 4A.2B: Apply Errata
+    bool cs35l41_register_errata_patch(CS35L41Amp &amp);
+    
     bool cs35l41_apply_phase4A2(CS35L41Amp &amp);
     
     void dumpAllRegisters(CS35L41Amp &amp);

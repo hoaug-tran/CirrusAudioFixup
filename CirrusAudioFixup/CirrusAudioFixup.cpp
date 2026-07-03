@@ -352,7 +352,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
         
         if (bootArgStrEquals("cirrus_phase", "4A1")) {
             cs35l41_init_mac(amp);
-        } else if (bootArgStrEquals("cirrus_phase", "4A2A")) {
+        } else if (bootArgStrEquals("cirrus_phase", "4A2A") || 
+                   bootArgStrEquals("cirrus_phase", "4A2B")) {
             if (cs35l41_init_mac(amp)) {
                 cs35l41_apply_phase4A2(amp);
             }
@@ -844,7 +845,7 @@ bool CirrusAudioFixup::cs35l41_test_key_lock(CS35L41Amp &amp) {
 }
 
 bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
-    CIRRUS_LOG("Amp %s: --- Starting Phase 4A.2A ---", amp.name);
+    CIRRUS_LOG("Amp %s: --- Starting Phase 4A.2 ---", amp.name);
     
     // 1. Unlock Test Key
     if (!cs35l41_test_key_unlock(amp)) {
@@ -857,7 +858,18 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     setProperty(propName, crc_unlock, 32);
     CIRRUS_LOG("Amp %s: CRC after Unlock -> 0x%08X", amp.name, crc_unlock);
     
-    // TODO: 4A.2B (Errata) will go here
+    if (bootArgStrEquals("cirrus_phase", "4A2B")) {
+        // 2. Errata Patch
+        if (!cs35l41_register_errata_patch(amp)) {
+            return false;
+        }
+        
+        UInt32 crc_errata = calculateRegistersCRC32(amp);
+        snprintf(propName, sizeof(propName), "Cirrus_CRC_Errata_%s", amp.name);
+        setProperty(propName, crc_errata, 32);
+        CIRRUS_LOG("Amp %s: CRC after Errata -> 0x%08X", amp.name, crc_errata);
+    }
+    
     // TODO: 4A.2C (OTP) will go here
     
     // 4. Lock Test Key
@@ -870,6 +882,45 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     setProperty(propName, crc_lock, 32);
     CIRRUS_LOG("Amp %s: CRC after Lock -> 0x%08X", amp.name, crc_lock);
     
-    CIRRUS_LOG("Amp %s: Phase 4A.2A completed. Unlock/Lock sequence executed.", amp.name);
+    CIRRUS_LOG("Amp %s: Phase 4A.2 completed.", amp.name);
+    return true;
+}
+
+bool CirrusAudioFixup::cs35l41_register_errata_patch(CS35L41Amp &amp) {
+    const ErrataTable errata_tables[] = {
+        { 0xB2, cs35l41_revb2_errata_patch, sizeof(cs35l41_revb2_errata_patch) / sizeof(ErrataPatch) }
+    };
+    
+    UInt32 rev_only = amp.revisionId & 0xFF;
+    const ErrataTable *table_to_apply = nullptr;
+    
+    for (size_t i = 0; i < sizeof(errata_tables) / sizeof(ErrataTable); i++) {
+        if (errata_tables[i].revid == rev_only) {
+            table_to_apply = &errata_tables[i];
+            break;
+        }
+    }
+    
+    if (!table_to_apply) {
+        CIRRUS_ERR("Amp %s: No Errata patch found for Revision 0x%02X", amp.name, rev_only);
+        return false;
+    }
+    
+    CIRRUS_LOG("Amp %s: Applying %lu Errata Patches for Revision 0x%02X", 
+               amp.name, table_to_apply->numPatches, rev_only);
+               
+    for (size_t i = 0; i < table_to_apply->numPatches; i++) {
+        if (!writeRegister(amp, table_to_apply->patches[i].reg, table_to_apply->patches[i].value)) {
+            CIRRUS_ERR("Amp %s: Failed to apply Errata Patch at 0x%08X", amp.name, table_to_apply->patches[i].reg);
+            return false;
+        }
+    }
+    
+    // Write 0 to CCM_CORE_CTRL per Linux implementation
+    if (!writeRegister(amp, 0x02BC1000, 0x00000000)) { // CS35L41_DSP1_CCM_CORE_CTRL
+        CIRRUS_ERR("Amp %s: Failed to write CCM_CORE_CTRL", amp.name);
+        return false;
+    }
+    
     return true;
 }

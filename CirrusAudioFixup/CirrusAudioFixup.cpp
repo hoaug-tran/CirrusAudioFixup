@@ -621,15 +621,37 @@ bool CirrusAudioFixup::pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask,
             return false;
         }
         if ((val & mask) == targetVal) {
+            CIRRUS_LOG("Amp %s: poll reg=0x%05X mask=0x%X expect=0x%X elapsed=%dms iterations=%d",
+                       amp.name, reg, mask, targetVal, i + 1, i + 1);
             return true;
         }
         IODelay(1000); // 1 ms delay
     }
-    CIRRUS_ERR("pollRegisterBit timeout for reg 0x%05X, mask 0x%X", reg, mask);
+    
+    CIRRUS_ERR("Amp %s: pollRegisterBit timeout! reg=0x%05X, mask=0x%X, val=0x%08X", amp.name, reg, mask, val);
+    
+    // Dump diagnostic registers on timeout
+    UInt32 st1=0, st2=0, st3=0, st4=0, pwr_ctrl2=0;
+    readRegister(amp, 0x10010, &st1, source);
+    readRegister(amp, 0x10014, &st2, source);
+    readRegister(amp, 0x10018, &st3, source);
+    readRegister(amp, 0x1001C, &st4, source);
+    readRegister(amp, 0x02018, &pwr_ctrl2, source);
+    CIRRUS_ERR("Amp %s: DIAGNOSTICS -> ST1=0x%08X ST2=0x%08X ST3=0x%08X ST4=0x%08X PWR_CTRL2=0x%08X",
+               amp.name, st1, st2, st3, st4, pwr_ctrl2);
+    
     return false;
 }
 
 bool CirrusAudioFixup::cs35l41_init_mac(CS35L41Amp &amp) {
+    // Before Reset: Log REVID and Calculate CRC
+    UInt32 devid_before = 0, revid_before = 0;
+    readRegister(amp, 0x00000, &devid_before);
+    readRegister(amp, 0x00004, &revid_before);
+    UInt32 crc_before = calculateRegistersCRC32(amp);
+    
+    CIRRUS_LOG("Amp %s: Before Reset -> DEVID=0x%08X REVID=0x%08X CRC=0x%08X", 
+               amp.name, devid_before, revid_before, crc_before);
     CIRRUS_LOG("Amp %s: Starting Soft Reset...", amp.name);
     
     // 1. Soft Reset
@@ -638,34 +660,42 @@ bool CirrusAudioFixup::cs35l41_init_mac(CS35L41Amp &amp) {
         return false;
     }
     
-    // Wait for DSP to reboot
-    IOSleep(3);
+    // Wait for DSP to reboot. Linux uses usleep_range(2000, 2100).
+    // IODelay provides microsecond precision in IOKit.
+    IODelay(3000);
     
     // 2. Poll OTP_BOOT_DONE
     if (!pollRegisterBit(amp, CS35L41_IRQ1_STATUS4, CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE, 100)) {
-        CIRRUS_ERR("Amp %s: OTP_BOOT_DONE polling timeout!", amp.name);
+        CIRRUS_ERR("Amp %s: OTP_BOOT_DONE polling failed! Aborting phase 4.", amp.name);
         return false;
     }
     
-    CIRRUS_LOG("Amp %s: OTP Boot Done successfully", amp.name);
+    // 3. Verify Revision After Reset
+    UInt32 devid_after = 0, revid_after = 0;
+    readRegister(amp, 0x00000, &devid_after);
+    readRegister(amp, 0x00004, &revid_after);
+    UInt32 crc_after = calculateRegistersCRC32(amp);
     
-    // 3. Verify Revision
-    UInt32 revid = 0;
-    if (!readRegister(amp, 0x00004, &revid)) {
-        CIRRUS_ERR("Amp %s: Failed to read REVID", amp.name);
-        return false;
+    CIRRUS_LOG("Amp %s: After Reset -> DEVID=0x%08X REVID=0x%08X CRC=0x%08X", 
+               amp.name, devid_after, revid_after, crc_after);
+               
+    if (crc_before != crc_after) {
+        CIRRUS_LOG("Amp %s: Hardware state changed successfully! CRC diff: 0x%08X -> 0x%08X", 
+                   amp.name, crc_before, crc_after);
+    } else {
+        CIRRUS_LOG("Amp %s: WARNING - CRC did not change after Soft Reset!", amp.name);
     }
     
-    revid = revid & 0xFF; // Only keep the lower byte
+    UInt32 rev_only = revid_after & 0xFF; // Only keep the lower byte
     
-    switch (revid) {
+    switch (rev_only) {
         case 0xB0:
         case 0xB1:
         case 0xB2:
-            CIRRUS_LOG("Amp %s: Revision 0x%02X detected", amp.name, revid);
+            CIRRUS_LOG("Amp %s: Revision 0x%02X confirmed.", amp.name, rev_only);
             break;
         default:
-            CIRRUS_LOG("Amp %s: Unknown Revision 0x%02X", amp.name, revid);
+            CIRRUS_LOG("Amp %s: Unknown Revision 0x%02X.", amp.name, rev_only);
             break;
     }
     

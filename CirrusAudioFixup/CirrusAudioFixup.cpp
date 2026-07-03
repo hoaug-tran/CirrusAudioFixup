@@ -466,6 +466,17 @@ void CirrusAudioFixup::dumpTraceBuffer() {
     IOLockLock(mTraceLock);
     
     CIRRUS_LOG("--- TRACE BUFFER DUMP START ---");
+    
+    size_t bufferSize = 128 * 1024;
+    char *dumpBuffer = (char *)IOMallocData(bufferSize);
+    if (!dumpBuffer) {
+        IOLockUnlock(mTraceLock);
+        return;
+    }
+    dumpBuffer[0] = '\0';
+    size_t currentLen = 0;
+    char lineBuffer[128];
+    
     uint32_t curr = mTraceHead;
     while (curr != mTraceTail) {
         const TraceEntry &e = mTraceBuffer[curr];
@@ -482,18 +493,31 @@ void CirrusAudioFixup::dumpTraceBuffer() {
         const char *ampStr = (e.amp == 0) ? "LEFT" : "RIGHT";
         
         if (e.isBulk) {
-            CIRRUS_LOG("[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X",
+            snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X\n",
                        e.timestamp, srcStr, ampStr, e.isWrite ? "WRITE" : "READ",
                        e.reg, e.value, e.ret);
         } else {
-            CIRRUS_LOG("[%llu ms][%s][%s] %s 0x%05X %s 0x%08X ret=0x%X",
+            snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] %s 0x%05X %s 0x%08X ret=0x%X\n",
                        e.timestamp, srcStr, ampStr, e.isWrite ? "WRITE" : "READ",
                        e.reg, e.isWrite ? "<-" : "->", e.value, e.ret);
+        }
+        
+        size_t lineLen = strlen(lineBuffer);
+        if (currentLen + lineLen < bufferSize - 1) {
+            strlcat(dumpBuffer, lineBuffer, bufferSize);
+            currentLen += lineLen;
         }
         
         curr = (curr + 1) % kTraceBufferSize;
     }
     CIRRUS_LOG("--- TRACE BUFFER DUMP END ---");
+    
+    OSString *strObj = OSString::withCString(dumpBuffer);
+    if (strObj) {
+        setProperty("Cirrus_Trace_Dump", strObj);
+        strObj->release();
+    }
+    IOFreeData(dumpBuffer, bufferSize);
     
     IOLockUnlock(mTraceLock);
 }
@@ -601,6 +625,15 @@ void CirrusAudioFixup::dumpAllRegisters(CS35L41Amp &amp) {
     uint32_t successCount = 0;
     uint32_t crc = 0;
     
+    // Allocate 16KB for dump string
+    size_t bufferSize = 16 * 1024;
+    char *dumpBuffer = (char *)IOMallocData(bufferSize);
+    if (!dumpBuffer) return;
+    dumpBuffer[0] = '\0';
+    size_t currentLen = 0;
+    
+    char lineBuffer[128];
+    
     for (size_t i = 0; i < numRegs; i++) {
         if (!cs35l41_reg_desc[i].readable) continue;
         
@@ -611,13 +644,32 @@ void CirrusAudioFixup::dumpAllRegisters(CS35L41Amp &amp) {
             crc = crc32_le(crc, (const uint8_t*)&val, 4);
             
             if (compact) {
-                CIRRUS_LOG("%07X: %08X", cs35l41_reg_desc[i].addr, val);
+                snprintf(lineBuffer, sizeof(lineBuffer), "%07X: %08X\n", cs35l41_reg_desc[i].addr, val);
             } else {
-                CIRRUS_LOG("%07X  %-35s = %08X", cs35l41_reg_desc[i].addr, cs35l41_reg_desc[i].name, val);
+                snprintf(lineBuffer, sizeof(lineBuffer), "%07X  %-35s = %08X\n", cs35l41_reg_desc[i].addr, cs35l41_reg_desc[i].name, val);
+            }
+            
+            size_t lineLen = strlen(lineBuffer);
+            if (currentLen + lineLen < bufferSize - 1) {
+                strlcat(dumpBuffer, lineBuffer, bufferSize);
+                currentLen += lineLen;
             }
         }
     }
     CIRRUS_LOG("--- Dump End: %u registers, CRC32: 0x%08X ---", successCount, crc);
+    
+    snprintf(lineBuffer, sizeof(lineBuffer), "--- CRC32: 0x%08X ---\n", crc);
+    strlcat(dumpBuffer, lineBuffer, bufferSize);
+    
+    char propName[64];
+    snprintf(propName, sizeof(propName), "Cirrus_Dump_%s", amp.name);
+    
+    OSString *strObj = OSString::withCString(dumpBuffer);
+    if (strObj) {
+        setProperty(propName, strObj);
+        strObj->release();
+    }
+    IOFreeData(dumpBuffer, bufferSize);
 }
 
 void CirrusAudioFixup::runTimeBasedFSMCheck(CS35L41Amp &amp) {

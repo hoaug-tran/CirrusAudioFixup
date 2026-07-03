@@ -184,13 +184,6 @@ bool CirrusAudioFixup::bootArgEnabled(const char *name) {
         return value != 0;
     }
     
-    // Also check for the boolean flag prefix (e.g. -cirrus_probe)
-    char flagBuf[64];
-    snprintf(flagBuf, sizeof(flagBuf), "-%s", name);
-    if (PE_parse_boot_argn(flagBuf, &value, sizeof(value))) {
-        return true; // Presence of flag implies true
-    }
-    
     // Check using VoodooI2C's checkKernelArg style (string buffer)
     int strValue[16];
     if (PE_parse_boot_argn(name, &strValue, sizeof(strValue))) {
@@ -202,6 +195,14 @@ bool CirrusAudioFixup::bootArgEnabled(const char *name) {
         return true;
     }
 
+    return false;
+}
+
+bool CirrusAudioFixup::bootArgStrEquals(const char *name, const char *expectedVal) {
+    char val[64];
+    if (PE_parse_boot_argn(name, val, sizeof(val))) {
+        return strncmp(val, expectedVal, sizeof(val)) == 0;
+    }
     return false;
 }
 
@@ -349,7 +350,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
         dumpAllRegisters(amp);
         runTimeBasedFSMCheck(amp);
         
-        if (bootArgEnabled("cirrus_phase=4A1")) {
+        if (bootArgStrEquals("cirrus_phase", "4A1")) {
             cs35l41_init_mac(amp);
         }
     }

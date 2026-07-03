@@ -123,6 +123,7 @@ private:
     void publishStatistics();
 
     bool bootArgEnabled(const char *name);
+    bool bootArgStrEquals(const char *name, const char *expectedVal);
     void logProviderInfo(IOService *provider);
     void dumpProviderProperties(IOService *provider);
     bool setupProbeTimer();

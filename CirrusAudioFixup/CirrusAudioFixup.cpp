@@ -29,6 +29,9 @@ bool CirrusAudioFixup::init(OSDictionary *properties) {
         return false;
     }
 
+    mTraceLock = IOLockAlloc();
+    initTraceBuffer();
+
     setProperty("CirrusReachedInit", kOSBooleanTrue);
     CIRRUS_LOG("init");
     return true;
@@ -168,6 +171,10 @@ void CirrusAudioFixup::stop(IOService *provider) {
 
 void CirrusAudioFixup::free() {
     CIRRUS_LOG("free");
+    if (mTraceLock) {
+        IOLockFree(mTraceLock);
+        mTraceLock = nullptr;
+    }
     super::free();
 }
 
@@ -305,9 +312,14 @@ void CirrusAudioFixup::probeTimerFired(OSObject *owner, IOTimerEventSource *send
 void CirrusAudioFixup::runReadOnlyProbe() {
     CIRRUS_LOG("read-only probe begin");
 
-    // VoodooI2C owns the bus. This kext only asks for safe debug transfers.
     for (unsigned i = 0; i < 2; ++i) {
         probeAmp(mAmps[i]);
+    }
+    
+    publishStatistics();
+    
+    if (bootArgEnabled("cirrus_dump_trace")) {
+        dumpTraceBuffer();
     }
 
     CIRRUS_LOG("read-only probe complete");
@@ -319,12 +331,12 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
 
     CIRRUS_LOG("amp %s probe address=0x%02X", amp.name, amp.address);
 
-    if (!readRegister(amp, CS35L41_DEVID_REG, &deviceId)) {
+    if (!readRegister(amp, CS35L41_DEVID_REG, &deviceId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s device-id read failed", amp.name);
         return;
     }
 
-    if (!readRegister(amp, CS35L41_REVID_REG, &revisionId)) {
+    if (!readRegister(amp, CS35L41_REVID_REG, &revisionId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s revision read failed", amp.name);
         return;
     }
@@ -334,8 +346,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
     amp.present = (deviceId == CS35L41_DEVICE_ID);
 
     if (amp.present) {
-        dumpRegisters(amp);
-        testRegisterConsistency(amp);
+        dumpAllRegisters(amp);
+        runTimeBasedFSMCheck(amp);
     }
 
     CIRRUS_LOG("amp %s devid=0x%08X revision=0x%08X present=%s",
@@ -376,13 +388,130 @@ bool CirrusAudioFixup::transferToAddress(UInt8 address,
     return true;
 }
 
-bool CirrusAudioFixup::bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length) {
-    UInt8 writeBuffer[4];
-    writeBE32(writeBuffer, reg);
-    return transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, length);
+void CirrusAudioFixup::initTraceBuffer() {
+    if (mTraceLock) {
+        IOLockLock(mTraceLock);
+        mTraceHead = 0;
+        mTraceTail = 0;
+        memset(&mTraceStats, 0, sizeof(mTraceStats));
+        IOLockUnlock(mTraceLock);
+    }
 }
 
-bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length) {
+void CirrusAudioFixup::recordTrace(TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen, IOReturn ret) {
+    if (!mTraceLock) return;
+    
+    uint64_t time = 0;
+    clock_get_uptime(&time);
+    uint64_t timeMs = 0;
+    absolutetime_to_nanoseconds(time, &timeMs);
+    timeMs /= 1000000; // ms
+
+    IOLockLock(mTraceLock);
+    
+    // Update stats
+    if (ret == kIOReturnOffline) {
+        mTraceStats.noackCount++;
+    } else if (ret == kIOReturnTimeout) {
+        mTraceStats.retries++; // reuse retries for timeout
+    }
+    
+    if (isBulk) {
+        if (ret == kIOReturnSuccess) mTraceStats.bulkSuccess++;
+        else mTraceStats.bulkFail++;
+    } else {
+        if (isWrite) {
+            if (ret == kIOReturnSuccess) mTraceStats.writeSuccess++;
+            else mTraceStats.writeFail++;
+        } else {
+            if (ret == kIOReturnSuccess) mTraceStats.readSuccess++;
+            else mTraceStats.readFail++;
+        }
+    }
+    
+    // Add to ring buffer
+    mTraceBuffer[mTraceTail].timestamp = timeMs;
+    mTraceBuffer[mTraceTail].amp = ampIndex;
+    mTraceBuffer[mTraceTail].isWrite = isWrite;
+    mTraceBuffer[mTraceTail].isBulk = isBulk;
+    mTraceBuffer[mTraceTail].reg = reg;
+    mTraceBuffer[mTraceTail].value = valOrLen;
+    mTraceBuffer[mTraceTail].ret = ret;
+    mTraceBuffer[mTraceTail].source = source;
+    
+    mTraceTail = (mTraceTail + 1) % kTraceBufferSize;
+    if (mTraceTail == mTraceHead) {
+        // Overwrite oldest
+        mTraceHead = (mTraceHead + 1) % kTraceBufferSize;
+    }
+    
+    IOLockUnlock(mTraceLock);
+}
+
+void CirrusAudioFixup::publishStatistics() {
+    if (!mTraceLock) return;
+    IOLockLock(mTraceLock);
+    setProperty("Cirrus_Read_Success", mTraceStats.readSuccess, 32);
+    setProperty("Cirrus_Read_Fail", mTraceStats.readFail, 32);
+    setProperty("Cirrus_Write_Success", mTraceStats.writeSuccess, 32);
+    setProperty("Cirrus_Write_Fail", mTraceStats.writeFail, 32);
+    setProperty("Cirrus_Bulk_Success", mTraceStats.bulkSuccess, 32);
+    setProperty("Cirrus_Bulk_Fail", mTraceStats.bulkFail, 32);
+    setProperty("Cirrus_NOACK_Count", mTraceStats.noackCount, 32);
+    IOLockUnlock(mTraceLock);
+}
+
+void CirrusAudioFixup::dumpTraceBuffer() {
+    if (!mTraceLock) return;
+    IOLockLock(mTraceLock);
+    
+    CIRRUS_LOG("--- TRACE BUFFER DUMP START ---");
+    uint32_t curr = mTraceHead;
+    while (curr != mTraceTail) {
+        const TraceEntry &e = mTraceBuffer[curr];
+        const char *srcStr = "OTHER";
+        switch (e.source) {
+            case TRACE_PROBE: srcStr = "Probe"; break;
+            case TRACE_DUMP: srcStr = "Dump"; break;
+            case TRACE_CONSISTENCY: srcStr = "Consist"; break;
+            case TRACE_FIRMWARE: srcStr = "Firmware"; break;
+            case TRACE_PLAYBACK: srcStr = "Playback"; break;
+            default: break;
+        }
+        
+        const char *ampStr = (e.amp == 0) ? "LEFT" : "RIGHT";
+        
+        if (e.isBulk) {
+            CIRRUS_LOG("[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X",
+                       e.timestamp, srcStr, ampStr, e.isWrite ? "WRITE" : "READ",
+                       e.reg, e.value, e.ret);
+        } else {
+            CIRRUS_LOG("[%llu ms][%s][%s] %s 0x%05X %s 0x%08X ret=0x%X",
+                       e.timestamp, srcStr, ampStr, e.isWrite ? "WRITE" : "READ",
+                       e.reg, e.isWrite ? "<-" : "->", e.value, e.ret);
+        }
+        
+        curr = (curr + 1) % kTraceBufferSize;
+    }
+    CIRRUS_LOG("--- TRACE BUFFER DUMP END ---");
+    
+    IOLockUnlock(mTraceLock);
+}
+
+bool CirrusAudioFixup::bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length, TraceSource source) {
+    UInt8 writeBuffer[4];
+    writeBE32(writeBuffer, reg);
+    bool ret = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, length);
+    
+    OSObject *transferRet = getProperty("CirrusTransferRet");
+    IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : (ret ? kIOReturnSuccess : kIOReturnError);
+    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    recordTrace(source, ampIdx, false, true, reg, length, retCode);
+    
+    return ret;
+}
+
+bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length, TraceSource source) {
     UInt8 stackBuffer[8];
     UInt8 *writeBuffer = stackBuffer;
     bool useMalloc = (4 + length > sizeof(stackBuffer));
@@ -399,103 +528,119 @@ bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data,
     
     bool ret = transferToAddress(amp.address, writeBuffer, 4 + length, nullptr, 0);
     
+    OSObject *transferRet = getProperty("CirrusTransferRet");
+    IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : (ret ? kIOReturnSuccess : kIOReturnError);
+    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    recordTrace(source, ampIdx, true, true, reg, length, retCode);
+    
     if (useMalloc) {
         IOFreeData(writeBuffer, 4 + length);
     }
     return ret;
 }
 
-bool CirrusAudioFixup::readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value) {
+bool CirrusAudioFixup::readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value, TraceSource source) {
     if (!value) return false;
     UInt8 readBuffer[4] { 0 };
-    if (!bulkRead(amp, reg, readBuffer, sizeof(readBuffer))) {
+    
+    UInt8 writeBuffer[4];
+    writeBE32(writeBuffer, reg);
+    bool success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), readBuffer, sizeof(readBuffer));
+    
+    OSObject *transferRet = getProperty("CirrusTransferRet");
+    IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : (success ? kIOReturnSuccess : kIOReturnError);
+    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    
+    if (success) {
+        *value = readBE32(readBuffer);
+        recordTrace(source, ampIdx, false, false, reg, *value, retCode);
+        return true;
+    } else {
+        recordTrace(source, ampIdx, false, false, reg, 0, retCode);
         return false;
     }
-    *value = readBE32(readBuffer);
-    return true;
 }
 
-bool CirrusAudioFixup::writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value) {
+bool CirrusAudioFixup::writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, TraceSource source) {
     UInt8 writeBuffer[4];
     writeBE32(writeBuffer, value);
-    return bulkWrite(amp, reg, writeBuffer, sizeof(writeBuffer));
+    bool success = bulkWrite(amp, reg, writeBuffer, sizeof(writeBuffer), source);
+    // bulkWrite already logs
+    return success;
 }
 
-void CirrusAudioFixup::dumpRegisters(CS35L41Amp &amp) {
-    struct RegDump {
-        UInt32 addr;
-        const char *name;
-    } regs[] = {
-        { CS35L41_DEVID_REG, "DEVID" },
-        { CS35L41_REVID_REG, "REVID" },
-        { CS35L41_FABID_REG, "FABID" },
-        { CS35L41_OTPID_REG, "OTPID" },
-        { CS35L41_PWR_CTRL1_REG, "PWR_CTRL1_GLOBAL_ENABLE" },
-        { CS35L41_PWR_CTRL2_REG, "PWR_CTRL2" },
-        { CS35L41_PWR_CTRL3_REG, "PWR_CTRL3" },
-        { CS35L41_AMP_OUT_MUTE_REG, "AMP_OUT_MUTE" },
-        { CS35L41_PWRMGT_STS_REG, "PWRMGT_STS" },
-        { CS35L41_IRQ1_STATUS1_REG, "IRQ1_STATUS1" },
-        { CS35L41_IRQ2_STATUS1_REG, "IRQ2_STATUS1" },
-        { CS35L41_IRQ1_MASK1_REG, "IRQ1_MASK1" },
-        { CS35L41_IRQ2_MASK1_REG, "IRQ2_MASK1" },
-        { CS35L41_DSP_MBOX_1_REG, "DSP_MBOX_1" },
-        { CS35L41_DSP_MBOX_2_REG, "DSP_MBOX_2" },
-        { CS35L41_DSP_MBOX_3_REG, "DSP_MBOX_3" },
-        { CS35L41_DSP_MBOX_4_REG, "DSP_MBOX_4" }
-    };
-    
-    char propName[64];
-    for (size_t i = 0; i < sizeof(regs) / sizeof(regs[0]); i++) {
-        UInt32 val = 0;
-        if (readRegister(amp, regs[i].addr, &val)) {
-            snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_%s", amp.name, regs[i].name);
-            setProperty(propName, val, 32);
-        }
+static uint32_t crc32_le(uint32_t crc, uint8_t const *buf, size_t len) {
+    crc = ~crc;
+    while (len--) {
+        crc ^= *buf++;
+        for (int i = 0; i < 8; i++)
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xEDB88320 : 0);
     }
+    return ~crc;
 }
 
-void CirrusAudioFixup::testRegisterConsistency(CS35L41Amp &amp) {
-    UInt32 val1 = 0, val2 = 0;
-    
-    CIRRUS_LOG("Amp %s: Starting Register Consistency Test", amp.name);
-    
-    // Phase A: GLOBAL_ENABLE
-    if (readRegister(amp, CS35L41_PWR_CTRL1_REG, &val1)) {
-        IOSleep(5000); // 5 seconds
-        if (readRegister(amp, CS35L41_PWR_CTRL1_REG, &val2)) {
-            setProperty("Cirrus_Test_GLOBAL_ENABLE_Match", (val1 == val2) ? kOSBooleanTrue : kOSBooleanFalse);
-            CIRRUS_LOG("Amp %s Phase A: GLOBAL_ENABLE old=0x%08X new=0x%08X", amp.name, val1, val2);
+uint32_t CirrusAudioFixup::calculateRegistersCRC32(CS35L41Amp &amp) {
+    uint32_t crc = 0;
+    size_t numRegs = sizeof(cs35l41_reg_desc) / sizeof(cs35l41_reg_desc[0]);
+    for (size_t i = 0; i < numRegs; i++) {
+        if (!cs35l41_reg_desc[i].readable) continue;
+        uint32_t val = 0;
+        if (readRegister(amp, cs35l41_reg_desc[i].addr, &val, TRACE_DUMP)) {
+            crc = crc32_le(crc, (const uint8_t*)&cs35l41_reg_desc[i].addr, 4);
+            crc = crc32_le(crc, (const uint8_t*)&val, 4);
         }
     }
+    return crc;
+}
+
+void CirrusAudioFixup::dumpAllRegisters(CS35L41Amp &amp) {
+    bool compact = bootArgEnabled("cirrus_dump_compact");
+    CIRRUS_LOG("--- Full Register Dump Amp %s ---", amp.name);
     
-    // Phase B: PWR_CTRL2
-    if (readRegister(amp, CS35L41_PWR_CTRL2_REG, &val1)) {
-        IOSleep(5000); // 5 seconds
-        if (readRegister(amp, CS35L41_PWR_CTRL2_REG, &val2)) {
-            setProperty("Cirrus_Test_PWR_CTRL2_Match", (val1 == val2) ? kOSBooleanTrue : kOSBooleanFalse);
-            CIRRUS_LOG("Amp %s Phase B: PWR_CTRL2 old=0x%08X new=0x%08X", amp.name, val1, val2);
-        }
-    }
+    size_t numRegs = sizeof(cs35l41_reg_desc) / sizeof(cs35l41_reg_desc[0]);
+    uint32_t successCount = 0;
+    uint32_t crc = 0;
     
-    // Phase C: DSP_MBOX_1
-    if (readRegister(amp, CS35L41_DSP_MBOX_1_REG, &val1)) {
-        IOSleep(5000); // 5 seconds
-        if (readRegister(amp, CS35L41_DSP_MBOX_1_REG, &val2)) {
-            setProperty("Cirrus_Test_MBOX1_Match", (val1 == val2) ? kOSBooleanTrue : kOSBooleanFalse);
-            CIRRUS_LOG("Amp %s Phase C: MBOX1 old=0x%08X new=0x%08X", amp.name, val1, val2);
-        }
-    }
-    
-    // Phase D: Write Test on IRQ1_STATUS1
-    UInt32 oldIrq = 0, newIrq = 0;
-    if (readRegister(amp, CS35L41_IRQ1_STATUS1_REG, &oldIrq)) {
-        CIRRUS_LOG("Amp %s Phase D: Write Test old_IRQ=0x%08X", amp.name, oldIrq);
-        if (writeRegister(amp, CS35L41_IRQ1_STATUS1_REG, oldIrq)) {
-            if (readRegister(amp, CS35L41_IRQ1_STATUS1_REG, &newIrq)) {
-                setProperty("Cirrus_Test_Write_Success", kOSBooleanTrue);
-                CIRRUS_LOG("Amp %s Phase D: Write Test new_IRQ=0x%08X", amp.name, newIrq);
+    for (size_t i = 0; i < numRegs; i++) {
+        if (!cs35l41_reg_desc[i].readable) continue;
+        
+        uint32_t val = 0;
+        if (readRegister(amp, cs35l41_reg_desc[i].addr, &val, TRACE_DUMP)) {
+            successCount++;
+            crc = crc32_le(crc, (const uint8_t*)&cs35l41_reg_desc[i].addr, 4);
+            crc = crc32_le(crc, (const uint8_t*)&val, 4);
+            
+            if (compact) {
+                CIRRUS_LOG("%07X: %08X", cs35l41_reg_desc[i].addr, val);
+            } else {
+                CIRRUS_LOG("%07X  %-35s = %08X", cs35l41_reg_desc[i].addr, cs35l41_reg_desc[i].name, val);
             }
         }
+    }
+    CIRRUS_LOG("--- Dump End: %u registers, CRC32: 0x%08X ---", successCount, crc);
+}
+
+void CirrusAudioFixup::runTimeBasedFSMCheck(CS35L41Amp &amp) {
+    CIRRUS_LOG("Amp %s: Starting Time-based FSM Check", amp.name);
+    
+    uint32_t crcT0 = calculateRegistersCRC32(amp);
+    CIRRUS_LOG("Amp %s T0 CRC: 0x%08X", amp.name, crcT0);
+    
+    IOSleep(1000); // T+1
+    uint32_t crcT1 = calculateRegistersCRC32(amp);
+    CIRRUS_LOG("Amp %s T+1s CRC: 0x%08X", amp.name, crcT1);
+    
+    IOSleep(4000); // T+5
+    uint32_t crcT5 = calculateRegistersCRC32(amp);
+    CIRRUS_LOG("Amp %s T+5s CRC: 0x%08X", amp.name, crcT5);
+    
+    IOSleep(25000); // T+30
+    uint32_t crcT30 = calculateRegistersCRC32(amp);
+    CIRRUS_LOG("Amp %s T+30s CRC: 0x%08X", amp.name, crcT30);
+    
+    if (crcT0 == crcT1 && crcT1 == crcT5 && crcT5 == crcT30) {
+        CIRRUS_LOG("Amp %s: FSM is stable (CRCs match)", amp.name);
+    } else {
+        CIRRUS_LOG("Amp %s: FSM is running! (CRCs differ)", amp.name);
     }
 }

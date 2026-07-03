@@ -7,13 +7,17 @@
 #define CirrusAudioFixup_hpp
 
 #include <IOKit/IOService.h>
+#include <IOKit/IOService.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOTimerEventSource.h>
 #include <libkern/c++/OSCollectionIterator.h>
+#include <os/log.h>
 
-#define LOG_PREFIX "[CirrusAudioFixup] "
-#define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
-#define CIRRUS_ERR(fmt, ...) IOLog(LOG_PREFIX "ERROR: " fmt "\n", ##__VA_ARGS__)
+#include "Codecs/CS35L41/CS35L41Registers.hpp"
+
+#define LOG_PREFIX "CirrusAudioFixup: "
+#define CIRRUS_LOG(fmt, ...) os_log(OS_LOG_DEFAULT, LOG_PREFIX fmt, ##__VA_ARGS__)
+#define CIRRUS_ERR(fmt, ...) os_log_error(OS_LOG_DEFAULT, LOG_PREFIX "ERROR: " fmt, ##__VA_ARGS__)
 
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 
@@ -37,6 +41,38 @@
 #define CS35L41_DSP_MBOX_2_REG   0x00013004
 #define CS35L41_DSP_MBOX_3_REG   0x00013008
 #define CS35L41_DSP_MBOX_4_REG   0x0001300C
+
+enum TraceSource {
+    TRACE_PROBE,
+    TRACE_DUMP,
+    TRACE_CONSISTENCY,
+    TRACE_FIRMWARE,
+    TRACE_PLAYBACK,
+    TRACE_OTHER
+};
+
+struct TraceEntry {
+    uint64_t timestamp;
+    uint8_t amp;        // 0 for left, 1 for right
+    bool isWrite;
+    bool isBulk;
+    uint32_t reg;
+    uint32_t value;     // or length if isBulk
+    IOReturn ret;
+    TraceSource source;
+};
+
+struct TraceStats {
+    uint32_t readSuccess;
+    uint32_t readFail;
+    uint32_t writeSuccess;
+    uint32_t writeFail;
+    uint32_t bulkSuccess;
+    uint32_t bulkFail;
+    uint32_t noackCount;
+    uint32_t retries;
+};
+
 
 struct VoodooI2CAddressedTransfer {
     UInt8 address;
@@ -74,6 +110,18 @@ private:
         { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0 },
     };
 
+    static const size_t kTraceBufferSize = 1024;
+    TraceEntry mTraceBuffer[kTraceBufferSize];
+    uint32_t mTraceHead { 0 };
+    uint32_t mTraceTail { 0 };
+    TraceStats mTraceStats { 0 };
+    IOLock *mTraceLock { nullptr };
+
+    void initTraceBuffer();
+    void recordTrace(TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen, IOReturn ret);
+    void dumpTraceBuffer();
+    void publishStatistics();
+
     bool bootArgEnabled(const char *name);
     void logProviderInfo(IOService *provider);
     void dumpProviderProperties(IOService *provider);
@@ -88,12 +136,15 @@ private:
                            UInt8 *readBuffer,
                            UInt16 readLength);
                            
-    bool bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length);
-    bool bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length);
-    bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value);
-    bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value);
-    void dumpRegisters(CS35L41Amp &amp);
+    bool bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
+    bool bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
+    bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value, TraceSource source = TRACE_OTHER);
+    bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, TraceSource source = TRACE_OTHER);
+    
+    void dumpAllRegisters(CS35L41Amp &amp);
     void testRegisterConsistency(CS35L41Amp &amp);
+    void runTimeBasedFSMCheck(CS35L41Amp &amp);
+    uint32_t calculateRegistersCRC32(CS35L41Amp &amp);
 
     static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
 };

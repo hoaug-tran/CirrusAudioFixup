@@ -677,6 +677,12 @@ bool CirrusAudioFixup::cs35l41_init_mac(CS35L41Amp &amp) {
     readRegister(amp, 0x00004, &revid_after);
     UInt32 crc_after = calculateRegistersCRC32(amp);
     
+    char propName[64];
+    snprintf(propName, sizeof(propName), "Cirrus_CRC_Before_%s", amp.name);
+    setProperty(propName, crc_before, 32);
+    snprintf(propName, sizeof(propName), "Cirrus_CRC_After_%s", amp.name);
+    setProperty(propName, crc_after, 32);
+    
     CIRRUS_LOG("Amp %s: After Reset -> DEVID=0x%08X REVID=0x%08X CRC=0x%08X", 
                amp.name, devid_after, revid_after, crc_after);
                

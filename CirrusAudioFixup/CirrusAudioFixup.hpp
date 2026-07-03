@@ -16,8 +16,8 @@
 #include "Codecs/CS35L41/CS35L41Registers.hpp"
 
 #define LOG_PREFIX "CirrusAudioFixup: "
-#define CIRRUS_LOG(fmt, ...) os_log(OS_LOG_DEFAULT, LOG_PREFIX fmt, ##__VA_ARGS__)
-#define CIRRUS_ERR(fmt, ...) os_log_error(OS_LOG_DEFAULT, LOG_PREFIX "ERROR: " fmt, ##__VA_ARGS__)
+#define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
+#define CIRRUS_ERR(fmt, ...) IOLog(LOG_PREFIX "ERROR: " fmt "\n", ##__VA_ARGS__)
 
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 

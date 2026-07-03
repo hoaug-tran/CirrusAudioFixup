@@ -55,11 +55,14 @@
             <key>IOProviderClass</key>
             <string>VoodooI2CDeviceNub</string>
 
-            <key>IONameMatch</key>
-            <string>CLSA0100</string>
+            <key>IOPropertyMatch</key>
+            <dict>
+                <key>IOName</key>
+                <string>CLSA0100</string>
+            </dict>
 
             <key>IOProbeScore</key>
-            <integer>9000</integer>
+            <integer>10000</integer>
         </dict>
     </dict>
 </dict>

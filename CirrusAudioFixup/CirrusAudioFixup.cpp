@@ -48,6 +48,7 @@ IOService *CirrusAudioFixup::probe(IOService *provider, SInt32 *score) {
 }
 
 bool CirrusAudioFixup::start(IOService *provider) {
+    CIRRUS_LOG("START CALLED OK");
     CIRRUS_LOG("start");
 
     if (!super::start(provider)) {

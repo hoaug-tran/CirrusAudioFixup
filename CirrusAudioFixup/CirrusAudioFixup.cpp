@@ -75,10 +75,10 @@ bool CirrusAudioFixup::start(IOService *provider) {
             IOService *amdi0030 = OSDynamicCast(IOService, iter->getNextObject());
             if (amdi0030) {
                 IOMemoryDescriptor *bmd0 = amdi0030->getDeviceMemoryWithIndex(0);
-                if (bmd0) {
-                    IOPhysicalAddress physAddr = bmd0->getPhysicalAddress();
-                    CIRRUS_LOG("Found AMDI0030 base physical address: 0x%llX", (unsigned long long)physAddr);
-                    bmd = IOMemoryDescriptor::withPhysicalAddress(physAddr, 0x400, kIODirectionInOut);
+                if (bmd0 && bmd0->getLength() >= 0x400) {
+                    CIRRUS_LOG("Found AMDI0030 base physical address: 0x%llX", (unsigned long long)bmd0->getPhysicalAddress());
+                    bmd0->retain();
+                    bmd = bmd0;
                 }
             }
             iter->release();
@@ -375,8 +375,14 @@ bool CirrusAudioFixup::bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t
 }
 
 bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length) {
-    UInt8 *writeBuffer = (UInt8 *)IOMallocData(4 + length);
-    if (!writeBuffer) return false;
+    UInt8 stackBuffer[8];
+    UInt8 *writeBuffer = stackBuffer;
+    bool useMalloc = (4 + length > sizeof(stackBuffer));
+    
+    if (useMalloc) {
+        writeBuffer = (UInt8 *)IOMallocData(4 + length);
+        if (!writeBuffer) return false;
+    }
     
     writeBE32(writeBuffer, reg);
     if (length > 0 && data) {
@@ -384,7 +390,10 @@ bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data,
     }
     
     bool ret = transferToAddress(amp.address, writeBuffer, 4 + length, nullptr, 0);
-    IOFreeData(writeBuffer, 4 + length);
+    
+    if (useMalloc) {
+        IOFreeData(writeBuffer, 4 + length);
+    }
     return ret;
 }
 
@@ -413,12 +422,19 @@ void CirrusAudioFixup::dumpRegisters(CS35L41Amp &amp) {
         { CS35L41_REVID_REG, "REVID" },
         { CS35L41_FABID_REG, "FABID" },
         { CS35L41_OTPID_REG, "OTPID" },
-        { CS35L41_PWR_CTRL1_REG, "PWR_CTRL1" },
+        { CS35L41_PWR_CTRL1_REG, "PWR_CTRL1_GLOBAL_ENABLE" },
         { CS35L41_PWR_CTRL2_REG, "PWR_CTRL2" },
         { CS35L41_PWR_CTRL3_REG, "PWR_CTRL3" },
         { CS35L41_AMP_OUT_MUTE_REG, "AMP_OUT_MUTE" },
         { CS35L41_PWRMGT_STS_REG, "PWRMGT_STS" },
-        { CS35L41_IRQ1_STATUS1_REG, "IRQ1_STATUS1" }
+        { CS35L41_IRQ1_STATUS1_REG, "IRQ1_STATUS1" },
+        { CS35L41_IRQ2_STATUS1_REG, "IRQ2_STATUS1" },
+        { CS35L41_IRQ1_MASK1_REG, "IRQ1_MASK1" },
+        { CS35L41_IRQ2_MASK1_REG, "IRQ2_MASK1" },
+        { CS35L41_DSP_MBOX_1_REG, "DSP_MBOX_1" },
+        { CS35L41_DSP_MBOX_2_REG, "DSP_MBOX_2" },
+        { CS35L41_DSP_MBOX_3_REG, "DSP_MBOX_3" },
+        { CS35L41_DSP_MBOX_4_REG, "DSP_MBOX_4" }
     };
     
     char propName[64];

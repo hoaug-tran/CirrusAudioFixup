@@ -309,6 +309,13 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
     amp.revisionId = revisionId;
     amp.present = (deviceId == CS35L41_DEVICE_ID);
 
+    char propName[64];
+    snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_DEVID", amp.name);
+    setProperty(propName, deviceId, 32);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_Amp_%s_REVID", amp.name);
+    setProperty(propName, revisionId, 32);
+
     CIRRUS_LOG("amp %s devid=0x%08X revision=0x%08X present=%s",
                amp.name, amp.deviceId, amp.revisionId, amp.present ? "yes" : "no");
 }

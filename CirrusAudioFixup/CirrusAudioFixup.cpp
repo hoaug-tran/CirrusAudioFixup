@@ -1745,6 +1745,67 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
                image->stat_xm_blocks, image->stat_ym_blocks, image->stat_pm_blocks, 
                image->stat_coeff_blocks, image->stat_metadata_blocks, image->stat_unknown_blocks);
 
+    if (amp.binData && amp.binSize > 0) {
+        if (!CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
+            CIRRUS_ERR("Amp %s: BIN parse failed", amp.name);
+        } else {
+            CIRRUS_LOG("Amp %s: BIN Parse OK. Found %d Coefficient Blocks", amp.name, image->coefficientCount);
+            
+            // Cross-Check
+            uint32_t orphanBlocks = 0;
+            uint32_t unknownIds = 0;
+            
+            CIRRUS_LOG("========================");
+            CIRRUS_LOG("Cross Check");
+            CIRRUS_LOG("========================");
+            CIRRUS_LOG("Algorithms : %d", image->algorithmCount);
+            CIRRUS_LOG("Coeff Blocks: %d\n", image->coefficientCount);
+            
+            for (uint32_t i = 0; i < image->algorithmCount; i++) {
+                uint32_t matchedBlocks = 0;
+                for (uint32_t j = 0; j < image->coefficientCount; j++) {
+                    if (image->coefficients[j].id == image->algorithms[i].id) {
+                        matchedBlocks++;
+                    }
+                }
+                CIRRUS_LOG("Algorithm %d\n  Blocks : %d\n", image->algorithms[i].id, matchedBlocks);
+            }
+            
+            for (uint32_t j = 0; j < image->coefficientCount; j++) {
+                bool found = false;
+                for (uint32_t i = 0; i < image->algorithmCount; i++) {
+                    if (image->coefficients[j].id == image->algorithms[i].id) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // Global coefficients use the firmware ID instead of an algorithm ID
+                    if (image->coefficients[j].id == image->fw_id) {
+                        // Global coefficient
+                        // Not an orphan
+                    } else {
+                        unknownIds++;
+                        orphanBlocks++;
+                    }
+                }
+            }
+            
+            CIRRUS_LOG("Unknown IDs    : %d", unknownIds);
+            CIRRUS_LOG("Orphan Blocks  : %d", orphanBlocks);
+            
+            uint32_t wmdr_payload = (uint32_t)(amp.binSize - 16);
+            CIRRUS_LOG("\nCoefficient payload bytes : %d", image->total_coeff_payload_bytes);
+            CIRRUS_LOG("WMDR payload bytes        : %d", wmdr_payload);
+            
+            if (image->total_coeff_payload_bytes == wmdr_payload) {
+                CIRRUS_LOG("PASS");
+            } else {
+                CIRRUS_LOG("FAIL - Payload mismatch");
+            }
+        }
+    }
+
     if (strncmp(phaseArg, "5C.0", 4) == 0) {
         CIRRUS_LOG("Phase 5C.0 Complete for amp %s", amp.name);
         IOFree(image, sizeof(FirmwareImage));

@@ -118,6 +118,7 @@ struct FirmwareResource {
     size_t wmfwSize;
     const uint8_t *bin;
     size_t binSize;
+    bool isDummy;
 };
 
 class CirrusAudioFixup : public IOService {
@@ -192,6 +193,9 @@ private:
     
     // Phase 5A
     void phase5a_FirmwareDiscovery(CS35L41Amp &amp);
+    
+    // Phase 5B
+    void phase5b_DSPBringup(CS35L41Amp &amp);
     IOService* getAudioController();
     
     void testRegisterConsistency(CS35L41Amp &amp);

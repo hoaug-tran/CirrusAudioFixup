@@ -368,7 +368,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     dumpAllRegisters(amp); // Phase 4B.4A Final Dump
                 }
             }
-        } else if (bootArgStrEquals("cirrus_phase", "5A")) {
+        } else if (bootArgStrEquals("cirrus_phase", "5A") || bootArgStrEquals("cirrus_phase", "5B")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
                     applyPLL(amp);
@@ -376,6 +376,9 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     applyGPIO(amp);
                     amp.final_crc = calculateRegistersCRC32(amp);
                     phase5a_FirmwareDiscovery(amp);
+                    if (bootArgStrEquals("cirrus_phase", "5B")) {
+                        phase5b_DSPBringup(amp);
+                    }
                 }
             }
         }
@@ -1450,6 +1453,13 @@ void CirrusAudioFixup::phase5a_FirmwareDiscovery(CS35L41Amp &amp) {
         srcStr->release();
     }
     
+    snprintf(propFW, sizeof(propFW), "Cirrus_FW_Type_%s", amp.name);
+    OSString *typeStr = OSString::withCString(foundRes->isDummy ? "Dummy" : "Production");
+    if (typeStr) {
+        setProperty(propFW, typeStr);
+        typeStr->release();
+    }
+    
     snprintf(propFW, sizeof(propFW), "Cirrus_FW_Size_%s", amp.name); setProperty(propFW, (uint64_t)foundRes->wmfwSize, 32);
     snprintf(propFW, sizeof(propFW), "Cirrus_BIN_Size_%s", amp.name); setProperty(propFW, (uint64_t)foundRes->binSize, 32);
     
@@ -1491,4 +1501,177 @@ void CirrusAudioFixup::phase5a_FirmwareDiscovery(CS35L41Amp &amp) {
         setProperty(propStatus, statusStr);
         statusStr->release();
     }
+}
+
+void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
+    CIRRUS_LOG("Entering Phase 5B: DSP Bring-up for amp %s", amp.name);
+    
+    char propName[64];
+    OSString *statusStr = nullptr;
+    
+    // PRE Snapshot
+    uint32_t pre_core_ctrl = 0, pre_clk_ctrl = 0, pre_mbox = 0;
+    readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &pre_core_ctrl);
+    readRegister(amp, CS35L41_DSP_CLK_CTRL, &pre_clk_ctrl);
+    readRegister(amp, CS35L41_DSP_MBOX_2, &pre_mbox);
+    CIRRUS_LOG("Phase 5B PRE-Snapshot: CORE_CTRL=0x%08X, CLK=0x%08X, MBOX_2=0x%08X", pre_core_ctrl, pre_clk_ctrl, pre_mbox);
+    
+    // 5B.1 DSP Reset Release
+    uint64_t reset_start = mach_absolute_time();
+    
+    // update_bits for RESET | EN
+    updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, HALO_CORE_RESET | HALO_CORE_EN, HALO_CORE_RESET | HALO_CORE_EN);
+    
+    // update_bits to clear RESET
+    updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, HALO_CORE_RESET, 0);
+    
+    uint64_t reset_end = mach_absolute_time();
+    uint64_t reset_time_us = (reset_end - reset_start) / 1000; // rough approximation for nanosecs to microsecs (assuming 1 tick = 1ns roughly on intel, but better use mach_timebase_info if precision matters, for diagnostics / 1000 is fine)
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_RESET_TIME_US_%s", amp.name);
+    setProperty(propName, reset_time_us, 32);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_RESET_%s", amp.name);
+    statusStr = OSString::withCString("OK");
+    if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
+    
+    // 5B.2 DSP Clock Raw
+    uint32_t current_clk = 0;
+    readRegister(amp, CS35L41_DSP_CLK_CTRL, &current_clk);
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_CLOCK_RAW_%s", amp.name);
+    setProperty(propName, (uint64_t)current_clk, 32);
+    
+    // 5B.3 MPU Unlock
+    uint64_t mpu_start = mach_absolute_time();
+    
+    writeRegister(amp, CS35L41_DSP1_MPU_LOCK_CONFIG, 0x5555);
+    writeRegister(amp, CS35L41_DSP1_MPU_LOCK_CONFIG, 0xAAAA);
+    
+    uint32_t unlock_val = 0xFFFFFFFF;
+    writeRegister(amp, CS35L41_DSP1_MPU_XM_ACCESS0, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YM_ACCESS0, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_WNDW_ACCESS0, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_XREG_ACCESS0, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YREG_ACCESS0, unlock_val);
+    
+    writeRegister(amp, CS35L41_DSP1_MPU_XM_ACCESS1, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YM_ACCESS1, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_WNDW_ACCESS1, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_XREG_ACCESS1, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YREG_ACCESS1, unlock_val);
+    
+    writeRegister(amp, CS35L41_DSP1_MPU_XM_ACCESS2, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YM_ACCESS2, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_WNDW_ACCESS2, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_XREG_ACCESS2, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YREG_ACCESS2, unlock_val);
+    
+    writeRegister(amp, CS35L41_DSP1_MPU_XM_ACCESS3, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YM_ACCESS3, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_WNDW_ACCESS3, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_XREG_ACCESS3, unlock_val);
+    writeRegister(amp, CS35L41_DSP1_MPU_YREG_ACCESS3, unlock_val);
+    
+    uint64_t mpu_end = mach_absolute_time();
+    uint64_t mpu_time_us = (mpu_end - mpu_start) / 1000;
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_MPU_TIME_US_%s", amp.name);
+    setProperty(propName, mpu_time_us, 32);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_MEM_WINDOW_%s", amp.name);
+    statusStr = OSString::withCString("OK");
+    if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
+    
+    // 5B.3.5 DSP Identity Check
+    uint32_t sys_id = 0, sys_ver = 0, sys_core = 0;
+    readRegister(amp, CS35L41_DSP1_SYS_ID, &sys_id);
+    readRegister(amp, CS35L41_DSP1_SYS_VERSION, &sys_ver);
+    readRegister(amp, CS35L41_DSP1_SYS_CORE_ID, &sys_core);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_SYS_ID_%s", amp.name); setProperty(propName, (uint64_t)sys_id, 32);
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_SYS_VER_%s", amp.name); setProperty(propName, (uint64_t)sys_ver, 32);
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_SYS_CORE_%s", amp.name); setProperty(propName, (uint64_t)sys_core, 32);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_STATE_%s", amp.name);
+    if (sys_id == 0xFFFFFFFF && sys_ver == 0xFFFFFFFF && sys_core == 0xFFFFFFFF) {
+        statusStr = OSString::withCString("FAIL_SYSINFO (DSP_UNREACHABLE)");
+        if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
+        return;
+    } else if (sys_id == 0x00000000 && sys_ver == 0x00000000 && sys_core == 0x00000000) {
+        statusStr = OSString::withCString("FAIL_SYSINFO (DSP_IN_RESET)");
+        if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
+        return;
+    }
+    
+    // 5B.4 Mailbox Init Read
+    uint32_t mbox_init = 0;
+    readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_init);
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_RAW_INIT_%s", amp.name);
+    setProperty(propName, (uint64_t)mbox_init, 32);
+    
+    // POST Snapshot
+    uint32_t post_core_ctrl = 0, post_clk_ctrl = 0, post_mbox = 0;
+    readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &post_core_ctrl);
+    readRegister(amp, CS35L41_DSP_CLK_CTRL, &post_clk_ctrl);
+    readRegister(amp, CS35L41_DSP_MBOX_2, &post_mbox);
+    CIRRUS_LOG("Phase 5B POST-Snapshot: CORE_CTRL=0x%08X, CLK=0x%08X, MBOX_2=0x%08X", post_core_ctrl, post_clk_ctrl, post_mbox);
+    
+    // 5B.5 Mailbox Timeline Polling
+    uint32_t current_mbox = post_mbox;
+    uint32_t previous_mbox = post_mbox;
+    OSArray *timeline = OSArray::withCapacity(10);
+    uint32_t transitions = 0;
+    
+    if (timeline) {
+        char initialTimeline[64];
+        snprintf(initialTimeline, sizeof(initialTimeline), "0ms: 0x%08X", previous_mbox);
+        OSString *tStr = OSString::withCString(initialTimeline);
+        if (tStr) { timeline->setObject(tStr); tStr->release(); }
+    }
+    
+    uint64_t mbox_start = mach_absolute_time();
+    int timeout_ms = 500;
+    int ms = 0;
+    
+    while (ms <= timeout_ms) {
+        readRegister(amp, CS35L41_DSP_MBOX_2, &current_mbox);
+        
+        if (current_mbox != previous_mbox) {
+            transitions++;
+            if (timeline) {
+                char transitionStr[64];
+                snprintf(transitionStr, sizeof(transitionStr), "%dms: 0x%08X", ms, current_mbox);
+                OSString *tStr = OSString::withCString(transitionStr);
+                if (tStr) { timeline->setObject(tStr); tStr->release(); }
+            }
+            previous_mbox = current_mbox;
+        }
+        
+        IODelay(1000); // 1ms delay
+        ms++;
+    }
+    
+    uint64_t mbox_end = mach_absolute_time();
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_POLL_%s", amp.name);
+    if (timeline) {
+        setProperty(propName, timeline);
+        timeline->release();
+    }
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_TRANSITIONS_%s", amp.name);
+    setProperty(propName, (uint64_t)transitions, 32);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_READY_TIME_MS_%s", amp.name);
+    setProperty(propName, (uint64_t)((mbox_end - mbox_start) / 1000000), 32);
+    
+    snprintf(propName, sizeof(propName), "Cirrus_DSP_STATE_%s", amp.name);
+    if (transitions == 0 && post_mbox == 0x0) {
+        statusStr = OSString::withCString("FAIL_MAILBOX_TIMEOUT");
+    } else {
+        statusStr = OSString::withCString("READY");
+    }
+    if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
+    
+    CIRRUS_LOG("Phase 5B complete for amp %s. Transitions: %d", amp.name, transitions);
 }

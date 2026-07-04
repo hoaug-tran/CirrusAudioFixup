@@ -358,6 +358,26 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
             if (cs35l41_init_mac(amp)) {
                 cs35l41_apply_phase4A2(amp);
             }
+        } else if (bootArgStrEquals("cirrus_phase", "4B")) {
+            if (cs35l41_init_mac(amp)) {
+                if (cs35l41_apply_phase4A2(amp)) {
+                    applyPLL(amp);
+                    applyASP(amp);
+                    applyGPIO(amp);
+                    amp.final_crc = calculateRegistersCRC32(amp);
+                    dumpAllRegisters(amp); // Phase 4B.4A Final Dump
+                }
+            }
+        } else if (bootArgStrEquals("cirrus_phase", "5A")) {
+            if (cs35l41_init_mac(amp)) {
+                if (cs35l41_apply_phase4A2(amp)) {
+                    applyPLL(amp);
+                    applyASP(amp);
+                    applyGPIO(amp);
+                    amp.final_crc = calculateRegistersCRC32(amp);
+                    phase5a_FirmwareDiscovery(amp);
+                }
+            }
         }
     }
 
@@ -536,14 +556,14 @@ void CirrusAudioFixup::dumpTraceBuffer() {
 bool CirrusAudioFixup::bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length, TraceSource source) {
     UInt8 writeBuffer[4];
     writeBE32(writeBuffer, reg);
-    bool ret = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, length);
+    bool success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, (UInt16)length);
     
     OSObject *transferRet = getProperty("CirrusTransferRet");
-    IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : (ret ? kIOReturnSuccess : kIOReturnError);
+    IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : (success ? kIOReturnSuccess : kIOReturnError);
     uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
-    recordTrace(source, ampIdx, false, true, reg, length, retCode);
+    recordTrace(source, ampIdx, false, true, reg, (UInt32)length, retCode);
     
-    return ret;
+    return success;
 }
 
 bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length, TraceSource source) {
@@ -965,7 +985,7 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
     int elements_skipped = 0;
     int update_bits_calls = 0;
     
-    if (!readRegister(amp, 0x00000010, otp_id_reg)) { // CS35L41_OTPID
+    if (!readRegister(amp, 0x00000010, &otp_id_reg)) { // CS35L41_OTPID
         CIRRUS_ERR("Amp %s: Read OTP ID failed", amp.name);
         return false;
     }
@@ -1054,9 +1074,9 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
 
 void CirrusAudioFixup::snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot) {
     if (!amp.present) return;
-    for (int i = 0; i < sizeof(cs35l41_readable_registers)/sizeof(RegisterDesc); i++) {
+    for (int i = 0; i < sizeof(cs35l41_reg_desc)/sizeof(RegisterDesc); i++) {
         UInt32 val = 0;
-        if (readRegister(amp, cs35l41_readable_registers[i].addr, val)) {
+        if (readRegister(amp, cs35l41_reg_desc[i].addr, &val)) {
             snapshot[i] = val;
         } else {
             snapshot[i] = 0xFFFFFFFF; // Error marker
@@ -1069,12 +1089,12 @@ void CirrusAudioFixup::compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *o
     CIRRUS_LOG("Amp %s: --- Register Diff Verification (Phase 4A.3) ---", amp.name);
     int diffCount = 0;
     
-    for (int i = 0; i < sizeof(cs35l41_readable_registers)/sizeof(RegisterDesc); i++) {
+    for (int i = 0; i < sizeof(cs35l41_reg_desc)/sizeof(RegisterDesc); i++) {
         if (oldSnapshot[i] != newSnapshot[i] && oldSnapshot[i] != 0xFFFFFFFF && newSnapshot[i] != 0xFFFFFFFF) {
             CIRRUS_LOG("Amp %s: [DIFF] %s (0x%08X) changed from 0x%08X to 0x%08X",
                        amp.name,
-                       cs35l41_readable_registers[i].name,
-                       cs35l41_readable_registers[i].addr,
+                       cs35l41_reg_desc[i].name,
+                       cs35l41_reg_desc[i].addr,
                        oldSnapshot[i],
                        newSnapshot[i]);
             diffCount++;
@@ -1082,4 +1102,393 @@ void CirrusAudioFixup::compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *o
     }
     
     CIRRUS_LOG("Amp %s: Total %d registers changed.", amp.name, diffCount);
+}
+
+bool CirrusAudioFixup::applyRegisterSequence(CS35L41Amp &amp, const RegisterSequence* sequence, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        if (sequence[i].updateBits) {
+            if (!updateRegisterBits(amp, sequence[i].reg, sequence[i].mask, sequence[i].value, TRACE_PROBE)) {
+                return false;
+            }
+        } else {
+            if (!writeRegister(amp, sequence[i].reg, sequence[i].value, TRACE_PROBE)) {
+                return false;
+            }
+        }
+        if (sequence[i].delay_us > 0) {
+            IODelay(sequence[i].delay_us);
+        }
+    }
+    return true;
+}
+
+static const RegisterSequence pll_sequence[] = {
+    { CS35L41_PLL_CLK_CTRL, 0, 0x00000430, 0, false },
+    { CS35L41_DSP_CLK_CTRL, 0, 0x00000003, 0, false },
+    { CS35L41_GLOBAL_CLK_CTRL, 0, 0x00000003, 0, false }
+};
+
+bool CirrusAudioFixup::applyPLL(CS35L41Amp &amp) {
+    uint32_t crc_before = calculateRegistersCRC32(amp);
+    uint64_t startTime = mach_absolute_time();
+
+    if (!applyRegisterSequence(amp, pll_sequence, sizeof(pll_sequence) / sizeof(RegisterSequence))) {
+        return false;
+    }
+
+    uint64_t endTime = mach_absolute_time();
+    uint64_t elapsed_us = 0;
+    absolutetime_to_nanoseconds(endTime - startTime, &elapsed_us);
+    elapsed_us /= 1000;
+
+    uint32_t crc_after = calculateRegistersCRC32(amp);
+    
+    // Telemetry
+    if (strcmp(amp.name, "right") == 0) {
+        setProperty("Cirrus_PLL_CRC_right", crc_after, 32);
+        setProperty("Cirrus_PLL_TimeUS_right", elapsed_us, 32);
+    } else {
+        setProperty("Cirrus_PLL_CRC_left", crc_after, 32);
+        setProperty("Cirrus_PLL_TimeUS_left", elapsed_us, 32);
+    }
+    
+    return true;
+}
+
+static const RegisterSequence asp_sequence[] = {
+    { CS35L41_SP_RATE_CTRL, 0, 0x00000021, 0, false },
+    { CS35L41_SP_FORMAT, 0, 0x20200200, 0, false },
+    { CS35L41_SP_TX_WL, 0, 0x00000018, 0, false },
+    { CS35L41_SP_RX_WL, 0, 0x00000018, 0, false },
+    { CS35L41_DAC_PCM1_SRC, 0, 0x00000032, 0, false },
+    { CS35L41_ASP_TX1_SRC, 0, 0x00000018, 0, false },
+    { CS35L41_ASP_TX2_SRC, 0, 0x00000019, 0, false },
+    { CS35L41_ASP_TX3_SRC, 0, 0x00000028, 0, false },
+    { CS35L41_ASP_TX4_SRC, 0, 0x00000029, 0, false },
+    { CS35L41_DSP1_RX1_SRC, 0, 0x00000008, 0, false },
+    { CS35L41_DSP1_RX2_SRC, 0, 0x00000009, 0, false },
+    { CS35L41_DSP1_RX3_SRC, 0, 0x00000018, 0, false },
+    { CS35L41_DSP1_RX4_SRC, 0, 0x00000019, 0, false },
+    { CS35L41_DSP1_RX6_SRC, 0, 0x00000029, 0, false },
+    { CS35L41_SP_HIZ_CTRL, 0, 0x00000003, 0, false },
+    { CS35L41_SP_ENABLES, 0, 0x00010001, 0, false }
+};
+
+bool CirrusAudioFixup::applyASP(CS35L41Amp &amp) {
+    uint32_t crc_before = calculateRegistersCRC32(amp);
+    uint64_t startTime = mach_absolute_time();
+
+    if (!applyRegisterSequence(amp, asp_sequence, sizeof(asp_sequence) / sizeof(RegisterSequence))) {
+        return false;
+    }
+
+    uint64_t endTime = mach_absolute_time();
+    uint64_t elapsed_us = 0;
+    absolutetime_to_nanoseconds(endTime - startTime, &elapsed_us);
+    elapsed_us /= 1000;
+
+    uint32_t crc_after = calculateRegistersCRC32(amp);
+    
+    // Telemetry
+    if (strcmp(amp.name, "right") == 0) {
+        setProperty("Cirrus_ASP_CRC_right", crc_after, 32);
+        setProperty("Cirrus_ASP_TimeUS_right", elapsed_us, 32);
+    } else {
+        setProperty("Cirrus_ASP_CRC_left", crc_after, 32);
+        setProperty("Cirrus_ASP_TimeUS_left", elapsed_us, 32);
+    }
+    
+    return true;
+}
+
+static const RegisterSequence gpio_sequence[] = {
+    // gpio1.pol_inv = 0, gpio1.out_en = 1 (CS35L41_GPIO_DIR_SHIFT = 24, POL_SHIFT = 16) -> 0x01000000 mask, 0x00000000 val
+    { CS35L41_GPIO1_CTRL1, 0x01010000, 0x00000000, 0, true },
+    // gpio2.pol_inv = 0, gpio2.out_en = 0 -> 0x01000000 mask, 0x01000000 val (wait, default is 81000001, so out_en is false (1))
+    { CS35L41_GPIO2_CTRL1, 0x01010000, 0x01000000, 0, true },
+    // gpio1.func = CS35L41_GPIO1_MDSYNC (2)
+    { CS35L41_GPIO_PAD_CONTROL, 0x07000000, 0x02000000, 0, true },
+};
+
+bool CirrusAudioFixup::applyGPIO(CS35L41Amp &amp) {
+    uint32_t crc_before = calculateRegistersCRC32(amp);
+    uint64_t startTime = mach_absolute_time();
+
+    if (!applyRegisterSequence(amp, gpio_sequence, sizeof(gpio_sequence) / sizeof(RegisterSequence))) {
+        return false;
+    }
+
+    uint64_t endTime = mach_absolute_time();
+    uint64_t elapsed_us = 0;
+    absolutetime_to_nanoseconds(endTime - startTime, &elapsed_us);
+    elapsed_us /= 1000;
+
+    uint32_t crc_after = calculateRegistersCRC32(amp);
+    
+    // Telemetry
+    if (strcmp(amp.name, "right") == 0) {
+        setProperty("Cirrus_GPIO_CRC_right", crc_after, 32);
+        setProperty("Cirrus_GPIO_TimeUS_right", elapsed_us, 32);
+    } else {
+        setProperty("Cirrus_GPIO_CRC_left", crc_after, 32);
+        setProperty("Cirrus_GPIO_TimeUS_left", elapsed_us, 32);
+    }
+    
+    return true;
+}
+
+IOService* CirrusAudioFixup::getAudioController() {
+    OSDictionary *matching = serviceMatching("IOPCIDevice");
+    if (!matching) return nullptr;
+    
+    OSIterator *iter = getMatchingServices(matching);
+    if (!iter) return nullptr;
+    
+    IOService *service;
+    IOService *bestController = nullptr;
+    int bestScore = -1;
+    
+    while ((service = OSDynamicCast(IOService, iter->getNextObject()))) {
+        int score = 0;
+        
+        OSData *classCodeData = OSDynamicCast(OSData, service->getProperty("class-code"));
+        if (classCodeData && classCodeData->getLength() >= 3) {
+            const uint8_t *bytes = (const uint8_t*)classCodeData->getBytesNoCopy();
+            // Subclass 03, Base Class 04 (Multimedia Audio Controller)
+            if (bytes[2] == 0x04 && bytes[1] == 0x03) {
+                score += 10;
+            }
+        }
+        
+        const char *name = service->getName();
+        if (name) {
+            if (strcmp(name, "HDEF") == 0) score += 5;
+            else if (strcmp(name, "HDAS") == 0) score += 3;
+            else if (strcmp(name, "HDAU") == 0) score -= 10; // Penalize HDMI audio
+        }
+        
+        if (score > bestScore) {
+            bestScore = score;
+            bestController = service;
+        }
+    }
+    
+    if (bestController) {
+        bestController->retain(); // Caller must release
+    }
+    iter->release();
+    return bestScore >= 0 ? bestController : nullptr;
+}
+
+#include "Codecs/CS35L41/CS35L41_FirmwareDatabase.hpp"
+
+// Simple CRC32 for firmware validation
+static uint32_t calculate_crc32(const uint8_t *data, size_t length) {
+    uint32_t crc = 0xFFFFFFFF;
+    for (size_t i = 0; i < length; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            crc = (crc >> 1) ^ (0xEDB88320 & (-(crc & 1)));
+        }
+    }
+    return ~crc;
+}
+
+void CirrusAudioFixup::phase5a_FirmwareDiscovery(CS35L41Amp &amp) {
+    CIRRUS_LOG("Entering Phase 5A: Firmware Discovery for amp %s", amp.name);
+    
+    amp.firmwareValidated = false;
+    
+    char propStatus[64];
+    snprintf(propStatus, sizeof(propStatus), "Cirrus_Phase5A_Status_%s", amp.name);
+    
+    // Analog Integrity Check
+    uint32_t current_crc = calculateRegistersCRC32(amp);
+    if (current_crc != amp.final_crc) {
+        CIRRUS_ERR("Analog Integrity failed! Expected %08X, got %08X", amp.final_crc, current_crc);
+        OSString *statusStr = OSString::withCString("ANALOG_STATE_CHANGED");
+        if (statusStr) {
+            setProperty(propStatus, statusStr);
+            statusStr->release();
+        }
+        return;
+    }
+    
+    uint32_t subVendor = 0;
+    uint32_t subDevice = 0;
+    uint32_t vendorId = 0;
+    uint32_t deviceId = 0;
+    uint32_t revisionId = 0;
+    
+    IOService *audioController = getAudioController();
+    if (audioController) {
+        OSData *subVenData = OSDynamicCast(OSData, audioController->getProperty("subsystem-vendor-id"));
+        if (subVenData && subVenData->getLength() >= 4) subVendor = *((uint32_t*)subVenData->getBytesNoCopy());
+        
+        OSData *subDevData = OSDynamicCast(OSData, audioController->getProperty("subsystem-id"));
+        if (subDevData && subDevData->getLength() >= 4) subDevice = *((uint32_t*)subDevData->getBytesNoCopy());
+        
+        OSData *venData = OSDynamicCast(OSData, audioController->getProperty("vendor-id"));
+        if (venData && venData->getLength() >= 4) vendorId = *((uint32_t*)venData->getBytesNoCopy());
+        
+        OSData *devData = OSDynamicCast(OSData, audioController->getProperty("device-id"));
+        if (devData && devData->getLength() >= 4) deviceId = *((uint32_t*)devData->getBytesNoCopy());
+        
+        OSData *revData = OSDynamicCast(OSData, audioController->getProperty("revision-id"));
+        if (revData && revData->getLength() >= 4) revisionId = *((uint32_t*)revData->getBytesNoCopy());
+        else if (revData && revData->getLength() >= 1) revisionId = *((uint8_t*)revData->getBytesNoCopy());
+        
+        // Log PCI Info
+        char propPath[64];
+        snprintf(propPath, sizeof(propPath), "Cirrus_PCI_Path_%s", amp.name);
+        io_string_t pathStr;
+        int pathLen = sizeof(pathStr);
+        if (audioController->getPath(pathStr, &pathLen, gIOServicePlane)) {
+            OSString *pStr = OSString::withCString(pathStr);
+            if (pStr) {
+                setProperty(propPath, pStr);
+                pStr->release();
+            }
+        }
+        
+        OSString *pciDebug = OSDynamicCast(OSString, audioController->getProperty("pcidebug"));
+        if (pciDebug) {
+            char propBDF[64];
+            snprintf(propBDF, sizeof(propBDF), "Cirrus_PCI_BDF_%s", amp.name);
+            setProperty(propBDF, pciDebug);
+        }
+        
+        char prop[64];
+        snprintf(prop, sizeof(prop), "Cirrus_PCI_Vendor_%s", amp.name); setProperty(prop, (uint64_t)vendorId, 32);
+        snprintf(prop, sizeof(prop), "Cirrus_PCI_Device_%s", amp.name); setProperty(prop, (uint64_t)deviceId, 32);
+        snprintf(prop, sizeof(prop), "Cirrus_PCI_Revision_%s", amp.name); setProperty(prop, (uint64_t)revisionId, 32);
+        snprintf(prop, sizeof(prop), "Cirrus_PCI_SubVendor_%s", amp.name); setProperty(prop, (uint64_t)subVendor, 32);
+        snprintf(prop, sizeof(prop), "Cirrus_PCI_SubDevice_%s", amp.name); setProperty(prop, (uint64_t)subDevice, 32);
+        
+        audioController->release();
+    }
+    
+    uint32_t ssid = (subVendor << 16) | subDevice;
+    int spkid = 0; // Default to 0, or lookup from ACPI if needed
+    
+    // Telemetry setup
+    char propSSID[64];
+    snprintf(propSSID, sizeof(propSSID), "Cirrus_SSID_%s", amp.name);
+    setProperty(propSSID, (uint64_t)ssid, 32);
+    
+    const FirmwareResource *foundRes = nullptr;
+    for (size_t i = 0; i < firmwareTableSize; i++) {
+        if (firmwareTable[i].subsystemVendor == subVendor &&
+            firmwareTable[i].subsystemDevice == subDevice &&
+            firmwareTable[i].spkid == spkid) {
+            foundRes = &firmwareTable[i];
+            break;
+        }
+    }
+    
+    if (!foundRes) {
+        CIRRUS_ERR("Firmware not found for SSID %08X, spkid %d", ssid, spkid);
+        OSString *statusStr = OSString::withCString("UNSUPPORTED_SSID");
+        if (statusStr) {
+            setProperty(propStatus, statusStr);
+            statusStr->release();
+        }
+        return;
+    }
+    
+    if (foundRes->wmfw == nullptr || foundRes->bin == nullptr) {
+        CIRRUS_ERR("Firmware files missing for SSID %08X", ssid);
+        OSString *statusStr = OSString::withCString("FILE_NOT_FOUND");
+        if (statusStr) {
+            setProperty(propStatus, statusStr);
+            statusStr->release();
+        }
+        return;
+    }
+    
+    // Validate Size
+    if (foundRes->wmfwSize == 0 || foundRes->binSize == 0) {
+        CIRRUS_ERR("Firmware size invalid for SSID %08X", ssid);
+        OSString *statusStr = OSString::withCString("INVALID_RESOURCE");
+        if (statusStr) {
+            setProperty(propStatus, statusStr);
+            statusStr->release();
+        }
+        return;
+    }
+    
+    // Validate Alignment
+    if ((foundRes->wmfwSize % 4 != 0) || (foundRes->binSize % 4 != 0)) {
+        CIRRUS_ERR("Firmware not 4-byte aligned for SSID %08X", ssid);
+        OSString *statusStr = OSString::withCString("INVALID_ALIGNMENT");
+        if (statusStr) {
+            setProperty(propStatus, statusStr);
+            statusStr->release();
+        }
+        return;
+    }
+    
+    // Basic verification of WMFW header magic
+    if (foundRes->wmfwSize >= 4 && foundRes->wmfw[0] == 'W' && foundRes->wmfw[1] == 'M' && foundRes->wmfw[2] == 'F' && foundRes->wmfw[3] == 'W') {
+        // Valid magic
+    } else {
+        CIRRUS_ERR("Invalid WMFW magic for SSID %08X", ssid);
+        OSString *statusStr = OSString::withCString("INVALID_RESOURCE");
+        if (statusStr) {
+            setProperty(propStatus, statusStr);
+            statusStr->release();
+        }
+        return;
+    }
+    
+    // Export Firmware Meta Telemetry
+    char propFW[64];
+    snprintf(propFW, sizeof(propFW), "Cirrus_FW_Source_%s", amp.name);
+    OSString *srcStr = OSString::withCString("Database");
+    if (srcStr) {
+        setProperty(propFW, srcStr);
+        srcStr->release();
+    }
+    
+    snprintf(propFW, sizeof(propFW), "Cirrus_FW_Size_%s", amp.name); setProperty(propFW, (uint64_t)foundRes->wmfwSize, 32);
+    snprintf(propFW, sizeof(propFW), "Cirrus_BIN_Size_%s", amp.name); setProperty(propFW, (uint64_t)foundRes->binSize, 32);
+    
+    // CRC32 of FW
+    uint32_t fwCrc = calculate_crc32(foundRes->wmfw, foundRes->wmfwSize);
+    uint32_t binCrc = calculate_crc32(foundRes->bin, foundRes->binSize);
+    snprintf(propFW, sizeof(propFW), "Cirrus_FW_CRC32_%s", amp.name); setProperty(propFW, (uint64_t)fwCrc, 32);
+    snprintf(propFW, sizeof(propFW), "Cirrus_BIN_CRC32_%s", amp.name); setProperty(propFW, (uint64_t)binCrc, 32);
+    
+    // Parse Version (e.g. at offset 4 of WMFW)
+    uint32_t fwVersion = 0;
+    if (foundRes->wmfwSize >= 8) {
+        fwVersion = foundRes->wmfw[4] | (foundRes->wmfw[5] << 8) | (foundRes->wmfw[6] << 16) | (foundRes->wmfw[7] << 24);
+    }
+    uint32_t binVersion = 0;
+    if (foundRes->binSize >= 8) {
+        binVersion = foundRes->bin[4] | (foundRes->bin[5] << 8) | (foundRes->bin[6] << 16) | (foundRes->bin[7] << 24);
+    }
+    
+    char propFwVer[64];
+    snprintf(propFwVer, sizeof(propFwVer), "Cirrus_FW_Version_%s", amp.name);
+    setProperty(propFwVer, (uint64_t)fwVersion, 32);
+    
+    char propBinVer[64];
+    snprintf(propBinVer, sizeof(propBinVer), "Cirrus_BIN_Version_%s", amp.name);
+    setProperty(propBinVer, (uint64_t)binVersion, 32);
+    
+    // All checks passed
+    amp.wmfwData = foundRes->wmfw;
+    amp.wmfwSize = foundRes->wmfwSize;
+    amp.binData = foundRes->bin;
+    amp.binSize = foundRes->binSize;
+    amp.firmwareValidated = true;
+    
+    CIRRUS_LOG("Firmware discovery OK: %s (Size: %lu, Ver: %08X, CRC: %08X), Tuning: %s (Size: %lu, Ver: %08X, CRC: %08X)",
+               foundRes->fwName, amp.wmfwSize, fwVersion, fwCrc, foundRes->binName, amp.binSize, binVersion, binCrc);
+    OSString *statusStr = OSString::withCString("READY");
+    if (statusStr) {
+        setProperty(propStatus, statusStr);
+        statusStr->release();
+    }
 }

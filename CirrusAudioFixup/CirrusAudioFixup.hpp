@@ -85,12 +85,39 @@ struct VoodooI2CAddressedTransfer {
     UInt16 readLength;
 };
 
+struct RegisterSequence {
+    UInt32 reg;
+    UInt32 mask;
+    UInt32 value;
+    UInt32 delay_us;
+    bool updateBits;
+};
+
 struct CS35L41Amp {
     const char *name;
     UInt8 address;
     bool present;
     UInt32 deviceId;
     UInt32 revisionId;
+    
+    const uint8_t *wmfwData;
+    size_t wmfwSize;
+    const uint8_t *binData;
+    size_t binSize;
+    bool firmwareValidated;
+    uint32_t final_crc;
+};
+
+struct FirmwareResource {
+    uint32_t subsystemVendor;
+    uint32_t subsystemDevice;
+    uint32_t spkid;
+    const char *fwName;
+    const char *binName;
+    const uint8_t *wmfw;
+    size_t wmfwSize;
+    const uint8_t *bin;
+    size_t binSize;
 };
 
 class CirrusAudioFixup : public IOService {
@@ -162,6 +189,11 @@ private:
     bool cs35l41_apply_phase4A2(CS35L41Amp &amp);
     
     void dumpAllRegisters(CS35L41Amp &amp);
+    
+    // Phase 5A
+    void phase5a_FirmwareDiscovery(CS35L41Amp &amp);
+    IOService* getAudioController();
+    
     void testRegisterConsistency(CS35L41Amp &amp);
     void runTimeBasedFSMCheck(CS35L41Amp &amp);
     uint32_t calculateRegistersCRC32(CS35L41Amp &amp);
@@ -169,6 +201,12 @@ private:
     // Phase 4A.3: Register Diff Verification
     void snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot);
     void compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *oldSnapshot, const UInt32 *newSnapshot);
+
+    // Phase 4B functions
+    bool applyRegisterSequence(CS35L41Amp &amp, const RegisterSequence* sequence, size_t count);
+    bool applyPLL(CS35L41Amp &amp);
+    bool applyASP(CS35L41Amp &amp);
+    bool applyGPIO(CS35L41Amp &amp);
 
     static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
 };

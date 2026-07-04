@@ -388,7 +388,7 @@ public:
         uint32_t pos = 16; // Coefficients start immediately after the 16-byte header
         
         while (pos < size && outImage->coefficientCount < 128) {
-            if (size - pos < 16) { // wmfw_coeff_item is 16 bytes
+            if (size - pos < 20) { // wmfw_coeff_item is 20 bytes
                 break;
             }
             
@@ -398,9 +398,9 @@ public:
             coeff.type = data[pos+2] | (data[pos+3] << 8); // type is le16
             coeff.id = data[pos+4] | (data[pos+5] << 8) | (data[pos+6] << 16) | (data[pos+7] << 24); // id is le32
             // Skip ver(4) and sr(4)
-            coeff.length = data[pos+12] | (data[pos+13] << 8) | (data[pos+14] << 16) | (data[pos+15] << 24); // len is le32
+            coeff.length = data[pos+16] | (data[pos+17] << 8) | (data[pos+18] << 16) | (data[pos+19] << 24); // len is le32
             
-            pos += 16;
+            pos += 20;
             
             if (pos + coeff.length > size) {
                 CIRRUS_ERR("BIN coefficient block out of bounds: pos=%u len=%u size=%zu", pos, coeff.length, size);

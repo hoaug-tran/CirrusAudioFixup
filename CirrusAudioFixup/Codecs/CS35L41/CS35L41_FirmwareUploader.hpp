@@ -15,11 +15,14 @@ struct UploadPolicy {
 struct UploadTransaction {
     uint32_t dspRegister;
     uint32_t firmwareAddress;
+    uint32_t payloadOffset;
     uint32_t size;
     const uint8_t *payload;
 };
 
 struct UploadPlan {
+    RegionType regionType;
+    uint32_t regionIndex;
     UploadTransaction transactions[MAX_UPLOAD_TRANSACTIONS];
     uint32_t transactionCount;
     uint32_t totalSize;
@@ -28,7 +31,9 @@ struct UploadPlan {
 
 class CirrusFirmwareUploadPlanner {
 public:
-    static bool generatePlan(const MappedRegion &region, const UploadPolicy &policy, UploadPlan &outPlan) {
+    static bool generatePlan(uint32_t regionIndex, const MappedRegion &region, const UploadPolicy &policy, UploadPlan &outPlan) {
+        outPlan.regionType = region.regionType;
+        outPlan.regionIndex = regionIndex;
         outPlan.transactionCount = 0;
         outPlan.totalSize = 0;
         outPlan.planCrc = 0xFFFFFFFF;
@@ -55,6 +60,7 @@ public:
             
             UploadTransaction &tx = outPlan.transactions[outPlan.transactionCount];
             tx.firmwareAddress = region.firmwareAddress + currentOffset;
+            tx.payloadOffset = currentOffset;
             tx.payload = region.data.begin + currentOffset;
             tx.size = chunkSize;
             
@@ -66,6 +72,24 @@ public:
                 return false;
             }
             tx.dspRegister = chunkReg;
+            
+            if (policy.alignRegister && (tx.dspRegister % 4 != 0)) {
+                CIRRUS_ERR("UPLOAD_PLAN_INVALID: dspRegister 0x%08X is not 4-byte aligned", tx.dspRegister);
+                return false;
+            }
+            if (policy.alignPayload && (tx.size % 4 != 0)) {
+                CIRRUS_ERR("UPLOAD_PLAN_INVALID: payload size %d is not 4-byte aligned", tx.size);
+                return false;
+            }
+            
+            if (tx.firmwareAddress + tx.size < tx.firmwareAddress) {
+                CIRRUS_ERR("UPLOAD_PLAN_INVALID: firmwareAddress wrap-around");
+                return false;
+            }
+            if (tx.dspRegister + tx.size < tx.dspRegister) {
+                CIRRUS_ERR("UPLOAD_PLAN_INVALID: dspRegister wrap-around");
+                return false;
+            }
             
             // Cumulate CRC over plan
             uint32_t crcFields[3] = {tx.dspRegister, tx.firmwareAddress, tx.size};
@@ -97,17 +121,41 @@ public:
 class CirrusFirmwareDryRunSimulator {
 public:
     static void simulate(const UploadPlan &plan) {
-        CIRRUS_LOG("--- Dry-Run Simulation ---");
-        CIRRUS_LOG("Total Transactions: %d", plan.transactionCount);
-        CIRRUS_LOG("Total Size: %d", plan.totalSize);
-        CIRRUS_LOG("Plan CRC: 0x%08X", plan.planCrc);
+        CIRRUS_LOG("--- Dry-Run Simulation for Region #%d ---", plan.regionIndex);
         
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
-            CIRRUS_LOG("Tx%d: Reg=0x%08X, FW=0x%06X, Size=%d", 
-                       i, tx.dspRegister, tx.firmwareAddress, tx.size);
+            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW=0x%06X, Offset=%d, Size=%d", 
+                       i, tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.size);
         }
-        CIRRUS_LOG("--- Simulation Complete ---");
+        
+        const char *typeName = "UNKNOWN";
+        switch (plan.regionType) {
+            case RegionType::PM_PACKED: typeName = "PM_PACKED"; break;
+            case RegionType::XM_PACKED: typeName = "XM_PACKED"; break;
+            case RegionType::YM_PACKED: typeName = "YM_PACKED"; break;
+            case RegionType::ALGORITHM_DATA: typeName = "ALGORITHM"; break;
+            case RegionType::METADATA: typeName = "METADATA"; break;
+            case RegionType::NAME_TEXT: typeName = "NAME_TEXT"; break;
+            case RegionType::INFO_TEXT: typeName = "INFO_TEXT"; break;
+            default: break;
+        }
+
+        uint32_t fwStart = plan.transactionCount > 0 ? plan.transactions[0].firmwareAddress : 0;
+        uint32_t fwEnd = plan.transactionCount > 0 ? plan.transactions[plan.transactionCount - 1].firmwareAddress + plan.transactions[plan.transactionCount - 1].size : 0;
+        uint32_t dspStart = plan.transactionCount > 0 ? plan.transactions[0].dspRegister : 0;
+        uint32_t dspEnd = plan.transactionCount > 0 ? plan.transactions[plan.transactionCount - 1].dspRegister + plan.transactions[plan.transactionCount - 1].size : 0;
+
+        CIRRUS_LOG("UploadPlan Summary");
+        CIRRUS_LOG("Region        : %d (%s)", plan.regionIndex, typeName);
+        CIRRUS_LOG("FW Start      : 0x%06X", fwStart);
+        CIRRUS_LOG("FW End        : 0x%06X", fwEnd);
+        CIRRUS_LOG("DSP Start     : 0x%08X", dspStart);
+        CIRRUS_LOG("DSP End       : 0x%08X", dspEnd);
+        CIRRUS_LOG("Transactions  : %d", plan.transactionCount);
+        CIRRUS_LOG("Total Bytes   : %d", plan.totalSize);
+        CIRRUS_LOG("Plan CRC      : 0x%08X", plan.planCrc);
+        CIRRUS_LOG("Validation    : PASS");
     }
 };
 

@@ -1825,7 +1825,7 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
 
-    if (!CirrusFirmwareUploadPlanner::generatePlan(targetReg, policy, *plan)) {
+    if (!CirrusFirmwareUploadPlanner::generatePlan(targetRegionIdx, targetReg, policy, *plan)) {
         CIRRUS_ERR("Amp %s: Failed to generate upload plan!", amp.name);
         IOFree(plan, sizeof(UploadPlan));
         IOFree(mappedImg, sizeof(MappedImage));

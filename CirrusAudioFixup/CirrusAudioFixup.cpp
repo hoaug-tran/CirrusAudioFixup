@@ -385,7 +385,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                    bootArgStrEquals("cirrus_phase", "5C.3") ||
                    bootArgStrEquals("cirrus_phase", "5C.3.5") ||
                    bootArgStrEquals("cirrus_phase", "5C.4") ||
-                   bootArgStrEquals("cirrus_phase", "5C")) {
+                   bootArgStrEquals("cirrus_phase", "5C") ||
+                   bootArgStrEquals("cirrus_phase", "5D.0")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
                     applyPLL(amp);
@@ -398,7 +399,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     } else {
                         char phaseArg[16] = {0};
                         if (PE_parse_boot_argn("cirrus_phase", phaseArg, sizeof(phaseArg))) {
-                            if (strncmp(phaseArg, "5C", 2) == 0) {
+                            if (strncmp(phaseArg, "5C", 2) == 0 || strncmp(phaseArg, "5D", 2) == 0) {
                                 phase5c_FirmwareUpload(amp, phaseArg);
                             }
                         }
@@ -1806,8 +1807,8 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         }
     }
 
-    if (strncmp(phaseArg, "5C.0", 4) == 0) {
-        CIRRUS_LOG("Phase 5C.0 Complete for amp %s", amp.name);
+    if (strncmp(phaseArg, "5D.0", 4) == 0 || strncmp(phaseArg, "5C.0", 4) == 0) {
+        CIRRUS_LOG("Phase %s Complete for amp %s", phaseArg, amp.name);
         IOFree(image, sizeof(FirmwareImage));
         return;
     }

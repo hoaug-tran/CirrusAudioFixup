@@ -5859,8 +5859,8 @@ const uint8_t cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin[] = {
 
 
 const FirmwareResource firmwareTable[] = {
-    { 0x17AA, 0x382B, 0, "cs35l41-dsp1-spk-prot-17aa382b.wmfw", "cs35l41-dsp1-spk-prot-17aa382b-spkid0.bin", cs35l41_dsp1_spk_prot_17aa382b_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa382b_wmfw), dummy_bin, 8, false },
-    { 0x17AA, 0x382B, 1, "cs35l41-dsp1-spk-prot-17aa382b.wmfw", "cs35l41-dsp1-spk-prot-17aa382b-spkid1.bin", cs35l41_dsp1_spk_prot_17aa382b_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa382b_wmfw), dummy_bin, 8, false },
+    { 0x17AA, 0x382B, 0, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid0.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), false },
+    { 0x17AA, 0x382B, 1, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid1.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), false },
     { 0x17AA, 0x3847, 0, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid0.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), false },
     { 0x17AA, 0x3847, 1, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid1.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), false }
 };

@@ -133,8 +133,8 @@ public:
         
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
-            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Size=%d", 
-                       i, tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.size);
+            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Payload=[%d..%d], Size=%d", 
+                       i, tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.payloadOffset, tx.payloadOffset + tx.size - 1, tx.size);
         }
         
         const char *typeName = "UNKNOWN";
@@ -227,9 +227,9 @@ public:
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
 
-            CIRRUS_LOG("Amp %s: --- Transaction %d/%d | DSP=0x%08X FW_Word=0x%06X ChunkByte=0x%06X Size=%d ---",
+            CIRRUS_LOG("Amp %s: --- Transaction %d/%d | DSP=0x%08X FW_Word=0x%06X ChunkByte=0x%06X Payload=[%d..%d] Size=%d ---",
                    amp.name, i + 1, plan.transactionCount,
-                   tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.size);
+                   tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.payloadOffset, tx.payloadOffset + tx.size - 1, tx.size);
 
             // Write chunk to DSP
             uint32_t totalPacketLength = tx.size + 4; // payload + register

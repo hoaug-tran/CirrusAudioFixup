@@ -848,6 +848,10 @@ bool CirrusAudioFixup::cs35l41_test_key_lock(CS35L41Amp &amp) {
 bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     CIRRUS_LOG("Amp %s: --- Starting Phase 4A.2 ---", amp.name);
     
+    UInt32 oldSnapshot[270];
+    UInt32 newSnapshot[270];
+    snapshotRegisters(amp, oldSnapshot);
+    
     // 1. Unlock Test Key
     if (!cs35l41_test_key_unlock(amp)) {
         return false;
@@ -893,6 +897,9 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     snprintf(propName, sizeof(propName), "Cirrus_CRC_Lock_%s", amp.name);
     setProperty(propName, crc_lock, 32);
     CIRRUS_LOG("Amp %s: CRC after Lock -> 0x%08X", amp.name, crc_lock);
+    
+    snapshotRegisters(amp, newSnapshot);
+    compareRegisterSnapshots(amp, oldSnapshot, newSnapshot);
     
     CIRRUS_LOG("Amp %s: Phase 4A.2 completed.", amp.name);
     return true;
@@ -1021,4 +1028,36 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
     }
     
     return true;
+}
+
+void CirrusAudioFixup::snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot) {
+    if (!amp.present) return;
+    for (int i = 0; i < sizeof(cs35l41_readable_registers)/sizeof(RegisterDesc); i++) {
+        UInt32 val = 0;
+        if (readRegister(amp, cs35l41_readable_registers[i].addr, val)) {
+            snapshot[i] = val;
+        } else {
+            snapshot[i] = 0xFFFFFFFF; // Error marker
+        }
+    }
+}
+
+void CirrusAudioFixup::compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *oldSnapshot, const UInt32 *newSnapshot) {
+    if (!amp.present) return;
+    CIRRUS_LOG("Amp %s: --- Register Diff Verification (Phase 4A.3) ---", amp.name);
+    int diffCount = 0;
+    
+    for (int i = 0; i < sizeof(cs35l41_readable_registers)/sizeof(RegisterDesc); i++) {
+        if (oldSnapshot[i] != newSnapshot[i] && oldSnapshot[i] != 0xFFFFFFFF && newSnapshot[i] != 0xFFFFFFFF) {
+            CIRRUS_LOG("Amp %s: [DIFF] %s (0x%08X) changed from 0x%08X to 0x%08X",
+                       amp.name,
+                       cs35l41_readable_registers[i].name,
+                       cs35l41_readable_registers[i].addr,
+                       oldSnapshot[i],
+                       newSnapshot[i]);
+            diffCount++;
+        }
+    }
+    
+    CIRRUS_LOG("Amp %s: Total %d registers changed.", amp.name, diffCount);
 }

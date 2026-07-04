@@ -166,6 +166,10 @@ private:
     void runTimeBasedFSMCheck(CS35L41Amp &amp);
     uint32_t calculateRegistersCRC32(CS35L41Amp &amp);
 
+    // Phase 4A.3: Register Diff Verification
+    void snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot);
+    void compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *oldSnapshot, const UInt32 *newSnapshot);
+
     static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
 };
 

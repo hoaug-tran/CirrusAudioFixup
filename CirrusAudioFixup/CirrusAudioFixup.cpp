@@ -1808,7 +1808,7 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         }
     }
 
-    if (strncmp(phaseArg, "5D.0", 4) == 0 || strncmp(phaseArg, "5C.0", 4) == 0) {
+    if (strncmp(phaseArg, "5C.0", 4) == 0) {
         CIRRUS_LOG("Phase %s Complete for amp %s", phaseArg, amp.name);
         IOFree(image, sizeof(FirmwareImage));
         return;
@@ -1865,7 +1865,7 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     bool isDryRun      = (strncmp(phaseArg, "5C.2",  4) == 0);
     bool isStress      = (strncmp(phaseArg, "5C.3.5", 6) == 0);
     bool isReal        = (strncmp(phaseArg, "5C.3",  4) == 0 && !isStress);
-    bool isFullUpload  = (strncmp(phaseArg, "5C.4",  4) == 0);
+    bool isFullUpload  = (strncmp(phaseArg, "5C.4",  4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
     const char *activePhaseLabel = isDryRun     ? "5C.2 Dry Run"
                                  : isStress     ? "5C.3.5 Stress Verify"
                                  : isFullUpload ? "5C.4 Full Upload"

@@ -381,7 +381,8 @@ public:
             return false;
         }
         
-        uint32_t pos = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24); // len is Little Endian
+        uint32_t file_len = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24); // len is Little Endian
+        uint32_t pos = 16; // Coefficients start immediately after the 16-byte header
         
         while (pos < size && outImage->coefficientCount < 128) {
             if (size - pos < 16) { // wmfw_coeff_item is 16 bytes

@@ -8,7 +8,10 @@
 #define CS35L41_TEST_KEY_CTL    0x00000040
 #define CS35L41_IRQ1_STATUS4    0x0001001C
 #define CS35L41_OTP_BOOT_DONE   0x00000002
-
+#define CS35L41_IRQ1_MASK1      0x00010110
+#define CS35L41_IRQ1_MASK2      0x00010114
+#define CS35L41_IRQ1_MASK3      0x00010118
+#define CS35L41_IRQ1_MASK4      0x0001011C
 struct RegisterDesc {
     uint32_t addr;
     const char* name;

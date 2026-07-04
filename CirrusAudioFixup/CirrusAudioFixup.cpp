@@ -350,6 +350,13 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
     amp.present = (deviceId == CS35L41_DEVICE_ID);
 
     if (amp.present) {
+        // CRITICAL FIX: Mask all CS35L41 interrupts to prevent I2C/GPIO interrupt storms 
+        // which freeze macOS WindowServer and cause the beachball after login.
+        writeRegister(amp, CS35L41_IRQ1_MASK1, 0xFFFFFFFF, TRACE_PROBE);
+        writeRegister(amp, CS35L41_IRQ1_MASK2, 0xFFFFFFFF, TRACE_PROBE);
+        writeRegister(amp, CS35L41_IRQ1_MASK3, 0xFFFFFFFF, TRACE_PROBE);
+        writeRegister(amp, CS35L41_IRQ1_MASK4, 0xFFFFFFFF, TRACE_PROBE);
+        
         dumpAllRegisters(amp);
         
         if (bootArgStrEquals("cirrus_phase", "4A1")) {

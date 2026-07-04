@@ -66,12 +66,15 @@ public:
             
             uint32_t chunkSize = (remaining > policy.maxPayloadBytes) ? policy.maxPayloadBytes : remaining;
             
-            // Align chunk size to DSP word boundaries
+            // Align chunk size to LCM(DSP word size, I2C word size)
+            // I2C word size is 4 bytes (32-bit registers).
+            // PM is 5 bytes -> LCM(5, 4) = 20
+            // XM/YM is 3 bytes -> LCM(3, 4) = 12
             uint32_t align = 4;
             switch (region.regionType) {
-                case RegionType::PM_PACKED: align = 5; break;
+                case RegionType::PM_PACKED: align = 20; break;
                 case RegionType::XM_PACKED:
-                case RegionType::YM_PACKED: align = 3; break;
+                case RegionType::YM_PACKED: align = 12; break;
                 default: align = 4; break;
             }
             if (chunkSize > align) {

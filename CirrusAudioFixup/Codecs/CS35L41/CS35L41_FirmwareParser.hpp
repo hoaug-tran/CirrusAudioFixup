@@ -309,6 +309,11 @@ public:
             uint32_t offset = OSSwapLittleToHostInt32(raw_region->offset_le) & 0xFFFFFF;
             uint32_t len = OSSwapLittleToHostInt32(raw_region->len);
             
+            if (pos + sizeof(wmfw_region) + len > size) {
+                CIRRUS_ERR("WMFW region length out of bounds: offset=%zu len=%u size=%zu", pos, len, size);
+                break;
+            }
+            
             FirmwareRegion &reg = outImage->regions[outImage->regionCount++];
             reg.baseWordOffset = offset;
             reg.data = raw_region->data;
@@ -398,6 +403,12 @@ public:
             coeff.length = data[pos+12] | (data[pos+13] << 8) | (data[pos+14] << 16) | (data[pos+15] << 24); // len is le32
             
             pos += 16;
+            
+            if (pos + coeff.length > size) {
+                CIRRUS_ERR("BIN coefficient block out of bounds: pos=%u len=%u size=%zu", pos, coeff.length, size);
+                break;
+            }
+            
             coeff.data = &data[pos];
             coeff.payloadCrc = calculate_crc32(coeff.data, coeff.length);
             

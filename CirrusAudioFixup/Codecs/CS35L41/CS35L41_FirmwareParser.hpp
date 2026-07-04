@@ -329,45 +329,64 @@ public:
                 default:                  reg.regionType = RegionType::UNKNOWN; break;
             }
             
-            // Extract Algorithm Table from the first XM_PACKED region
-            if (type == WMFW_HALO_XM_PACKED && offset == 0 && outImage->algorithmCount == 0 && len >= 30) {
-                extractHaloAlgorithmsFromXM(outImage, reg);
-            }
+            // Do not extract immediately, wait until all regions are parsed
             
             pos += sizeof(wmfw_region) + len;
         }
         
+        extractHaloAlgorithms(outImage);
+        
         return true;
     }
 
-    // Note: This is a Halo firmware specific extraction. It relies on the DSP memory layout 
-    // where wmfw_halo_id_hdr is placed at offset 0 of the XM_PACKED region.
-    static void extractHaloAlgorithmsFromXM(FirmwareImage *outImage, const FirmwareRegion &reg) {
-        if (reg.length >= 12) {
-            uint32_t fw_id = (reg.data[2*3] << 16) | (reg.data[2*3+1] << 8) | reg.data[2*3+2];
-            outImage->fw_id = fw_id;
+    // Note: This is a Halo firmware specific extraction.
+    // The Algorithm Table is scattered across multiple XM_PACKED regions.
+    // We assemble a virtual memory buffer and parse it.
+    static void extractHaloAlgorithms(FirmwareImage *outImage) {
+        size_t vmem_size = 24576; // 24KB is enough for header and 256 algorithms
+        uint8_t *vmem = (uint8_t *)IOMalloc(vmem_size);
+        if (!vmem) return;
+        memset(vmem, 0, vmem_size);
+
+        // Copy all XM_PACKED regions into vmem
+        for (uint32_t i = 0; i < outImage->regionCount; i++) {
+            const FirmwareRegion &reg = outImage->regions[i];
+            if (reg.regionType == RegionType::XM_PACKED) {
+                uint32_t byte_offset = reg.baseWordOffset * 3;
+                if (byte_offset + reg.length <= vmem_size) {
+                    memcpy(vmem + byte_offset, reg.data, reg.length);
+                }
+            }
         }
 
+        // Parse wmfw_halo_id_hdr from offset 0
+        uint32_t fw_id = (vmem[2*3] << 16) | (vmem[2*3+1] << 8) | vmem[2*3+2];
+        outImage->fw_id = fw_id;
+
         // wmfw_halo_id_hdr has 10 32-bit words, stored as 3 bytes each
-        uint32_t n_algs = (reg.data[9*3] << 16) | (reg.data[9*3+1] << 8) | reg.data[9*3+2];
+        uint32_t n_algs = (vmem[9*3] << 16) | (vmem[9*3+1] << 8) | vmem[9*3+2];
         
-        if (n_algs > 0 && n_algs < 32 && reg.length >= 30 + (n_algs * 18)) {
-            for (uint32_t i = 0; i < n_algs; i++) {
+        if (n_algs > 0 && n_algs < 256 && (30 + n_algs * 18) <= vmem_size) {
+            for (uint32_t i = 0; i < n_algs && outImage->algorithmCount < 128; i++) {
                 size_t alg_pos = 30 + (i * 18);
-                uint32_t alg_id = (reg.data[alg_pos] << 16) | (reg.data[alg_pos+1] << 8) | reg.data[alg_pos+2];
-                // wmfw_halo_alg_hdr: id(0), ver(1), xm_base(2), xm_size(3), ym_base(4), ym_size(5)
-                uint32_t xm_base = (reg.data[alg_pos+6] << 16) | (reg.data[alg_pos+7] << 8) | reg.data[alg_pos+8];
-                uint32_t ym_base = (reg.data[alg_pos+12] << 16) | (reg.data[alg_pos+13] << 8) | reg.data[alg_pos+14];
+                uint32_t alg_id = (vmem[alg_pos] << 16) | (vmem[alg_pos+1] << 8) | vmem[alg_pos+2];
+                
+                // Skip empty or garbage slots
+                if (alg_id == 0 || alg_id == 0xFFFFFF) continue;
+                
+                uint32_t xm_base = (vmem[alg_pos+6] << 16) | (vmem[alg_pos+7] << 8) | vmem[alg_pos+8];
                 
                 AlgorithmInfo &alg = outImage->algorithms[outImage->algorithmCount++];
                 alg.id = alg_id;
                 alg.baseWordOffset = xm_base;
-                alg.region = RegionType::XM_PACKED; // Defaulting to XM base for tracking
+                alg.region = RegionType::XM_PACKED;
                 
                 CIRRUS_LOG("Algorithm %u:\n  ID        = 0x%08X\n  Region    = XM\n  Base      = 0x%08X", 
                            outImage->algorithmCount - 1, alg.id, alg.baseWordOffset);
             }
         }
+        
+        IOFree(vmem, vmem_size);
     }
 
     static bool parseBIN(const uint8_t *data, size_t size, FirmwareImage *outImage) {

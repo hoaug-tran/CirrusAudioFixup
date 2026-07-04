@@ -377,6 +377,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                    bootArgStrEquals("cirrus_phase", "5C.2") ||
                    bootArgStrEquals("cirrus_phase", "5C.3") ||
                    bootArgStrEquals("cirrus_phase", "5C.3.5") ||
+                   bootArgStrEquals("cirrus_phase", "5C.4") ||
                    bootArgStrEquals("cirrus_phase", "5C")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
@@ -1790,11 +1791,15 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    // Phase 5C.2 / 5C.3 / 5C.3.5: determine active phase
-    bool isDryRun = (strncmp(phaseArg, "5C.2", 4) == 0);
-    bool isStress = (strncmp(phaseArg, "5C.3.5", 6) == 0);
-    bool isReal   = (strncmp(phaseArg, "5C.3", 4) == 0 && !isStress);
-    const char *activePhaseLabel = isDryRun ? "5C.2 Dry Run" : (isStress ? "5C.3.5 Stress Verify" : "5C.3 Real Upload");
+    // Determine active sub-phase
+    bool isDryRun      = (strncmp(phaseArg, "5C.2",  4) == 0);
+    bool isStress      = (strncmp(phaseArg, "5C.3.5", 6) == 0);
+    bool isReal        = (strncmp(phaseArg, "5C.3",  4) == 0 && !isStress);
+    bool isFullUpload  = (strncmp(phaseArg, "5C.4",  4) == 0);
+    const char *activePhaseLabel = isDryRun     ? "5C.2 Dry Run"
+                                 : isStress     ? "5C.3.5 Stress Verify"
+                                 : isFullUpload ? "5C.4 Full Upload"
+                                               : "5C.3 Real Upload";
     CIRRUS_LOG("Amp %s: Starting Phase %s", amp.name, activePhaseLabel);
     
     // Find first executable region
@@ -1839,7 +1844,20 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    if (isReal || isStress) {
+    if (isFullUpload) {
+        // Phase 5C.4: scheduler iterates ALL executable regions
+        UploadSession *session = (UploadSession *)IOMalloc(sizeof(UploadSession));
+        if (!session) {
+            CIRRUS_ERR("Amp %s: Failed to allocate UploadSession", amp.name);
+        } else {
+            if (CirrusFirmwareScheduler::run(amp, this, *mappedImg, *session)) {
+                CIRRUS_LOG("Phase 5C.4 Complete for amp %s", amp.name);
+            } else {
+                CIRRUS_ERR("Amp %s: Phase 5C.4 FAILED", amp.name);
+            }
+            IOFree(session, sizeof(UploadSession));
+        }
+    } else if (isReal || isStress) {
         if (isStress) {
             // Stress verify: run N iterations, accumulate timing stats
             constexpr int kStressIterations = 20;

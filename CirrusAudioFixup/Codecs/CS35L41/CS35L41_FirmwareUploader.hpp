@@ -339,4 +339,142 @@ public:
     }
 };
 
+
+// Phase 5C.4: Region Scheduler
+// Calls UploadPlanner + RealUploader for each executable region in order.
+// Stops at first failure. Does not touch uploader internals.
+
+struct RegionResult {
+    uint32_t   regionIndex;
+    RegionType type;
+    uint32_t   bytes;
+    uint32_t   transactionCount;
+    bool       success;
+    uint32_t   planCrc;
+    uint32_t   elapsedMs;
+};
+
+struct UploadSession {
+    RegionResult results[32];
+    uint32_t     regionCount;
+    uint32_t     passCount;
+    uint32_t     totalBytes;
+    uint32_t     totalTransactions;
+    uint32_t     totalMs;
+    bool         complete;
+};
+
+class CirrusFirmwareScheduler {
+public:
+    static bool run(CS35L41Amp &amp, CirrusAudioFixup *fixup,
+                    const MappedImage &mappedImg, UploadSession &session)
+    {
+        session = {};
+
+        UploadPolicy policy;
+        policy.maxTransferBytes = 256;
+        policy.alignRegister    = false;
+        policy.alignPayload     = false;
+
+        uint64_t t_session_start = mach_absolute_time();
+
+        CIRRUS_LOG("Amp %s: WMFW Upload — %d mapped regions total", amp.name, mappedImg.regionCount);
+
+        for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
+            const MappedRegion &region = mappedImg.regions[i];
+
+            bool isExecutable = (region.regionType == RegionType::PM_PACKED ||
+                                 region.regionType == RegionType::XM_PACKED ||
+                                 region.regionType == RegionType::YM_PACKED);
+            if (!isExecutable) continue;
+
+            if (session.regionCount >= 32) {
+                CIRRUS_ERR("Amp %s: Too many regions in session", amp.name);
+                break;
+            }
+
+            const char *rname = regionTypeName(region.regionType);
+            CIRRUS_LOG("Amp %s: Region %d (%s) %d bytes", amp.name, i, rname, region.size);
+
+            UploadPlan *plan = (UploadPlan *)IOMalloc(sizeof(UploadPlan));
+            if (!plan) {
+                CIRRUS_ERR("Amp %s: Failed to allocate UploadPlan for region %d", amp.name, i);
+                RegionResult &res = session.results[session.regionCount++];
+                res = {i, region.regionType, region.size, 0, false, 0, 0};
+                break;
+            }
+
+            bool planOk = CirrusFirmwareUploadPlanner::generatePlan(i, region, policy, *plan);
+            if (!planOk) {
+                CIRRUS_ERR("Amp %s: Region %d plan FAIL", amp.name, i);
+                IOFree(plan, sizeof(UploadPlan));
+                RegionResult &res = session.results[session.regionCount++];
+                res = {i, region.regionType, region.size, 0, false, 0, 0};
+                break;
+            }
+
+            uint64_t t0 = mach_absolute_time();
+            UploadStats stats = {};
+            bool ok = CirrusFirmwareRealUploader::upload(amp, fixup, *plan, &stats);
+            uint64_t t1 = mach_absolute_time();
+
+            uint64_t nsecs = 0;
+            absolutetime_to_nanoseconds(t1 - t0, &nsecs);
+            uint32_t elapsed_ms = (uint32_t)(nsecs / 1000000);
+
+            RegionResult &res = session.results[session.regionCount++];
+            res.regionIndex      = i;
+            res.type             = region.regionType;
+            res.bytes            = plan->totalSize;
+            res.transactionCount = plan->transactionCount;
+            res.success          = ok;
+            res.planCrc          = plan->planCrc;
+            res.elapsedMs        = elapsed_ms;
+
+            IOFree(plan, sizeof(UploadPlan));
+
+            if (ok) {
+                session.passCount++;
+                session.totalBytes        += res.bytes;
+                session.totalTransactions += res.transactionCount;
+                CIRRUS_LOG("Amp %s:   Region %d (%s) PASS (%d ms)", amp.name, i, rname, elapsed_ms);
+            } else {
+                CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", amp.name, i, rname);
+                break;
+            }
+        }
+
+        uint64_t t_ns = 0;
+        absolutetime_to_nanoseconds(mach_absolute_time() - t_session_start, &t_ns);
+        session.totalMs = (uint32_t)(t_ns / 1000000);
+        session.complete = (session.regionCount > 0 && session.passCount == session.regionCount);
+
+        CIRRUS_LOG("Amp %s: ================================", amp.name);
+        CIRRUS_LOG("Amp %s: WMFW Upload Summary", amp.name);
+        CIRRUS_LOG("Amp %s: ================================", amp.name);
+        for (uint32_t i = 0; i < session.regionCount; i++) {
+            const RegionResult &r = session.results[i];
+            CIRRUS_LOG("Amp %s:   [%d] %-10s %s  %d bytes  %d tx  %d ms",
+                       amp.name, r.regionIndex, regionTypeName(r.type),
+                       r.success ? "PASS" : "FAIL",
+                       r.bytes, r.transactionCount, r.elapsedMs);
+        }
+        CIRRUS_LOG("Amp %s: ================================", amp.name);
+        CIRRUS_LOG("Amp %s:   Regions      : %d / %d PASS", amp.name, session.passCount, session.regionCount);
+        CIRRUS_LOG("Amp %s:   Bytes        : %d", amp.name, session.totalBytes);
+        CIRRUS_LOG("Amp %s:   Transactions : %d", amp.name, session.totalTransactions);
+        CIRRUS_LOG("Amp %s:   Total Time   : %d ms", amp.name, session.totalMs);
+        CIRRUS_LOG("Amp %s: ================================", amp.name);
+
+        if (session.complete) {
+            CIRRUS_LOG("Amp %s: WMFW UPLOAD COMPLETE", amp.name);
+        } else {
+            CIRRUS_ERR("Amp %s: WMFW UPLOAD INCOMPLETE — %d/%d regions passed",
+                       amp.name, session.passCount, session.regionCount);
+        }
+
+        return session.complete;
+    }
+};
+
 #endif // CS35L41_FIRMWARE_UPLOADER_HPP

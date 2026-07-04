@@ -159,4 +159,143 @@ public:
     }
 };
 
+class CirrusFirmwareRealUploader {
+public:
+    static bool upload(CS35L41Amp &amp, CirrusAudioFixup *fixup, const UploadPlan &plan) {
+        if (plan.transactionCount == 0 || plan.totalSize == 0) return true;
+        
+        uint32_t dspStart = plan.transactions[0].dspRegister;
+        uint32_t totalSize = plan.totalSize;
+        
+        CIRRUS_LOG("Amp %s: --- Phase 5C.3 Real Upload Start ---", amp.name);
+        CIRRUS_LOG("Amp %s: Region %d, Total Size: %d, DSP Start: 0x%08X", amp.name, plan.regionIndex, totalSize, dspStart);
+        
+        // Allocate buffers for backup and verify
+        UInt8 *backupBuffer = (UInt8 *)IOMallocData(totalSize);
+        UInt8 *verifyBuffer = (UInt8 *)IOMallocData(totalSize);
+        if (!backupBuffer || !verifyBuffer) {
+            CIRRUS_ERR("Amp %s: Failed to allocate memory for Backup/Verify buffers", amp.name);
+            if (backupBuffer) IOFreeData(backupBuffer, totalSize);
+            if (verifyBuffer) IOFreeData(verifyBuffer, totalSize);
+            return false;
+        }
+        
+        uint64_t t_start = 0, t_end = 0;
+        auto to_ms = [&](uint64_t diff) -> uint32_t {
+            uint64_t nsecs = 0;
+            absolutetime_to_nanoseconds(diff, &nsecs);
+            return (uint32_t)(nsecs / 1000000);
+        };
+        
+        // 1. BACKUP
+        CIRRUS_LOG("Amp %s: Backing up %d bytes from 0x%08X...", amp.name, totalSize, dspStart);
+        if (!fixup->bulkRead(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER)) {
+            CIRRUS_ERR("Amp %s: Backup failed! Aborting upload.", amp.name);
+            IOFreeData(backupBuffer, totalSize);
+            IOFreeData(verifyBuffer, totalSize);
+            return false;
+        }
+        
+        // 2. UPLOAD
+        bool uploadSuccess = true;
+        t_start = mach_absolute_time();
+        for (uint32_t i = 0; i < plan.transactionCount; i++) {
+            const UploadTransaction &tx = plan.transactions[i];
+            
+            bool txSuccess = false;
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                if (fixup->bulkWrite(amp, tx.dspRegister, tx.payload, tx.size, TRACE_OTHER)) {
+                    txSuccess = true;
+                    break;
+                }
+                
+                // Get error code from IORegistry via fixup
+                OSObject *transferRet = fixup->getProperty("CirrusTransferRet");
+                IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : kIOReturnError;
+                
+                CIRRUS_ERR("Amp %s: Upload #1, Tx #%d/%d Failed (Attempt %d/2)", amp.name, i + 1, plan.transactionCount, attempt);
+                CIRRUS_ERR("Amp %s: Region: %d, DSP Reg: 0x%08X, FW Offset: 0x%06X, Size: %d, Status: 0x%08X", 
+                           amp.name, plan.regionIndex, tx.dspRegister, tx.payloadOffset, tx.size, retCode);
+                
+                if (attempt == 2) {
+                    CIRRUS_ERR("Amp %s: Tx #%d/%d failed after 2 attempts. Aborting.", amp.name, i + 1, plan.transactionCount);
+                    uploadSuccess = false;
+                    break;
+                }
+                IOSleep(10); // Wait 10ms before retry
+            }
+            if (!uploadSuccess) break;
+        }
+        t_end = mach_absolute_time();
+        uint32_t upload_ms = to_ms(t_end - t_start);
+        
+        // 3. VERIFY & ROLLBACK
+        if (!uploadSuccess) {
+            CIRRUS_ERR("Amp %s: Upload failed. Rolling back...", amp.name);
+            fixup->bulkWrite(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER);
+            IOFreeData(backupBuffer, totalSize);
+            IOFreeData(verifyBuffer, totalSize);
+            return false;
+        }
+        
+        CIRRUS_LOG("Amp %s: Upload complete in %d ms. Verifying...", amp.name, upload_ms);
+        t_start = mach_absolute_time();
+        if (!fixup->bulkRead(amp, dspStart, verifyBuffer, totalSize, TRACE_OTHER)) {
+            CIRRUS_ERR("Amp %s: Read-back failed! Rolling back...", amp.name);
+            fixup->bulkWrite(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER);
+            IOFreeData(backupBuffer, totalSize);
+            IOFreeData(verifyBuffer, totalSize);
+            return false;
+        }
+        t_end = mach_absolute_time();
+        uint32_t readback_ms = to_ms(t_end - t_start);
+        
+        t_start = mach_absolute_time();
+        uint32_t payloadCrc = 0xFFFFFFFF;
+        uint32_t readCrc = 0xFFFFFFFF;
+        const uint8_t *payloadBase = plan.transactions[0].payload;
+        
+        for (uint32_t i = 0; i < totalSize; i++) {
+            payloadCrc ^= payloadBase[i];
+            readCrc ^= verifyBuffer[i];
+            for (int j = 0; j < 8; j++) {
+                payloadCrc = (payloadCrc >> 1) ^ (0xEDB88320 & (-(payloadCrc & 1)));
+                readCrc = (readCrc >> 1) ^ (0xEDB88320 & (-(readCrc & 1)));
+            }
+        }
+        payloadCrc = ~payloadCrc;
+        readCrc = ~readCrc;
+        t_end = mach_absolute_time();
+        uint32_t crc_ms = to_ms(t_end - t_start);
+        
+        if (payloadCrc != readCrc) {
+            CIRRUS_ERR("Amp %s: Verification Failed! Payload CRC: 0x%08X, Read CRC: 0x%08X", amp.name, payloadCrc, readCrc);
+            // memcmp
+            for (uint32_t i = 0; i < totalSize; i++) {
+                if (payloadBase[i] != verifyBuffer[i]) {
+                    CIRRUS_ERR("Amp %s: First mismatch at offset 0x%06X (Expected: 0x%02X, Read: 0x%02X)", 
+                               amp.name, i, payloadBase[i], verifyBuffer[i]);
+                    break;
+                }
+            }
+            CIRRUS_ERR("Amp %s: Rolling back...", amp.name);
+            fixup->bulkWrite(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER);
+            IOFreeData(backupBuffer, totalSize);
+            IOFreeData(verifyBuffer, totalSize);
+            return false;
+        }
+        
+        CIRRUS_LOG("Amp %s: Verification PASS! CRC: 0x%08X", amp.name, payloadCrc);
+        CIRRUS_LOG("Amp %s: Timing Summary", amp.name);
+        CIRRUS_LOG("  Upload      : %d ms", upload_ms);
+        CIRRUS_LOG("  Readback    : %d ms", readback_ms);
+        CIRRUS_LOG("  CRC         : %d ms", crc_ms);
+        CIRRUS_LOG("  Total       : %d ms", upload_ms + readback_ms + crc_ms);
+        
+        IOFreeData(backupBuffer, totalSize);
+        IOFreeData(verifyBuffer, totalSize);
+        return true;
+    }
+};
+
 #endif // CS35L41_FIRMWARE_UPLOADER_HPP

@@ -168,8 +168,10 @@ private:
                            UInt8 *readBuffer,
                            UInt16 readLength);
                            
-    bool bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
+public:
     bool bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
+    bool bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
+private:
     bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value, TraceSource source = TRACE_OTHER);
     bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, TraceSource source = TRACE_OTHER);
     bool updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source = TRACE_OTHER);

@@ -375,6 +375,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                    bootArgStrEquals("cirrus_phase", "5C.0") ||
                    bootArgStrEquals("cirrus_phase", "5C.1") ||
                    bootArgStrEquals("cirrus_phase", "5C.2") ||
+                   bootArgStrEquals("cirrus_phase", "5C.3") ||
                    bootArgStrEquals("cirrus_phase", "5C")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
@@ -603,7 +604,7 @@ bool CirrusAudioFixup::bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data,
     OSObject *transferRet = getProperty("CirrusTransferRet");
     IOReturn retCode = transferRet ? ((OSNumber*)transferRet)->unsigned32BitValue() : (ret ? kIOReturnSuccess : kIOReturnError);
     uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
-    recordTrace(source, ampIdx, true, true, reg, length, retCode);
+    recordTrace(source, ampIdx, true, true, reg, (uint32_t)length, retCode);
     
     if (useMalloc) {
         IOFreeData(writeBuffer, 4 + length);
@@ -1833,8 +1834,16 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    CirrusFirmwareDryRunSimulator::simulate(*plan);
-    CIRRUS_LOG("Phase 5C.2 Complete for amp %s", amp.name);
+    if (strncmp(phaseArg, "5C.3", 4) == 0) {
+        if (!CirrusFirmwareRealUploader::upload(amp, this, *plan)) {
+            CIRRUS_ERR("Amp %s: Phase 5C.3 Real Upload Failed!", amp.name);
+        } else {
+            CIRRUS_LOG("Phase 5C.3 Complete for amp %s", amp.name);
+        }
+    } else {
+        CirrusFirmwareDryRunSimulator::simulate(*plan);
+        CIRRUS_LOG("Phase 5C.2 Complete for amp %s", amp.name);
+    }
 
     IOFree(plan, sizeof(UploadPlan));
     IOFree(mappedImg, sizeof(MappedImage));

@@ -1841,22 +1841,39 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     
     if (isReal || isStress) {
         if (isStress) {
-            // Stress verify: run the same block N times to detect flaky I2C or race conditions
+            // Stress verify: run N iterations, accumulate timing stats
             constexpr int kStressIterations = 20;
             int passed = 0;
+            uint32_t acc_write = 0, acc_rb = 0, acc_crc = 0, acc_total = 0, acc_retries = 0;
             CIRRUS_LOG("Amp %s: Stress Verify - %d iterations on Region %d", amp.name, kStressIterations, targetRegionIdx);
             for (int iter = 1; iter <= kStressIterations; iter++) {
                 CIRRUS_LOG("Amp %s: Iteration %d/%d", amp.name, iter, kStressIterations);
-                if (CirrusFirmwareRealUploader::upload(amp, this, *plan)) {
+                UploadStats stats = {};
+                if (CirrusFirmwareRealUploader::upload(amp, this, *plan, &stats)) {
                     passed++;
+                    acc_write   += stats.writeMs;
+                    acc_rb      += stats.readbackMs;
+                    acc_crc     += stats.crcMs;
+                    acc_total   += stats.totalMs;
+                    acc_retries += stats.retries;
                     CIRRUS_LOG("Amp %s: Iteration %d/%d PASS (%d/%d total)", amp.name, iter, kStressIterations, passed, iter);
                 } else {
                     CIRRUS_ERR("Amp %s: Iteration %d/%d FAIL - stopping stress test.", amp.name, iter, kStressIterations);
                     break;
                 }
             }
+            CIRRUS_LOG("Amp %s: Stress Verify Summary", amp.name);
+            CIRRUS_LOG("Amp %s:   Iterations  : %d", amp.name, kStressIterations);
+            CIRRUS_LOG("Amp %s:   PASS        : %d", amp.name, passed);
+            CIRRUS_LOG("Amp %s:   FAIL        : %d", amp.name, kStressIterations - passed);
+            CIRRUS_LOG("Amp %s:   Retries     : %d", amp.name, acc_retries);
+            if (passed > 0) {
+                CIRRUS_LOG("Amp %s:   Write Avg   : %d ms", amp.name, acc_write / passed);
+                CIRRUS_LOG("Amp %s:   Read Avg    : %d ms", amp.name, acc_rb / passed);
+                CIRRUS_LOG("Amp %s:   CRC Avg     : %d ms", amp.name, acc_crc / passed);
+                CIRRUS_LOG("Amp %s:   Total Avg   : %d ms", amp.name, acc_total / passed);
+            }
             if (passed == kStressIterations) {
-                CIRRUS_LOG("Amp %s: Stress Verify COMPLETE - %d/%d PASS", amp.name, passed, kStressIterations);
                 CIRRUS_LOG("Phase 5C.3.5 Complete for amp %s", amp.name);
             } else {
                 CIRRUS_ERR("Amp %s: Stress Verify FAILED - %d/%d passed", amp.name, passed, kStressIterations);

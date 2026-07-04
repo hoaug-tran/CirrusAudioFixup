@@ -29,6 +29,14 @@ struct UploadPlan {
     uint32_t planCrc;
 };
 
+struct UploadStats {
+    uint32_t writeMs;
+    uint32_t readbackMs;
+    uint32_t crcMs;
+    uint32_t totalMs;
+    uint32_t retries;
+};
+
 class CirrusFirmwareUploadPlanner {
 public:
     static bool generatePlan(uint32_t regionIndex, const MappedRegion &region, const UploadPolicy &policy, UploadPlan &outPlan) {
@@ -175,7 +183,7 @@ static inline const char *regionTypeName(RegionType t) {
 
 class CirrusFirmwareRealUploader {
 public:
-    static bool upload(CS35L41Amp &amp, CirrusAudioFixup *fixup, const UploadPlan &plan) {
+    static bool upload(CS35L41Amp &amp, CirrusAudioFixup *fixup, const UploadPlan &plan, UploadStats *outStats = nullptr) {
         if (plan.transactionCount == 0 || plan.totalSize == 0) return true;
 
         uint32_t dspStart  = plan.transactions[0].dspRegister;
@@ -214,6 +222,7 @@ public:
 
         // Per-transaction: Write, Readback, CRC
         uint64_t t_total_start = mach_absolute_time();
+        uint32_t acc_write_ms = 0, acc_rb_ms = 0, acc_crc_ms = 0, acc_retries = 0;
 
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
@@ -234,10 +243,12 @@ public:
                     OSObject *ret = fixup->getProperty("CirrusTransferRet");
                     IOReturn rc = ret ? ((OSNumber*)ret)->unsigned32BitValue() : kIOReturnError;
                     CIRRUS_LOG("Amp %s:   WRITE    : FAIL (Attempt 1/2, Status=0x%08X) retrying...", amp.name, rc);
+                    acc_retries++;
                     IOSleep(10);
                 }
             }
             uint32_t write_ms = to_ms(mach_absolute_time() - t0);
+            acc_write_ms += write_ms;
 
             if (!writeOk) {
                 OSObject *ret = fixup->getProperty("CirrusTransferRet");
@@ -258,6 +269,7 @@ public:
             UInt8 *rbSlot = verifyBuffer + tx.payloadOffset;
             bool readOk = fixup->bulkRead(amp, tx.dspRegister, rbSlot, tx.size, TRACE_OTHER);
             uint32_t rb_ms = to_ms(mach_absolute_time() - t0);
+            acc_rb_ms += rb_ms;
 
             if (!readOk) {
                 CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", amp.name, rb_ms);
@@ -285,6 +297,7 @@ public:
             payCrc = ~payCrc;
             rbCrc  = ~rbCrc;
             uint32_t crc_ms = to_ms(mach_absolute_time() - t0);
+            acc_crc_ms += crc_ms;
 
             if (payCrc != rbCrc) {
                 CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]",
@@ -309,10 +322,16 @@ public:
 
         // Summary
         uint32_t total_ms = to_ms(mach_absolute_time() - t_total_start);
-        CIRRUS_LOG("Amp %s: --- Upload Complete ---", amp.name);
-        CIRRUS_LOG("Amp %s:   Transactions : %d / %d PASS", amp.name, plan.transactionCount, plan.transactionCount);
-        CIRRUS_LOG("Amp %s:   Total Bytes  : %d", amp.name, totalSize);
-        CIRRUS_LOG("Amp %s:   Total Time   : %d ms", amp.name, total_ms);
+        CIRRUS_LOG("Amp %s: Upload Complete | Tx=%d PASS, Write=%d ms, RB=%d ms, CRC=%d ms, Total=%d ms",
+                   amp.name, plan.transactionCount, acc_write_ms, acc_rb_ms, acc_crc_ms, total_ms);
+
+        if (outStats) {
+            outStats->writeMs   = acc_write_ms;
+            outStats->readbackMs = acc_rb_ms;
+            outStats->crcMs     = acc_crc_ms;
+            outStats->totalMs   = total_ms;
+            outStats->retries   = acc_retries;
+        }
 
         IOFreeData(backupBuffer, totalSize);
         IOFreeData(verifyBuffer, totalSize);

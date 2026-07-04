@@ -202,7 +202,7 @@ public:
             return (uint32_t)(nsecs / 1000000);
         };
 
-        // ── BACKUP ──────────────────────────────────────────────────────
+        // Backup current DSP memory before writing
         CIRRUS_LOG("Amp %s: Backing up %d bytes from 0x%08X...", amp.name, totalSize, dspStart);
         if (!fixup->bulkRead(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER)) {
             CIRRUS_ERR("Amp %s: Backup FAIL - aborting.", amp.name);
@@ -212,7 +212,7 @@ public:
         }
         CIRRUS_LOG("Amp %s: Backup OK (%d bytes)", amp.name, totalSize);
 
-        // ── PER-TRANSACTION: WRITE → READBACK → CRC ─────────────────────
+        // Per-transaction: Write, Readback, CRC
         uint64_t t_total_start = mach_absolute_time();
 
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
@@ -222,7 +222,7 @@ public:
                        amp.name, i + 1, plan.transactionCount,
                        tx.dspRegister, tx.payloadOffset, tx.size);
 
-            // ── WRITE ────────────────────────────────────────────────────
+            // Write chunk to DSP
             uint64_t t0 = mach_absolute_time();
             bool writeOk = false;
             for (int attempt = 1; attempt <= 2; attempt++) {
@@ -253,7 +253,7 @@ public:
             }
             CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", amp.name, write_ms);
 
-            // ── READBACK ──────────────────────────────────────────────────
+            // Read back the written chunk
             t0 = mach_absolute_time();
             UInt8 *rbSlot = verifyBuffer + tx.payloadOffset;
             bool readOk = fixup->bulkRead(amp, tx.dspRegister, rbSlot, tx.size, TRACE_OTHER);
@@ -270,7 +270,7 @@ public:
             }
             CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", amp.name, rb_ms);
 
-            // ── CRC ───────────────────────────────────────────────────────
+            // CRC check: compare written vs read-back
             t0 = mach_absolute_time();
             uint32_t payCrc = 0xFFFFFFFF, rbCrc = 0xFFFFFFFF;
             const uint8_t *paySlice = tx.payload;
@@ -307,7 +307,7 @@ public:
             CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", amp.name);
         }
 
-        // ── SUMMARY ────────────────────────────────────────────────────
+        // Summary
         uint32_t total_ms = to_ms(mach_absolute_time() - t_total_start);
         CIRRUS_LOG("Amp %s: --- Upload Complete ---", amp.name);
         CIRRUS_LOG("Amp %s:   Transactions : %d / %d PASS", amp.name, plan.transactionCount, plan.transactionCount);

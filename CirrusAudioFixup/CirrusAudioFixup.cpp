@@ -5,6 +5,8 @@
 
 #include "CirrusAudioFixup.hpp"
 #include <IOKit/IOMemoryDescriptor.h>
+#include "Codecs/CS35L41/CS35L41_FirmwareParser.hpp"
+#include "Codecs/CS35L41/CS35L41_FirmwareDatabase.hpp"
 
 #define super IOService
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
@@ -348,7 +350,6 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
 
     if (amp.present) {
         dumpAllRegisters(amp);
-        runTimeBasedFSMCheck(amp);
         
         if (bootArgStrEquals("cirrus_phase", "4A1")) {
             cs35l41_init_mac(amp);
@@ -368,7 +369,10 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     dumpAllRegisters(amp); // Phase 4B.4A Final Dump
                 }
             }
-        } else if (bootArgStrEquals("cirrus_phase", "5A") || bootArgStrEquals("cirrus_phase", "5B")) {
+        } else if (bootArgStrEquals("cirrus_phase", "5A") || 
+                   bootArgStrEquals("cirrus_phase", "5B") ||
+                   bootArgStrEquals("cirrus_phase", "5C.0") ||
+                   bootArgStrEquals("cirrus_phase", "5C")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
                     applyPLL(amp);
@@ -378,6 +382,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     phase5a_FirmwareDiscovery(amp);
                     if (bootArgStrEquals("cirrus_phase", "5B")) {
                         phase5b_DSPBringup(amp);
+                    } else if (bootArgStrEquals("cirrus_phase", "5C.0") || bootArgStrEquals("cirrus_phase", "5C")) {
+                        phase5c_FirmwareUpload(amp);
                     }
                 }
             }
@@ -1511,10 +1517,15 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     
     // PRE Snapshot
     uint32_t pre_core_ctrl = 0, pre_clk_ctrl = 0, pre_mbox = 0;
+    uint32_t pre_sys_id = 0, pre_sys_ver = 0, pre_sys_core = 0;
     readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &pre_core_ctrl);
     readRegister(amp, CS35L41_DSP_CLK_CTRL, &pre_clk_ctrl);
     readRegister(amp, CS35L41_DSP_MBOX_2, &pre_mbox);
-    CIRRUS_LOG("Phase 5B PRE-Snapshot: CORE_CTRL=0x%08X, CLK=0x%08X, MBOX_2=0x%08X", pre_core_ctrl, pre_clk_ctrl, pre_mbox);
+    readRegister(amp, CS35L41_DSP1_SYS_ID, &pre_sys_id);
+    readRegister(amp, CS35L41_DSP1_SYS_VERSION, &pre_sys_ver);
+    readRegister(amp, CS35L41_DSP1_SYS_CORE_ID, &pre_sys_core);
+    CIRRUS_LOG("Phase 5B PRE-Snapshot: CORE=0x%08X, CLK=0x%08X, MBOX=0x%08X, SYSID=0x%08X, VER=0x%08X, COREID=0x%08X", 
+               pre_core_ctrl, pre_clk_ctrl, pre_mbox, pre_sys_id, pre_sys_ver, pre_sys_core);
     
     // 5B.1 DSP Reset Release
     uint64_t reset_start = mach_absolute_time();
@@ -1592,6 +1603,14 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     snprintf(propName, sizeof(propName), "Cirrus_DSP_SYS_VER_%s", amp.name); setProperty(propName, (uint64_t)sys_ver, 32);
     snprintf(propName, sizeof(propName), "Cirrus_DSP_SYS_CORE_%s", amp.name); setProperty(propName, (uint64_t)sys_core, 32);
     
+    // POST Snapshot
+    uint32_t post_core_ctrl = 0, post_clk_ctrl = 0, post_mbox = 0;
+    readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &post_core_ctrl);
+    readRegister(amp, CS35L41_DSP_CLK_CTRL, &post_clk_ctrl);
+    readRegister(amp, CS35L41_DSP_MBOX_2, &post_mbox);
+    CIRRUS_LOG("Phase 5B POST-Snapshot: CORE=0x%08X, CLK=0x%08X, MBOX=0x%08X, SYSID=0x%08X, VER=0x%08X, COREID=0x%08X", 
+               post_core_ctrl, post_clk_ctrl, post_mbox, sys_id, sys_ver, sys_core);
+    
     snprintf(propName, sizeof(propName), "Cirrus_DSP_STATE_%s", amp.name);
     if (sys_id == 0xFFFFFFFF && sys_ver == 0xFFFFFFFF && sys_core == 0xFFFFFFFF) {
         statusStr = OSString::withCString("FAIL_SYSINFO (DSP_UNREACHABLE)");
@@ -1609,18 +1628,12 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_RAW_INIT_%s", amp.name);
     setProperty(propName, (uint64_t)mbox_init, 32);
     
-    // POST Snapshot
-    uint32_t post_core_ctrl = 0, post_clk_ctrl = 0, post_mbox = 0;
-    readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &post_core_ctrl);
-    readRegister(amp, CS35L41_DSP_CLK_CTRL, &post_clk_ctrl);
-    readRegister(amp, CS35L41_DSP_MBOX_2, &post_mbox);
-    CIRRUS_LOG("Phase 5B POST-Snapshot: CORE_CTRL=0x%08X, CLK=0x%08X, MBOX_2=0x%08X", post_core_ctrl, post_clk_ctrl, post_mbox);
-    
     // 5B.5 Mailbox Timeline Polling
     uint32_t current_mbox = post_mbox;
     uint32_t previous_mbox = post_mbox;
     OSArray *timeline = OSArray::withCapacity(10);
     uint32_t transitions = 0;
+    uint32_t first_non_zero_time = 0xFFFFFFFF;
     
     if (timeline) {
         char initialTimeline[64];
@@ -1638,6 +1651,9 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
         
         if (current_mbox != previous_mbox) {
             transitions++;
+            if (current_mbox != 0 && first_non_zero_time == 0xFFFFFFFF) {
+                first_non_zero_time = ms;
+            }
             if (timeline) {
                 char transitionStr[64];
                 snprintf(transitionStr, sizeof(transitionStr), "%dms: 0x%08X", ms, current_mbox);
@@ -1673,5 +1689,37 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     }
     if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
     
+    if (first_non_zero_time == 0xFFFFFFFF) {
+        CIRRUS_LOG("Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=N/A", ms, transitions, current_mbox);
+    } else {
+        CIRRUS_LOG("Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=%dms", ms, transitions, current_mbox, first_non_zero_time);
+    }
+    
     CIRRUS_LOG("Phase 5B complete for amp %s. Transitions: %d", amp.name, transitions);
+}
+
+void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp) {
+    CIRRUS_LOG("Entering Phase 5C: Firmware Upload for amp %s", amp.name);
+    
+    // Since phase5a set up amp.wmfwData, we can just use it
+    if (!amp.wmfwData || amp.wmfwSize == 0) {
+        CIRRUS_LOG("Amp %s: No WMFW data found. Phase 5C skipped.", amp.name);
+        return;
+    }
+    
+    FirmwareImage image;
+    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, &image)) {
+        CIRRUS_ERR("Amp %s: WMFW parse failed", amp.name);
+        return;
+    }
+    
+    CIRRUS_LOG("Amp %s: WMFW Parse OK. Fingerprint: 0x%08X", amp.name, image.fingerprint);
+    CIRRUS_LOG("  - Magic: 0x%08X, Ver: %d, TotalBytes: %d, CRC: 0x%08X", image.fw_magic, image.fw_version, image.fw_total_bytes, image.fw_crc);
+    CIRRUS_LOG("  - Core ID: %d, Core Rev: %d", image.fw_core, image.fw_core_rev);
+    CIRRUS_LOG("  - Blocks: %d Regions, %d Algs", image.regionCount, image.algorithmCount);
+    CIRRUS_LOG("  - Stats: XM=%d, YM=%d, PM=%d, Coeff=%d, Meta=%d, Unknown=%d", 
+               image.stat_xm_blocks, image.stat_ym_blocks, image.stat_pm_blocks, 
+               image.stat_coeff_blocks, image.stat_metadata_blocks, image.stat_unknown_blocks);
+    
+    CIRRUS_LOG("Phase 5C.0 Complete for amp %s", amp.name);
 }

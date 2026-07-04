@@ -194,8 +194,11 @@ private:
     // Phase 5A
     void phase5a_FirmwareDiscovery(CS35L41Amp &amp);
     
-    // Phase 5B
+    // Phase 5B: DSP Bring-up
     void phase5b_DSPBringup(CS35L41Amp &amp);
+
+    // Phase 5C: Firmware Upload
+    void phase5c_FirmwareUpload(CS35L41Amp &amp);
     IOService* getAudioController();
     
     void testRegisterConsistency(CS35L41Amp &amp);

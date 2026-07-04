@@ -848,14 +848,15 @@ bool CirrusAudioFixup::cs35l41_test_key_lock(CS35L41Amp &amp) {
 bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     CIRRUS_LOG("Amp %s: --- Starting Phase 4A.2 ---", amp.name);
     
-    UInt32 oldSnapshot[270];
-    UInt32 newSnapshot[270];
-    snapshotRegisters(amp, oldSnapshot);
+    UInt32 snapshot0[270], snapshot1[270], snapshot2[270], snapshot3[270];
+    snapshotRegisters(amp, snapshot0);
     
     // 1. Unlock Test Key
     if (!cs35l41_test_key_unlock(amp)) {
         return false;
     }
+    
+    snapshotRegisters(amp, snapshot1);
     
     UInt32 crc_unlock = calculateRegistersCRC32(amp);
     char propName[64];
@@ -869,6 +870,10 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
             return false;
         }
         
+        snapshotRegisters(amp, snapshot2);
+        CIRRUS_LOG("Amp %s: --- Diff [Snapshot1 -> Snapshot2] (Errata) ---", amp.name);
+        compareRegisterSnapshots(amp, snapshot1, snapshot2);
+        
         UInt32 crc_errata = calculateRegistersCRC32(amp);
         snprintf(propName, sizeof(propName), "Cirrus_CRC_Errata_%s", amp.name);
         setProperty(propName, crc_errata, 32);
@@ -878,9 +883,14 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     if (bootArgStrEquals("cirrus_phase", "4A2C")) {
         // 3. OTP Unpack
         if (!cs35l41_otp_unpack(amp)) {
-            CIRRUS_ERR("Amp %s: OTP Unpack failed. Rollback could be applied here.", amp.name);
+            CIRRUS_ERR("Amp %s: OTP Unpack failed! Rolling back (Locking Test Key).", amp.name);
+            cs35l41_test_key_lock(amp); // ROLLBACK
             return false;
         }
+        
+        snapshotRegisters(amp, snapshot3);
+        CIRRUS_LOG("Amp %s: --- Diff [Snapshot2 -> Snapshot3] (OTP) ---", amp.name);
+        compareRegisterSnapshots(amp, snapshot2, snapshot3);
         
         UInt32 crc_otp = calculateRegistersCRC32(amp);
         snprintf(propName, sizeof(propName), "Cirrus_CRC_OTP_%s", amp.name);
@@ -897,9 +907,6 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     snprintf(propName, sizeof(propName), "Cirrus_CRC_Lock_%s", amp.name);
     setProperty(propName, crc_lock, 32);
     CIRRUS_LOG("Amp %s: CRC after Lock -> 0x%08X", amp.name, crc_lock);
-    
-    snapshotRegisters(amp, newSnapshot);
-    compareRegisterSnapshots(amp, oldSnapshot, newSnapshot);
     
     CIRRUS_LOG("Amp %s: Phase 4A.2 completed.", amp.name);
     return true;
@@ -954,10 +961,16 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
     UInt32 otp_mem[80]; // CS35L41_OTP_SIZE_WORDS is 80 (since size is 80 * 4 bytes?)
     // Actually, Linux reads 80 words. We'll use 80.
     
+    int elements_processed = 0;
+    int elements_skipped = 0;
+    int update_bits_calls = 0;
+    
     if (!readRegister(amp, 0x00000010, otp_id_reg)) { // CS35L41_OTPID
         CIRRUS_ERR("Amp %s: Read OTP ID failed", amp.name);
         return false;
     }
+    
+    CIRRUS_LOG("Amp %s: Read OTPID = 0x%02X", amp.name, otp_id_reg);
     
     for (size_t i = 0; i < ARRAY_SIZE(cs35l41_otp_map_map); i++) {
         if (cs35l41_otp_map_map[i].id == otp_id_reg) {
@@ -971,7 +984,8 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
         return false;
     }
     
-    CIRRUS_LOG("Amp %s: Found OTP map ID %u with %u elements", amp.name, otp_id_reg, otp_map_match->num_elements);
+    CIRRUS_LOG("Amp %s: Selected OTP Map = %u", amp.name, otp_id_reg);
+    CIRRUS_LOG("Amp %s: Number of packed elements = %u", amp.name, otp_map_match->num_elements);
     
     // We must read 80 words (320 bytes) from CS35L41_OTP_MEM0 (0x00000400).
     UInt8 otp_raw_buf[80 * 4];
@@ -993,6 +1007,8 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
     word_offset = otp_map_match->word_offset;
     
     for (i = 0; i < otp_map_match->num_elements; i++) {
+        elements_processed++;
+        
         if (bit_offset + otp_map[i].size - 1 >= 32) {
             otp_val = (otp_mem[word_offset] &
                     GENMASK(31, bit_offset)) >> bit_offset;
@@ -1017,6 +1033,7 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
         }
 
         if (otp_map[i].reg != 0) {
+            update_bits_calls++;
             if (!updateRegisterBits(amp, otp_map[i].reg,
                          GENMASK(otp_map[i].shift + otp_map[i].size - 1,
                              otp_map[i].shift),
@@ -1024,8 +1041,13 @@ bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
                 CIRRUS_ERR("Amp %s: Write OTP val failed at reg 0x%08X", amp.name, otp_map[i].reg);
                 return false;
             }
+        } else {
+            elements_skipped++;
         }
     }
+    
+    CIRRUS_LOG("Amp %s: OTP Unpack Summary: Elements Processed=%d, Skipped=%d, UpdateBits Calls=%d",
+               amp.name, elements_processed, elements_skipped, update_bits_calls);
     
     return true;
 }

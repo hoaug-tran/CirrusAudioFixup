@@ -74,7 +74,7 @@ public:
             
             // Calculate register increment based on Region Type
             uint32_t chunkReg = 0;
-            MappingStatus status = CirrusFirmwareMapper::mapPackedAddress(region.regionType, tx.firmwareAddress, tx.size, chunkReg);
+            MappingStatus status = CirrusFirmwareMapper::mapPackedAddress(region.regionType, region.firmwareAddress, currentOffset, chunkReg);
             if (status != MappingStatus::OK) {
                 CIRRUS_ERR("UPLOAD_PLAN_INVALID: Failed to map chunk offset 0x%06X", tx.firmwareAddress);
                 return false;

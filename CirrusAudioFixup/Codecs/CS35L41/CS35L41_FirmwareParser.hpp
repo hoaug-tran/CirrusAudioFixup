@@ -138,24 +138,16 @@ struct MappedImage {
 
 class CirrusFirmwareMapper {
 public:
-    static MappingStatus mapPackedAddress(RegionType type, uint32_t firmwareAddress, uint32_t size, uint32_t &regAddress) {
-        // Prevent overflow
-        if (firmwareAddress + size < firmwareAddress) {
-            return MappingStatus::Overflow;
-        }
-
+    static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t &regAddress) {
         switch (type) {
             case RegionType::PM_PACKED:
-                // Base 0x03800000 + (offset * 5)
-                regAddress = 0x03800000 + (firmwareAddress * 5);
+                regAddress = 0x03800000 + (wordOffset * 5) + byteOffset;
                 break;
             case RegionType::XM_PACKED:
-                // Base 0x02000000 + (offset * 3) & ~0x3
-                regAddress = (0x02000000 + (firmwareAddress * 3)) & ~0x3;
+                regAddress = 0x02000000 + (wordOffset * 3) + byteOffset;
                 break;
             case RegionType::YM_PACKED:
-                // Base 0x02C00000 + (offset * 3) & ~0x3
-                regAddress = (0x02C00000 + (firmwareAddress * 3)) & ~0x3;
+                regAddress = 0x02C00000 + (wordOffset * 3) + byteOffset;
                 break;
             default:
                 return MappingStatus::UnsupportedRegion;
@@ -193,7 +185,7 @@ public:
                 outReg.regionType == RegionType::XM_PACKED || 
                 outReg.regionType == RegionType::YM_PACKED) {
                 
-                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, outReg.size, outReg.dspRegister);
+                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
                 if (status != MappingStatus::OK) {
                     CIRRUS_ERR("Mapping failed for region %d: status %d", i, (int)status);
                     return false;

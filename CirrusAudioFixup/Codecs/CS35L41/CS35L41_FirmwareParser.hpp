@@ -297,7 +297,7 @@ public:
         outImage->fw_core = header->core;
         outImage->fw_core_rev = header->rev;
         
-        size_t pos = sizeof(wmfw_header) + sizeof(wmfw_adsp2_sizes) + sizeof(wmfw_footer);
+        size_t pos = sizeof(header->magic) + OSSwapLittleToHostInt32(header->len);
         
         while (pos < size && outImage->regionCount < 32) {
             const wmfw_region *raw_region = (const wmfw_region *)&data[pos];

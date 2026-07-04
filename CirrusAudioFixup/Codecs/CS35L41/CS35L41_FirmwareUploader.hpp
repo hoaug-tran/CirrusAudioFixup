@@ -372,7 +372,7 @@ public:
         session = {};
 
         UploadPolicy policy;
-        policy.maxTransferBytes = 256;
+        policy.maxTransferBytes = 252;
         policy.alignRegister    = false;
         policy.alignPayload     = false;
 

@@ -1824,7 +1824,7 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     CIRRUS_LOG("Amp %s: Selected Region %d for Dry Run", amp.name, targetRegionIdx);
     
     UploadPolicy policy;
-    policy.maxTransferBytes = 256;
+    policy.maxTransferBytes = 252;
     policy.alignRegister = false;
     policy.alignPayload = false;
     

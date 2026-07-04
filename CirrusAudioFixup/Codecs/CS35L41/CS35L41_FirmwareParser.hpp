@@ -44,10 +44,7 @@ struct wmfw_footer {
 };
 
 struct wmfw_region {
-    union {
-        uint32_t type_be;
-        uint32_t offset_le;
-    };
+    uint32_t type_offset_le;
     uint32_t len;
     uint8_t data[];
 };
@@ -305,8 +302,9 @@ public:
         while (pos < size && outImage->regionCount < 32) {
             const wmfw_region *raw_region = (const wmfw_region *)&data[pos];
             
-            uint32_t type = OSSwapBigToHostInt32(raw_region->type_be) & 0xFF;
-            uint32_t offset = OSSwapLittleToHostInt32(raw_region->offset_le) & 0xFFFFFF;
+            uint32_t type_offset = OSSwapLittleToHostInt32(raw_region->type_offset_le);
+            uint32_t type = type_offset & 0xFF;
+            uint32_t offset = type_offset >> 8;
             uint32_t len = OSSwapLittleToHostInt32(raw_region->len);
             
             if (pos + sizeof(wmfw_region) + len > size) {

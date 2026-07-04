@@ -376,6 +376,7 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                    bootArgStrEquals("cirrus_phase", "5C.1") ||
                    bootArgStrEquals("cirrus_phase", "5C.2") ||
                    bootArgStrEquals("cirrus_phase", "5C.3") ||
+                   bootArgStrEquals("cirrus_phase", "5C.3.5") ||
                    bootArgStrEquals("cirrus_phase", "5C")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
@@ -1789,8 +1790,12 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    // Phase 5C.2: Dry Run Upload
-    CIRRUS_LOG("Amp %s: Starting Phase 5C.2 Dry Run", amp.name);
+    // Phase 5C.2 / 5C.3 / 5C.3.5: determine active phase
+    bool isDryRun = (strncmp(phaseArg, "5C.2", 4) == 0);
+    bool isStress = (strncmp(phaseArg, "5C.3.5", 6) == 0);
+    bool isReal   = (strncmp(phaseArg, "5C.3", 4) == 0 && !isStress);
+    const char *activePhaseLabel = isDryRun ? "5C.2 Dry Run" : (isStress ? "5C.3.5 Stress Verify" : "5C.3 Real Upload");
+    CIRRUS_LOG("Amp %s: Starting Phase %s", amp.name, activePhaseLabel);
     
     // Find first executable region
     int targetRegionIdx = -1;
@@ -1834,11 +1839,34 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    if (strncmp(phaseArg, "5C.3", 4) == 0) {
-        if (!CirrusFirmwareRealUploader::upload(amp, this, *plan)) {
-            CIRRUS_ERR("Amp %s: Phase 5C.3 Real Upload Failed!", amp.name);
+    if (isReal || isStress) {
+        if (isStress) {
+            // Stress verify: run the same block N times to detect flaky I2C or race conditions
+            constexpr int kStressIterations = 20;
+            int passed = 0;
+            CIRRUS_LOG("Amp %s: Stress Verify - %d iterations on Region %d", amp.name, kStressIterations, targetRegionIdx);
+            for (int iter = 1; iter <= kStressIterations; iter++) {
+                CIRRUS_LOG("Amp %s: Iteration %d/%d", amp.name, iter, kStressIterations);
+                if (CirrusFirmwareRealUploader::upload(amp, this, *plan)) {
+                    passed++;
+                    CIRRUS_LOG("Amp %s: Iteration %d/%d PASS (%d/%d total)", amp.name, iter, kStressIterations, passed, iter);
+                } else {
+                    CIRRUS_ERR("Amp %s: Iteration %d/%d FAIL - stopping stress test.", amp.name, iter, kStressIterations);
+                    break;
+                }
+            }
+            if (passed == kStressIterations) {
+                CIRRUS_LOG("Amp %s: Stress Verify COMPLETE - %d/%d PASS", amp.name, passed, kStressIterations);
+                CIRRUS_LOG("Phase 5C.3.5 Complete for amp %s", amp.name);
+            } else {
+                CIRRUS_ERR("Amp %s: Stress Verify FAILED - %d/%d passed", amp.name, passed, kStressIterations);
+            }
         } else {
-            CIRRUS_LOG("Phase 5C.3 Complete for amp %s", amp.name);
+            if (!CirrusFirmwareRealUploader::upload(amp, this, *plan)) {
+                CIRRUS_ERR("Amp %s: Phase 5C.3 Real Upload Failed!", amp.name);
+            } else {
+                CIRRUS_LOG("Phase 5C.3 Complete for amp %s", amp.name);
+            }
         }
     } else {
         CirrusFirmwareDryRunSimulator::simulate(*plan);

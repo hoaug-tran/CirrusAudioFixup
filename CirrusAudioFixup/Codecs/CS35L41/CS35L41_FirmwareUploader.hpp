@@ -66,6 +66,23 @@ public:
             
             uint32_t chunkSize = (remaining > policy.maxPayloadBytes) ? policy.maxPayloadBytes : remaining;
             
+            // Align chunk size to DSP word boundaries
+            uint32_t align = 4;
+            switch (region.regionType) {
+                case RegionType::PM_PACKED: align = 5; break;
+                case RegionType::XM_PACKED:
+                case RegionType::YM_PACKED: align = 3; break;
+                default: align = 4; break;
+            }
+            if (chunkSize > align) {
+                chunkSize -= (chunkSize % align);
+            }
+            
+            if (chunkSize == 0) {
+                CIRRUS_ERR("UPLOAD_PLAN_INVALID: chunkSize dropped to 0 due to alignment");
+                return false;
+            }
+            
             UploadTransaction &tx = outPlan.transactions[outPlan.transactionCount];
             tx.firmwareAddress = region.firmwareAddress; // FW Word Offset
             tx.payloadOffset = currentOffset;

@@ -67,7 +67,7 @@ public:
             uint32_t chunkSize = (remaining > policy.maxPayloadBytes) ? policy.maxPayloadBytes : remaining;
             
             UploadTransaction &tx = outPlan.transactions[outPlan.transactionCount];
-            tx.firmwareAddress = region.firmwareAddress + currentOffset;
+            tx.firmwareAddress = region.firmwareAddress; // FW Word Offset
             tx.payloadOffset = currentOffset;
             tx.payload = region.data.begin + currentOffset;
             tx.size = chunkSize;
@@ -133,7 +133,7 @@ public:
         
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
-            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW=0x%06X, Offset=%d, Size=%d", 
+            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Size=%d", 
                        i, tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.size);
         }
         
@@ -227,9 +227,9 @@ public:
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
 
-            CIRRUS_LOG("Amp %s: --- Transaction %d/%d | DSP=0x%08X FW+0x%06X Size=%d ---",
-                       amp.name, i + 1, plan.transactionCount,
-                       tx.dspRegister, tx.payloadOffset, tx.size);
+            CIRRUS_LOG("Amp %s: --- Transaction %d/%d | DSP=0x%08X FW_Word=0x%06X ChunkByte=0x%06X Size=%d ---",
+                   amp.name, i + 1, plan.transactionCount,
+                   tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.size);
 
             // Write chunk to DSP
             uint32_t totalPacketLength = tx.size + 4; // payload + register

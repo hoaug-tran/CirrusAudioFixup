@@ -1715,36 +1715,51 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    FirmwareImage image;
-    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, &image)) {
+    FirmwareImage *image = (FirmwareImage *)IOMalloc(sizeof(FirmwareImage));
+    if (!image) {
+        CIRRUS_ERR("Amp %s: Failed to allocate memory for FirmwareImage", amp.name);
+        return;
+    }
+
+    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, image)) {
         CIRRUS_ERR("Amp %s: WMFW parse failed", amp.name);
+        IOFree(image, sizeof(FirmwareImage));
         return;
     }
     
-    CIRRUS_LOG("Amp %s: WMFW Parse OK. Fingerprint: 0x%08X", amp.name, image.fingerprint);
-    CIRRUS_LOG("  - Magic: 0x%08X, Ver: %d, TotalBytes: %d, CRC: 0x%08X", image.fw_magic, image.fw_version, image.fw_total_bytes, image.fw_crc);
-    CIRRUS_LOG("  - Core ID: %d, Core Rev: %d", image.fw_core, image.fw_core_rev);
-    CIRRUS_LOG("  - Blocks: %d Regions, %d Algs", image.regionCount, image.algorithmCount);
+    CIRRUS_LOG("Amp %s: WMFW Parse OK. Fingerprint: 0x%08X", amp.name, image->fingerprint);
+    CIRRUS_LOG("  - Magic: 0x%08X, Ver: %d, TotalBytes: %d, CRC: 0x%08X", image->fw_magic, image->fw_version, image->fw_total_bytes, image->fw_crc);
+    CIRRUS_LOG("  - Core ID: %d, Core Rev: %d", image->fw_core, image->fw_core_rev);
+    CIRRUS_LOG("  - Blocks: %d Regions, %d Algs", image->regionCount, image->algorithmCount);
     CIRRUS_LOG("  - Stats: XM=%d, YM=%d, PM=%d, Coeff=%d, Meta=%d, Unknown=%d", 
-               image.stat_xm_blocks, image.stat_ym_blocks, image.stat_pm_blocks, 
-               image.stat_coeff_blocks, image.stat_metadata_blocks, image.stat_unknown_blocks);
+               image->stat_xm_blocks, image->stat_ym_blocks, image->stat_pm_blocks, 
+               image->stat_coeff_blocks, image->stat_metadata_blocks, image->stat_unknown_blocks);
 
     if (strncmp(phaseArg, "5C.0", 4) == 0) {
         CIRRUS_LOG("Phase 5C.0 Complete for amp %s", amp.name);
+        IOFree(image, sizeof(FirmwareImage));
         return;
     }
 
     // Phase 5C.1: Address Mapping
     CIRRUS_LOG("Amp %s: Starting Phase 5C.1 Address Mapping", amp.name);
-    MappedImage mappedImg;
-    if (!CirrusFirmwareMapper::mapFirmwareImage(image, mappedImg)) {
+    MappedImage *mappedImg = (MappedImage *)IOMalloc(sizeof(MappedImage));
+    if (!mappedImg) {
+        CIRRUS_ERR("Amp %s: Failed to allocate memory for MappedImage", amp.name);
+        IOFree(image, sizeof(FirmwareImage));
+        return;
+    }
+
+    if (!CirrusFirmwareMapper::mapFirmwareImage(*image, *mappedImg)) {
         CIRRUS_ERR("Amp %s: Firmware Address Mapping Failed!", amp.name);
+        IOFree(mappedImg, sizeof(MappedImage));
+        IOFree(image, sizeof(FirmwareImage));
         return;
     }
     
-    CIRRUS_LOG("Amp %s: Mapping OK. Mapped Regions: %d, Mapping CRC: 0x%08X", amp.name, mappedImg.regionCount, mappedImg.mappingCrc);
-    for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
-        const MappedRegion &m = mappedImg.regions[i];
+    CIRRUS_LOG("Amp %s: Mapping OK. Mapped Regions: %d, Mapping CRC: 0x%08X", amp.name, mappedImg->regionCount, mappedImg->mappingCrc);
+    for (uint32_t i = 0; i < mappedImg->regionCount; i++) {
+        const MappedRegion &m = mappedImg->regions[i];
         const char *typeName = "UNKNOWN";
         switch (m.regionType) {
             case RegionType::PM_PACKED: typeName = "PM_PACKED"; break;
@@ -1768,6 +1783,8 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     
     if (strncmp(phaseArg, "5C.1", 4) == 0) {
         CIRRUS_LOG("Phase 5C.1 Complete for amp %s", amp.name);
+        IOFree(mappedImg, sizeof(MappedImage));
+        IOFree(image, sizeof(FirmwareImage));
         return;
     }
     
@@ -1776,10 +1793,10 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     
     // Find first executable region
     int targetRegionIdx = -1;
-    for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
-        if (mappedImg.regions[i].regionType == RegionType::PM_PACKED ||
-            mappedImg.regions[i].regionType == RegionType::XM_PACKED ||
-            mappedImg.regions[i].regionType == RegionType::YM_PACKED) {
+    for (uint32_t i = 0; i < mappedImg->regionCount; i++) {
+        if (mappedImg->regions[i].regionType == RegionType::PM_PACKED ||
+            mappedImg->regions[i].regionType == RegionType::XM_PACKED ||
+            mappedImg->regions[i].regionType == RegionType::YM_PACKED) {
             targetRegionIdx = i;
             break;
         }
@@ -1787,10 +1804,12 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     
     if (targetRegionIdx == -1) {
         CIRRUS_ERR("Amp %s: No executable region found for dry run!", amp.name);
+        IOFree(mappedImg, sizeof(MappedImage));
+        IOFree(image, sizeof(FirmwareImage));
         return;
     }
     
-    const MappedRegion &targetReg = mappedImg.regions[targetRegionIdx];
+    const MappedRegion &targetReg = mappedImg->regions[targetRegionIdx];
     CIRRUS_LOG("Amp %s: Selected Region %d for Dry Run", amp.name, targetRegionIdx);
     
     UploadPolicy policy;
@@ -1798,12 +1817,26 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     policy.alignRegister = false;
     policy.alignPayload = false;
     
-    UploadPlan plan;
-    if (!CirrusFirmwareUploadPlanner::generatePlan(targetReg, policy, plan)) {
+    UploadPlan *plan = (UploadPlan *)IOMalloc(sizeof(UploadPlan));
+    if (!plan) {
+        CIRRUS_ERR("Amp %s: Failed to allocate memory for UploadPlan", amp.name);
+        IOFree(mappedImg, sizeof(MappedImage));
+        IOFree(image, sizeof(FirmwareImage));
+        return;
+    }
+
+    if (!CirrusFirmwareUploadPlanner::generatePlan(targetReg, policy, *plan)) {
         CIRRUS_ERR("Amp %s: Failed to generate upload plan!", amp.name);
+        IOFree(plan, sizeof(UploadPlan));
+        IOFree(mappedImg, sizeof(MappedImage));
+        IOFree(image, sizeof(FirmwareImage));
         return;
     }
     
-    CirrusFirmwareDryRunSimulator::simulate(plan);
+    CirrusFirmwareDryRunSimulator::simulate(*plan);
     CIRRUS_LOG("Phase 5C.2 Complete for amp %s", amp.name);
+
+    IOFree(plan, sizeof(UploadPlan));
+    IOFree(mappedImg, sizeof(MappedImage));
+    IOFree(image, sizeof(FirmwareImage));
 }

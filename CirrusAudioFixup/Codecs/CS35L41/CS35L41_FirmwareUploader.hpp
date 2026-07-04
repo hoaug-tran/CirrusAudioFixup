@@ -7,7 +7,7 @@
 #define MAX_UPLOAD_TRANSACTIONS 1024
 
 struct UploadPolicy {
-    uint32_t maxTransferBytes;
+    uint32_t maxPayloadBytes;
     bool alignRegister;
     bool alignPayload;
 };
@@ -50,8 +50,8 @@ public:
             return true; // Nothing to do
         }
         
-        if (policy.maxTransferBytes == 0) {
-            CIRRUS_ERR("UploadPolicy maxTransferBytes cannot be 0");
+        if (policy.maxPayloadBytes == 0) {
+            CIRRUS_ERR("UploadPolicy maxPayloadBytes cannot be 0");
             return false;
         }
 
@@ -64,7 +64,7 @@ public:
                 return false;
             }
             
-            uint32_t chunkSize = (remaining > policy.maxTransferBytes) ? policy.maxTransferBytes : remaining;
+            uint32_t chunkSize = (remaining > policy.maxPayloadBytes) ? policy.maxPayloadBytes : remaining;
             
             UploadTransaction &tx = outPlan.transactions[outPlan.transactionCount];
             tx.firmwareAddress = region.firmwareAddress + currentOffset;
@@ -232,6 +232,8 @@ public:
                        tx.dspRegister, tx.payloadOffset, tx.size);
 
             // Write chunk to DSP
+            uint32_t totalPacketLength = tx.size + 4; // payload + register
+            CIRRUS_LOG("Amp %s:   WRITE    : payload = %d bytes, packet = %d bytes (payload + 4)", amp.name, tx.size, totalPacketLength);
             uint64_t t0 = mach_absolute_time();
             bool writeOk = false;
             for (int attempt = 1; attempt <= 2; attempt++) {
@@ -372,7 +374,7 @@ public:
         session = {};
 
         UploadPolicy policy;
-        policy.maxTransferBytes = 252;
+        policy.maxPayloadBytes = 252;
         policy.alignRegister    = false;
         policy.alignPayload     = false;
 

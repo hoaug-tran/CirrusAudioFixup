@@ -382,8 +382,13 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     phase5a_FirmwareDiscovery(amp);
                     if (bootArgStrEquals("cirrus_phase", "5B")) {
                         phase5b_DSPBringup(amp);
-                    } else if (bootArgStrEquals("cirrus_phase", "5C.0") || bootArgStrEquals("cirrus_phase", "5C")) {
-                        phase5c_FirmwareUpload(amp);
+                    } else {
+                        char phaseArg[16] = {0};
+                        if (PE_parse_boot_argn("cirrus_phase", phaseArg, sizeof(phaseArg))) {
+                            if (strncmp(phaseArg, "5C", 2) == 0) {
+                                phase5c_FirmwareUpload(amp, phaseArg);
+                            }
+                        }
                     }
                 }
             }
@@ -1698,7 +1703,7 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     CIRRUS_LOG("Phase 5B complete for amp %s. Transitions: %d", amp.name, transitions);
 }
 
-void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp) {
+void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phaseArg) {
     CIRRUS_LOG("Entering Phase 5C: Firmware Upload for amp %s", amp.name);
     
     // Since phase5a set up amp.wmfwData, we can just use it
@@ -1720,6 +1725,43 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp) {
     CIRRUS_LOG("  - Stats: XM=%d, YM=%d, PM=%d, Coeff=%d, Meta=%d, Unknown=%d", 
                image.stat_xm_blocks, image.stat_ym_blocks, image.stat_pm_blocks, 
                image.stat_coeff_blocks, image.stat_metadata_blocks, image.stat_unknown_blocks);
+
+    if (strncmp(phaseArg, "5C.0", 4) == 0) {
+        CIRRUS_LOG("Phase 5C.0 Complete for amp %s", amp.name);
+        return;
+    }
+
+    // Phase 5C.1: Address Mapping
+    CIRRUS_LOG("Amp %s: Starting Phase 5C.1 Address Mapping", amp.name);
+    MappedImage mappedImg;
+    if (!CirrusFirmwareMapper::mapFirmwareImage(image, mappedImg)) {
+        CIRRUS_ERR("Amp %s: Firmware Address Mapping Failed!", amp.name);
+        return;
+    }
     
-    CIRRUS_LOG("Phase 5C.0 Complete for amp %s", amp.name);
+    CIRRUS_LOG("Amp %s: Mapping OK. Mapped Regions: %d, Mapping CRC: 0x%08X", amp.name, mappedImg.regionCount, mappedImg.mappingCrc);
+    for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
+        const MappedRegion &m = mappedImg.regions[i];
+        const char *typeName = "UNKNOWN";
+        switch (m.regionType) {
+            case RegionType::PM_PACKED: typeName = "PM_PACKED"; break;
+            case RegionType::XM_PACKED: typeName = "XM_PACKED"; break;
+            case RegionType::YM_PACKED: typeName = "YM_PACKED"; break;
+            case RegionType::ALGORITHM_DATA: typeName = "ALGORITHM"; break;
+            case RegionType::METADATA: typeName = "METADATA"; break;
+            case RegionType::NAME_TEXT: typeName = "NAME_TEXT"; break;
+            case RegionType::INFO_TEXT: typeName = "INFO_TEXT"; break;
+            default: break;
+        }
+        
+        if (m.regionType == RegionType::PM_PACKED || m.regionType == RegionType::XM_PACKED || m.regionType == RegionType::YM_PACKED) {
+            CIRRUS_LOG("  Region %d: Type=%s, FW Addr=0x%06X, DSP Reg=0x%08X, Size=%d", 
+                       i, typeName, m.firmwareAddress, m.dspRegister, m.size);
+        } else {
+            CIRRUS_LOG("  Region %d: Type=%s, FW Addr=0x%06X, Size=%d (Not mapped to DSP)", 
+                       i, typeName, m.firmwareAddress, m.size);
+        }
+    }
+    
+    CIRRUS_LOG("Phase 5C.1 Complete for amp %s", amp.name);
 }

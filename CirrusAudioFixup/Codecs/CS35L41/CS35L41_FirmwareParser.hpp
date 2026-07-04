@@ -101,6 +101,126 @@ struct FirmwareImage {
     uint32_t fingerprint;
 };
 
+// Phase 5C.1: Mapper Structures
+
+enum class RegionType : uint32_t {
+    PM_PACKED = 0x10,
+    XM_PACKED = 0x11,
+    YM_PACKED = 0x12,
+    ALGORITHM_DATA = 0xF2,
+    METADATA = 0xFC,
+    NAME_TEXT = 0xFE,
+    INFO_TEXT = 0xFF,
+    UNKNOWN = 0xFFFF
+};
+
+enum class MappingStatus {
+    OK,
+    UnsupportedRegion,
+    Overflow,
+    AlignmentError,
+    InvalidOffset
+};
+
+struct MappedRegion {
+    RegionType regionType;
+    uint32_t firmwareAddress;
+    uint32_t dspRegister;
+    uint32_t size;
+    FirmwareSpan data;
+};
+
+struct MappedImage {
+    MappedRegion regions[MAX_FIRMWARE_REGIONS];
+    uint32_t regionCount;
+    uint32_t mappingCrc;
+};
+
+class CirrusFirmwareMapper {
+public:
+    static MappingStatus mapPackedAddress(RegionType type, uint32_t firmwareAddress, uint32_t size, uint32_t &regAddress) {
+        // Prevent overflow
+        if (firmwareAddress + size < firmwareAddress) {
+            return MappingStatus::Overflow;
+        }
+
+        switch (type) {
+            case RegionType::PM_PACKED:
+                // Base 0x03800000 + (offset * 5)
+                regAddress = 0x03800000 + (firmwareAddress * 5);
+                break;
+            case RegionType::XM_PACKED:
+                // Base 0x02000000 + (offset * 3) & ~0x3
+                regAddress = (0x02000000 + (firmwareAddress * 3)) & ~0x3;
+                break;
+            case RegionType::YM_PACKED:
+                // Base 0x02C00000 + (offset * 3) & ~0x3
+                regAddress = (0x02C00000 + (firmwareAddress * 3)) & ~0x3;
+                break;
+            default:
+                return MappingStatus::UnsupportedRegion;
+        }
+        
+        return MappingStatus::OK;
+    }
+
+    static bool mapFirmwareImage(const FirmwareImage &image, MappedImage &outMapped) {
+        outMapped.regionCount = 0;
+        outMapped.mappingCrc = 0xFFFFFFFF;
+        
+        for (uint32_t i = 0; i < image.regionCount; i++) {
+            const FirmwareRegion &inReg = image.regions[i];
+            MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
+            
+            // Map Type
+            switch (inReg.type) {
+                case WMFW_HALO_PM_PACKED: outReg.regionType = RegionType::PM_PACKED; break;
+                case WMFW_HALO_XM_PACKED: outReg.regionType = RegionType::XM_PACKED; break;
+                case WMFW_HALO_YM_PACKED: outReg.regionType = RegionType::YM_PACKED; break;
+                case WMFW_ALGORITHM_DATA: outReg.regionType = RegionType::ALGORITHM_DATA; break;
+                case WMFW_METADATA:       outReg.regionType = RegionType::METADATA; break;
+                case WMFW_NAME_TEXT:      outReg.regionType = RegionType::NAME_TEXT; break;
+                case WMFW_INFO_TEXT:      outReg.regionType = RegionType::INFO_TEXT; break;
+                default:                  outReg.regionType = RegionType::UNKNOWN; break;
+            }
+            
+            outReg.firmwareAddress = inReg.offset;
+            outReg.size = inReg.data.size;
+            outReg.data = inReg.data;
+            outReg.dspRegister = 0; // default for unmapped
+            
+            if (outReg.regionType == RegionType::PM_PACKED || 
+                outReg.regionType == RegionType::XM_PACKED || 
+                outReg.regionType == RegionType::YM_PACKED) {
+                
+                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, outReg.size, outReg.dspRegister);
+                if (status != MappingStatus::OK) {
+                    CIRRUS_ERR("Mapping failed for region %d: status %d", i, (int)status);
+                    return false;
+                }
+            } else {
+                // Non-memory region (algorithms, metadata)
+                outReg.dspRegister = 0xFFFFFFFF; // Not applicable
+            }
+            
+            // Cumulate CRC
+            const uint8_t *crcData = (const uint8_t *)&outReg;
+            // Calculate CRC over the metadata: regionType(4), firmwareAddress(4), dspRegister(4), size(4)
+            for (size_t k = 0; k < 16; k++) {
+                outMapped.mappingCrc ^= crcData[k];
+                for (size_t j = 0; j < 8; j++) {
+                    outMapped.mappingCrc = (outMapped.mappingCrc >> 1) ^ (0xEDB88320 & (-(outMapped.mappingCrc & 1)));
+                }
+            }
+            
+            outMapped.regionCount++;
+        }
+        
+        outMapped.mappingCrc = ~outMapped.mappingCrc;
+        return true;
+    }
+};
+
 class CirrusFirmwareParser {
 public:
     static uint32_t calculate_crc32(const uint8_t *data, size_t length) {

@@ -198,7 +198,7 @@ private:
     void phase5b_DSPBringup(CS35L41Amp &amp);
 
     // Phase 5C: Firmware Upload
-    void phase5c_FirmwareUpload(CS35L41Amp &amp);
+    void phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phaseArg);
     IOService* getAudioController();
     
     void testRegisterConsistency(CS35L41Amp &amp);

@@ -350,13 +350,6 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
     amp.present = (deviceId == CS35L41_DEVICE_ID);
 
     if (amp.present) {
-        // CRITICAL FIX: Mask all CS35L41 interrupts to prevent I2C/GPIO interrupt storms 
-        // which freeze macOS WindowServer and cause the beachball after login.
-        writeRegister(amp, CS35L41_IRQ1_MASK1, 0xFFFFFFFF, TRACE_PROBE);
-        writeRegister(amp, CS35L41_IRQ1_MASK2, 0xFFFFFFFF, TRACE_PROBE);
-        writeRegister(amp, CS35L41_IRQ1_MASK3, 0xFFFFFFFF, TRACE_PROBE);
-        writeRegister(amp, CS35L41_IRQ1_MASK4, 0xFFFFFFFF, TRACE_PROBE);
-        
         dumpAllRegisters(amp);
         
         if (bootArgStrEquals("cirrus_phase", "4A1")) {
@@ -718,6 +711,14 @@ bool CirrusAudioFixup::cs35l41_init_mac(CS35L41Amp &amp) {
     // Wait for DSP to reboot. Linux uses usleep_range(2000, 2100).
     // IODelay provides microsecond precision in IOKit.
     IODelay(3000);
+    
+    // CRITICAL FIX: The Soft Reset above clears all registers, including IRQ masks!
+    // We MUST reapply the IRQ masks immediately to prevent interrupt storms
+    // which freeze macOS WindowServer at the login screen.
+    writeRegister(amp, CS35L41_IRQ1_MASK1, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ1_MASK2, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ1_MASK3, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ1_MASK4, 0xFFFFFFFF, TRACE_PROBE);
     
     // 2. Poll OTP_BOOT_DONE
     if (!pollRegisterBit(amp, CS35L41_IRQ1_STATUS4, CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE, 100)) {

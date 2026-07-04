@@ -20,6 +20,8 @@
 #define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
 #define CIRRUS_ERR(fmt, ...) IOLog(LOG_PREFIX "ERROR: " fmt "\n", ##__VA_ARGS__)
 
+#define GENMASK(h, l) (((~0U) >> (31 - (h))) & (~0U << (l)))
+
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 
 #define CS35L41_I2C_ADDR_LEFT   0x40
@@ -153,6 +155,9 @@ private:
     
     // Phase 4A.2B: Apply Errata
     bool cs35l41_register_errata_patch(CS35L41Amp &amp);
+    
+    // Phase 4A.2C: OTP Unpack
+    bool cs35l41_otp_unpack(CS35L41Amp &amp);
     
     bool cs35l41_apply_phase4A2(CS35L41Amp &amp);
     

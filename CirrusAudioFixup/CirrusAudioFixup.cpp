@@ -353,7 +353,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
         if (bootArgStrEquals("cirrus_phase", "4A1")) {
             cs35l41_init_mac(amp);
         } else if (bootArgStrEquals("cirrus_phase", "4A2A") || 
-                   bootArgStrEquals("cirrus_phase", "4A2B")) {
+                   bootArgStrEquals("cirrus_phase", "4A2B") ||
+                   bootArgStrEquals("cirrus_phase", "4A2C")) {
             if (cs35l41_init_mac(amp)) {
                 cs35l41_apply_phase4A2(amp);
             }
@@ -858,7 +859,7 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
     setProperty(propName, crc_unlock, 32);
     CIRRUS_LOG("Amp %s: CRC after Unlock -> 0x%08X", amp.name, crc_unlock);
     
-    if (bootArgStrEquals("cirrus_phase", "4A2B")) {
+    if (bootArgStrEquals("cirrus_phase", "4A2B") || bootArgStrEquals("cirrus_phase", "4A2C")) {
         // 2. Errata Patch
         if (!cs35l41_register_errata_patch(amp)) {
             return false;
@@ -870,7 +871,18 @@ bool CirrusAudioFixup::cs35l41_apply_phase4A2(CS35L41Amp &amp) {
         CIRRUS_LOG("Amp %s: CRC after Errata -> 0x%08X", amp.name, crc_errata);
     }
     
-    // TODO: 4A.2C (OTP) will go here
+    if (bootArgStrEquals("cirrus_phase", "4A2C")) {
+        // 3. OTP Unpack
+        if (!cs35l41_otp_unpack(amp)) {
+            CIRRUS_ERR("Amp %s: OTP Unpack failed. Rollback could be applied here.", amp.name);
+            return false;
+        }
+        
+        UInt32 crc_otp = calculateRegistersCRC32(amp);
+        snprintf(propName, sizeof(propName), "Cirrus_CRC_OTP_%s", amp.name);
+        setProperty(propName, crc_otp, 32);
+        CIRRUS_LOG("Amp %s: CRC after OTP Unpack -> 0x%08X", amp.name, crc_otp);
+    }
     
     // 4. Lock Test Key
     if (!cs35l41_test_key_lock(amp)) {
@@ -920,6 +932,92 @@ bool CirrusAudioFixup::cs35l41_register_errata_patch(CS35L41Amp &amp) {
     if (!writeRegister(amp, 0x02BC1000, 0x00000000)) { // CS35L41_DSP1_CCM_CORE_CTRL
         CIRRUS_ERR("Amp %s: Failed to write CCM_CORE_CTRL", amp.name);
         return false;
+    }
+    
+    return true;
+}
+
+bool CirrusAudioFixup::cs35l41_otp_unpack(CS35L41Amp &amp) {
+    const cs35l41_otp_map_element_t *otp_map_match = nullptr;
+    const cs35l41_otp_packed_element_t *otp_map;
+    int bit_offset, word_offset, i;
+    unsigned int bit_sum = 8;
+    UInt32 otp_val;
+    UInt32 otp_id_reg;
+    UInt32 otp_mem[80]; // CS35L41_OTP_SIZE_WORDS is 80 (since size is 80 * 4 bytes?)
+    // Actually, Linux reads 80 words. We'll use 80.
+    
+    if (!readRegister(amp, 0x00000010, otp_id_reg)) { // CS35L41_OTPID
+        CIRRUS_ERR("Amp %s: Read OTP ID failed", amp.name);
+        return false;
+    }
+    
+    for (size_t i = 0; i < ARRAY_SIZE(cs35l41_otp_map_map); i++) {
+        if (cs35l41_otp_map_map[i].id == otp_id_reg) {
+            otp_map_match = &cs35l41_otp_map_map[i];
+            break;
+        }
+    }
+    
+    if (!otp_map_match) {
+        CIRRUS_ERR("Amp %s: OTP Map matching ID %u not found", amp.name, otp_id_reg);
+        return false;
+    }
+    
+    CIRRUS_LOG("Amp %s: Found OTP map ID %u with %u elements", amp.name, otp_id_reg, otp_map_match->num_elements);
+    
+    // We must read 80 words (320 bytes) from CS35L41_OTP_MEM0 (0x00000400).
+    UInt8 otp_raw_buf[80 * 4];
+    if (!bulkRead(amp, 0x00000400, otp_raw_buf, sizeof(otp_raw_buf))) {
+        CIRRUS_ERR("Amp %s: Read OTP Mem failed", amp.name);
+        return false;
+    }
+    
+    for (int i = 0; i < 80; i++) {
+        // I2C reads big-endian, we need to convert to host endianness for uint32
+        otp_mem[i] = (otp_raw_buf[i * 4] << 24) | 
+                     (otp_raw_buf[i * 4 + 1] << 16) | 
+                     (otp_raw_buf[i * 4 + 2] << 8) | 
+                     (otp_raw_buf[i * 4 + 3]);
+    }
+    
+    otp_map = otp_map_match->map;
+    bit_offset = otp_map_match->bit_offset;
+    word_offset = otp_map_match->word_offset;
+    
+    for (i = 0; i < otp_map_match->num_elements; i++) {
+        if (bit_offset + otp_map[i].size - 1 >= 32) {
+            otp_val = (otp_mem[word_offset] &
+                    GENMASK(31, bit_offset)) >> bit_offset;
+            otp_val |= (otp_mem[++word_offset] &
+                    GENMASK(bit_offset + otp_map[i].size - 33, 0)) <<
+                    (32 - bit_offset);
+            bit_offset += otp_map[i].size - 32;
+        } else if (bit_offset + otp_map[i].size - 1 >= 0) {
+            otp_val = (otp_mem[word_offset] &
+                   GENMASK(bit_offset + otp_map[i].size - 1, bit_offset)
+                  ) >> bit_offset;
+            bit_offset += otp_map[i].size;
+        } else { /* both bit_offset and otp_map[i].size are 0 */
+            otp_val = 0;
+        }
+
+        bit_sum += otp_map[i].size;
+
+        if (bit_offset == 32) {
+            bit_offset = 0;
+            word_offset++;
+        }
+
+        if (otp_map[i].reg != 0) {
+            if (!updateRegisterBits(amp, otp_map[i].reg,
+                         GENMASK(otp_map[i].shift + otp_map[i].size - 1,
+                             otp_map[i].shift),
+                         otp_val << otp_map[i].shift)) {
+                CIRRUS_ERR("Amp %s: Write OTP val failed at reg 0x%08X", amp.name, otp_map[i].reg);
+                return false;
+            }
+        }
     }
     
     return true;

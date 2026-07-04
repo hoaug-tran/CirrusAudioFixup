@@ -5,8 +5,9 @@
 
 #include "CirrusAudioFixup.hpp"
 #include <IOKit/IOMemoryDescriptor.h>
-#include "Codecs/CS35L41/CS35L41_FirmwareParser.hpp"
 #include "Codecs/CS35L41/CS35L41_FirmwareDatabase.hpp"
+#include "Codecs/CS35L41/CS35L41_FirmwareParser.hpp"
+#include "Codecs/CS35L41/CS35L41_FirmwareUploader.hpp"
 
 #define super IOService
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
@@ -372,6 +373,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
         } else if (bootArgStrEquals("cirrus_phase", "5A") || 
                    bootArgStrEquals("cirrus_phase", "5B") ||
                    bootArgStrEquals("cirrus_phase", "5C.0") ||
+                   bootArgStrEquals("cirrus_phase", "5C.1") ||
+                   bootArgStrEquals("cirrus_phase", "5C.2") ||
                    bootArgStrEquals("cirrus_phase", "5C")) {
             if (cs35l41_init_mac(amp)) {
                 if (cs35l41_apply_phase4A2(amp)) {
@@ -1763,5 +1766,44 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         }
     }
     
-    CIRRUS_LOG("Phase 5C.1 Complete for amp %s", amp.name);
+    if (strncmp(phaseArg, "5C.1", 4) == 0) {
+        CIRRUS_LOG("Phase 5C.1 Complete for amp %s", amp.name);
+        return;
+    }
+    
+    // Phase 5C.2: Dry Run Upload
+    CIRRUS_LOG("Amp %s: Starting Phase 5C.2 Dry Run", amp.name);
+    
+    // Find first executable region
+    int targetRegionIdx = -1;
+    for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
+        if (mappedImg.regions[i].regionType == RegionType::PM_PACKED ||
+            mappedImg.regions[i].regionType == RegionType::XM_PACKED ||
+            mappedImg.regions[i].regionType == RegionType::YM_PACKED) {
+            targetRegionIdx = i;
+            break;
+        }
+    }
+    
+    if (targetRegionIdx == -1) {
+        CIRRUS_ERR("Amp %s: No executable region found for dry run!", amp.name);
+        return;
+    }
+    
+    const MappedRegion &targetReg = mappedImg.regions[targetRegionIdx];
+    CIRRUS_LOG("Amp %s: Selected Region %d for Dry Run", amp.name, targetRegionIdx);
+    
+    UploadPolicy policy;
+    policy.maxTransferBytes = 256;
+    policy.alignRegister = false;
+    policy.alignPayload = false;
+    
+    UploadPlan plan;
+    if (!CirrusFirmwareUploadPlanner::generatePlan(targetReg, policy, plan)) {
+        CIRRUS_ERR("Amp %s: Failed to generate upload plan!", amp.name);
+        return;
+    }
+    
+    CirrusFirmwareDryRunSimulator::simulate(plan);
+    CIRRUS_LOG("Phase 5C.2 Complete for amp %s", amp.name);
 }

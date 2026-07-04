@@ -394,6 +394,12 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                         if (PE_parse_boot_argn("cirrus_phase", phaseArg, sizeof(phaseArg))) {
                             if (strncmp(phaseArg, "5C", 2) == 0 || strncmp(phaseArg, "5D", 2) == 0) {
                                 phase5c_FirmwareUpload(amp, phaseArg);
+                                
+                                bool isFullUpload = (strncmp(phaseArg, "5C.4", 4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
+                                if (isFullUpload) {
+                                    CIRRUS_LOG("Amp %s: Bringing up DSP after full Firmware Upload", amp.name);
+                                    phase5b_DSPBringup(amp);
+                                }
                             }
                         }
                     }
@@ -719,6 +725,10 @@ bool CirrusAudioFixup::cs35l41_init_mac(CS35L41Amp &amp) {
     writeRegister(amp, CS35L41_IRQ1_MASK2, 0xFFFFFFFF, TRACE_PROBE);
     writeRegister(amp, CS35L41_IRQ1_MASK3, 0xFFFFFFFF, TRACE_PROBE);
     writeRegister(amp, CS35L41_IRQ1_MASK4, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ2_MASK1, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ2_MASK2, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ2_MASK3, 0xFFFFFFFF, TRACE_PROBE);
+    writeRegister(amp, CS35L41_IRQ2_MASK4, 0xFFFFFFFF, TRACE_PROBE);
     
     // 2. Poll OTP_BOOT_DONE
     if (!pollRegisterBit(amp, CS35L41_IRQ1_STATUS4, CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE, 100)) {
@@ -1199,8 +1209,9 @@ static const RegisterSequence asp_sequence[] = {
     { CS35L41_DSP1_RX3_SRC, 0, 0x00000018, 0, false },
     { CS35L41_DSP1_RX4_SRC, 0, 0x00000019, 0, false },
     { CS35L41_DSP1_RX6_SRC, 0, 0x00000029, 0, false },
-    { CS35L41_SP_HIZ_CTRL, 0, 0x00000003, 0, false },
-    { CS35L41_SP_ENABLES, 0, 0x00010001, 0, false }
+    { CS35L41_SP_HIZ_CTRL, 0, 0x00000003, 0, false }
+    // DO NOT ENABLE ASP YET! Enabling it without fully configuring the DSP and Global Enable causes CoreAudio to freeze the AMD ACP via I2S.
+    // { CS35L41_SP_ENABLES, 0, 0x00010001, 0, false }
 };
 
 bool CirrusAudioFixup::applyASP(CS35L41Amp &amp) {

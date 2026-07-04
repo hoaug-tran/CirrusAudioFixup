@@ -12,6 +12,10 @@
 #define CS35L41_IRQ1_MASK2      0x00010114
 #define CS35L41_IRQ1_MASK3      0x00010118
 #define CS35L41_IRQ1_MASK4      0x0001011C
+#define CS35L41_IRQ2_MASK1      0x00010910
+#define CS35L41_IRQ2_MASK2      0x00010914
+#define CS35L41_IRQ2_MASK3      0x00010918
+#define CS35L41_IRQ2_MASK4      0x0001091C
 struct RegisterDesc {
     uint32_t addr;
     const char* name;

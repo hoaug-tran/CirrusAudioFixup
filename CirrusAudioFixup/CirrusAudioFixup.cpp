@@ -399,6 +399,22 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
             // Step 9: Mailbox Resume (DSP to RUN state)
             CIRRUS_LOG("Amp %s: Step 9 (Mailbox Resume) Starting...", amp.name);
             writeRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, HALO_CORE_EN, TRACE_DUMP);
+            writeRegister(amp, CS35L41_DSP_MBOX_1, 0x00000001, TRACE_DUMP);
+
+            uint32_t current_mbox = 0;
+            uint32_t ms = 0;
+            while (ms < 500) {
+                readRegister(amp, CS35L41_DSP_MBOX_2, &current_mbox);
+                if (current_mbox != 0) {
+                    CIRRUS_LOG("Amp %s: Mailbox reached state 0x%08X after %u ms", amp.name, current_mbox, ms);
+                    break;
+                }
+                IODelay(1000);
+                ms++;
+            }
+            if (current_mbox == 0) {
+                CIRRUS_ERR("Amp %s: Mailbox timeout after 500ms!", amp.name);
+            }
             
             // Note: Since SP_ENABLES is 0 in phase4A2, no audio flows yet. CoreAudio will trigger SP_ENABLES later.
         } else {

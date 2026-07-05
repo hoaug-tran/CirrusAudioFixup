@@ -261,8 +261,8 @@ public:
             } else {
                 for (uint32_t a = 0; a < image.algorithmCount; a++) {
                     if (image.algorithms[a].id == coeff.id) {
-                        alg_xm_base = image.algorithms[a].baseWordOffset;
-                        alg_ym_base = image.algorithms[a].ymBaseWordOffset;
+                        alg_xm_base = image.algorithms[a].baseWordOffset & 0x00FFFF;
+                        alg_ym_base = image.algorithms[a].ymBaseWordOffset & 0x00FFFF;
                         found = true;
                         break;
                     }

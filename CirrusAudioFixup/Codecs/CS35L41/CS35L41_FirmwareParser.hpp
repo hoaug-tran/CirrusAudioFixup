@@ -117,28 +117,69 @@ struct CoefficientBlock {
     const uint8_t* data;
 };
 
+// WMFW Metadata Cache Structures
+struct WMFWControl {
+    uint16_t offset;
+    uint16_t type;
+    uint32_t size;
+    char name[64];
+    uint16_t ctl_type;
+    uint16_t flags;
+    uint32_t len;
+};
+
+struct WMFWAlgorithm {
+    uint32_t id;
+    char name[64];
+    uint32_t firstControl;
+    uint32_t controlCount;
+};
+
+struct WMFWControlRef {
+    const WMFWAlgorithm *algorithm;
+    const WMFWControl *control;
+};
+
+
 struct FirmwareImage {
     uint32_t fw_magic;
     uint32_t fw_version;
     uint32_t fw_total_bytes;
     uint32_t fw_crc;
-    uint8_t fw_core;
-    uint16_t fw_core_rev;
-    uint32_t fw_id; // Firmware ID from Halo ID Header
-    uint32_t n_algs; // Expected number of algorithms from header
-    uint32_t xm_dump_crc; // CRC32 of the live XM dump
+    uint32_t fw_core;
+    uint32_t fw_core_rev;
     
-    FirmwareRegion regions[MAX_FIRMWARE_REGIONS];
-    uint32_t regionCount;
+    // Halo specific
+    uint32_t fw_id;
+    uint32_t n_algs;
+    uint32_t xm_dump_crc;
     
-    AlgorithmInfo algorithms[32];
+    // Extracted Algorithm Headers from UNPACK24_0 (DSP RAM)
     uint32_t algorithmCount;
+    AlgorithmInfo algorithms[32];
     
-    CoefficientBlock coefficients[128];
+    // Specific algorithm match (usually CSPL = 205)
+    uint32_t algorithm_id;
+    uint32_t algorithm_version;
+    uint32_t algorithm_xm_base;
+    uint32_t algorithm_xm_size;
+    uint32_t algorithm_ym_base;
+    uint32_t algorithm_ym_size;
+    
+    // WMFW Metadata Cache
+    uint32_t wmfwAlgorithmCount;
+    WMFWAlgorithm wmfwAlgorithms[8]; // Max 8 algorithms in metadata
+    
+    uint32_t wmfwControlCount;
+    WMFWControl wmfwControls[512]; // Global pool for controls
+    
+    uint32_t regionCount;
+    FirmwareRegion regions[32];
+    
     uint32_t coefficientCount;
+    CoefficientBlock coefficients[128];
     uint32_t total_coeff_payload_bytes;
     
-    // Stats
     uint32_t stat_xm_blocks;
     uint32_t stat_ym_blocks;
     uint32_t stat_pm_blocks;
@@ -186,10 +227,10 @@ public:
                 regAddress = 0x03800000 + (wordOffset * 5) + byteOffset;
                 break;
             case RegionType::XM_PACKED:
-                regAddress = 0x02000000 + (wordOffset * 3) + byteOffset;
+                regAddress = ((0x02000000 + (wordOffset * 3)) & ~0x3) + byteOffset;
                 break;
             case RegionType::YM_PACKED:
-                regAddress = 0x02C00000 + (wordOffset * 3) + byteOffset;
+                regAddress = ((0x02C00000 + (wordOffset * 3)) & ~0x3) + byteOffset;
                 break;
             default:
                 return MappingStatus::UnsupportedRegion;
@@ -390,6 +431,171 @@ public:
         return true;
     }
 
+    static inline uint32_t readLE32(const uint8_t *p) {
+        return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
+    }
+    static inline uint16_t readLE16(const uint8_t *p) {
+        return p[0] | (p[1] << 8);
+    }
+
+    static inline uint32_t alignStringLen(uint32_t str_len, uint32_t field_bytes) {
+        return ((str_len + field_bytes) + 3) & ~0x03;
+    }
+
+    static uint32_t regionToReg(uint16_t type, uint32_t dspWord) {
+        switch (type) {
+            case WMFW_ADSP2_XM:
+                return 0x02800000 + (dspWord * 4);
+            case WMFW_ADSP2_YM:
+                return 0x02C00000 + (dspWord * 4);
+            case WMFW_HALO_XM_PACKED:
+                return (0x02000000 + (dspWord * 3)) & ~0x3;
+            case WMFW_HALO_YM_PACKED:
+                return (0x02C00000 + (dspWord * 3)) & ~0x3;
+            case WMFW_HALO_PM_PACKED:
+                return 0x03800000 + (dspWord * 5); // Assuming PM uses the same base window or similar, though Linux driver does this
+            default:
+                CIRRUS_ERR("regionToReg: Unknown memory region type %u", type);
+                return dspWord;
+        }
+    }
+
+    static bool findControl(const FirmwareImage *fw, const char *name, WMFWControlRef &out) {
+        for (uint32_t i = 0; i < fw->wmfwAlgorithmCount; i++) {
+            const WMFWAlgorithm &alg = fw->wmfwAlgorithms[i];
+            for (uint32_t j = 0; j < alg.controlCount; j++) {
+                const WMFWControl &ctl = fw->wmfwControls[alg.firstControl + j];
+                if (strncmp(ctl.name, name, sizeof(ctl.name)) == 0) {
+                    out.algorithm = &alg;
+                    out.control = &ctl;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    static void parseWMFWAlgorithmData(const uint8_t *data, size_t size, FirmwareImage *outImage, size_t file_offset, uint8_t fw_version) {
+        if (size < 4) return;
+        
+        if (fw_version < 2) {
+            CIRRUS_LOG("Warning: This parser is designed for wmfw_ver >= 2. Skipping.");
+            return;
+        }
+        
+        uint32_t pos = 0;
+        
+        if (pos + 4 > size) return;
+        uint32_t alg_id = readLE32(&data[pos]);
+        pos += 4;
+        
+        // Algorithm Name (uint8)
+        if (pos + 1 > size) return;
+        uint8_t alg_name_len = data[pos];
+        if (pos + alignStringLen(alg_name_len, 1) > size) return;
+        char alg_name[256] = {0};
+        memcpy(alg_name, &data[pos + 1], alg_name_len);
+        pos += alignStringLen(alg_name_len, 1);
+        
+        // Algorithm Description (uint16)
+        if (pos + 2 > size) return;
+        uint16_t alg_desc_len = readLE16(&data[pos]);
+        if (pos + alignStringLen(alg_desc_len, 2) > size) return;
+        pos += alignStringLen(alg_desc_len, 2);
+        
+        if (pos + 4 > size) return;
+        uint32_t ncoeff = readLE32(&data[pos]);
+        pos += 4;
+        
+        CIRRUS_LOG("Algorithm:");
+        CIRRUS_LOG("  id      = %u (0x%08X)", alg_id, alg_id);
+        CIRRUS_LOG("  name    = %s", alg_name);
+        CIRRUS_LOG("  coeffs  = %u", ncoeff);
+        
+        if (outImage->wmfwAlgorithmCount >= 8) {
+            CIRRUS_LOG("Warning: Maximum algorithms reached.");
+            return;
+        }
+        
+        WMFWAlgorithm &alg = outImage->wmfwAlgorithms[outImage->wmfwAlgorithmCount++];
+        alg.id = alg_id;
+        strlcpy(alg.name, alg_name, sizeof(alg.name));
+        alg.firstControl = outImage->wmfwControlCount;
+        alg.controlCount = 0;
+        
+        for (uint32_t i = 0; i < ncoeff; i++) {
+            if (pos + 8 > size) {
+                CIRRUS_LOG("Sanity Check Failed: pos (0x%04X) exceeds payload size", pos);
+                break;
+            }
+            
+            uint16_t c_offset = readLE16(&data[pos]);
+            uint16_t c_type = readLE16(&data[pos + 2]);
+            uint32_t c_size = readLE32(&data[pos + 4]);
+            
+            uint32_t payload_start = pos + 8;
+            uint32_t coeff_end = payload_start + c_size;
+            
+            if (c_size < 8) {
+                CIRRUS_LOG("Sanity Check Failed: Coeff[%u] c_size (%u) is suspiciously small", i, c_size);
+                break;
+            }
+            if (coeff_end > size) {
+                CIRRUS_LOG("Sanity Check Failed: Coeff[%u] c_size (%u) exceeds payload", i, c_size);
+                break;
+            }
+            
+            uint32_t inner_pos = payload_start;
+            
+            // String 1: Coefficient Name (uint8)
+            if (inner_pos + 1 > coeff_end) break;
+            uint8_t c_name_len = data[inner_pos];
+            if (inner_pos + alignStringLen(c_name_len, 1) > coeff_end) break;
+            char c_name[256] = {0};
+            memcpy(c_name, &data[inner_pos + 1], c_name_len);
+            inner_pos += alignStringLen(c_name_len, 1);
+            
+            // String 2: Coefficient Description (uint8)
+            if (inner_pos + 1 > coeff_end) break;
+            uint8_t c_desc_len = data[inner_pos];
+            if (inner_pos + alignStringLen(c_desc_len, 1) > coeff_end) break;
+            inner_pos += alignStringLen(c_desc_len, 1);
+            
+            // String 3: Unknown String (uint16)
+            if (inner_pos + 2 > coeff_end) break;
+            uint16_t c_unknown_len = readLE16(&data[inner_pos]);
+            if (inner_pos + alignStringLen(c_unknown_len, 2) > coeff_end) break;
+            inner_pos += alignStringLen(c_unknown_len, 2);
+            
+            // Struct fields: ctl_type, flags, len
+            if (inner_pos + 8 > coeff_end) break;
+            uint16_t c_ctl_type = readLE16(&data[inner_pos]);
+            uint16_t c_flags = readLE16(&data[inner_pos + 2]);
+            uint32_t c_len = readLE32(&data[inner_pos + 4]);
+            
+            CIRRUS_LOG("  Coeff[%u] %s", i, c_name);
+            CIRRUS_LOG("    offset   = 0x%04X", c_offset);
+            CIRRUS_LOG("    type     = 0x%04X", c_type);
+            CIRRUS_LOG("    ctl_type = 0x%04X", c_ctl_type);
+            CIRRUS_LOG("    flags    = 0x%04X", c_flags);
+            CIRRUS_LOG("    len      = %u", c_len);
+            
+            if (outImage->wmfwControlCount < 512) {
+                WMFWControl &ctl = outImage->wmfwControls[outImage->wmfwControlCount++];
+                ctl.offset = c_offset;
+                ctl.type = c_type;
+                ctl.size = c_size;
+                strlcpy(ctl.name, c_name, sizeof(ctl.name));
+                ctl.ctl_type = c_ctl_type;
+                ctl.flags = c_flags;
+                ctl.len = c_len;
+                alg.controlCount++;
+            }
+            
+            pos = coeff_end; // Skip to next coefficient safely
+        }
+    }
+
     static bool parseWMFW(const uint8_t *data, size_t size, FirmwareImage *outImage) {
         if (!outImage) return false;
         memset(outImage, 0, sizeof(FirmwareImage));
@@ -404,176 +610,154 @@ public:
         outImage->fw_total_bytes = (uint32_t)size;
         outImage->fw_crc = calculate_crc32(data, size);
         outImage->fw_core = header->core;
-        outImage->fw_core_rev = header->rev;
+        outImage->fw_core_rev = OSSwapLittleToHostInt32(header->rev);
+        
+        CIRRUS_LOG("WMFW File Header:");
+        CIRRUS_LOG("  Magic    : 0x%08X", outImage->fw_magic);
+        CIRRUS_LOG("  Version  : %u", outImage->fw_version);
+        CIRRUS_LOG("  Core     : %u", outImage->fw_core);
+        CIRRUS_LOG("  Core Rev : 0x%08X", outImage->fw_core_rev);
         
         size_t pos = OSSwapLittleToHostInt32(header->len);
         
-        while (pos < size && outImage->regionCount < 32) {
+        while (pos + sizeof(wmfw_region) <= size) {
             const wmfw_region *raw_region = (const wmfw_region *)&data[pos];
-            
             uint32_t type_offset = OSSwapLittleToHostInt32(raw_region->type_offset_le);
             uint32_t type = (type_offset >> 24) & 0xFF;
             uint32_t offset = type_offset & 0xFFFFFF;
             uint32_t len = OSSwapLittleToHostInt32(raw_region->len);
             
-            if (pos + sizeof(wmfw_region) + len > size) {
-                CIRRUS_ERR("WMFW region length out of bounds: offset=%zu len=%u size=%zu", pos, len, size);
+            pos += sizeof(wmfw_region);
+            
+            if (pos + len > size) {
+                CIRRUS_LOG("Error: Region payload exceeds file bounds");
                 break;
             }
             
-            FirmwareRegion &reg = outImage->regions[outImage->regionCount++];
-            reg.baseWordOffset = offset;
-            reg.data = raw_region->data;
-            reg.length = len;
-            
-            switch (type) {
+            if (outImage->regionCount < 32) {
+                FirmwareRegion &reg = outImage->regions[outImage->regionCount++];
+                reg.baseWordOffset = offset;
+                reg.length = len;
+                reg.data = raw_region->data;
+                
+                switch (type) {
                 case WMFW_HALO_XM_PACKED: reg.regionType = RegionType::XM_PACKED; outImage->stat_xm_blocks++; break;
                 case WMFW_HALO_YM_PACKED: reg.regionType = RegionType::YM_PACKED; outImage->stat_ym_blocks++; break;
                 case WMFW_HALO_PM_PACKED: reg.regionType = RegionType::PM_PACKED; outImage->stat_pm_blocks++; break;
-                case WMFW_ALGORITHM_DATA: reg.regionType = RegionType::ALGORITHM_DATA; break;
+                case WMFW_ALGORITHM_DATA: 
+                    reg.regionType = RegionType::ALGORITHM_DATA; 
+                    CIRRUS_LOG("WMFW Block Type: ALGORITHM_DATA (0xF2)");
+                    CIRRUS_LOG("WMFW Block Start Offset: 0x%08zX", pos);
+                    CIRRUS_LOG("WMFW Block Payload Size: %u bytes", len);
+                    parseWMFWAlgorithmData(raw_region->data, len, outImage, pos, outImage->fw_version);
+                    break;
                 case WMFW_METADATA:       reg.regionType = RegionType::METADATA; break;
                 case WMFW_INFO_TEXT:      reg.regionType = RegionType::INFO_TEXT; break;
                 case WMFW_NAME_TEXT:      reg.regionType = RegionType::NAME_TEXT; break;
                 case WMFW_ABSOLUTE:       reg.regionType = RegionType::UNKNOWN; break;
                 default:                  reg.regionType = RegionType::UNKNOWN; break;
+                }
             }
             
             if (type == WMFW_HALO_XM_PACKED && offset == 0 && len >= kHaloIdHdrWords * 3) {
                 // This is the first XM region containing the Halo ID Header.
                 outImage->fw_id = readPacked24BE(raw_region->data, kHaloFwIdWord);
-                // In our updated ground truth, the first Algorithm ID is at word 9.
-                // We don't have a strict n_algs field. We'll set it to 1 for the WMFW summary.
                 outImage->n_algs = 1; 
                 CIRRUS_LOG("parseWMFW: Found Halo Header. fw_id=0x%06X", outImage->fw_id);
             }
             
-            pos += sizeof(wmfw_region) + len;
+            pos += len;
         }
         
         return true;
     }
 
+    static inline uint32_t readUnpacked32BE(const uint8_t *data, uint32_t wordIdx) {
+        const uint32_t b = wordIdx * 4;
+        return ((uint32_t)data[b] << 24) | ((uint32_t)data[b+1] << 16) | ((uint32_t)data[b+2] << 8) | (uint32_t)data[b+3];
+    }
+
     static bool parseAlgorithmTable(const uint8_t *vmem, size_t vmem_size, FirmwareImage &outImage) {
-        if (vmem_size < kHaloIdHdrWords * 3) {
-            CIRRUS_ERR("Dump buffer too small (%zu bytes) for Halo ID header", vmem_size);
+        // We are reading from UNPACK24_0, where each word is a 32-bit big-endian value (4 bytes)
+        const uint32_t kHaloAlgTableStartWord = 10;
+        const uint32_t kHaloAlgEntryWords = 6;
+
+        if (vmem_size < kHaloAlgTableStartWord * 4) {
+            CIRRUS_ERR("Dump buffer too small for Halo ID header");
             return false;
         }
 
-        // Scanner for candidates in the entire dump
-        uint32_t header_offset = 0xFFFFFFFF;
-        for (uint32_t off = 0; off + 40 <= vmem_size; off += 3) {
-            uint32_t scan_fw_id = readPacked24BE(vmem, off / 3 + kHaloFwIdWord);
-            
-            if (scan_fw_id == outImage.fw_id || (scan_fw_id > 0 && scan_fw_id < 0xFFFFFF)) {
-                uint32_t scan_core = readPacked24BE(vmem, off / 3);
-                if (true) {
-                    uint32_t crc40 = CirrusFirmwareParser::calculate_crc32(vmem + off, 40);
-                    CIRRUS_LOG("==== Candidate Header @ 0x%04X ====", off);
-                    CIRRUS_LOG("Decoded:");
-                    CIRRUS_LOG("core_id = 0x%06X", readPacked24BE(vmem, off/3 + 0));
-                    CIRRUS_LOG("core_rev= 0x%06X", readPacked24BE(vmem, off/3 + 1));
-                    CIRRUS_LOG("fw_id   = 0x%06X", readPacked24BE(vmem, off/3 + 2));
-                    CIRRUS_LOG("version = 0x%06X", readPacked24BE(vmem, off/3 + 3));
-                    CIRRUS_LOG("vndr_id = 0x%06X", readPacked24BE(vmem, off/3 + 4));
-                    CIRRUS_LOG("xm_base = 0x%06X", readPacked24BE(vmem, off/3 + 5));
-                    CIRRUS_LOG("xm_size = 0x%06X", readPacked24BE(vmem, off/3 + 6));
-                    CIRRUS_LOG("ym_base = 0x%06X", readPacked24BE(vmem, off/3 + 7));
-                    CIRRUS_LOG("ym_size = 0x%06X", readPacked24BE(vmem, off/3 + 8));
-                    CIRRUS_LOG("Alg0 ID = 0x%06X", readPacked24BE(vmem, off/3 + 9));
-                    CIRRUS_LOG("Alg0 Ver= 0x%06X", readPacked24BE(vmem, off/3 + 10));
-                    CIRRUS_LOG("CRC(40) = 0x%08X", crc40);
-                    
-                    if (header_offset == 0xFFFFFFFF) {
-                        if (scan_fw_id == outImage.fw_id) {
-                            header_offset = off;
-                        } else {
-                            header_offset = off;
-                        }
-                    }
-                }
-            }
+        uint32_t core_id = readUnpacked32BE(vmem, 0);
+        uint32_t block_rev = readUnpacked32BE(vmem, 1);
+        uint32_t vendor_id = readUnpacked32BE(vmem, 2);
+        uint32_t fw_id = readUnpacked32BE(vmem, 3);
+        uint32_t fw_ver = readUnpacked32BE(vmem, 4);
+        uint32_t fw_xm_base = readUnpacked32BE(vmem, 5);
+        uint32_t fw_xm_size = readUnpacked32BE(vmem, 6);
+        uint32_t fw_ym_base = readUnpacked32BE(vmem, 7);
+        uint32_t fw_ym_size = readUnpacked32BE(vmem, 8);
+        
+        CIRRUS_LOG("HALO Header");
+        CIRRUS_LOG(" Core ID     = %u (0x%06X)", core_id, core_id);
+        CIRRUS_LOG(" Block Rev   = %u (0x%06X)", block_rev, block_rev);
+        CIRRUS_LOG(" Vendor      = %u (0x%06X)", vendor_id, vendor_id);
+        CIRRUS_LOG(" Firmware ID = %u (0x%06X)", fw_id, fw_id);
+        CIRRUS_LOG(" Version     = %u (0x%06X)", fw_ver, fw_ver);
+        CIRRUS_LOG(" FW xm_base  = 0x%06X", fw_xm_base);
+        CIRRUS_LOG(" FW xm_size  = 0x%06X", fw_xm_size);
+
+        // Treat Firmware ID as the first "Algorithm" Region since coefficients bind to it
+        AlgorithmInfo &fwAlg = outImage.algorithms[outImage.algorithmCount++];
+        fwAlg.id = fw_id;
+        fwAlg.baseWordOffset = fw_xm_base;
+        fwAlg.ymBaseWordOffset = fw_ym_base;
+        fwAlg.size = fw_xm_size;
+        fwAlg.region = RegionType::XM_PACKED;
+
+        uint32_t n_algs = readUnpacked32BE(vmem, 9);
+        CIRRUS_LOG("Algorithm count = %u", n_algs);
+
+        if (n_algs > 100) {
+            CIRRUS_LOG("Warning: n_algs=%u seems abnormally large, truncating to 100", n_algs);
+            n_algs = 100;
         }
-        
-        if (header_offset == 0xFFFFFFFF) {
-            CIRRUS_ERR("parseAlgorithmTable: No valid Halo Header candidate found. Aborting parser.");
-            return false;
-        }
-        
-        uint32_t hdr_base_word = header_offset / 3;
-        CIRRUS_LOG("parseAlgorithmTable: Selected Header @ 0x%04X", header_offset);
-        
-        // We scan algorithms until we hit a known terminator or run out of space.
-        // We will just scan up to 10 entries max.
-        uint32_t n_algs_scan = 10;
-        
-        size_t requiredBytes = header_offset + (kHaloAlgTableStartWord + kHaloAlgEntryWords) * 3;
-        if (vmem_size < requiredBytes) {
-            CIRRUS_ERR("Dump buffer too small to hold even one Algorithm Entry");
+
+        if (vmem_size < (kHaloAlgTableStartWord + n_algs * kHaloAlgEntryWords) * 4) {
+            CIRRUS_ERR("Dump buffer too small for %u algorithms", n_algs);
             return false;
         }
 
         uint32_t valid_algs = 0;
-        uint32_t discarded_algs = 0;
-        uint32_t invalid_run = 0;
         
-        for (uint32_t i = 0; i < n_algs_scan && outImage.algorithmCount < 32; i++) {
-            uint32_t base   = hdr_base_word + kHaloAlgTableStartWord + i * kHaloAlgEntryWords;
-            if (base * 3 + kHaloAlgEntryWords * 3 > vmem_size) {
-                CIRRUS_LOG("parseAlgorithmTable: Reached end of memory buffer.");
-                break;
-            }
+        for (uint32_t i = 0; i < n_algs && outImage.algorithmCount < 32; i++) {
+            uint32_t base = kHaloAlgTableStartWord + i * kHaloAlgEntryWords;
             
-            uint32_t alg_id = readPacked24BE(vmem, base);
-            uint32_t alg_ver = readPacked24BE(vmem, base+1);
-            uint32_t alg_xm_base = readPacked24BE(vmem, base+2);
+            uint32_t alg_id = readUnpacked32BE(vmem, base);
+            uint32_t alg_ver = readUnpacked32BE(vmem, base + 1);
+            uint32_t alg_xm_base = readUnpacked32BE(vmem, base + 2);
+            uint32_t alg_xm_size = readUnpacked32BE(vmem, base + 3);
+            uint32_t alg_ym_base = readUnpacked32BE(vmem, base + 4);
+            uint32_t alg_ym_size = readUnpacked32BE(vmem, base + 5);
             
-            // Validation: discard dummy or malformed entries
-            if (alg_id == 0 || alg_id == 0xFFFFFF) {
-                CIRRUS_LOG("Discard: index=%u id=0x%06X xm=0x%06X reason=Invalid ID", i, alg_id, alg_xm_base);
-                discarded_algs++;
-                invalid_run++;
-                if (invalid_run >= 5) break;
-                continue;
-            }
-            
-            // Heuristic check for uninitialized or dummy pointer values
-            if (alg_xm_base == 0x00BEDE || alg_xm_base == 0xBEDEAD || alg_xm_base == 0xFFFFFF) {
-                CIRRUS_LOG("Discard: index=%u id=0x%06X xm=0x%06X reason=Invalid XM Base", i, alg_id, alg_xm_base);
-                discarded_algs++;
-                invalid_run++;
-                if (invalid_run >= 5) break;
-                continue;
-            }
-            
-            invalid_run = 0; // reset run on valid entry
+            CIRRUS_LOG("Algorithm[%u]", i);
+            CIRRUS_LOG(" id = %u (0x%06X)", alg_id, alg_id);
+            CIRRUS_LOG(" ver = 0x%06X", alg_ver);
+            CIRRUS_LOG(" xm_base = 0x%06X", alg_xm_base);
+            CIRRUS_LOG(" xm_size = 0x%06X", alg_xm_size);
+            CIRRUS_LOG(" ym_base = 0x%06X", alg_ym_base);
+            CIRRUS_LOG(" ym_size = 0x%06X", alg_ym_size);
 
             AlgorithmInfo &alg = outImage.algorithms[outImage.algorithmCount++];
-            alg.id             = alg_id;
-            alg.baseWordOffset = alg_xm_base; // xm_base
-            alg.ymBaseWordOffset = readPacked24BE(vmem, base+3); // ym_base
-            alg.size           = 0; // Not available in 5-word struct
-            alg.region         = RegionType::XM_PACKED;
-
-            uint32_t raw_xm = readPacked24BE(vmem, base+2);
-            uint32_t raw_ym = readPacked24BE(vmem, base+3);
-            uint32_t raw_pm = readPacked24BE(vmem, base+4);
+            alg.id = alg_id;
+            alg.baseWordOffset = alg_xm_base;
+            alg.ymBaseWordOffset = alg_ym_base;
+            alg.size = alg_xm_size;
+            alg.region = RegionType::XM_PACKED; // Kext uses this for logic
             
-            auto xm = decodePointer(raw_xm);
-            auto ym = decodePointer(raw_ym);
-            auto pm = decodePointer(raw_pm);
-
-            CIRRUS_LOG("Algorithm[%u]: id=%u (0x%06X) ver=0x%06X", i, alg_id, alg_id, alg_ver);
-            CIRRUS_LOG("  XM Pointer: Raw=0x%06X Region=0x%02X Offset=0x%04X", raw_xm, xm.region, xm.wordOffset);
-            CIRRUS_LOG("  YM Pointer: Raw=0x%06X Region=0x%02X Offset=0x%04X", raw_ym, ym.region, ym.wordOffset);
-            CIRRUS_LOG("  PM Pointer: Raw=0x%06X Region=0x%02X Offset=0x%04X", raw_pm, pm.region, pm.wordOffset);
             valid_algs++;
         }
 
-        CIRRUS_LOG("==== Algorithm Parser ====");
-        CIRRUS_LOG("Found            %u entries", valid_algs + discarded_algs);
-        CIRRUS_LOG("Valid            %u", valid_algs);
-        CIRRUS_LOG("Discarded        %u", discarded_algs);
-        return true;
+        return valid_algs > 0;
     }
 
     static bool parseBIN(const uint8_t *data, size_t size, FirmwareImage *outImage) {

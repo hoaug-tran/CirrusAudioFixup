@@ -412,11 +412,18 @@ public:
         outImage->fw_id = readPacked24BE(vmem, kHaloFwIdWord);
         uint32_t n_algs = readPacked24BE(vmem, kHaloNAlgsWord);
 
-        CIRRUS_LOG("Halo ID: fw_id=0x%06X xm_base=0x%06X xm_size=%u ym_base=0x%06X ym_size=%u n_algs=%u",
-                   outImage->fw_id,
-                   readPacked24BE(vmem, 5), readPacked24BE(vmem, 6),
-                   readPacked24BE(vmem, 7), readPacked24BE(vmem, 8),
-                   n_algs);
+        CIRRUS_LOG("Halo Header");
+        CIRRUS_LOG("-----------");
+        CIRRUS_LOG("core_id     = 0x%06X", readPacked24BE(vmem, 0));
+        CIRRUS_LOG("block_rev   = 0x%06X", readPacked24BE(vmem, 1));
+        CIRRUS_LOG("vendor_id   = 0x%06X", readPacked24BE(vmem, 2));
+        CIRRUS_LOG("fw_id       = 0x%06X", outImage->fw_id);
+        CIRRUS_LOG("version     = 0x%06X", readPacked24BE(vmem, 4));
+        CIRRUS_LOG("xm_base     = 0x%06X", readPacked24BE(vmem, 5));
+        CIRRUS_LOG("xm_size     = %u", readPacked24BE(vmem, 6));
+        CIRRUS_LOG("ym_base     = 0x%06X", readPacked24BE(vmem, 7));
+        CIRRUS_LOG("ym_size     = %u", readPacked24BE(vmem, 8));
+        CIRRUS_LOG("n_algs      = %u", n_algs);
 
         if (n_algs == 0 || n_algs > 255) {
             CIRRUS_ERR("n_algs=%u out of range [1-255]; aborting algorithm extraction", n_algs);

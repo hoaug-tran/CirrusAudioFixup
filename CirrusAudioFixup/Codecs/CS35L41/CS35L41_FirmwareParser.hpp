@@ -454,7 +454,7 @@ public:
             
             if (scan_fw_id == outImage.fw_id || (scan_fw_id > 0 && scan_fw_id < 0xFFFFFF)) {
                 uint32_t scan_core = readPacked24BE(vmem, off / 3);
-                if (scan_core < 10) {
+                if (true) {
                     uint32_t crc40 = CirrusFirmwareParser::calculate_crc32(vmem + off, 40);
                     CIRRUS_LOG("==== Candidate Header @ 0x%04X ====", off);
                     CIRRUS_LOG("Decoded:");

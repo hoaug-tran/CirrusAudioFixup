@@ -395,10 +395,11 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                             if (strncmp(phaseArg, "5C", 2) == 0 || strncmp(phaseArg, "5D", 2) == 0) {
                                 phase5c_FirmwareUpload(amp, phaseArg);
                                 
-                                bool isFullUpload = (strncmp(phaseArg, "5C.4", 4) == 0);
+                                bool isFullUpload = (strncmp(phaseArg, "5C.4", 4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
                                 if (isFullUpload) {
-                                    CIRRUS_LOG("Amp %s: Bringing up DSP after full Firmware Upload", amp.name);
-                                    phase5b_DSPBringup(amp);
+                                    // DSP Bringup (phase5b) MUST NOT be called here until Phase 5D.1 (Coefficient Upload) is fully implemented!
+                                    // Booting the DSP with firmware but without coefficients causes a DSP panic, which pulls down the ACP and hangs the APU (Black Screen).
+                                    CIRRUS_LOG("Amp %s: Skipping DSP Bringup because Coefficient Upload is not yet implemented.", amp.name);
                                 }
                             }
                         }

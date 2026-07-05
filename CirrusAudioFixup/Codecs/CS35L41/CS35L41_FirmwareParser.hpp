@@ -186,10 +186,10 @@ public:
                 regAddress = 0x03800000 + (wordOffset * 5) + byteOffset;
                 break;
             case RegionType::XM_PACKED:
-                regAddress = 0x03000000 + (wordOffset * 3) + byteOffset;
+                regAddress = 0x02000000 + (wordOffset * 3) + byteOffset;
                 break;
             case RegionType::YM_PACKED:
-                regAddress = 0x03400000 + (wordOffset * 3) + byteOffset;
+                regAddress = 0x02C00000 + (wordOffset * 3) + byteOffset;
                 break;
             default:
                 return MappingStatus::UnsupportedRegion;

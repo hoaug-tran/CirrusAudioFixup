@@ -166,6 +166,18 @@ struct MappedImage {
     uint32_t mappingCrc;
 };
 
+struct HaloMemoryPointer {
+    uint8_t region;
+    uint16_t wordOffset;
+};
+
+inline HaloMemoryPointer decodePointer(uint32_t value) {
+    return {
+        static_cast<uint8_t>(value >> 16),
+        static_cast<uint16_t>(value & 0xFFFF)
+    };
+}
+
 class CirrusFirmwareMapper {
 public:
     static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t &regAddress) {
@@ -261,8 +273,8 @@ public:
             } else {
                 for (uint32_t a = 0; a < image.algorithmCount; a++) {
                     if (image.algorithms[a].id == coeff.id) {
-                        alg_xm_base = image.algorithms[a].baseWordOffset & 0x00FFFF;
-                        alg_ym_base = image.algorithms[a].ymBaseWordOffset & 0x00FFFF;
+                        alg_xm_base = decodePointer(image.algorithms[a].baseWordOffset).wordOffset;
+                        alg_ym_base = decodePointer(image.algorithms[a].ymBaseWordOffset).wordOffset;
                         found = true;
                         break;
                     }
@@ -542,11 +554,18 @@ public:
             alg.size           = 0; // Not available in 5-word struct
             alg.region         = RegionType::XM_PACKED;
 
-            CIRRUS_LOG("Algorithm[%u]: id=%u (0x%06X) ver=0x%06X xm_base=0x%06X ym_base=0x%06X pm_base=0x%06X",
-                       i, alg_id, alg_id, alg_ver,
-                       readPacked24BE(vmem, base+2),
-                       readPacked24BE(vmem, base+3),
-                       readPacked24BE(vmem, base+4));
+            uint32_t raw_xm = readPacked24BE(vmem, base+2);
+            uint32_t raw_ym = readPacked24BE(vmem, base+3);
+            uint32_t raw_pm = readPacked24BE(vmem, base+4);
+            
+            auto xm = decodePointer(raw_xm);
+            auto ym = decodePointer(raw_ym);
+            auto pm = decodePointer(raw_pm);
+
+            CIRRUS_LOG("Algorithm[%u]: id=%u (0x%06X) ver=0x%06X", i, alg_id, alg_id, alg_ver);
+            CIRRUS_LOG("  XM Pointer: Raw=0x%06X Region=0x%02X Offset=0x%04X", raw_xm, xm.region, xm.wordOffset);
+            CIRRUS_LOG("  YM Pointer: Raw=0x%06X Region=0x%02X Offset=0x%04X", raw_ym, ym.region, ym.wordOffset);
+            CIRRUS_LOG("  PM Pointer: Raw=0x%06X Region=0x%02X Offset=0x%04X", raw_pm, pm.region, pm.wordOffset);
             valid_algs++;
         }
 

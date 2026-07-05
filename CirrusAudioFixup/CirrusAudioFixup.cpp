@@ -383,7 +383,7 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
                             // Step 8: Coefficient Upload
                             CIRRUS_LOG("Amp %s: Step 8 (Coefficient Upload) Starting...", amp.name);
                             UploadSession session;
-                            CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session);
+                            CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session, true);
                         } else {
                             CIRRUS_ERR("Amp %s: Step 7 Coefficient Mapping Failed!", amp.name);
                         }

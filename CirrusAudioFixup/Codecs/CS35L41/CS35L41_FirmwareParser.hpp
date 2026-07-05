@@ -687,15 +687,15 @@ public:
             return false;
         }
 
-        uint32_t core_id = readUnpacked32BE(vmem, 0);
-        uint32_t block_rev = readUnpacked32BE(vmem, 1);
-        uint32_t vendor_id = readUnpacked32BE(vmem, 2);
-        uint32_t fw_id = readUnpacked32BE(vmem, 3);
-        uint32_t fw_ver = readUnpacked32BE(vmem, 4);
-        uint32_t fw_xm_base = readUnpacked32BE(vmem, 5);
-        uint32_t fw_xm_size = readUnpacked32BE(vmem, 6);
-        uint32_t fw_ym_base = readUnpacked32BE(vmem, 7);
-        uint32_t fw_ym_size = readUnpacked32BE(vmem, 8);
+        uint32_t core_id = readPacked24BE(vmem, 0);
+        uint32_t block_rev = readPacked24BE(vmem, 1);
+        uint32_t vendor_id = readPacked24BE(vmem, 2);
+        uint32_t fw_id = readPacked24BE(vmem, 3);
+        uint32_t fw_ver = readPacked24BE(vmem, 4);
+        uint32_t fw_xm_base = readPacked24BE(vmem, 5);
+        uint32_t fw_xm_size = readPacked24BE(vmem, 6);
+        uint32_t fw_ym_base = readPacked24BE(vmem, 7);
+        uint32_t fw_ym_size = readPacked24BE(vmem, 8);
         
         CIRRUS_LOG("HALO Header");
         CIRRUS_LOG(" Core ID     = %u (0x%06X)", core_id, core_id);
@@ -704,7 +704,6 @@ public:
         CIRRUS_LOG(" Firmware ID = %u (0x%06X)", fw_id, fw_id);
         CIRRUS_LOG(" Version     = %u (0x%06X)", fw_ver, fw_ver);
         CIRRUS_LOG(" FW xm_base  = 0x%06X", fw_xm_base);
-        CIRRUS_LOG(" FW xm_size  = 0x%06X", fw_xm_size);
 
         // Treat Firmware ID as the first "Algorithm" Region since coefficients bind to it
         AlgorithmInfo &fwAlg = outImage.algorithms[outImage.algorithmCount++];
@@ -714,7 +713,7 @@ public:
         fwAlg.size = fw_xm_size;
         fwAlg.region = RegionType::XM_PACKED;
 
-        uint32_t n_algs = readUnpacked32BE(vmem, 9);
+        uint32_t n_algs = readPacked24BE(vmem, 9);
         CIRRUS_LOG("Algorithm count = %u", n_algs);
 
         if (n_algs > 100) {
@@ -732,20 +731,18 @@ public:
         for (uint32_t i = 0; i < n_algs && outImage.algorithmCount < 32; i++) {
             uint32_t base = kHaloAlgTableStartWord + i * kHaloAlgEntryWords;
             
-            uint32_t alg_id = readUnpacked32BE(vmem, base);
-            uint32_t alg_ver = readUnpacked32BE(vmem, base + 1);
-            uint32_t alg_xm_base = readUnpacked32BE(vmem, base + 2);
-            uint32_t alg_xm_size = readUnpacked32BE(vmem, base + 3);
-            uint32_t alg_ym_base = readUnpacked32BE(vmem, base + 4);
-            uint32_t alg_ym_size = readUnpacked32BE(vmem, base + 5);
+            uint32_t alg_id = readPacked24BE(vmem, base);
+            uint32_t alg_ver = readPacked24BE(vmem, base + 1);
+            uint32_t alg_xm_base = readPacked24BE(vmem, base + 2);
+            uint32_t alg_xm_size = readPacked24BE(vmem, base + 3); // Not technically size, but we'll read it
+            uint32_t alg_ym_base = readPacked24BE(vmem, base + 4);
+            uint32_t alg_ym_size = readPacked24BE(vmem, base + 5);
             
             CIRRUS_LOG("Algorithm[%u]", i);
             CIRRUS_LOG(" id = %u (0x%06X)", alg_id, alg_id);
             CIRRUS_LOG(" ver = 0x%06X", alg_ver);
             CIRRUS_LOG(" xm_base = 0x%06X", alg_xm_base);
-            CIRRUS_LOG(" xm_size = 0x%06X", alg_xm_size);
             CIRRUS_LOG(" ym_base = 0x%06X", alg_ym_base);
-            CIRRUS_LOG(" ym_size = 0x%06X", alg_ym_size);
 
             AlgorithmInfo &alg = outImage.algorithms[outImage.algorithmCount++];
             alg.id = alg_id;

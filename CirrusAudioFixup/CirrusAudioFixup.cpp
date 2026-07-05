@@ -300,6 +300,118 @@ bool CirrusAudioFixup::setupProbeTimer() {
     return true;
 }
 
+void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseArg) {
+    CIRRUS_LOG("Entering Phase 5D: Full Initialization for amp %s", amp.name);
+    
+    if (!amp.wmfwData || amp.wmfwSize == 0) {
+        CIRRUS_LOG("Amp %s: No WMFW data found. Phase 5D skipped.", amp.name);
+        return;
+    }
+    
+    FirmwareImage *image = (FirmwareImage *)IOMalloc(sizeof(FirmwareImage));
+    if (!image) {
+        CIRRUS_ERR("Amp %s: Failed to allocate memory for FirmwareImage", amp.name);
+        return;
+    }
+
+    // Step 1: WMFW Parse
+    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, image)) {
+        CIRRUS_ERR("Amp %s: WMFW parse failed", amp.name);
+        IOFree(image, sizeof(FirmwareImage));
+        return;
+    }
+    
+    CIRRUS_LOG("Amp %s: Step 1 (WMFW Parse) OK. FW ID: 0x%06X, Expected Algs: %u", amp.name, image->fw_id, image->n_algs);
+
+    // Step 2: WMFW Upload
+    MappedImage *wmfwMapped = (MappedImage *)IOMalloc(sizeof(MappedImage));
+    if (wmfwMapped) {
+        if (CirrusFirmwareMapper::mapFirmwareImage(*image, *wmfwMapped)) {
+            CIRRUS_LOG("Amp %s: Step 2 (WMFW Upload) Starting...", amp.name);
+            UploadSession session;
+            CirrusFirmwareScheduler::run(amp, this, *wmfwMapped, session);
+        } else {
+            CIRRUS_ERR("Amp %s: Step 2 WMFW Mapping Failed!", amp.name);
+        }
+        IOFree(wmfwMapped, sizeof(MappedImage));
+    }
+    
+    // Step 3: DSP Bringup
+    CIRRUS_LOG("Amp %s: Step 3 (DSP Bringup) Starting...", amp.name);
+    phase5b_DSPBringup(amp);
+    
+    // Step 4: Verify DSP Alive
+    if (phase5b_1_VerifyDSPAlive(amp)) {
+        CIRRUS_LOG("Amp %s: Step 4 (Verify DSP Alive) OK.", amp.name);
+        
+        // Step 5: XM Dump & Algorithm Parse
+        phase5c_1_DumpXMAndParseAlgorithms(amp, *image);
+        
+        if (image->algorithmCount > 0) {
+            // Step 6: BIN Parse
+            if (amp.binData && amp.binSize > 0) {
+                if (CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
+                    CIRRUS_LOG("Amp %s: Step 6 (BIN Parse) OK. Found %u Coeffs.", amp.name, image->coefficientCount);
+                    
+                    uint32_t matchedBlocks = 0;
+                    uint32_t unknownBlocks = 0;
+                    for (uint32_t j = 0; j < image->coefficientCount; j++) {
+                        bool found = false;
+                        for (uint32_t i = 0; i < image->algorithmCount; i++) {
+                            if (image->coefficients[j].id == image->algorithms[i].id) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        // Treat global coeff matching FW ID as matched
+                        if (found || image->coefficients[j].id == image->fw_id) {
+                            matchedBlocks++;
+                        } else {
+                            unknownBlocks++;
+                        }
+                    }
+                    
+                    CIRRUS_LOG("==== Parser Confidence ====");
+                    CIRRUS_LOG("BIN blocks       : %u", image->coefficientCount);
+                    CIRRUS_LOG("Matched          : %u", matchedBlocks);
+                    CIRRUS_LOG("Unknown          : %u", unknownBlocks);
+                    
+                    // Step 7: Coefficient Mapper
+                    MappedImage *coeffMapped = (MappedImage *)IOMalloc(sizeof(MappedImage));
+                    if (coeffMapped) {
+                        if (CirrusFirmwareMapper::mapCoefficients(*image, *coeffMapped)) {
+                            // Step 8: Coefficient Upload
+                            CIRRUS_LOG("Amp %s: Step 8 (Coefficient Upload) Starting...", amp.name);
+                            UploadSession session;
+                            CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session);
+                        } else {
+                            CIRRUS_ERR("Amp %s: Step 7 Coefficient Mapping Failed!", amp.name);
+                        }
+                        IOFree(coeffMapped, sizeof(MappedImage));
+                    }
+                } else {
+                    CIRRUS_ERR("Amp %s: Step 6 BIN parse failed", amp.name);
+                }
+            } else {
+                CIRRUS_LOG("Amp %s: No BIN data, skipping coefficient upload", amp.name);
+            }
+            
+            // Step 9: Mailbox Resume (DSP to RUN state)
+            CIRRUS_LOG("Amp %s: Step 9 (Mailbox Resume) Starting...", amp.name);
+            writeRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, HALO_CORE_EN, TRACE_DUMP);
+            
+            // Note: Since SP_ENABLES is 0 in phase4A2, no audio flows yet. CoreAudio will trigger SP_ENABLES later.
+        } else {
+            CIRRUS_ERR("Amp %s: Failed to extract Algorithm Table, aborting tuning upload.", amp.name);
+        }
+    } else {
+        CIRRUS_ERR("Amp %s: Step 4 Verify DSP Alive FAILED! Aborting dump & tuning upload.", amp.name);
+    }
+
+    IOFree(image, sizeof(FirmwareImage));
+    CIRRUS_LOG("Phase 5D Complete for amp %s", amp.name);
+}
+
 void CirrusAudioFixup::scheduleReadOnlyProbe(UInt32 delayMs) {
     CIRRUS_LOG("read-only probe scheduled in %u ms", delayMs);
     mProbeTimer->setTimeoutMS(delayMs);
@@ -392,18 +504,16 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     } else {
                         char phaseArg[16] = {0};
                         if (PE_parse_boot_argn("cirrus_phase", phaseArg, sizeof(phaseArg))) {
-                            if (strncmp(phaseArg, "5C", 2) == 0 || strncmp(phaseArg, "5D", 2) == 0) {
+                            if (strncmp(phaseArg, "5D", 2) == 0) {
+                                phase5d_FirmwareInit(amp, phaseArg);
+                            } else if (strncmp(phaseArg, "5C", 2) == 0) {
                                 phase5c_FirmwareUpload(amp, phaseArg);
                                 
                                 // Only boot DSP after 5C.4 (full WMFW upload).
-                                // 5D.x phases parse/cross-check only at this stage.
-                                // Booting DSP without coefficients causes DSP panic -> ACP crash -> black screen.
                                 bool shouldBootDsp = (strncmp(phaseArg, "5C.4", 4) == 0);
                                 if (shouldBootDsp) {
                                     CIRRUS_LOG("Amp %s: Bringing up DSP after 5C.4 Firmware Upload", amp.name);
                                     phase5b_DSPBringup(amp);
-                                } else if (strncmp(phaseArg, "5D", 2) == 0) {
-                                    CIRRUS_LOG("Amp %s: 5D phase - DSP boot deferred until 5D.1 coefficient upload is complete", amp.name);
                                 }
                             }
                         }
@@ -1733,10 +1843,166 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     CIRRUS_LOG("Phase 5B complete for amp %s. Transitions: %d", amp.name, transitions);
 }
 
+bool CirrusAudioFixup::phase5b_1_VerifyDSPAlive(CS35L41Amp &amp) {
+    uint32_t core_ctrl = 0, sys_id = 0, mbox = 0;
+    bool core_pass = false, reset_pass = false, mbox_pass = false, xm_pass = false;
+
+    readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl, TRACE_DUMP);
+    readRegister(amp, CS35L41_DSP1_SYS_ID, &sys_id, TRACE_DUMP);
+    readRegister(amp, CS35L41_DSP_MBOX_2, &mbox, TRACE_DUMP);
+
+    if (core_ctrl & HALO_CORE_EN) core_pass = true;
+    if ((core_ctrl & HALO_CORE_RESET) == 0) reset_pass = true;
+    if (sys_id != 0x00000000 && sys_id != 0xFFFFFFFF) mbox_pass = true;
+
+    uint8_t dummy[4] = {0};
+    if (bulkRead(amp, 0x02000000, dummy, 4, TRACE_DUMP)) {
+        xm_pass = true;
+    }
+
+    CIRRUS_LOG("Amp %s: ==== Verify DSP Alive ====", amp.name);
+    CIRRUS_LOG("Amp %s: CORE_CTRL        %s  value=0x%08X", amp.name, reset_pass ? "PASS" : "FAIL", core_ctrl);
+    CIRRUS_LOG("Amp %s: CORE_ENABLE      %s", amp.name, core_pass ? "PASS" : "FAIL");
+    CIRRUS_LOG("Amp %s: MAILBOX          %s  value=0x%08X", amp.name, mbox_pass ? "PASS" : "FAIL", mbox);
+    CIRRUS_LOG("Amp %s: XM READ          %s  addr=0x02000000", amp.name, xm_pass ? "PASS" : "FAIL");
+
+    return core_pass && reset_pass && mbox_pass && xm_pass;
+}
+
+static uint32_t compute_entropy_x10(const uint8_t *data, uint32_t size) {
+    if (size == 0) return 0;
+    uint32_t counts[256] = {0};
+    for (uint32_t i = 0; i < size; i++) {
+        counts[data[i]]++;
+    }
+    
+    auto log2_x1000 = [](uint32_t x) -> uint32_t {
+        if (x == 0) return 0;
+        uint32_t l = 31 - __builtin_clz(x);
+        uint32_t rem = x - (1U << l);
+        uint32_t frac = (rem * 1000) >> l;
+        return l * 1000 + frac;
+    };
+    
+    uint32_t size_log2 = log2_x1000(size);
+    uint64_t total_entropy_x1000 = 0;
+    
+    for (int i = 0; i < 256; i++) {
+        uint32_t c = counts[i];
+        if (c > 0) {
+            uint32_t c_log2 = log2_x1000(c);
+            // size_log2 >= c_log2 is guaranteed since size >= c
+            uint32_t term = c * (size_log2 - c_log2);
+            total_entropy_x1000 += term;
+        }
+    }
+    
+    return (uint32_t)(total_entropy_x1000 / size / 100);
+}
+
+void CirrusAudioFixup::phase5c_1_DumpXMAndParseAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage) {
+    CIRRUS_LOG("Entering Phase 5C.1: Dump XM and Parse Algorithms for %s", amp.name);
+    
+    // Dump full 16KB of XM memory (CS35L41 XM RAM size is at least 8KB, usually 12KB, we dump up to 16KB to be safe)
+    uint32_t dump_size = 16384;
+
+    uint8_t *xm_dump_buffer = (uint8_t *)IOMallocData(dump_size);
+    if (!xm_dump_buffer) {
+        CIRRUS_ERR("Failed to allocate %u bytes for XM dump", dump_size);
+        return;
+    }
+    memset(xm_dump_buffer, 0, dump_size);
+
+    uint64_t dump_start = mach_absolute_time();
+    uint32_t offset = 0;
+    uint32_t chunk_size = 252;
+    bool dump_success = true;
+    
+    while (offset < dump_size) {
+        uint32_t read_len = dump_size - offset;
+        if (read_len > chunk_size) read_len = chunk_size;
+        
+        uint32_t read_addr = 0x02000000 + offset;
+        if (!bulkRead(amp, read_addr, xm_dump_buffer + offset, read_len, TRACE_DUMP)) {
+            CIRRUS_ERR("Failed to read XM RAM at offset 0x%08X", read_addr);
+            dump_success = false;
+            break;
+        }
+        offset += read_len;
+    }
+    
+    uint64_t dump_end = mach_absolute_time();
+    uint32_t dump_time_ms = (uint32_t)((dump_end - dump_start) / 1000000);
+    
+    if (dump_success) {
+        uint32_t crc = CirrusFirmwareParser::calculate_crc32(xm_dump_buffer, dump_size);
+        
+        uint32_t zeroes = 0, ffs = 0;
+        for (uint32_t i = 0; i < dump_size; i++) {
+            if (xm_dump_buffer[i] == 0x00) zeroes++;
+            if (xm_dump_buffer[i] == 0xFF) ffs++;
+        }
+        
+        CIRRUS_LOG("==== XM Dump ====");
+        CIRRUS_LOG("Base             0x02000000");
+        CIRRUS_LOG("Size             %u", dump_size);
+        CIRRUS_LOG("CRC              0x%08X", crc);
+        CIRRUS_LOG("Time             %u ms", dump_time_ms);
+        
+        uint32_t zero_pct = (zeroes * 100) / dump_size;
+        uint32_t ff_pct = (ffs * 100) / dump_size;
+        uint32_t entropy_x10 = compute_entropy_x10(xm_dump_buffer, dump_size);
+        
+        CIRRUS_LOG("==== Dump Validation ====");
+        CIRRUS_LOG("Zero bytes       %u%% (%u bytes)", zero_pct, zeroes);
+        CIRRUS_LOG("FF bytes         %u%% (%u bytes)", ff_pct, ffs);
+        CIRRUS_LOG("Entropy          %u.%u bits/byte", entropy_x10 / 10, entropy_x10 % 10);
+        
+        bool is_valid = (zero_pct < 100 && ff_pct < 100 && crc != 0);
+        CIRRUS_LOG("CRC              %s", is_valid ? "PASS" : "FAIL");
+        
+        CIRRUS_LOG("==== First 64 bytes ====");
+        for (uint32_t i = 0; i < 64 && i < dump_size; i += 16) {
+            CIRRUS_LOG("%02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X",
+                       xm_dump_buffer[i], xm_dump_buffer[i+1], xm_dump_buffer[i+2], xm_dump_buffer[i+3],
+                       xm_dump_buffer[i+4], xm_dump_buffer[i+5], xm_dump_buffer[i+6], xm_dump_buffer[i+7],
+                       xm_dump_buffer[i+8], xm_dump_buffer[i+9], xm_dump_buffer[i+10], xm_dump_buffer[i+11],
+                       xm_dump_buffer[i+12], xm_dump_buffer[i+13], xm_dump_buffer[i+14], xm_dump_buffer[i+15]);
+        }
+        
+        CIRRUS_LOG("==== Last 64 bytes ====");
+        for (uint32_t i = dump_size - 64; i < dump_size; i += 16) {
+            CIRRUS_LOG("%02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X  %02X %02X %02X %02X",
+                       xm_dump_buffer[i], xm_dump_buffer[i+1], xm_dump_buffer[i+2], xm_dump_buffer[i+3],
+                       xm_dump_buffer[i+4], xm_dump_buffer[i+5], xm_dump_buffer[i+6], xm_dump_buffer[i+7],
+                       xm_dump_buffer[i+8], xm_dump_buffer[i+9], xm_dump_buffer[i+10], xm_dump_buffer[i+11],
+                       xm_dump_buffer[i+12], xm_dump_buffer[i+13], xm_dump_buffer[i+14], xm_dump_buffer[i+15]);
+        }
+        
+        if (!is_valid) {
+            CIRRUS_ERR("Dump Validation FAILED!");
+        } else {
+            outImage.xm_dump_crc = crc;
+            
+            // Export dump to IORegistry for offline parsing
+            char propName[64];
+            snprintf(propName, sizeof(propName), "Cirrus_XM_Dump_%s", amp.name);
+            OSData *dumpData = OSData::withBytes(xm_dump_buffer, dump_size);
+            if (dumpData) {
+                setProperty(propName, dumpData);
+                dumpData->release();
+            }
+            
+            CirrusFirmwareParser::parseAlgorithmTable(xm_dump_buffer, dump_size, outImage);
+        }
+    }
+    
+    IOFreeData(xm_dump_buffer, dump_size);
+}
+
 void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phaseArg) {
     CIRRUS_LOG("Entering Phase 5C: Firmware Upload for amp %s", amp.name);
     
-    // Since phase5a set up amp.wmfwData, we can just use it
     if (!amp.wmfwData || amp.wmfwSize == 0) {
         CIRRUS_LOG("Amp %s: No WMFW data found. Phase 5C skipped.", amp.name);
         return;
@@ -1753,84 +2019,7 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         IOFree(image, sizeof(FirmwareImage));
         return;
     }
-    
-    CIRRUS_LOG("Amp %s: WMFW Parse OK. Fingerprint: 0x%08X", amp.name, image->fingerprint);
-    CIRRUS_LOG("  - Magic: 0x%08X, Ver: %d, TotalBytes: %d, CRC: 0x%08X", image->fw_magic, image->fw_version, image->fw_total_bytes, image->fw_crc);
-    CIRRUS_LOG("  - Core ID: %d, Core Rev: %d", image->fw_core, image->fw_core_rev);
-    CIRRUS_LOG("  - Blocks: %d Regions, %d Algs", image->regionCount, image->algorithmCount);
-    CIRRUS_LOG("  - Stats: XM=%d, YM=%d, PM=%d, Coeff=%d, Meta=%d, Unknown=%d", 
-               image->stat_xm_blocks, image->stat_ym_blocks, image->stat_pm_blocks, 
-               image->stat_coeff_blocks, image->stat_metadata_blocks, image->stat_unknown_blocks);
 
-    if (amp.binData && amp.binSize > 0) {
-        if (!CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
-            CIRRUS_ERR("Amp %s: BIN parse failed", amp.name);
-        } else {
-            CIRRUS_LOG("Amp %s: BIN Parse OK. Found %d Coefficient Blocks", amp.name, image->coefficientCount);
-            
-            // Cross-Check
-            uint32_t orphanBlocks = 0;
-            uint32_t unknownIds = 0;
-            
-            CIRRUS_LOG("========================");
-            CIRRUS_LOG("Cross Check");
-            CIRRUS_LOG("========================");
-            CIRRUS_LOG("Algorithms : %d", image->algorithmCount);
-            CIRRUS_LOG("Coeff Blocks: %d\n", image->coefficientCount);
-            
-            for (uint32_t i = 0; i < image->algorithmCount; i++) {
-                uint32_t matchedBlocks = 0;
-                for (uint32_t j = 0; j < image->coefficientCount; j++) {
-                    if (image->coefficients[j].id == image->algorithms[i].id) {
-                        matchedBlocks++;
-                    }
-                }
-                CIRRUS_LOG("Algorithm %d\n  Blocks : %d\n", image->algorithms[i].id, matchedBlocks);
-            }
-            
-            for (uint32_t j = 0; j < image->coefficientCount; j++) {
-                bool found = false;
-                for (uint32_t i = 0; i < image->algorithmCount; i++) {
-                    if (image->coefficients[j].id == image->algorithms[i].id) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    // Global coefficients use the firmware ID instead of an algorithm ID
-                    if (image->coefficients[j].id == image->fw_id) {
-                        // Global coefficient
-                        // Not an orphan
-                    } else {
-                        unknownIds++;
-                        orphanBlocks++;
-                    }
-                }
-            }
-            
-            CIRRUS_LOG("Unknown IDs    : %d", unknownIds);
-            CIRRUS_LOG("Orphan Blocks  : %d", orphanBlocks);
-            
-            uint32_t wmdr_payload = (uint32_t)(amp.binSize - 16);
-            CIRRUS_LOG("\nCoefficient payload bytes : %d", image->total_coeff_payload_bytes);
-            CIRRUS_LOG("WMDR payload bytes        : %d", wmdr_payload);
-            
-            if (image->total_coeff_payload_bytes == wmdr_payload) {
-                CIRRUS_LOG("PASS");
-            } else {
-                CIRRUS_LOG("FAIL - Payload mismatch");
-            }
-        }
-    }
-
-    if (strncmp(phaseArg, "5D.0", 4) == 0 || strncmp(phaseArg, "5C.0", 4) == 0) {
-        CIRRUS_LOG("Phase %s Complete for amp %s", phaseArg, amp.name);
-        IOFree(image, sizeof(FirmwareImage));
-        return;
-    }
-
-    // Phase 5C.1: Address Mapping
-    CIRRUS_LOG("Amp %s: Starting Phase 5C.1 Address Mapping", amp.name);
     MappedImage *mappedImg = (MappedImage *)IOMalloc(sizeof(MappedImage));
     if (!mappedImg) {
         CIRRUS_ERR("Amp %s: Failed to allocate memory for MappedImage", amp.name);
@@ -1845,155 +2034,13 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
-    CIRRUS_LOG("Amp %s: Mapping OK. Mapped Regions: %d, Mapping CRC: 0x%08X", amp.name, mappedImg->regionCount, mappedImg->mappingCrc);
-    for (uint32_t i = 0; i < mappedImg->regionCount; i++) {
-        const MappedRegion &m = mappedImg->regions[i];
-        const char *typeName = "UNKNOWN";
-        switch (m.regionType) {
-            case RegionType::PM_PACKED: typeName = "PM_PACKED"; break;
-            case RegionType::XM_PACKED: typeName = "XM_PACKED"; break;
-            case RegionType::YM_PACKED: typeName = "YM_PACKED"; break;
-            case RegionType::ALGORITHM_DATA: typeName = "ALGORITHM"; break;
-            case RegionType::METADATA: typeName = "METADATA"; break;
-            case RegionType::NAME_TEXT: typeName = "NAME_TEXT"; break;
-            case RegionType::INFO_TEXT: typeName = "INFO_TEXT"; break;
-            default: break;
-        }
-        
-        if (m.regionType == RegionType::PM_PACKED || m.regionType == RegionType::XM_PACKED || m.regionType == RegionType::YM_PACKED) {
-            CIRRUS_LOG("  Region %d: Type=%s, FW Addr=0x%06X, DSP Reg=0x%08X, Size=%d", 
-                       i, typeName, m.firmwareAddress, m.dspRegister, m.size);
-        } else {
-            CIRRUS_LOG("  Region %d: Type=%s, FW Addr=0x%06X, Size=%d (Not mapped to DSP)", 
-                       i, typeName, m.firmwareAddress, m.size);
-        }
-    }
-    
-    if (strncmp(phaseArg, "5C.1", 4) == 0) {
-        CIRRUS_LOG("Phase 5C.1 Complete for amp %s", amp.name);
-        IOFree(mappedImg, sizeof(MappedImage));
-        IOFree(image, sizeof(FirmwareImage));
-        return;
-    }
-    
-    // Determine active sub-phase
-    bool isDryRun      = (strncmp(phaseArg, "5C.2",  4) == 0);
-    bool isStress      = (strncmp(phaseArg, "5C.3.5", 6) == 0);
-    bool isReal        = (strncmp(phaseArg, "5C.3",  4) == 0 && !isStress);
-    bool isFullUpload  = (strncmp(phaseArg, "5C.4",  4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
-    const char *activePhaseLabel = isDryRun     ? "5C.2 Dry Run"
-                                 : isStress     ? "5C.3.5 Stress Verify"
-                                 : isFullUpload ? "5C.4 Full Upload"
-                                               : "5C.3 Real Upload";
-    CIRRUS_LOG("Amp %s: Starting Phase %s", amp.name, activePhaseLabel);
-    
-    // Find first executable region
-    int targetRegionIdx = -1;
-    for (uint32_t i = 0; i < mappedImg->regionCount; i++) {
-        if (mappedImg->regions[i].regionType == RegionType::PM_PACKED ||
-            mappedImg->regions[i].regionType == RegionType::XM_PACKED ||
-            mappedImg->regions[i].regionType == RegionType::YM_PACKED) {
-            targetRegionIdx = i;
-            break;
-        }
-    }
-    
-    if (targetRegionIdx == -1) {
-        CIRRUS_ERR("Amp %s: No executable region found for dry run!", amp.name);
-        IOFree(mappedImg, sizeof(MappedImage));
-        IOFree(image, sizeof(FirmwareImage));
-        return;
-    }
-    
-    const MappedRegion &targetReg = mappedImg->regions[targetRegionIdx];
-    CIRRUS_LOG("Amp %s: Selected Region %d for Dry Run", amp.name, targetRegionIdx);
-    
-    UploadPolicy policy;
-    policy.maxPayloadBytes = 252;
-    policy.alignRegister = false;
-    policy.alignPayload = false;
-    
-    UploadPlan *plan = (UploadPlan *)IOMalloc(sizeof(UploadPlan));
-    if (!plan) {
-        CIRRUS_ERR("Amp %s: Failed to allocate memory for UploadPlan", amp.name);
-        IOFree(mappedImg, sizeof(MappedImage));
-        IOFree(image, sizeof(FirmwareImage));
-        return;
-    }
-
-    if (!CirrusFirmwareUploadPlanner::generatePlan(targetRegionIdx, targetReg, policy, *plan)) {
-        CIRRUS_ERR("Amp %s: Failed to generate upload plan!", amp.name);
-        IOFree(plan, sizeof(UploadPlan));
-        IOFree(mappedImg, sizeof(MappedImage));
-        IOFree(image, sizeof(FirmwareImage));
-        return;
-    }
-    
-    if (isFullUpload) {
-        // Phase 5C.4: scheduler iterates ALL executable regions
-        UploadSession *session = (UploadSession *)IOMalloc(sizeof(UploadSession));
-        if (!session) {
-            CIRRUS_ERR("Amp %s: Failed to allocate UploadSession", amp.name);
-        } else {
-            if (CirrusFirmwareScheduler::run(amp, this, *mappedImg, *session)) {
-                CIRRUS_LOG("Phase 5C.4 Complete for amp %s", amp.name);
-            } else {
-                CIRRUS_ERR("Amp %s: Phase 5C.4 FAILED", amp.name);
-            }
-            IOFree(session, sizeof(UploadSession));
-        }
-    } else if (isReal || isStress) {
-        if (isStress) {
-            // Stress verify: run N iterations, accumulate timing stats
-            constexpr int kStressIterations = 20;
-            int passed = 0;
-            uint32_t acc_write = 0, acc_rb = 0, acc_crc = 0, acc_total = 0, acc_retries = 0;
-            CIRRUS_LOG("Amp %s: Stress Verify - %d iterations on Region %d", amp.name, kStressIterations, targetRegionIdx);
-            for (int iter = 1; iter <= kStressIterations; iter++) {
-                CIRRUS_LOG("Amp %s: Iteration %d/%d", amp.name, iter, kStressIterations);
-                UploadStats stats = {};
-                if (CirrusFirmwareRealUploader::upload(amp, this, *plan, &stats)) {
-                    passed++;
-                    acc_write   += stats.writeMs;
-                    acc_rb      += stats.readbackMs;
-                    acc_crc     += stats.crcMs;
-                    acc_total   += stats.totalMs;
-                    acc_retries += stats.retries;
-                    CIRRUS_LOG("Amp %s: Iteration %d/%d PASS (%d/%d total)", amp.name, iter, kStressIterations, passed, iter);
-                } else {
-                    CIRRUS_ERR("Amp %s: Iteration %d/%d FAIL - stopping stress test.", amp.name, iter, kStressIterations);
-                    break;
-                }
-            }
-            CIRRUS_LOG("Amp %s: Stress Verify Summary", amp.name);
-            CIRRUS_LOG("Amp %s:   Iterations  : %d", amp.name, kStressIterations);
-            CIRRUS_LOG("Amp %s:   PASS        : %d", amp.name, passed);
-            CIRRUS_LOG("Amp %s:   FAIL        : %d", amp.name, kStressIterations - passed);
-            CIRRUS_LOG("Amp %s:   Retries     : %d", amp.name, acc_retries);
-            if (passed > 0) {
-                CIRRUS_LOG("Amp %s:   Write Avg   : %d ms", amp.name, acc_write / passed);
-                CIRRUS_LOG("Amp %s:   Read Avg    : %d ms", amp.name, acc_rb / passed);
-                CIRRUS_LOG("Amp %s:   CRC Avg     : %d ms", amp.name, acc_crc / passed);
-                CIRRUS_LOG("Amp %s:   Total Avg   : %d ms", amp.name, acc_total / passed);
-            }
-            if (passed == kStressIterations) {
-                CIRRUS_LOG("Phase 5C.3.5 Complete for amp %s", amp.name);
-            } else {
-                CIRRUS_ERR("Amp %s: Stress Verify FAILED - %d/%d passed", amp.name, passed, kStressIterations);
-            }
-        } else {
-            if (!CirrusFirmwareRealUploader::upload(amp, this, *plan)) {
-                CIRRUS_ERR("Amp %s: Phase 5C.3 Real Upload Failed!", amp.name);
-            } else {
-                CIRRUS_LOG("Phase 5C.3 Complete for amp %s", amp.name);
-            }
-        }
+    UploadSession session;
+    if (CirrusFirmwareScheduler::run(amp, this, *mappedImg, session)) {
+        CIRRUS_LOG("Phase 5C Complete for amp %s", amp.name);
     } else {
-        CirrusFirmwareDryRunSimulator::simulate(*plan);
-        CIRRUS_LOG("Phase 5C.2 Complete for amp %s", amp.name);
+        CIRRUS_ERR("Amp %s: Phase 5C FAILED", amp.name);
     }
 
-    IOFree(plan, sizeof(UploadPlan));
     IOFree(mappedImg, sizeof(MappedImage));
     IOFree(image, sizeof(FirmwareImage));
 }

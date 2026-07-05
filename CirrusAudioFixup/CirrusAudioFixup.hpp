@@ -108,6 +108,8 @@ struct CS35L41Amp {
     uint32_t final_crc;
 };
 
+struct FirmwareImage;
+
 struct FirmwareResource {
     uint32_t subsystemVendor;
     uint32_t subsystemDevice;
@@ -198,9 +200,15 @@ private:
     
     // Phase 5B: DSP Bring-up
     void phase5b_DSPBringup(CS35L41Amp &amp);
+    bool phase5b_1_VerifyDSPAlive(CS35L41Amp &amp);
 
     // Phase 5C: Firmware Upload
     void phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phaseArg);
+    void phase5c_1_DumpXMAndParseAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage);
+    
+    // Phase 5D: Full Initialization
+    void phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseArg);
+    
     IOService* getAudioController();
     
     void testRegisterConsistency(CS35L41Amp &amp);

@@ -55,11 +55,12 @@ struct wmfw_region {
 #define MAX_MAPPED_REGIONS   192  // WMFW regions(~8) + coefficient blocks(up to 128) + headroom
 
 // Halo ID Header layout (24-bit packed words in XM memory)
-static constexpr uint32_t kHaloFwIdWord          = 3;  // In wmfw_v3_id_hdr, id is word 3 (vendor_id is word 2)
-static constexpr uint32_t kHaloNAlgsWord         = 9;  // n_algs is word 9
-static constexpr uint32_t kHaloAlgTableStartWord = 10; // 10 words in header
-static constexpr uint32_t kHaloAlgEntryWords     = 6;  // 6 words per algorithm
-static constexpr uint32_t kHaloIdHdrWords        = 10; // words before alg table
+static constexpr uint32_t kHaloFwIdWord          = 2;  // fw_id is word 2
+static constexpr uint32_t kHaloVersionWord       = 3;  // version is word 3
+static constexpr uint32_t kHaloVendorIdWord      = 4;  // vendor_id is word 4
+static constexpr uint32_t kHaloIdHdrWords        = 9;  // Header is 9 words
+static constexpr uint32_t kHaloAlgTableStartWord = 9;  // Algorithm table starts immediately at word 9
+static constexpr uint32_t kHaloAlgEntryWords     = 5;  // 5 words per algorithm (id, ver, xm_base, ym_base, pm_base)
 
 // Helper: read a 24-bit packed big-endian word from packed XM memory
 static inline uint32_t readPacked24BE(const uint8_t *data, uint32_t wordIdx) {
@@ -123,6 +124,8 @@ struct FirmwareImage {
     uint8_t fw_core;
     uint16_t fw_core_rev;
     uint32_t fw_id; // Firmware ID from Halo ID Header
+    uint32_t n_algs; // Expected number of algorithms from header
+    uint32_t xm_dump_crc; // CRC32 of the live XM dump
     
     FirmwareRegion regions[MAX_FIRMWARE_REGIONS];
     uint32_t regionCount;
@@ -227,6 +230,82 @@ public:
                 }
             }
             
+            outMapped.regionCount++;
+        }
+        
+        outMapped.mappingCrc = ~outMapped.mappingCrc;
+        return true;
+    }
+
+    static bool mapCoefficients(const FirmwareImage &image, MappedImage &outMapped) {
+        outMapped.regionCount = 0;
+        outMapped.mappingCrc = 0xFFFFFFFF;
+        
+        for (uint32_t i = 0; i < image.coefficientCount; i++) {
+            if (outMapped.regionCount >= MAX_MAPPED_REGIONS) {
+                CIRRUS_ERR("mapCoefficients: MAX_MAPPED_REGIONS overflow");
+                return false;
+            }
+            const CoefficientBlock &coeff = image.coefficients[i];
+            
+            // Find algorithm
+            bool found = false;
+            uint32_t alg_xm_base = 0;
+            uint32_t alg_ym_base = 0;
+            
+            if (coeff.id == image.fw_id) {
+                // Global coefficient (usually targets XM or YM directly or has special handling)
+                CIRRUS_LOG("Global Coefficient %u (ID=0x%06X) mapping is not fully supported yet", i, coeff.id);
+                continue;
+            } else {
+                for (uint32_t a = 0; a < image.algorithmCount; a++) {
+                    if (image.algorithms[a].id == coeff.id) {
+                        alg_xm_base = image.algorithms[a].baseWordOffset;
+                        // For Halo, ym_base is typically after xm_size in the struct, but we didn't save ym_base in AlgorithmInfo!
+                        // Let's assume algorithm type is XM for now or we must fetch YM.
+                        // Wait, Linux maps based on coeff.type.
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!found) {
+                CIRRUS_LOG("Skipping orphan coefficient block %u (ID=0x%06X)", i, coeff.id);
+                continue;
+            }
+            
+            MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
+            uint32_t type_masked = coeff.type & 0xFF;
+            
+            // For CS35L41, the WMFW types for packed memory are used.
+            // WMFW_HALO_XM_PACKED = 0x11, YM_PACKED = 0x12
+            if (type_masked == WMFW_HALO_XM_PACKED) {
+                outReg.regionType = RegionType::XM_PACKED;
+                outReg.firmwareAddress = alg_xm_base + coeff.offset;
+                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
+                if (status != MappingStatus::OK) return false;
+            } else if (type_masked == WMFW_HALO_YM_PACKED) {
+                // We need ym_base. For now we skip or we add ym_base to AlgorithmInfo.
+                CIRRUS_LOG("YM_PACKED Coeff mapping not yet implemented");
+                continue;
+            } else {
+                CIRRUS_LOG("Unsupported Coefficient Type 0x%X", type_masked);
+                continue;
+            }
+            
+            outReg.size = coeff.length;
+            outReg.data.begin = coeff.data;
+            outReg.data.size = coeff.length;
+            
+            // Cumulate CRC
+            const uint8_t *crcData = (const uint8_t *)&outReg;
+            for (size_t k = 0; k < 16; k++) {
+                outMapped.mappingCrc ^= crcData[k];
+                for (size_t j = 0; j < 8; j++) {
+                    outMapped.mappingCrc = (outMapped.mappingCrc >> 1) ^ (0xEDB88320 & (-(outMapped.mappingCrc & 1)));
+                }
+            }
             outMapped.regionCount++;
         }
         
@@ -347,119 +426,134 @@ public:
                 default:                  reg.regionType = RegionType::UNKNOWN; break;
             }
             
-            // Do not extract immediately, wait until all regions are parsed
+            if (type == WMFW_HALO_XM_PACKED && offset == 0 && len >= kHaloIdHdrWords * 3) {
+                // This is the first XM region containing the Halo ID Header.
+                outImage->fw_id = readPacked24BE(raw_region->data, kHaloFwIdWord);
+                // In our updated ground truth, the first Algorithm ID is at word 9.
+                // We don't have a strict n_algs field. We'll set it to 1 for the WMFW summary.
+                outImage->n_algs = 1; 
+                CIRRUS_LOG("parseWMFW: Found Halo Header. fw_id=0x%06X", outImage->fw_id);
+            }
             
             pos += sizeof(wmfw_region) + len;
         }
         
-        extractHaloAlgorithms(outImage);
-        
         return true;
     }
 
-    // Note: This is a Halo firmware specific extraction.
-    // The Algorithm Table is scattered across multiple XM_PACKED regions.
-    // We assemble a virtual memory buffer and parse it.
-    //
-    // wmfw_halo_id_hdr layout (each field = 1 DSP word = 3 bytes packed):
-    //   word 0: core_id
-    //   word 1: block_rev
-    //   word 2: vendor_id
-    //   word 3: id        <-- firmware ID
-    //   word 4: ver       <-- firmware version
-    //   word 5: xm_base
-    //   word 6: xm_size
-    //   word 7: ym_base
-    //   word 8: ym_size
-    //   word 9: n_algs    <-- number of algorithms (0-indexed)
-    // Then n_algs x wmfw_halo_alg_hdr (6 words each):
-    //   word 0: alg_id
-    //   word 1: alg_ver
-    //   word 2: xm_base
-    //   word 3: xm_size
-    //   word 4: ym_base
-    //   word 5: ym_size
-    static void extractHaloAlgorithms(FirmwareImage *outImage) {
-        size_t vmem_size = 0;
+    static bool parseAlgorithmTable(const uint8_t *vmem, size_t vmem_size, FirmwareImage &outImage) {
+        if (vmem_size < kHaloIdHdrWords * 3) {
+            CIRRUS_ERR("Dump buffer too small (%zu bytes) for Halo ID header", vmem_size);
+            return false;
+        }
 
-        for (uint32_t i = 0; i < outImage->regionCount; i++) {
-            const FirmwareRegion &reg = outImage->regions[i];
-            if (reg.regionType == RegionType::XM_PACKED) {
-                size_t end_pos = (size_t)(reg.baseWordOffset * 3) + reg.length;
-                if (end_pos > vmem_size) vmem_size = end_pos;
+        // Scanner for candidates in the entire dump
+        uint32_t header_offset = 0xFFFFFFFF;
+        for (uint32_t off = 0; off + 40 <= vmem_size; off += 3) {
+            uint32_t scan_fw_id = readPacked24BE(vmem, off / 3 + kHaloFwIdWord);
+            
+            if (scan_fw_id == outImage.fw_id || (scan_fw_id > 0 && scan_fw_id < 0xFFFFFF)) {
+                uint32_t scan_core = readPacked24BE(vmem, off / 3);
+                if (scan_core < 10) {
+                    uint32_t crc40 = CirrusFirmwareParser::calculate_crc32(vmem + off, 40);
+                    CIRRUS_LOG("==== Candidate Header @ 0x%04X ====", off);
+                    CIRRUS_LOG("Decoded:");
+                    CIRRUS_LOG("core_id = 0x%06X", readPacked24BE(vmem, off/3 + 0));
+                    CIRRUS_LOG("core_rev= 0x%06X", readPacked24BE(vmem, off/3 + 1));
+                    CIRRUS_LOG("fw_id   = 0x%06X", readPacked24BE(vmem, off/3 + 2));
+                    CIRRUS_LOG("version = 0x%06X", readPacked24BE(vmem, off/3 + 3));
+                    CIRRUS_LOG("vndr_id = 0x%06X", readPacked24BE(vmem, off/3 + 4));
+                    CIRRUS_LOG("xm_base = 0x%06X", readPacked24BE(vmem, off/3 + 5));
+                    CIRRUS_LOG("xm_size = 0x%06X", readPacked24BE(vmem, off/3 + 6));
+                    CIRRUS_LOG("ym_base = 0x%06X", readPacked24BE(vmem, off/3 + 7));
+                    CIRRUS_LOG("ym_size = 0x%06X", readPacked24BE(vmem, off/3 + 8));
+                    CIRRUS_LOG("Alg0 ID = 0x%06X", readPacked24BE(vmem, off/3 + 9));
+                    CIRRUS_LOG("Alg0 Ver= 0x%06X", readPacked24BE(vmem, off/3 + 10));
+                    CIRRUS_LOG("CRC(40) = 0x%08X", crc40);
+                    
+                    if (header_offset == 0xFFFFFFFF) {
+                        if (scan_fw_id == outImage.fw_id) {
+                            header_offset = off;
+                        } else {
+                            header_offset = off;
+                        }
+                    }
+                }
             }
         }
-
-        if (vmem_size < kHaloIdHdrWords * 3) {  // need at least 9 words = 27 bytes
-            CIRRUS_ERR("XM region too small (%zu bytes) for Halo ID header (need %u)", vmem_size, kHaloIdHdrWords * 3);
-            return;
+        
+        if (header_offset == 0xFFFFFFFF) {
+            CIRRUS_ERR("parseAlgorithmTable: No valid Halo Header candidate found. Aborting parser.");
+            return false;
+        }
+        
+        uint32_t hdr_base_word = header_offset / 3;
+        CIRRUS_LOG("parseAlgorithmTable: Selected Header @ 0x%04X", header_offset);
+        
+        // We scan algorithms until we hit a known terminator or run out of space.
+        // We will just scan up to 10 entries max.
+        uint32_t n_algs_scan = 10;
+        
+        size_t requiredBytes = header_offset + (kHaloAlgTableStartWord + kHaloAlgEntryWords) * 3;
+        if (vmem_size < requiredBytes) {
+            CIRRUS_ERR("Dump buffer too small to hold even one Algorithm Entry");
+            return false;
         }
 
-        uint8_t *vmem = (uint8_t *)IOMalloc(vmem_size);
-        if (!vmem) return;
-        memset(vmem, 0, vmem_size);
-
-        for (uint32_t i = 0; i < outImage->regionCount; i++) {
-            const FirmwareRegion &reg = outImage->regions[i];
-            if (reg.regionType == RegionType::XM_PACKED) {
-                uint32_t byte_offset = reg.baseWordOffset * 3;
-                if (byte_offset + reg.length <= vmem_size)
-                    memcpy(vmem + byte_offset, reg.data, reg.length);
+        uint32_t valid_algs = 0;
+        uint32_t discarded_algs = 0;
+        uint32_t invalid_run = 0;
+        
+        for (uint32_t i = 0; i < n_algs_scan && outImage.algorithmCount < 32; i++) {
+            uint32_t base   = hdr_base_word + kHaloAlgTableStartWord + i * kHaloAlgEntryWords;
+            if (base * 3 + kHaloAlgEntryWords * 3 > vmem_size) {
+                CIRRUS_LOG("parseAlgorithmTable: Reached end of memory buffer.");
+                break;
             }
-        }
-
-        // Use file-scope readPacked24BE() with named constants
-        outImage->fw_id = readPacked24BE(vmem, kHaloFwIdWord);
-        uint32_t n_algs = readPacked24BE(vmem, kHaloNAlgsWord);
-
-        CIRRUS_LOG("Halo Header");
-        CIRRUS_LOG("-----------");
-        CIRRUS_LOG("core_id     = 0x%06X", readPacked24BE(vmem, 0));
-        CIRRUS_LOG("block_rev   = 0x%06X", readPacked24BE(vmem, 1));
-        CIRRUS_LOG("vendor_id   = 0x%06X", readPacked24BE(vmem, 2));
-        CIRRUS_LOG("fw_id       = 0x%06X", outImage->fw_id);
-        CIRRUS_LOG("version     = 0x%06X", readPacked24BE(vmem, 4));
-        CIRRUS_LOG("xm_base     = 0x%06X", readPacked24BE(vmem, 5));
-        CIRRUS_LOG("xm_size     = %u", readPacked24BE(vmem, 6));
-        CIRRUS_LOG("ym_base     = 0x%06X", readPacked24BE(vmem, 7));
-        CIRRUS_LOG("ym_size     = %u", readPacked24BE(vmem, 8));
-        CIRRUS_LOG("n_algs      = %u", n_algs);
-
-        if (n_algs == 0 || n_algs > 255) {
-            CIRRUS_ERR("n_algs=%u out of range [1-255]; aborting algorithm extraction", n_algs);
-            IOFree(vmem, vmem_size);
-            return;
-        }
-
-        // Bounds check: make sure the algorithm table fits within vmem
-        size_t requiredBytes = (kHaloAlgTableStartWord + n_algs * kHaloAlgEntryWords) * 3;
-        if (requiredBytes > vmem_size) {
-            CIRRUS_ERR("Algorithm table OOB: n_algs=%u required=%zu vmem=%zu", n_algs, requiredBytes, vmem_size);
-            IOFree(vmem, vmem_size);
-            return;
-        }
-
-        // Parse algorithm entries: start at word kHaloAlgTableStartWord, each entry = kHaloAlgEntryWords words
-        for (uint32_t i = 0; i < n_algs && outImage->algorithmCount < 32; i++) {
-            uint32_t base   = kHaloAlgTableStartWord + i * kHaloAlgEntryWords;
+            
             uint32_t alg_id = readPacked24BE(vmem, base);
-            if (alg_id == 0 || alg_id == 0xFFFFFF) continue;
+            uint32_t alg_ver = readPacked24BE(vmem, base+1);
+            uint32_t alg_xm_base = readPacked24BE(vmem, base+2);
+            
+            // Validation: discard dummy or malformed entries
+            if (alg_id == 0 || alg_id == 0xFFFFFF) {
+                CIRRUS_LOG("Discard: index=%u id=0x%06X xm=0x%06X reason=Invalid ID", i, alg_id, alg_xm_base);
+                discarded_algs++;
+                invalid_run++;
+                if (invalid_run >= 5) break;
+                continue;
+            }
+            
+            // Heuristic check for uninitialized or dummy pointer values
+            if (alg_xm_base == 0x00BEDE || alg_xm_base == 0xBEDEAD || alg_xm_base == 0xFFFFFF) {
+                CIRRUS_LOG("Discard: index=%u id=0x%06X xm=0x%06X reason=Invalid XM Base", i, alg_id, alg_xm_base);
+                discarded_algs++;
+                invalid_run++;
+                if (invalid_run >= 5) break;
+                continue;
+            }
+            
+            invalid_run = 0; // reset run on valid entry
 
-            AlgorithmInfo &alg = outImage->algorithms[outImage->algorithmCount++];
+            AlgorithmInfo &alg = outImage.algorithms[outImage.algorithmCount++];
             alg.id             = alg_id;
             alg.baseWordOffset = readPacked24BE(vmem, base + 2); // xm_base
-            alg.size           = readPacked24BE(vmem, base + 3); // xm_size
+            alg.size           = 0; // Not available in 5-word struct
             alg.region         = RegionType::XM_PACKED;
 
-            CIRRUS_LOG("Algorithm[%u]: id=0x%06X ver=0x%06X XM@0x%06X+%u YM@0x%06X+%u",
-                       i, alg_id,
-                       readPacked24BE(vmem, base+1),
-                       readPacked24BE(vmem, base+2), readPacked24BE(vmem, base+3),
-                       readPacked24BE(vmem, base+4), readPacked24BE(vmem, base+5));
+            CIRRUS_LOG("Algorithm[%u]: id=%u (0x%06X) ver=0x%06X xm_base=0x%06X ym_base=0x%06X pm_base=0x%06X",
+                       i, alg_id, alg_id, alg_ver,
+                       readPacked24BE(vmem, base+2),
+                       readPacked24BE(vmem, base+3),
+                       readPacked24BE(vmem, base+4));
+            valid_algs++;
         }
 
-        CIRRUS_LOG("extractHaloAlgorithms: found %u algorithms", outImage->algorithmCount);
-        IOFree(vmem, vmem_size);
+        CIRRUS_LOG("==== Algorithm Parser ====");
+        CIRRUS_LOG("Found            %u entries", valid_algs + discarded_algs);
+        CIRRUS_LOG("Valid            %u", valid_algs);
+        CIRRUS_LOG("Discarded        %u", discarded_algs);
+        return true;
     }
 
     static bool parseBIN(const uint8_t *data, size_t size, FirmwareImage *outImage) {

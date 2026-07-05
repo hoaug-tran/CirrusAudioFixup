@@ -324,11 +324,23 @@ public:
             if (payCrc != rbCrc) {
                 CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]",
                            amp.name, crc_ms, payCrc, rbCrc);
+                           
+                // Dump the first 16 bytes to see where it differs
+                uint32_t dump_len = min((uint32_t)tx.size, (uint32_t)16);
+                char payHex[64] = {0};
+                char rbHex[64] = {0};
+                for (uint32_t d = 0; d < dump_len; d++) {
+                    snprintf(payHex + d * 3, sizeof(payHex) - d * 3, "%02X ", paySlice[d]);
+                    snprintf(rbHex + d * 3, sizeof(rbHex) - d * 3, "%02X ", rbSlot[d]);
+                }
+                CIRRUS_LOG("Amp %s:   PAYLOAD  : %s", amp.name, payHex);
+                CIRRUS_LOG("Amp %s:   READBACK : %s", amp.name, rbHex);
+
                 // memcmp: narrow down to exact byte
                 for (uint32_t b = 0; b < tx.size; b++) {
                     if (paySlice[b] != rbSlot[b]) {
                         CIRRUS_LOG("Amp %s:   memcmp   : offset 0x%06X (Exp=0x%02X Got=0x%02X)",
-                                   amp.name, tx.payloadOffset + b, paySlice[b], rbSlot[b]);
+                                   amp.name, b, paySlice[b], rbSlot[b]);
                         break;
                     }
                 }

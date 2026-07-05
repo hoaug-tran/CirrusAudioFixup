@@ -396,32 +396,110 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
                 CIRRUS_LOG("Amp %s: No BIN data, skipping coefficient upload", amp.name);
             }
             
-            // Step 9: Mailbox Resume (DSP to RUN state)
-            CIRRUS_LOG("Amp %s: ==== Mailbox Resume ====", amp.name);
-            
-            auto logDSPState = [&](const char *label, uint32_t ms) {
-                uint32_t core_ctrl=0, virt_mbox1=0, mbox2=0, irq1_1=0, irq1_2=0, irq2=0;
-                readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl);
-                readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &virt_mbox1);
-                readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
-                readRegister(amp, CS35L41_IRQ1_STATUS1, &irq1_1);
-                readRegister(amp, CS35L41_IRQ1_STATUS2, &irq1_2);
-                readRegister(amp, CS35L41_IRQ2_STATUS, &irq2);
-                CIRRUS_LOG("Amp %s: [%s] elapsed=%u ms | CORE=0x%08X VIRT_MBOX1=0x%X MBOX2=0x%X IRQ1_1=0x%08X IRQ1_2=0x%08X IRQ2=0x%08X",
-                           amp.name, label, ms, core_ctrl, virt_mbox1, mbox2, irq1_1, irq1_2, irq2);
+            // Step 8.5: Telemetry Metadata Verification & Commit D Preparation
+            auto readAndLogControl = [&](const char* controlName, const char* prefix) {
+                WMFWControlRef controlRef;
+                if (CirrusFirmwareParser::findControl(image, controlName, controlRef)) {
+                    // Sanity Check 1: Length (Skip Buffer Controls)
+                    if (controlRef.control->len != 4) {
+                        CIRRUS_LOG("Amp %s: %s Skipping %s (len = %u, not scalar)", amp.name, prefix, controlName, controlRef.control->len);
+                        return;
+                    } 
+                    // Sanity Check 2: Type
+                    if (controlRef.control->type != WMFW_ADSP2_XM && controlRef.control->type != WMFW_HALO_XM_PACKED) {
+                        CIRRUS_ERR("Amp %s: %s Sanity Check Failed! %s type %u is neither ADSP2_XM (5) nor HALO_XM_PACKED (17)", amp.name, prefix, controlName, controlRef.control->type);
+                        return;
+                    }
+                    
+                    // Sanity Check 3: Bounds Check against DSP RAM
+                    AlgorithmInfo *dspAlg = nullptr;
+                    for (uint32_t i = 0; i < image->algorithmCount; i++) {
+                        if (image->algorithms[i].id == controlRef.algorithm->id) {
+                            dspAlg = &image->algorithms[i];
+                            break;
+                        }
+                    }
+                    
+                    if (!dspAlg) {
+                        CIRRUS_ERR("Amp %s: %s Sanity Check Failed! Algorithm %u not found in DSP RAM", amp.name, prefix, controlRef.algorithm->id);
+                        return;
+                    }
+                    
+                    uint32_t ctl_byte_offset = controlRef.control->offset * 4; 
+                    uint32_t xm_byte_size = dspAlg->size * 4;                 
+                    
+                    if (ctl_byte_offset + controlRef.control->len > xm_byte_size) {
+                        CIRRUS_ERR("Amp %s: %s Sanity Check Failed! %s exceeds XM bounds", amp.name, prefix, controlName);
+                        return;
+                    }
+                    
+                    uint32_t dspWord = dspAlg->baseWordOffset + controlRef.control->offset;
+                    uint32_t physicalRegister = CirrusFirmwareParser::regionToReg(controlRef.control->type, dspWord);
+                    
+                    const char* typeName = (controlRef.control->type == WMFW_ADSP2_XM) ? "WMFW_ADSP2_XM" : "WMFW_HALO_XM_PACKED";
+                    
+                    CIRRUS_LOG("Amp %s: %s Control: %s", amp.name, prefix, controlName);
+                    CIRRUS_LOG("Amp %s: ------------------", amp.name);
+                    CIRRUS_LOG("Amp %s: alg      = %u", amp.name, controlRef.algorithm->id);
+                    CIRRUS_LOG("Amp %s: type     = %s", amp.name, typeName);
+                    CIRRUS_LOG("Amp %s: offset   = 0x%04X", amp.name, controlRef.control->offset);
+                    CIRRUS_LOG("Amp %s: len      = %u", amp.name, controlRef.control->len);
+                    CIRRUS_LOG("Amp %s: ", amp.name);
+                    CIRRUS_LOG("Amp %s: region", amp.name);
+                    CIRRUS_LOG("Amp %s: xm_base  = 0x%04X", amp.name, dspAlg->baseWordOffset);
+                    CIRRUS_LOG("Amp %s: ", amp.name);
+                    CIRRUS_LOG("Amp %s: logical  = 0x%04X", amp.name, dspWord);
+                    CIRRUS_LOG("Amp %s: register = 0x%08X", amp.name, physicalRegister);
+                    CIRRUS_LOG("Amp %s: ", amp.name);
+                    
+                    uint32_t controlValue = 0;
+                    bool status = readRegister(amp, physicalRegister, &controlValue);
+                    if (status) {
+                        CIRRUS_LOG("Amp %s: read OK", amp.name);
+                        CIRRUS_LOG("Amp %s: value    = 0x%08X", amp.name, controlValue);
+                    } else {
+                        CIRRUS_LOG("Amp %s: read FAILED", amp.name);
+                        CIRRUS_LOG("Amp %s: ret = -EIO", amp.name);
+                    }
+                    CIRRUS_LOG("Amp %s: ------------------", amp.name);
+                } else {
+                    CIRRUS_LOG("Amp %s: %s Control: %s", amp.name, prefix, controlName);
+                    CIRRUS_LOG("Amp %s: ------------------", amp.name);
+                    CIRRUS_LOG("Amp %s: lookup FAILED", amp.name);
+                    CIRRUS_LOG("Amp %s: ------------------", amp.name);
+                }
             };
 
-            logDSPState("Before Resume", 0);
+            // === PRE-RESUME ===
+            CIRRUS_LOG("Amp %s: ==== PRE-RESUME ====", amp.name);
+            readAndLogControl("HALO_STATE", "[PRE]");
+            readAndLogControl("CAL_STATUS", "[PRE]");
+            readAndLogControl("BDLOG_MAX_TEMP", "[PRE]");
+            
+            // === MAILBOX ===
+            CIRRUS_LOG("Amp %s: ==== MAILBOX ====", amp.name);
+            uint32_t core_ctrl_before = 0, core_ctrl_after = 0;
+            readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl_before);
+            
+            // Following Linux cs_dsp_halo_start_core:
+            // 1. Assert CORE_RESET (0x200) and CORE_EN (0x1)
+            uint32_t reset_flags = HALO_CORE_EN | 0x00000200; // 0x201
+            updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, reset_flags, reset_flags);
+            
+            // 2. De-assert CORE_RESET (0x200), leave CORE_EN
+            updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, 0x00000200, 0x00000000);
+            
+            // 3. Ensure MAC_EN (0x100) is set.
+            updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, 0x00000100, 0x00000100);
 
-            // CS35L41_DSP1_MAC_EN (0x100) MUST be set, otherwise the DSP hangs the I2C bus!
-            uint32_t run_flags = HALO_CORE_EN | 0x00000100;
-            updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, run_flags, run_flags, TRACE_DUMP);
+            readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl_after);
+            
+            CIRRUS_LOG("Amp %s: MAC_EN before = 0x%08X", amp.name, core_ctrl_before);
+            CIRRUS_LOG("Amp %s: MAC_EN after  = 0x%08X", amp.name, core_ctrl_after);
             
             // Send RESUME command
-            CIRRUS_LOG("Amp %s: Write: REG 0x13020 <- 0x00000002", amp.name);
-            writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, CSPL_MBOX_CMD_RESUME, TRACE_DUMP);
-
-            logDSPState("Immediate After Write", 0);
+            CIRRUS_LOG("Amp %s: Write MBOX1 = 0x00000002", amp.name);
+            writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, CSPL_MBOX_CMD_RESUME);
 
             uint32_t virt_mbox1 = 0, mbox2 = 0xFFFFFFFF;
             uint32_t ms = 0;
@@ -431,23 +509,36 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
                 readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &virt_mbox1);
                 readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
                 
-                if (mbox2 == CSPL_MBOX_STS_RUNNING) {
+                if (mbox2 == CSPL_MBOX_STS_RUNNING) { // usually 0 or CSPL_MBOX_STS_RUNNING
                     reached_running = true;
-                    logDSPState("Reached RUNNING", ms);
                     break;
-                }
-                
-                if (ms == 0 || ms == 1 || ms == 2 || ms == 5 || ms == 10 || ms == 50 || ms == 100 || ms == 250 || ms == 500) {
-                    logDSPState("Polling", ms);
                 }
                 
                 IODelay(1000);
                 ms++;
             }
-            if (!reached_running) {
-                logDSPState("Timeout", ms);
-                CIRRUS_ERR("Amp %s: Mailbox timeout after 500ms!", amp.name);
+            
+            if (reached_running) {
+                CIRRUS_LOG("Amp %s: ACK = 0x%08X", amp.name, mbox2);
+                CIRRUS_LOG("Amp %s: elapsed = %u ms", amp.name, ms);
+            } else {
+                CIRRUS_ERR("Amp %s: ACK = TIMEOUT (MBOX2=0x%08X)", amp.name, mbox2);
             }
+            
+            // === POST-RESUME #1 ===
+            CIRRUS_LOG("Amp %s: ==== POST-RESUME #1 ====", amp.name);
+            readAndLogControl("HALO_STATE", "[POST1]");
+            readAndLogControl("CAL_STATUS", "[POST1]");
+            readAndLogControl("BDLOG_MAX_TEMP", "[POST1]");
+            
+            // Delay 150 ms
+            IOSleep(150);
+            
+            // === POST-RESUME #2 ===
+            CIRRUS_LOG("Amp %s: ==== POST-RESUME #2 ====", amp.name);
+            readAndLogControl("HALO_STATE", "[POST2]");
+            readAndLogControl("CAL_STATUS", "[POST2]");
+            readAndLogControl("BDLOG_MAX_TEMP", "[POST2]");
             
             // Note: Since SP_ENABLES is 0 in phase4A2, no audio flows yet. CoreAudio will trigger SP_ENABLES later.
         } else {
@@ -553,13 +644,11 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                     } else {
                         char phaseArg[16] = {0};
                         if (PE_parse_boot_argn("cirrus_phase", phaseArg, sizeof(phaseArg))) {
-                            if (strncmp(phaseArg, "5D", 2) == 0) {
-                                phase5d_FirmwareInit(amp, phaseArg);
-                            } else if (strncmp(phaseArg, "5C", 2) == 0) {
+                            if (strncmp(phaseArg, "5D", 2) == 0 || strncmp(phaseArg, "5C", 2) == 0) {
                                 phase5c_FirmwareUpload(amp, phaseArg);
                                 
-                                // Only boot DSP after 5C.4 (full WMFW upload).
-                                bool shouldBootDsp = (strncmp(phaseArg, "5C.4", 4) == 0);
+                                // Only boot DSP after full firmware upload.
+                                bool shouldBootDsp = (strncmp(phaseArg, "5C.4", 4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
                                 if (shouldBootDsp) {
                                     CIRRUS_LOG("Amp %s: Bringing up DSP after 5C.4 Firmware Upload", amp.name);
                                     phase5b_DSPBringup(amp);
@@ -1971,7 +2060,7 @@ void CirrusAudioFixup::phase5c_1_DumpXMAndParseAlgorithms(CS35L41Amp &amp, Firmw
         uint32_t read_len = dump_size - offset;
         if (read_len > chunk_size) read_len = chunk_size;
         
-        uint32_t read_addr = 0x02000000 + offset;
+        uint32_t read_addr = 0x02800000 + offset;
         if (!bulkRead(amp, read_addr, xm_dump_buffer + offset, read_len, TRACE_DUMP)) {
             CIRRUS_ERR("Failed to read XM RAM at offset 0x%08X", read_addr);
             dump_success = false;
@@ -2057,6 +2146,11 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
         return;
     }
     
+    CIRRUS_LOG("Amp %s: Stopping HALO Core before firmware upload", amp.name);
+    updateRegisterBits(amp, 0x02BC1000, 0x00000001, 0x00000000); // HALO_CORE_EN (bit 0)
+    updateRegisterBits(amp, 0x02B80010, 0x00000001, 0x00000001); // HALO_CORE_SOFT_RESET
+    IOSleep(2);
+    
     FirmwareImage *image = (FirmwareImage *)IOMalloc(sizeof(FirmwareImage));
     if (!image) {
         CIRRUS_ERR("Amp %s: Failed to allocate memory for FirmwareImage", amp.name);
@@ -2085,9 +2179,30 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
     
     UploadSession session;
     if (CirrusFirmwareScheduler::run(amp, this, *mappedImg, session)) {
-        CIRRUS_LOG("Phase 5C Complete for amp %s", amp.name);
+        CIRRUS_LOG("Amp %s: WMFW Upload Complete", amp.name);
     } else {
-        CIRRUS_ERR("Amp %s: Phase 5C FAILED", amp.name);
+        CIRRUS_ERR("Amp %s: WMFW Upload FAILED", amp.name);
+    }
+
+    if (amp.binData && amp.binSize > 0) {
+        if (CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
+            CIRRUS_LOG("Amp %s: BIN Parse OK. Found %u Coeffs.", amp.name, image->coefficientCount);
+            
+            MappedImage *coeffMapped = (MappedImage *)IOMalloc(sizeof(MappedImage));
+            if (coeffMapped) {
+                if (CirrusFirmwareMapper::mapCoefficients(*image, *coeffMapped)) {
+                    CIRRUS_LOG("Amp %s: Coefficient Upload Starting...", amp.name);
+                    CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session);
+                } else {
+                    CIRRUS_ERR("Amp %s: Coefficient Mapping Failed!", amp.name);
+                }
+                IOFree(coeffMapped, sizeof(MappedImage));
+            }
+        } else {
+            CIRRUS_ERR("Amp %s: BIN parse failed", amp.name);
+        }
+    } else {
+        CIRRUS_LOG("Amp %s: No BIN data, skipping coefficient upload", amp.name);
     }
 
     IOFree(mappedImg, sizeof(MappedImage));

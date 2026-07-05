@@ -103,7 +103,8 @@ struct FirmwareRegion {
 struct AlgorithmInfo {
     uint32_t   id;
     RegionType region;
-    uint32_t   baseWordOffset;
+    uint32_t   baseWordOffset; // xm_base
+    uint32_t   ymBaseWordOffset; // ym_base
     uint32_t   size;
 };
 
@@ -261,9 +262,7 @@ public:
                 for (uint32_t a = 0; a < image.algorithmCount; a++) {
                     if (image.algorithms[a].id == coeff.id) {
                         alg_xm_base = image.algorithms[a].baseWordOffset;
-                        // For Halo, ym_base is typically after xm_size in the struct, but we didn't save ym_base in AlgorithmInfo!
-                        // Let's assume algorithm type is XM for now or we must fetch YM.
-                        // Wait, Linux maps based on coeff.type.
+                        alg_ym_base = image.algorithms[a].ymBaseWordOffset;
                         found = true;
                         break;
                     }
@@ -286,9 +285,10 @@ public:
                 MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
                 if (status != MappingStatus::OK) return false;
             } else if (type_masked == WMFW_HALO_YM_PACKED) {
-                // We need ym_base. For now we skip or we add ym_base to AlgorithmInfo.
-                CIRRUS_LOG("YM_PACKED Coeff mapping not yet implemented");
-                continue;
+                outReg.regionType = RegionType::YM_PACKED;
+                outReg.firmwareAddress = alg_ym_base + coeff.offset;
+                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
+                if (status != MappingStatus::OK) return false;
             } else {
                 CIRRUS_LOG("Unsupported Coefficient Type 0x%X", type_masked);
                 continue;
@@ -537,7 +537,8 @@ public:
 
             AlgorithmInfo &alg = outImage.algorithms[outImage.algorithmCount++];
             alg.id             = alg_id;
-            alg.baseWordOffset = readPacked24BE(vmem, base + 2); // xm_base
+            alg.baseWordOffset = alg_xm_base; // xm_base
+            alg.ymBaseWordOffset = readPacked24BE(vmem, base+3); // ym_base
             alg.size           = 0; // Not available in 5-word struct
             alg.region         = RegionType::XM_PACKED;
 

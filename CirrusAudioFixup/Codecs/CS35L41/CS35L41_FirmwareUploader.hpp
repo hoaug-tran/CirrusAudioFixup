@@ -459,7 +459,7 @@ public:
                 session.passCount++;
                 session.totalBytes        += res.bytes;
                 session.totalTransactions += res.transactionCount;
-                CIRRUS_LOG("Amp %s:   Region %d (%s) PASS (%d ms)", amp.name, i, rname, elapsed_ms);
+                CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", amp.name, i, rname, region.dspRegister, elapsed_ms);
             } else {
                 CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", amp.name, i, rname);
                 break;

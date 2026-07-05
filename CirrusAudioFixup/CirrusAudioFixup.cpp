@@ -397,9 +397,8 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                                 
                                 bool isFullUpload = (strncmp(phaseArg, "5C.4", 4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
                                 if (isFullUpload) {
-                                    // DSP Bringup (phase5b) MUST NOT be called here until Phase 5D.1 (Coefficient Upload) is fully implemented!
-                                    // Booting the DSP with firmware but without coefficients causes a DSP panic, which pulls down the ACP and hangs the APU (Black Screen).
-                                    CIRRUS_LOG("Amp %s: Skipping DSP Bringup because Coefficient Upload is not yet implemented.", amp.name);
+                                    CIRRUS_LOG("Amp %s: Bringing up DSP after full Firmware Upload", amp.name);
+                                    phase5b_DSPBringup(amp);
                                 }
                             }
                         }
@@ -1210,9 +1209,8 @@ static const RegisterSequence asp_sequence[] = {
     { CS35L41_DSP1_RX3_SRC, 0, 0x00000018, 0, false },
     { CS35L41_DSP1_RX4_SRC, 0, 0x00000019, 0, false },
     { CS35L41_DSP1_RX6_SRC, 0, 0x00000029, 0, false },
-    { CS35L41_SP_HIZ_CTRL, 0, 0x00000003, 0, false }
-    // DO NOT ENABLE ASP YET! Enabling it without fully configuring the DSP and Global Enable causes CoreAudio to freeze the AMD ACP via I2S.
-    // { CS35L41_SP_ENABLES, 0, 0x00010001, 0, false }
+    { CS35L41_SP_HIZ_CTRL, 0, 0x00000003, 0, false },
+    { CS35L41_SP_ENABLES, 0, 0x00010001, 0, false }
 };
 
 bool CirrusAudioFixup::applyASP(CS35L41Amp &amp) {

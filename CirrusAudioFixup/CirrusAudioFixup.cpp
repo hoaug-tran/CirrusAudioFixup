@@ -398,21 +398,41 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
             
             // Step 9: Mailbox Resume (DSP to RUN state)
             CIRRUS_LOG("Amp %s: Step 9 (Mailbox Resume) Starting...", amp.name);
-            writeRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, HALO_CORE_EN, TRACE_DUMP);
+            
+            auto logDSPState = [&](const char *label, uint32_t ms) {
+                uint32_t core_ctrl=0, mbox1=0, mbox2=0, irq1=0, irq2=0;
+                readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl);
+                readRegister(amp, CS35L41_DSP_MBOX_1, &mbox1);
+                readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
+                readRegister(amp, CS35L41_IRQ1_STATUS1, &irq1);
+                readRegister(amp, CS35L41_IRQ1_STATUS2, &irq2);
+                CIRRUS_LOG("Amp %s: [%s] ms=%u CORE_CTRL=0x%08X MBOX1=0x%08X MBOX2=0x%08X IRQ1=0x%08X IRQ2=0x%08X",
+                           amp.name, label, ms, core_ctrl, mbox1, mbox2, irq1, irq2);
+            };
+
+            logDSPState("Before Resume", 0);
+
+            // CS35L41_DSP1_MAC_EN (0x100) MUST be set, otherwise the DSP hangs the I2C bus!
+            uint32_t run_flags = HALO_CORE_EN | 0x00000100;
+            updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, run_flags, run_flags, TRACE_DUMP);
             writeRegister(amp, CS35L41_DSP_MBOX_1, 0x00000001, TRACE_DUMP);
 
             uint32_t current_mbox = 0;
             uint32_t ms = 0;
             while (ms < 500) {
+                if (ms == 0 || ms == 10 || ms == 20 || ms == 50 || ms == 100 || ms == 200) {
+                    logDSPState("Polling", ms);
+                }
                 readRegister(amp, CS35L41_DSP_MBOX_2, &current_mbox);
                 if (current_mbox != 0) {
-                    CIRRUS_LOG("Amp %s: Mailbox reached state 0x%08X after %u ms", amp.name, current_mbox, ms);
+                    logDSPState("Reached RUNNING", ms);
                     break;
                 }
                 IODelay(1000);
                 ms++;
             }
             if (current_mbox == 0) {
+                logDSPState("Timeout", ms);
                 CIRRUS_ERR("Amp %s: Mailbox timeout after 500ms!", amp.name);
             }
             
@@ -1132,9 +1152,9 @@ bool CirrusAudioFixup::cs35l41_register_errata_patch(CS35L41Amp &amp) {
         }
     }
     
-    // Write 0 to CCM_CORE_CTRL per Linux implementation
-    if (!writeRegister(amp, 0x02BC1000, 0x00000000)) { // CS35L41_DSP1_CCM_CORE_CTRL
-        CIRRUS_ERR("Amp %s: Failed to write CCM_CORE_CTRL", amp.name);
+    // Write 0 to HALO_CORE_EN per Linux implementation, but preserve MAC_EN (0x100)
+    if (!updateRegisterBits(amp, 0x02BC1000, HALO_CORE_EN, 0x00000000)) { // CS35L41_DSP1_CCM_CORE_CTRL
+        CIRRUS_ERR("Amp %s: Failed to clear HALO_CORE_EN in CCM_CORE_CTRL", amp.name);
         return false;
     }
     

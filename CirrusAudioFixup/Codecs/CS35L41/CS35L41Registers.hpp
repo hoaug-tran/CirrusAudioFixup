@@ -325,8 +325,14 @@ static const RegisterDesc cs35l41_reg_desc[] = {
 #define CS35L41_DSP1_SYS_CORE_ID        0x025E0008
 #define CS35L41_DSP_MBOX_1              0x00013000
 #define CS35L41_DSP_MBOX_2              0x00013004
+#define CS35L41_DSP_VIRT1_MBOX_1        0x00013020
+
+#define CSPL_MBOX_CMD_RESUME            2
+#define CSPL_MBOX_STS_RUNNING           0
 #define CS35L41_IRQ1_STATUS1            0x00010010
 #define CS35L41_IRQ1_STATUS2            0x00010014
+#define CS35L41_IRQ2_STATUS             0x00010804
+
 #define HALO_CORE_EN                    0x00000001
 #define HALO_CORE_RESET                 0x00000200
 #define CS35L41_DSP1_MPU_LOCK_CONFIG    0x02BC3140

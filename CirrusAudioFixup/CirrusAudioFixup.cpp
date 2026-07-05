@@ -397,17 +397,18 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
             }
             
             // Step 9: Mailbox Resume (DSP to RUN state)
-            CIRRUS_LOG("Amp %s: Step 9 (Mailbox Resume) Starting...", amp.name);
+            CIRRUS_LOG("Amp %s: ==== Mailbox Resume ====", amp.name);
             
             auto logDSPState = [&](const char *label, uint32_t ms) {
-                uint32_t core_ctrl=0, mbox1=0, mbox2=0, irq1=0, irq2=0;
+                uint32_t core_ctrl=0, virt_mbox1=0, mbox2=0, irq1_1=0, irq1_2=0, irq2=0;
                 readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl);
-                readRegister(amp, CS35L41_DSP_MBOX_1, &mbox1);
+                readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &virt_mbox1);
                 readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
-                readRegister(amp, CS35L41_IRQ1_STATUS1, &irq1);
-                readRegister(amp, CS35L41_IRQ1_STATUS2, &irq2);
-                CIRRUS_LOG("Amp %s: [%s] ms=%u CORE_CTRL=0x%08X MBOX1=0x%08X MBOX2=0x%08X IRQ1=0x%08X IRQ2=0x%08X",
-                           amp.name, label, ms, core_ctrl, mbox1, mbox2, irq1, irq2);
+                readRegister(amp, CS35L41_IRQ1_STATUS1, &irq1_1);
+                readRegister(amp, CS35L41_IRQ1_STATUS2, &irq1_2);
+                readRegister(amp, CS35L41_IRQ2_STATUS, &irq2);
+                CIRRUS_LOG("Amp %s: [%s] elapsed=%u ms | CORE=0x%08X VIRT_MBOX1=0x%X MBOX2=0x%X IRQ1_1=0x%08X IRQ1_2=0x%08X IRQ2=0x%08X",
+                           amp.name, label, ms, core_ctrl, virt_mbox1, mbox2, irq1_1, irq1_2, irq2);
             };
 
             logDSPState("Before Resume", 0);
@@ -415,23 +416,35 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
             // CS35L41_DSP1_MAC_EN (0x100) MUST be set, otherwise the DSP hangs the I2C bus!
             uint32_t run_flags = HALO_CORE_EN | 0x00000100;
             updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, run_flags, run_flags, TRACE_DUMP);
-            writeRegister(amp, CS35L41_DSP_MBOX_1, 0x00000001, TRACE_DUMP);
+            
+            // Send RESUME command
+            CIRRUS_LOG("Amp %s: Write: REG 0x13020 <- 0x00000002", amp.name);
+            writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, CSPL_MBOX_CMD_RESUME, TRACE_DUMP);
 
-            uint32_t current_mbox = 0;
+            logDSPState("Immediate After Write", 0);
+
+            uint32_t virt_mbox1 = 0, mbox2 = 0xFFFFFFFF;
             uint32_t ms = 0;
-            while (ms < 500) {
-                if (ms == 0 || ms == 10 || ms == 20 || ms == 50 || ms == 100 || ms == 200) {
-                    logDSPState("Polling", ms);
-                }
-                readRegister(amp, CS35L41_DSP_MBOX_2, &current_mbox);
-                if (current_mbox != 0) {
+            bool reached_running = false;
+            
+            while (ms <= 500) {
+                readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &virt_mbox1);
+                readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
+                
+                if (mbox2 == CSPL_MBOX_STS_RUNNING) {
+                    reached_running = true;
                     logDSPState("Reached RUNNING", ms);
                     break;
                 }
+                
+                if (ms == 0 || ms == 1 || ms == 2 || ms == 5 || ms == 10 || ms == 50 || ms == 100 || ms == 250 || ms == 500) {
+                    logDSPState("Polling", ms);
+                }
+                
                 IODelay(1000);
                 ms++;
             }
-            if (current_mbox == 0) {
+            if (!reached_running) {
                 logDSPState("Timeout", ms);
                 CIRRUS_ERR("Amp %s: Mailbox timeout after 500ms!", amp.name);
             }

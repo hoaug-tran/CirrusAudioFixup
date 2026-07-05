@@ -52,6 +52,20 @@ struct wmfw_region {
 #pragma pack(pop)
 
 #define MAX_FIRMWARE_REGIONS 32
+#define MAX_MAPPED_REGIONS   192  // WMFW regions(~8) + coefficient blocks(up to 128) + headroom
+
+// Halo ID Header layout (24-bit packed words in XM memory)
+static constexpr uint32_t kHaloFwIdWord          = 2;
+static constexpr uint32_t kHaloNAlgsWord         = 8;
+static constexpr uint32_t kHaloAlgTableStartWord = 9;
+static constexpr uint32_t kHaloAlgEntryWords     = 6;
+static constexpr uint32_t kHaloIdHdrWords        = 9;  // words before alg table
+
+// Helper: read a 24-bit packed big-endian word from packed XM memory
+static inline uint32_t readPacked24BE(const uint8_t *data, uint32_t wordIdx) {
+    const uint32_t b = wordIdx * 3;
+    return ((uint32_t)data[b] << 16) | ((uint32_t)data[b+1] << 8) | (uint32_t)data[b+2];
+}
 
 enum class RegionType : uint32_t {
     PM_PACKED = 0x10,
@@ -143,7 +157,7 @@ struct MappedRegion {
 };
 
 struct MappedImage {
-    MappedRegion regions[MAX_FIRMWARE_REGIONS];
+    MappedRegion regions[MAX_MAPPED_REGIONS]; // 32 firmware + up to 128 coefficient blocks
     uint32_t regionCount;
     uint32_t mappingCrc;
 };
@@ -173,6 +187,10 @@ public:
         outMapped.mappingCrc = 0xFFFFFFFF;
         
         for (uint32_t i = 0; i < image.regionCount; i++) {
+            if (outMapped.regionCount >= MAX_MAPPED_REGIONS) {
+                CIRRUS_ERR("mapFirmwareImage: MAX_MAPPED_REGIONS overflow at region %d", i);
+                return false;
+            }
             const FirmwareRegion &inReg = image.regions[i];
             MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
             
@@ -371,8 +389,8 @@ public:
             }
         }
 
-        if (vmem_size < 27) {  // need at least 9 words = 27 bytes
-            CIRRUS_ERR("XM region too small (%zu bytes) for Halo ID header", vmem_size);
+        if (vmem_size < kHaloIdHdrWords * 3) {  // need at least 9 words = 27 bytes
+            CIRRUS_ERR("XM region too small (%zu bytes) for Halo ID header (need %u)", vmem_size, kHaloIdHdrWords * 3);
             return;
         }
 
@@ -389,39 +407,47 @@ public:
             }
         }
 
-        // Helper: read a 24-bit packed word (MSB first) at word index
-        auto rd = [&](uint32_t wi) -> uint32_t {
-            size_t b = wi * 3;
-            if (b + 2 >= vmem_size) return 0;
-            return ((uint32_t)vmem[b] << 16) | ((uint32_t)vmem[b+1] << 8) | vmem[b+2];
-        };
-
-        outImage->fw_id = rd(2);
-        uint32_t n_algs = rd(8);
+        // Use file-scope readPacked24BE() with named constants
+        outImage->fw_id = readPacked24BE(vmem, kHaloFwIdWord);
+        uint32_t n_algs = readPacked24BE(vmem, kHaloNAlgsWord);
 
         CIRRUS_LOG("Halo ID: fw_id=0x%06X xm_base=0x%06X xm_size=%u ym_base=0x%06X ym_size=%u n_algs=%u",
-                   outImage->fw_id, rd(4), rd(5), rd(6), rd(7), n_algs);
+                   outImage->fw_id,
+                   readPacked24BE(vmem, 4), readPacked24BE(vmem, 5),
+                   readPacked24BE(vmem, 6), readPacked24BE(vmem, 7),
+                   n_algs);
 
-        if (n_algs == 0 || n_algs > 16) {
-            CIRRUS_ERR("n_algs=%u out of range [1-16]; aborting algorithm extraction", n_algs);
+        if (n_algs == 0 || n_algs > 32) {
+            CIRRUS_ERR("n_algs=%u out of range [1-32]; aborting algorithm extraction", n_algs);
             IOFree(vmem, vmem_size);
             return;
         }
 
-        // Entries start at word 9 (after 9-word header), each entry = 6 words
+        // Bounds check: make sure the algorithm table fits within vmem
+        size_t requiredBytes = (kHaloAlgTableStartWord + n_algs * kHaloAlgEntryWords) * 3;
+        if (requiredBytes > vmem_size) {
+            CIRRUS_ERR("Algorithm table OOB: n_algs=%u required=%zu vmem=%zu", n_algs, requiredBytes, vmem_size);
+            IOFree(vmem, vmem_size);
+            return;
+        }
+
+        // Parse algorithm entries: start at word kHaloAlgTableStartWord, each entry = kHaloAlgEntryWords words
         for (uint32_t i = 0; i < n_algs && outImage->algorithmCount < 32; i++) {
-            uint32_t base   = 9 + i * 6;
-            uint32_t alg_id = rd(base);
+            uint32_t base   = kHaloAlgTableStartWord + i * kHaloAlgEntryWords;
+            uint32_t alg_id = readPacked24BE(vmem, base);
             if (alg_id == 0 || alg_id == 0xFFFFFF) continue;
 
             AlgorithmInfo &alg = outImage->algorithms[outImage->algorithmCount++];
             alg.id             = alg_id;
-            alg.baseWordOffset = rd(base + 2); // xm_base
-            alg.size           = rd(base + 3); // xm_size
+            alg.baseWordOffset = readPacked24BE(vmem, base + 2); // xm_base
+            alg.size           = readPacked24BE(vmem, base + 3); // xm_size
             alg.region         = RegionType::XM_PACKED;
 
             CIRRUS_LOG("Algorithm[%u]: id=0x%06X ver=0x%06X XM@0x%06X+%u YM@0x%06X+%u",
-                       i, alg_id, rd(base+1), rd(base+2), rd(base+3), rd(base+4), rd(base+5));
+                       i, alg_id,
+                       readPacked24BE(vmem, base+1),
+                       readPacked24BE(vmem, base+2), readPacked24BE(vmem, base+3),
+                       readPacked24BE(vmem, base+4), readPacked24BE(vmem, base+5));
         }
 
         CIRRUS_LOG("extractHaloAlgorithms: found %u algorithms", outImage->algorithmCount);
@@ -432,7 +458,7 @@ public:
         if (!outImage) return false;
         
         // Header is wmfw_coeff_hdr: magic(4), len(4), rev(4), core(4)
-        if (size < 16) {
+        if (size < 12) {
             CIRRUS_ERR("BIN file too small for header");
             return false;
         }
@@ -442,8 +468,13 @@ public:
             return false;
         }
         
-        uint32_t file_len = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24); // len is Little Endian
-        uint32_t pos = 16; // Coefficients start immediately after the 16-byte header
+        uint32_t hdr_len = data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24); // len is Little Endian
+        if (hdr_len < 12 || hdr_len > size) {
+            CIRRUS_ERR("BIN invalid header len %u", hdr_len);
+            return false;
+        }
+
+        uint32_t pos = hdr_len; // Coefficients start immediately after the header
         
         while (pos < size && outImage->coefficientCount < 128) {
             if (size - pos < 20) { // wmfw_coeff_item is 20 bytes

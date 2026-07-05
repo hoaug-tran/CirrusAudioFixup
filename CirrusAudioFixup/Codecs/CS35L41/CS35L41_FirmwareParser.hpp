@@ -55,11 +55,11 @@ struct wmfw_region {
 #define MAX_MAPPED_REGIONS   192  // WMFW regions(~8) + coefficient blocks(up to 128) + headroom
 
 // Halo ID Header layout (24-bit packed words in XM memory)
-static constexpr uint32_t kHaloFwIdWord          = 2;
-static constexpr uint32_t kHaloNAlgsWord         = 8;
-static constexpr uint32_t kHaloAlgTableStartWord = 9;
-static constexpr uint32_t kHaloAlgEntryWords     = 6;
-static constexpr uint32_t kHaloIdHdrWords        = 9;  // words before alg table
+static constexpr uint32_t kHaloFwIdWord          = 3;  // In wmfw_v3_id_hdr, id is word 3 (vendor_id is word 2)
+static constexpr uint32_t kHaloNAlgsWord         = 9;  // n_algs is word 9
+static constexpr uint32_t kHaloAlgTableStartWord = 10; // 10 words in header
+static constexpr uint32_t kHaloAlgEntryWords     = 6;  // 6 words per algorithm
+static constexpr uint32_t kHaloIdHdrWords        = 10; // words before alg table
 
 // Helper: read a 24-bit packed big-endian word from packed XM memory
 static inline uint32_t readPacked24BE(const uint8_t *data, uint32_t wordIdx) {
@@ -363,14 +363,15 @@ public:
     //
     // wmfw_halo_id_hdr layout (each field = 1 DSP word = 3 bytes packed):
     //   word 0: core_id
-    //   word 1: core_rev
-    //   word 2: fw_id     <-- firmware ID
-    //   word 3: fw_ver
-    //   word 4: xm_base
-    //   word 5: xm_size
-    //   word 6: ym_base
-    //   word 7: ym_size
-    //   word 8: n_algs    <-- number of algorithms (0-indexed)
+    //   word 1: block_rev
+    //   word 2: vendor_id
+    //   word 3: id        <-- firmware ID
+    //   word 4: ver       <-- firmware version
+    //   word 5: xm_base
+    //   word 6: xm_size
+    //   word 7: ym_base
+    //   word 8: ym_size
+    //   word 9: n_algs    <-- number of algorithms (0-indexed)
     // Then n_algs x wmfw_halo_alg_hdr (6 words each):
     //   word 0: alg_id
     //   word 1: alg_ver
@@ -413,12 +414,12 @@ public:
 
         CIRRUS_LOG("Halo ID: fw_id=0x%06X xm_base=0x%06X xm_size=%u ym_base=0x%06X ym_size=%u n_algs=%u",
                    outImage->fw_id,
-                   readPacked24BE(vmem, 4), readPacked24BE(vmem, 5),
-                   readPacked24BE(vmem, 6), readPacked24BE(vmem, 7),
+                   readPacked24BE(vmem, 5), readPacked24BE(vmem, 6),
+                   readPacked24BE(vmem, 7), readPacked24BE(vmem, 8),
                    n_algs);
 
-        if (n_algs == 0 || n_algs > 32) {
-            CIRRUS_ERR("n_algs=%u out of range [1-32]; aborting algorithm extraction", n_algs);
+        if (n_algs == 0 || n_algs > 255) {
+            CIRRUS_ERR("n_algs=%u out of range [1-255]; aborting algorithm extraction", n_algs);
             IOFree(vmem, vmem_size);
             return;
         }

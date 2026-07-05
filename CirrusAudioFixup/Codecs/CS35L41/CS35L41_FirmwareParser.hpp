@@ -342,93 +342,89 @@ public:
     // Note: This is a Halo firmware specific extraction.
     // The Algorithm Table is scattered across multiple XM_PACKED regions.
     // We assemble a virtual memory buffer and parse it.
+    //
+    // wmfw_halo_id_hdr layout (each field = 1 DSP word = 3 bytes packed):
+    //   word 0: core_id
+    //   word 1: core_rev
+    //   word 2: fw_id     <-- firmware ID
+    //   word 3: fw_ver
+    //   word 4: xm_base
+    //   word 5: xm_size
+    //   word 6: ym_base
+    //   word 7: ym_size
+    //   word 8: n_algs    <-- number of algorithms (0-indexed)
+    // Then n_algs x wmfw_halo_alg_hdr (6 words each):
+    //   word 0: alg_id
+    //   word 1: alg_ver
+    //   word 2: xm_base
+    //   word 3: xm_size
+    //   word 4: ym_base
+    //   word 5: ym_size
     static void extractHaloAlgorithms(FirmwareImage *outImage) {
         size_t vmem_size = 0;
-        
-        // 1. Calculate max vmem size
+
         for (uint32_t i = 0; i < outImage->regionCount; i++) {
             const FirmwareRegion &reg = outImage->regions[i];
             if (reg.regionType == RegionType::XM_PACKED) {
-                uint32_t byte_offset = reg.baseWordOffset * 3;
-                size_t end_pos = byte_offset + reg.length;
-                if (end_pos > vmem_size) {
-                    vmem_size = end_pos;
-                }
+                size_t end_pos = (size_t)(reg.baseWordOffset * 3) + reg.length;
+                if (end_pos > vmem_size) vmem_size = end_pos;
             }
         }
-        
-        if (vmem_size == 0) return;
-        
+
+        if (vmem_size < 27) {  // need at least 9 words = 27 bytes
+            CIRRUS_ERR("XM region too small (%zu bytes) for Halo ID header", vmem_size);
+            return;
+        }
+
         uint8_t *vmem = (uint8_t *)IOMalloc(vmem_size);
         if (!vmem) return;
         memset(vmem, 0, vmem_size);
 
-        // 2. Map regions to vmem and check for overlaps/holes
-        size_t current_mapped_end = 0;
         for (uint32_t i = 0; i < outImage->regionCount; i++) {
             const FirmwareRegion &reg = outImage->regions[i];
             if (reg.regionType == RegionType::XM_PACKED) {
                 uint32_t byte_offset = reg.baseWordOffset * 3;
-                
-                if (byte_offset < current_mapped_end) {
-                    CIRRUS_LOG("WARNING: XM overlap detected! Old end=0x%zX, New region offset=0x%X", current_mapped_end, byte_offset);
-                } else if (byte_offset > current_mapped_end && current_mapped_end > 0) {
-                    CIRRUS_LOG("INFO: XM hole detected from 0x%zX to 0x%X (filled with zero)", current_mapped_end, byte_offset);
-                }
-                
-                if (byte_offset + reg.length <= vmem_size) {
+                if (byte_offset + reg.length <= vmem_size)
                     memcpy(vmem + byte_offset, reg.data, reg.length);
-                    if (byte_offset + reg.length > current_mapped_end) {
-                        current_mapped_end = byte_offset + reg.length;
-                    }
-                }
             }
         }
 
-        // 3. Parse wmfw_halo_id_hdr from offset 0
-        if (vmem_size >= 12) {
-            uint32_t fw_id = (vmem[2*3] << 16) | (vmem[2*3+1] << 8) | vmem[2*3+2];
-            outImage->fw_id = fw_id;
+        // Helper: read a 24-bit packed word (MSB first) at word index
+        auto rd = [&](uint32_t wi) -> uint32_t {
+            size_t b = wi * 3;
+            if (b + 2 >= vmem_size) return 0;
+            return ((uint32_t)vmem[b] << 16) | ((uint32_t)vmem[b+1] << 8) | vmem[b+2];
+        };
+
+        outImage->fw_id = rd(2);
+        uint32_t n_algs = rd(8);
+
+        CIRRUS_LOG("Halo ID: fw_id=0x%06X xm_base=0x%06X xm_size=%u ym_base=0x%06X ym_size=%u n_algs=%u",
+                   outImage->fw_id, rd(4), rd(5), rd(6), rd(7), n_algs);
+
+        if (n_algs == 0 || n_algs > 16) {
+            CIRRUS_ERR("n_algs=%u out of range [1-16]; aborting algorithm extraction", n_algs);
+            IOFree(vmem, vmem_size);
+            return;
         }
 
-        if (vmem_size >= 30) {
-            // wmfw_halo_id_hdr has 10 32-bit words, stored as 3 bytes each
-            uint32_t n_algs = (vmem[9*3] << 16) | (vmem[9*3+1] << 8) | vmem[9*3+2];
-            
-            uint32_t valid_algs = 0;
-            uint32_t discarded_algs = 0;
-            
-            if (n_algs > 0 && n_algs < 256 && (30 + n_algs * 18) <= vmem_size) {
-                for (uint32_t i = 0; i < n_algs && outImage->algorithmCount < 128; i++) {
-                    size_t alg_pos = 30 + (i * 18);
-                    uint32_t alg_id = (vmem[alg_pos] << 16) | (vmem[alg_pos+1] << 8) | vmem[alg_pos+2];
-                    
-                    // Skip empty or garbage slots
-                    if (alg_id == 0 || alg_id == 0xFFFFFF) {
-                        discarded_algs++;
-                        continue;
-                    }
-                    
-                    uint32_t xm_base = (vmem[alg_pos+6] << 16) | (vmem[alg_pos+7] << 8) | vmem[alg_pos+8];
-                    
-                    AlgorithmInfo &alg = outImage->algorithms[outImage->algorithmCount++];
-                    alg.id = alg_id;
-                    alg.baseWordOffset = xm_base;
-                    alg.region = RegionType::XM_PACKED;
-                    valid_algs++;
-                    
-                    CIRRUS_LOG("Algorithm %u:\n  ID        = 0x%08X\n  Region    = XM\n  Base      = 0x%08X", 
-                               outImage->algorithmCount - 1, alg.id, alg.baseWordOffset);
-                }
-                
-                CIRRUS_LOG("Algorithm table entries: %u", n_algs);
-                CIRRUS_LOG("  Valid     : %u", valid_algs);
-                CIRRUS_LOG("  Discarded : %u", discarded_algs);
-            } else {
-                CIRRUS_ERR("Failed to extract algorithms: n_algs=%u, vmem_size=%zu", n_algs, vmem_size);
-            }
+        // Entries start at word 9 (after 9-word header), each entry = 6 words
+        for (uint32_t i = 0; i < n_algs && outImage->algorithmCount < 32; i++) {
+            uint32_t base   = 9 + i * 6;
+            uint32_t alg_id = rd(base);
+            if (alg_id == 0 || alg_id == 0xFFFFFF) continue;
+
+            AlgorithmInfo &alg = outImage->algorithms[outImage->algorithmCount++];
+            alg.id             = alg_id;
+            alg.baseWordOffset = rd(base + 2); // xm_base
+            alg.size           = rd(base + 3); // xm_size
+            alg.region         = RegionType::XM_PACKED;
+
+            CIRRUS_LOG("Algorithm[%u]: id=0x%06X ver=0x%06X XM@0x%06X+%u YM@0x%06X+%u",
+                       i, alg_id, rd(base+1), rd(base+2), rd(base+3), rd(base+4), rd(base+5));
         }
-        
+
+        CIRRUS_LOG("extractHaloAlgorithms: found %u algorithms", outImage->algorithmCount);
         IOFree(vmem, vmem_size);
     }
 

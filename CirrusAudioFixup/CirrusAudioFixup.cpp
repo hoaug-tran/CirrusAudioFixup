@@ -395,10 +395,15 @@ void CirrusAudioFixup::probeAmp(CS35L41Amp &amp) {
                             if (strncmp(phaseArg, "5C", 2) == 0 || strncmp(phaseArg, "5D", 2) == 0) {
                                 phase5c_FirmwareUpload(amp, phaseArg);
                                 
-                                bool isFullUpload = (strncmp(phaseArg, "5C.4", 4) == 0 || strncmp(phaseArg, "5D", 2) == 0);
-                                if (isFullUpload) {
-                                    CIRRUS_LOG("Amp %s: Bringing up DSP after full Firmware Upload", amp.name);
+                                // Only boot DSP after 5C.4 (full WMFW upload).
+                                // 5D.x phases parse/cross-check only at this stage.
+                                // Booting DSP without coefficients causes DSP panic -> ACP crash -> black screen.
+                                bool shouldBootDsp = (strncmp(phaseArg, "5C.4", 4) == 0);
+                                if (shouldBootDsp) {
+                                    CIRRUS_LOG("Amp %s: Bringing up DSP after 5C.4 Firmware Upload", amp.name);
                                     phase5b_DSPBringup(amp);
+                                } else if (strncmp(phaseArg, "5D", 2) == 0) {
+                                    CIRRUS_LOG("Amp %s: 5D phase - DSP boot deferred until 5D.1 coefficient upload is complete", amp.name);
                                 }
                             }
                         }

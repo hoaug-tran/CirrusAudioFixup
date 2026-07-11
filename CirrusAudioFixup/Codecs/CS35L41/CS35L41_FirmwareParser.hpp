@@ -72,6 +72,8 @@ enum class RegionType : uint32_t {
     PM_PACKED = 0x10,
     XM_PACKED = 0x11,
     YM_PACKED = 0x12,
+    XM_UNPACKED = 0x5,
+    YM_UNPACKED = 0x6,
     ALGORITHM_DATA = 0xF2,
     METADATA = 0xFC,
     NAME_TEXT = 0xFE,
@@ -232,6 +234,12 @@ public:
             case RegionType::YM_PACKED:
                 regAddress = ((0x02C00000 + (wordOffset * 3)) & ~0x3) + byteOffset;
                 break;
+            case RegionType::XM_UNPACKED:
+                regAddress = 0x02800000 + (wordOffset * 4) + byteOffset;
+                break;
+            case RegionType::YM_UNPACKED:
+                regAddress = 0x03400000 + (wordOffset * 4) + byteOffset;
+                break;
             default:
                 return MappingStatus::UnsupportedRegion;
         }
@@ -264,7 +272,9 @@ public:
             
             if (outReg.regionType == RegionType::PM_PACKED || 
                 outReg.regionType == RegionType::XM_PACKED || 
-                outReg.regionType == RegionType::YM_PACKED) {
+                outReg.regionType == RegionType::YM_PACKED ||
+                outReg.regionType == RegionType::XM_UNPACKED ||
+                outReg.regionType == RegionType::YM_UNPACKED) {
                 
                 MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
                 if (status != MappingStatus::OK) {
@@ -334,14 +344,14 @@ public:
             uint32_t type_masked = coeff.type & 0xFF;
             
             // For CS35L41, the WMFW types for packed memory are used.
-            // WMFW_HALO_XM_PACKED = 0x11, YM_PACKED = 0x12
-            if (type_masked == WMFW_HALO_XM_PACKED) {
-                outReg.regionType = RegionType::XM_PACKED;
+            // WMFW_HALO_XM_PACKED = 0x11, YM_PACKED = 0x12, XM_UNPACKED = 0x5, YM_UNPACKED = 0x6
+            if (type_masked == WMFW_HALO_XM_PACKED || type_masked == 0x5) {
+                outReg.regionType = (type_masked == 0x5) ? RegionType::XM_UNPACKED : RegionType::XM_PACKED;
                 outReg.firmwareAddress = alg_xm_base + coeff.offset;
                 MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
                 if (status != MappingStatus::OK) return false;
-            } else if (type_masked == WMFW_HALO_YM_PACKED) {
-                outReg.regionType = RegionType::YM_PACKED;
+            } else if (type_masked == WMFW_HALO_YM_PACKED || type_masked == 0x6) {
+                outReg.regionType = (type_masked == 0x6) ? RegionType::YM_UNPACKED : RegionType::YM_PACKED;
                 outReg.firmwareAddress = alg_ym_base + coeff.offset;
                 MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
                 if (status != MappingStatus::OK) return false;

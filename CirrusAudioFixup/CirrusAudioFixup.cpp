@@ -2145,14 +2145,27 @@ void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
     CIRRUS_LOG("Amp %s: Entering Phase 5E (Dump ASP Registers)", amp.name);
     
     uint32_t asprx_en = 0, asptx_en = 0, frm_ctrl = 0, fmt = 0, clk = 0;
+    uint32_t tx_wl = 0, rx_wl = 0;
+    uint32_t rx1_src = 0, rx2_src = 0, rx3_src = 0, rx4_src = 0;
+    
     readRegister(amp, 0x00004808, &asprx_en); // CS35L41_SP_RX_EN
     readRegister(amp, 0x00004804, &asptx_en); // CS35L41_SP_TX_EN
     readRegister(amp, 0x00004818, &frm_ctrl); // CS35L41_SP_FRAME_CTRL
     readRegister(amp, 0x0000480C, &fmt);      // CS35L41_SP_FMT
     readRegister(amp, 0x00004800, &clk);      // CS35L41_SP_CLK_CTRL
+    readRegister(amp, 0x00004810, &tx_wl);    // CS35L41_SP_TX_WL
+    readRegister(amp, 0x00004814, &rx_wl);    // CS35L41_SP_RX_WL
+    
+    readRegister(amp, 0x00004C40, &rx1_src);  // CS35L41_DSP1_RX1_SRC
+    readRegister(amp, 0x00004C44, &rx2_src);  // CS35L41_DSP1_RX2_SRC
+    readRegister(amp, 0x00004C48, &rx3_src);  // CS35L41_DSP1_RX3_SRC
+    readRegister(amp, 0x00004C4C, &rx4_src);  // CS35L41_DSP1_RX4_SRC
     
     CIRRUS_LOG("Amp %s: ASP Dump -> RX_EN=0x%08X TX_EN=0x%08X FRM_CTRL=0x%08X FMT=0x%08X CLK=0x%08X",
                amp.name, asprx_en, asptx_en, frm_ctrl, fmt, clk);
+    CIRRUS_LOG("Amp %s: ASP WL -> TX_WL=0x%08X RX_WL=0x%08X", amp.name, tx_wl, rx_wl);
+    CIRRUS_LOG("Amp %s: ASP SRC -> RX1=0x%08X RX2=0x%08X RX3=0x%08X RX4=0x%08X",
+               amp.name, rx1_src, rx2_src, rx3_src, rx4_src);
 }
 
 // =====================================================================

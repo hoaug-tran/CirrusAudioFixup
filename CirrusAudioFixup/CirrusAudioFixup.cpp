@@ -1765,6 +1765,10 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_RAW_INIT_%s", amp.name);
     setProperty(propName, (uint64_t)mbox_init, 32);
     
+    // 5B.4.5 Send RESUME Command
+    CIRRUS_LOG("Amp %s: Sending DSP RESUME Mailbox Command...", amp.name);
+    writeRegister(amp, CS35L41_DSP_MBOX_1, 2); // CSPL_MBOX_CMD_RESUME = 2
+    
     // 5B.5 Mailbox Timeline Polling
     uint32_t current_mbox = post_mbox;
     uint32_t previous_mbox = post_mbox;

@@ -1971,7 +1971,7 @@ void CirrusAudioFixup::phase5c_1_DumpXMAndParseAlgorithms(CS35L41Amp &amp, Firmw
         uint32_t read_len = dump_size - offset;
         if (read_len > chunk_size) read_len = chunk_size;
         
-        uint32_t read_addr = 0x02800000 + offset;
+        uint32_t read_addr = 0x02000000 + offset;
         if (!bulkRead(amp, read_addr, xm_dump_buffer + offset, read_len, TRACE_DUMP)) {
             CIRRUS_ERR("Failed to read XM RAM at offset 0x%08X", read_addr);
             dump_success = false;

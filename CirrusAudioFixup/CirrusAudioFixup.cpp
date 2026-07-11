@@ -187,8 +187,15 @@ void CirrusAudioFixup::fullDriverFlow() {
         
         // Phase 6: Power On Amp
         phase6_PowerAmplifier(amp);
+        amp.needsSpkOutEnable = true;
         
         CIRRUS_LOG("Amp %s: Full Init Complete.", amp.name);
+    }
+    
+    mAudioMonitorTimer = IOTimerEventSource::timerEventSource(this, audioMonitorFired);
+    if (mAudioMonitorTimer && mWorkLoop->addEventSource(mAudioMonitorTimer) == kIOReturnSuccess) {
+        mAudioMonitorTimer->setTimeoutMS(500);
+        CIRRUS_LOG("Audio Monitor Timer started. Waiting for audio playback (PUP_DONE)...");
     }
     
     CIRRUS_LOG("--- FULL DRIVER FLOW COMPLETE ---");
@@ -201,8 +208,13 @@ void CirrusAudioFixup::stop(IOService *provider) {
         mProbeTimer->cancelTimeout();
         mWorkLoop->removeEventSource(mProbeTimer);
     }
+    if (mAudioMonitorTimer && mWorkLoop) {
+        mAudioMonitorTimer->cancelTimeout();
+        mWorkLoop->removeEventSource(mAudioMonitorTimer);
+    }
 
     OSSafeReleaseNULL(mProbeTimer);
+    OSSafeReleaseNULL(mAudioMonitorTimer);
     OSSafeReleaseNULL(mWorkLoop);
     mProvider = nullptr;
 
@@ -2116,54 +2128,93 @@ void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
     pwr_ctrl1 |= (1 << 0); // GLOBAL_EN
     writeRegister(amp, 0x00002014, pwr_ctrl1);
     
-    // Wait for PUP_DONE (bit 24 of IRQ1_STATUS1 0x10010)
-    int pup_timeout = 100;
-    uint32_t irq_status = 0;
-    while (pup_timeout > 0) {
-        readRegister(amp, 0x00010010, &irq_status); // CS35L41_IRQ1_STATUS1
-        if (irq_status & 0x01000000) {
-            break;
-        }
-        IODelay(1000);
-        pup_timeout--;
-    }
-    
-    if (pup_timeout == 0) {
-        CIRRUS_LOG("Amp %s: Phase 6 Warning - PUP_DONE timeout! irq=0x%08X", amp.name, irq_status);
-    } else {
-        CIRRUS_LOG("Amp %s: Phase 6 PUP_DONE asserted after %d ms", amp.name, 100 - pup_timeout);
-    }
-    
-    // Clear PUP_DONE bit
-    writeRegister(amp, 0x00010010, 0x01000000);
-    
-    // Send SPK_OUT_ENABLE (7) to Mailbox
-    CIRRUS_LOG("Amp %s: Sending DSP SPK_OUT_ENABLE (7) Mailbox Command...", amp.name);
-    writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, 7);
-    
-    // Poll MBOX_2 for completion
-    int mbox_timeout = 500;
-    uint32_t mbox2 = 0xFFFFFFFF;
-    while (mbox_timeout > 0) {
-        readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
-        if (mbox2 == 0) {
-            break;
-        }
-        IODelay(1000);
-        mbox_timeout--;
-    }
-    
-    CIRRUS_LOG("Amp %s: Phase 6 SPK_OUT_ENABLE completed with MBOX_2=0x%08X (timeout=%d)", amp.name, mbox2, mbox_timeout);
-    
-    // Read DSP State Variables to confirm
-    uint32_t halo_state = 0, cal_status = 0;
-    readRegister(amp, 0x02800250, &halo_state);
-    readRegister(amp, 0x02800270, &cal_status);
-    CIRRUS_LOG("Amp %s: DSP Controls AFTER Mailbox: HALO_STATE=0x%08X, CAL_STATUS=0x%08X", amp.name, halo_state, cal_status);
-    
     // Lock Test Key
     writeRegister(amp, 0x00000040, 0x000000CC);
     writeRegister(amp, 0x00000040, 0x00000033);
     
-    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON (GLOBAL_EN=1)", amp.name);
+    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON (GLOBAL_EN=1). Audio Monitor will wait for PUP_DONE.", amp.name);
+    
+    amp.needsSpkOutEnable = true;
+}
+
+void CirrusAudioFixup::audioMonitorFired(OSObject *owner, IOTimerEventSource *sender) {
+    CirrusAudioFixup *self = OSDynamicCast(CirrusAudioFixup, owner);
+    if (self) {
+        self->runAudioMonitor();
+    }
+}
+
+void CirrusAudioFixup::runAudioMonitor() {
+    bool anyNeedsPoll = false;
+    for (unsigned i = 0; i < 2; ++i) {
+        CS35L41Amp &amp = mAmps[i];
+        if (!amp.present || !amp.needsSpkOutEnable) continue;
+        
+        uint32_t irq_status = 0;
+        readRegister(amp, 0x00010010, &irq_status); // CS35L41_IRQ1_STATUS1
+        
+        if (irq_status & 0x01000000) { // PUP_DONE
+            // Clear PUP_DONE bit
+            writeRegister(amp, 0x00010010, 0x01000000);
+            
+            // Send SPK_OUT_ENABLE (7) to Mailbox
+            CIRRUS_LOG("Amp %s: Audio Playback Detected (PUP_DONE)! Sending SPK_OUT_ENABLE (7) Mailbox Command...", amp.name);
+            writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, 7);
+            
+            // Poll MBOX_2 for completion with Timeline Logging
+            int mbox_timeout = 500;
+            uint32_t current_mbox = 0xFFFFFFFF;
+            uint32_t previous_mbox = 0xFFFFFFFF;
+            readRegister(amp, CS35L41_DSP_MBOX_2, &previous_mbox);
+            
+            OSArray *timeline = OSArray::withCapacity(10);
+            uint32_t transitions = 0;
+            
+            if (timeline) {
+                char initialTimeline[64];
+                snprintf(initialTimeline, sizeof(initialTimeline), "0ms: 0x%08X", previous_mbox);
+                OSString *tStr = OSString::withCString(initialTimeline);
+                if (tStr) { timeline->setObject(tStr); tStr->release(); }
+            }
+            
+            int ms = 0;
+            while (ms <= mbox_timeout) {
+                readRegister(amp, CS35L41_DSP_MBOX_2, &current_mbox);
+                
+                if (current_mbox != previous_mbox) {
+                    transitions++;
+                    if (timeline) {
+                        char transitionStr[64];
+                        snprintf(transitionStr, sizeof(transitionStr), "%dms: 0x%08X", ms, current_mbox);
+                        OSString *tStr = OSString::withCString(transitionStr);
+                        if (tStr) { timeline->setObject(tStr); tStr->release(); }
+                    }
+                    previous_mbox = current_mbox;
+                }
+                
+                if (current_mbox == 0) {
+                    break;
+                }
+                IODelay(1000);
+                ms++;
+            }
+            
+            CIRRUS_LOG("Amp %s: SPK_OUT_ENABLE completed with MBOX_2=0x%08X (timeout_used=%d ms, transitions=%d)", amp.name, current_mbox, ms, transitions);
+            
+            char propName[64];
+            snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_POLL_%s", amp.name);
+            if (timeline) {
+                setProperty(propName, timeline);
+                timeline->release();
+            }
+            
+            amp.needsSpkOutEnable = false;
+        } else {
+            anyNeedsPoll = true;
+        }
+    }
+    
+    if (anyNeedsPoll && mAudioMonitorTimer) {
+        mAudioMonitorTimer->setTimeoutMS(500);
+    }
 }

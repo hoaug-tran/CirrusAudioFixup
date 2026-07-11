@@ -106,6 +106,8 @@ struct CS35L41Amp {
     size_t binSize;
     bool firmwareValidated;
     uint32_t final_crc;
+    
+    bool needsSpkOutEnable;
 };
 
 struct FirmwareImage;
@@ -139,10 +141,11 @@ private:
     IOService *mProvider { nullptr };
     IOWorkLoop *mWorkLoop { nullptr };
     IOTimerEventSource *mProbeTimer { nullptr };
+    IOTimerEventSource *mAudioMonitorTimer { nullptr };
 
     CS35L41Amp mAmps[2] {
-        { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0 },
-        { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0 },
+        { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0, nullptr, 0, nullptr, 0, false, 0, false },
+        { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0, nullptr, 0, nullptr, 0, false, 0, false },
     };
 
     static const size_t kTraceBufferSize = 1024;
@@ -226,8 +229,11 @@ private:
     bool applyPLL(CS35L41Amp &amp);
     bool applyASP(CS35L41Amp &amp);
     bool applyGPIO(CS35L41Amp &amp);
-
+    
     static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
+    static void audioMonitorFired(OSObject *owner, IOTimerEventSource *sender);
+    
+    void runAudioMonitor();
 };
 
 #endif /* CirrusAudioFixup_hpp */

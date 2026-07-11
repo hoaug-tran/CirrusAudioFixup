@@ -9,6 +9,8 @@
 #include "Codecs/CS35L41/CS35L41_FirmwareParser.hpp"
 #include "Codecs/CS35L41/CS35L41_FirmwareUploader.hpp"
 
+#define CIRRUS_BUILD_ID "commit-c8df89d-virt-mbox-test2"
+
 #define super IOService
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
 
@@ -37,6 +39,7 @@ bool CirrusAudioFixup::init(OSDictionary *properties) {
 
     setProperty("CirrusReachedInit", kOSBooleanTrue);
     CIRRUS_LOG("init");
+    CIRRUS_LOG("CirrusAudioFixup initialized. Build ID: %s", CIRRUS_BUILD_ID);
     return true;
 }
 
@@ -1765,7 +1768,14 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_RAW_INIT_%s", amp.name);
     setProperty(propName, (uint64_t)mbox_init, 32);
     
-    // 5B.4.5 Send RESUME Command
+    // 5B.4.5 Read DSP Controls Before RESUME
+    uint32_t pre_halo_state = 0, pre_cal_status = 0, pre_max_temp = 0;
+    readRegister(amp, 0x02800250, &pre_halo_state);
+    readRegister(amp, 0x02800270, &pre_cal_status);
+    readRegister(amp, 0x02800358, &pre_max_temp);
+    CIRRUS_LOG("Amp %s: DSP Controls BEFORE: HALO_STATE=0x%08X, CAL_STATUS=0x%08X, BDLOG_MAX_TEMP=0x%08X", amp.name, pre_halo_state, pre_cal_status, pre_max_temp);
+
+    // 5B.4.6 Send RESUME Command
     uint32_t mbox_1_before = 0, mbox_2_before = 0;
     readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &mbox_1_before);
     readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_2_before);

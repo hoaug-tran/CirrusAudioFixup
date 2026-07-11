@@ -336,125 +336,68 @@ void CirrusAudioFixup::phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseAr
         IOFree(wmfwMapped, sizeof(MappedImage));
     }
     
-    // Step 3: DSP Bringup
-    CIRRUS_LOG("Amp %s: Step 3 (DSP Bringup) Starting...", amp.name);
-    phase5b_DSPBringup(amp);
+    // Step 2.5: XM Dump & Algorithm Parse (MUST BE BEFORE DSP BRINGUP!)
+    CIRRUS_LOG("Amp %s: Step 2.5 (XM Dump & Algorithm Parse) Starting...", amp.name);
+    phase5c_1_DumpXMAndParseAlgorithms(amp, *image);
     
-    // Step 4: Verify DSP Alive
-    if (phase5b_1_VerifyDSPAlive(amp)) {
-        CIRRUS_LOG("Amp %s: Step 4 (Verify DSP Alive) OK.", amp.name);
-        
-        // Step 5: XM Dump & Algorithm Parse
-        phase5c_1_DumpXMAndParseAlgorithms(amp, *image);
-        
-        if (image->algorithmCount > 0) {
-            // Step 6: BIN Parse
-            if (amp.binData && amp.binSize > 0) {
-                if (CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
-                    CIRRUS_LOG("Amp %s: Step 6 (BIN Parse) OK. Found %u Coeffs.", amp.name, image->coefficientCount);
-                    
-                    uint32_t matchedBlocks = 0;
-                    uint32_t unknownBlocks = 0;
-                    for (uint32_t j = 0; j < image->coefficientCount; j++) {
-                        bool found = false;
-                        for (uint32_t i = 0; i < image->algorithmCount; i++) {
-                            if (image->coefficients[j].id == image->algorithms[i].id) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        // Treat global coeff matching FW ID as matched
-                        if (found || image->coefficients[j].id == image->fw_id) {
-                            matchedBlocks++;
-                        } else {
-                            unknownBlocks++;
+    if (image->algorithmCount > 0) {
+        // Step 6: BIN Parse
+        if (amp.binData && amp.binSize > 0) {
+            if (CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
+                CIRRUS_LOG("Amp %s: Step 6 (BIN Parse) OK. Found %u Coeffs.", amp.name, image->coefficientCount);
+                
+                uint32_t matchedBlocks = 0;
+                uint32_t unknownBlocks = 0;
+                for (uint32_t j = 0; j < image->coefficientCount; j++) {
+                    bool found = false;
+                    for (uint32_t i = 0; i < image->algorithmCount; i++) {
+                        if (image->coefficients[j].id == image->algorithms[i].id) {
+                            found = true;
+                            break;
                         }
                     }
-                    
-                    CIRRUS_LOG("==== Parser Confidence ====");
-                    CIRRUS_LOG("BIN blocks       : %u", image->coefficientCount);
-                    CIRRUS_LOG("Matched          : %u", matchedBlocks);
-                    CIRRUS_LOG("Unknown          : %u", unknownBlocks);
-                    
-                    // Step 7: Coefficient Mapper
-                    MappedImage *coeffMapped = (MappedImage *)IOMalloc(sizeof(MappedImage));
-                    if (coeffMapped) {
-                        if (CirrusFirmwareMapper::mapCoefficients(*image, *coeffMapped)) {
-                            // Step 8: Coefficient Upload
-                            CIRRUS_LOG("Amp %s: Step 8 (Coefficient Upload) Starting...", amp.name);
-                            UploadSession session;
-                            CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session, true);
-                        } else {
-                            CIRRUS_ERR("Amp %s: Step 7 Coefficient Mapping Failed!", amp.name);
-                        }
-                        IOFree(coeffMapped, sizeof(MappedImage));
+                    if (found || image->coefficients[j].id == image->fw_id) {
+                        matchedBlocks++;
+                    } else {
+                        unknownBlocks++;
                     }
-                } else {
-                    CIRRUS_ERR("Amp %s: Step 6 BIN parse failed", amp.name);
+                }
+                
+                CIRRUS_LOG("==== Parser Confidence ====");
+                CIRRUS_LOG("BIN blocks       : %u", image->coefficientCount);
+                CIRRUS_LOG("Matched          : %u", matchedBlocks);
+                CIRRUS_LOG("Unknown          : %u", unknownBlocks);
+                
+                // Step 7: Coefficient Mapper
+                MappedImage *coeffMapped = (MappedImage *)IOMalloc(sizeof(MappedImage));
+                if (coeffMapped) {
+                    if (CirrusFirmwareMapper::mapCoefficients(*image, *coeffMapped)) {
+                        // Step 8: Coefficient Upload
+                        CIRRUS_LOG("Amp %s: Step 8 (Coefficient Upload) Starting...", amp.name);
+                        UploadSession session;
+                        CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session, true);
+                    } else {
+                        CIRRUS_ERR("Amp %s: Step 7 Coefficient Mapping Failed!", amp.name);
+                    }
+                    IOFree(coeffMapped, sizeof(MappedImage));
                 }
             } else {
-                CIRRUS_LOG("Amp %s: No BIN data, skipping coefficient upload", amp.name);
+                CIRRUS_ERR("Amp %s: Step 6 BIN parse failed", amp.name);
             }
-            
-            // Step 9: Mailbox Resume (DSP to RUN state)
-            CIRRUS_LOG("Amp %s: ==== Mailbox Resume ====", amp.name);
-            
-            auto logDSPState = [&](const char *label, uint32_t ms) {
-                uint32_t core_ctrl=0, virt_mbox1=0, mbox2=0, irq1_1=0, irq1_2=0, irq2=0;
-                readRegister(amp, CS35L41_DSP1_CCM_CORE_CTRL, &core_ctrl);
-                readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &virt_mbox1);
-                readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
-                readRegister(amp, CS35L41_IRQ1_STATUS1, &irq1_1);
-                readRegister(amp, CS35L41_IRQ1_STATUS2, &irq1_2);
-                readRegister(amp, CS35L41_IRQ2_STATUS, &irq2);
-                CIRRUS_LOG("Amp %s: [%s] elapsed=%u ms | CORE=0x%08X VIRT_MBOX1=0x%X MBOX2=0x%X IRQ1_1=0x%08X IRQ1_2=0x%08X IRQ2=0x%08X",
-                           amp.name, label, ms, core_ctrl, virt_mbox1, mbox2, irq1_1, irq1_2, irq2);
-            };
-
-            logDSPState("Before Resume", 0);
-
-            // CS35L41_DSP1_MAC_EN (0x100) MUST be set, otherwise the DSP hangs the I2C bus!
-            uint32_t run_flags = HALO_CORE_EN | 0x00000100;
-            updateRegisterBits(amp, CS35L41_DSP1_CCM_CORE_CTRL, run_flags, run_flags, TRACE_DUMP);
-            
-            // Send RESUME command
-            CIRRUS_LOG("Amp %s: Write: REG 0x13020 <- 0x00000002", amp.name);
-            writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, CSPL_MBOX_CMD_RESUME, TRACE_DUMP);
-
-            logDSPState("Immediate After Write", 0);
-
-            uint32_t virt_mbox1 = 0, mbox2 = 0xFFFFFFFF;
-            uint32_t ms = 0;
-            bool reached_running = false;
-            
-            while (ms <= 500) {
-                readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &virt_mbox1);
-                readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
-                
-                if (mbox2 == CSPL_MBOX_STS_RUNNING) {
-                    reached_running = true;
-                    logDSPState("Reached RUNNING", ms);
-                    break;
-                }
-                
-                if (ms == 0 || ms == 1 || ms == 2 || ms == 5 || ms == 10 || ms == 50 || ms == 100 || ms == 250 || ms == 500) {
-                    logDSPState("Polling", ms);
-                }
-                
-                IODelay(1000);
-                ms++;
-            }
-            if (!reached_running) {
-                logDSPState("Timeout", ms);
-                CIRRUS_ERR("Amp %s: Mailbox timeout after 500ms!", amp.name);
-            }
-            
-            // Note: Since SP_ENABLES is 0 in phase4A2, no audio flows yet. CoreAudio will trigger SP_ENABLES later.
         } else {
-            CIRRUS_ERR("Amp %s: Failed to extract Algorithm Table, aborting tuning upload.", amp.name);
+            CIRRUS_LOG("Amp %s: No BIN data, skipping coefficient upload", amp.name);
         }
+    }
+    
+    // Step 3 & 9: DSP Bringup / Mailbox Resume
+    // Now that all memory is written, we can safely start the DSP
+    CIRRUS_LOG("Amp %s: Step 3/9 (DSP Bringup) Starting...", amp.name);
+    phase5b_DSPBringup(amp);
+    
+    if (phase5b_1_VerifyDSPAlive(amp)) {
+        CIRRUS_LOG("Amp %s: Step 4 (Verify DSP Alive) OK.", amp.name);
     } else {
-        CIRRUS_ERR("Amp %s: Step 4 Verify DSP Alive FAILED! Aborting dump & tuning upload.", amp.name);
+        CIRRUS_ERR("Amp %s: DSP Bringup failed or DSP is not alive", amp.name);
     }
 
     IOFree(image, sizeof(FirmwareImage));

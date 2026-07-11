@@ -184,6 +184,11 @@ private:
     bool updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source = TRACE_OTHER);
     bool pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 targetVal, UInt32 timeoutMs, TraceSource source = TRACE_OTHER);
 
+    void snapshotPhase4_ASP(CS35L41Amp &amp);
+    void snapshotPhase5_DSP(CS35L41Amp &amp);
+    void snapshotPhase6_Power(CS35L41Amp &amp);
+    void snapshotPlayback(CS35L41Amp &amp);
+    
     bool cs35l41_init_mac(CS35L41Amp &amp);
     
     // Phase 4A.2A: Test Key Unlock/Lock

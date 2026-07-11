@@ -195,7 +195,7 @@ void CirrusAudioFixup::fullDriverFlow() {
         phase5d_FirmwareInit(amp, phaseArg);
         
         // Phase 5E: ASP Dump for Verification
-        phase5e_DumpASPRegisters(amp);
+        snapshotPhase4_ASP(amp);
         
         // Phase 6: Power On Amp
         phase6_PowerAmplifier(amp);
@@ -1373,10 +1373,10 @@ static const RegisterSequence asp_sequence[] = {
     { CS35L41_ASP_TX3_SRC, 0, 0x00000028, 0, false },
     { CS35L41_ASP_TX4_SRC, 0, 0x00000029, 0, false },
     { CS35L41_DSP1_RX1_SRC, 0, 0x00000008, 0, false },
-    { CS35L41_DSP1_RX2_SRC, 0, 0x00000009, 0, false },
+    { CS35L41_DSP1_RX2_SRC, 0, 0x00000008, 0, false },
     { CS35L41_DSP1_RX3_SRC, 0, 0x00000018, 0, false },
     { CS35L41_DSP1_RX4_SRC, 0, 0x00000019, 0, false },
-    { CS35L41_DSP1_RX6_SRC, 0, 0x00000029, 0, false },
+    { CS35L41_DSP1_RX5_SRC, 0, 0x00000029, 0, false },
     { CS35L41_SP_HIZ_CTRL, 0, 0x00000003, 0, false },
     { CS35L41_SP_ENABLES, 0, 0x00010001, 0, false }
 };
@@ -1388,6 +1388,15 @@ bool CirrusAudioFixup::applyASP(CS35L41Amp &amp) {
     if (!applyRegisterSequence(amp, asp_sequence, sizeof(asp_sequence) / sizeof(RegisterSequence))) {
         return false;
     }
+
+    // Set CS35L41_SP_FRAME_RX_SLOT dynamically based on channel
+    // Linux uses rx_num=1, rx_slot[0] = spk_pos (0 for Left, 1 for Right). Mask is 0x3F.
+    uint32_t rx_slot_val = 0;
+    readRegister(amp, 0x00004820, &rx_slot_val); // CS35L41_SP_FRAME_RX_SLOT
+    rx_slot_val &= ~0x3F;
+    rx_slot_val |= ((strcmp(amp.name, "right") == 0) ? 1 : 0);
+    writeRegister(amp, 0x00004820, rx_slot_val);
+
 
     uint64_t endTime = mach_absolute_time();
     uint64_t elapsed_us = 0;
@@ -2077,41 +2086,79 @@ void CirrusAudioFixup::phase4_HardwareConfig(CS35L41Amp &amp) {
 }
 
 // =====================================================================
-// Phase 5E: Dump ASP Registers for Verification
+// Register Snapshots
 // =====================================================================
-void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
-    CIRRUS_LOG("Amp %s: Entering Phase 5E (Dump ASP Registers)", amp.name);
+void CirrusAudioFixup::snapshotPhase4_ASP(CS35L41Amp &amp) {
+    uint32_t frm_ctrl = 0, fmt = 0, clk = 0;
+    uint32_t tx_wl = 0, rx_wl = 0, tx_slot = 0, rx_slot = 0;
+    uint32_t rx1_src = 0, rx2_src = 0, rx3_src = 0, rx4_src = 0, rx5_src = 0;
     
-    uint32_t asprx_en = 0, asptx_en = 0, frm_ctrl = 0, fmt = 0, clk = 0;
-    uint32_t tx_wl = 0, rx_wl = 0;
-    uint32_t rx1_src = 0, rx2_src = 0, rx3_src = 0, rx4_src = 0;
-    
-    readRegister(amp, 0x00004808, &asprx_en); // CS35L41_SP_RX_EN
-    readRegister(amp, 0x00004804, &asptx_en); // CS35L41_SP_TX_EN
     readRegister(amp, 0x00004818, &frm_ctrl); // CS35L41_SP_FRAME_CTRL
     readRegister(amp, 0x0000480C, &fmt);      // CS35L41_SP_FMT
     readRegister(amp, 0x00004800, &clk);      // CS35L41_SP_CLK_CTRL
-    uint32_t tx_slot = 0, rx_slot = 0;
     readRegister(amp, 0x00004810, &tx_slot);  // CS35L41_SP_FRAME_TX_SLOT
     readRegister(amp, 0x00004820, &rx_slot);  // CS35L41_SP_FRAME_RX_SLOT
     readRegister(amp, 0x00004830, &tx_wl);    // CS35L41_SP_TX_WL
     readRegister(amp, 0x00004840, &rx_wl);    // CS35L41_SP_RX_WL
-    
     readRegister(amp, 0x00004C40, &rx1_src);  // CS35L41_DSP1_RX1_SRC
     readRegister(amp, 0x00004C44, &rx2_src);  // CS35L41_DSP1_RX2_SRC
     readRegister(amp, 0x00004C48, &rx3_src);  // CS35L41_DSP1_RX3_SRC
     readRegister(amp, 0x00004C4C, &rx4_src);  // CS35L41_DSP1_RX4_SRC
+    readRegister(amp, 0x00004C50, &rx5_src);  // CS35L41_DSP1_RX5_SRC
     
-    uint32_t pcm1_src = 0;
-    readRegister(amp, 0x00004C00, &pcm1_src); // CS35L41_DAC_PCM1_SRC
+    CIRRUS_LOG("Amp %s: ======== Phase4 Snapshot ========", amp.name);
+    CIRRUS_LOG("Amp %s: FRAME_CTRL=0x%08X FMT=0x%08X CLK=0x%08X", amp.name, frm_ctrl, fmt, clk);
+    CIRRUS_LOG("Amp %s: RX_SLOT=0x%08X TX_SLOT=0x%08X RX_WL=0x%08X TX_WL=0x%08X", amp.name, rx_slot, tx_slot, rx_wl, tx_wl);
+    CIRRUS_LOG("Amp %s: DSP_RX_SRC -> RX1=0x%08X RX2=0x%08X RX3=0x%08X RX4=0x%08X RX5=0x%08X", amp.name, rx1_src, rx2_src, rx3_src, rx4_src, rx5_src);
     
-    CIRRUS_LOG("Amp %s: ASP Dump -> RX_EN=0x%08X TX_EN=0x%08X FRM_CTRL=0x%08X FMT=0x%08X CLK=0x%08X",
-               amp.name, asprx_en, asptx_en, frm_ctrl, fmt, clk);
-    CIRRUS_LOG("Amp %s: ASP SLOT -> TX_SLOT=0x%08X RX_SLOT=0x%08X", amp.name, tx_slot, rx_slot);
-    CIRRUS_LOG("Amp %s: ASP WL -> TX_WL=0x%08X RX_WL=0x%08X", amp.name, tx_wl, rx_wl);
-    CIRRUS_LOG("Amp %s: ASP SRC -> RX1=0x%08X RX2=0x%08X RX3=0x%08X RX4=0x%08X",
-               amp.name, rx1_src, rx2_src, rx3_src, rx4_src);
-    CIRRUS_LOG("Amp %s: PCM SRC -> DAC_PCM1_SRC=0x%08X", amp.name, pcm1_src);
+    bool pass = true;
+    uint32_t expected_rx_slot = (strcmp(amp.name, "right") == 0) ? 1 : 0;
+    if ((rx_slot & 0x3F) != expected_rx_slot) { CIRRUS_ERR("Amp %s: FAIL RX_SLOT mismatch", amp.name); pass = false; }
+    if (rx1_src != 0x08) { CIRRUS_ERR("Amp %s: FAIL RX1_SRC mismatch", amp.name); pass = false; }
+    if (rx2_src != 0x08) { CIRRUS_ERR("Amp %s: FAIL RX2_SRC mismatch", amp.name); pass = false; }
+    
+    if (pass) {
+        CIRRUS_LOG("Amp %s: PHASE 4 RESULT: PASS", amp.name);
+    } else {
+        CIRRUS_ERR("Amp %s: PHASE 4 RESULT: FAIL", amp.name);
+    }
+    CIRRUS_LOG("Amp %s: ==================================", amp.name);
+}
+
+void CirrusAudioFixup::snapshotPhase5_DSP(CS35L41Amp &amp) {
+    uint32_t halo_state = 0, dsp_state = 0, mbox1 = 0, mbox2 = 0;
+    readRegister(amp, 0x00013004, &mbox2); // CS35L41_DSP_MBOX_2 (HALO_STATE)
+    readRegister(amp, 0x00013020, &mbox1); // CS35L41_DSP_VIRT1_MBOX_1
+    readRegister(amp, 0x02BC1000, &dsp_state); // CS35L41_DSP1_CCM_CORE_CTRL
+    
+    CIRRUS_LOG("Amp %s: === Phase5 ===", amp.name);
+    CIRRUS_LOG("Amp %s: Before:", amp.name);
+    CIRRUS_LOG("Amp %s: HALO_STATE = %u", amp.name, mbox2);
+    CIRRUS_LOG("Amp %s: DSP_STATE  = 0x%08X", amp.name, dsp_state);
+    CIRRUS_LOG("Amp %s: MBOX1      = %u", amp.name, mbox1);
+    CIRRUS_LOG("Amp %s: MBOX2      = %u", amp.name, mbox2);
+}
+
+void CirrusAudioFixup::snapshotPhase6_Power(CS35L41Amp &amp) {
+    uint32_t pwr_ctrl1 = 0, pwr_ctrl2 = 0, pwr_ctrl3 = 0;
+    readRegister(amp, 0x00002014, &pwr_ctrl1); // CS35L41_PWR_CTRL1
+    readRegister(amp, 0x00002018, &pwr_ctrl2); // CS35L41_PWR_CTRL2
+    readRegister(amp, 0x0000201C, &pwr_ctrl3); // CS35L41_PWR_CTRL3
+    
+    CIRRUS_LOG("Amp %s: ======== Phase6 Snapshot ========", amp.name);
+    CIRRUS_LOG("Amp %s: PWR_CTRL1=0x%08X PWR_CTRL2=0x%08X PWR_CTRL3=0x%08X", amp.name, pwr_ctrl1, pwr_ctrl2, pwr_ctrl3);
+    
+    bool pass = true;
+    if ((pwr_ctrl1 & 1) == 0) { CIRRUS_ERR("Amp %s: FAIL GLOBAL_EN=0", amp.name); pass = false; }
+    if ((pwr_ctrl2 & 1) == 0) { CIRRUS_ERR("Amp %s: FAIL AMP_EN=0", amp.name); pass = false; }
+    if ((pwr_ctrl2 & 0x00003000) != 0x00003000) { CIRRUS_ERR("Amp %s: FAIL VMON/IMON missing in PWR_CTRL2", amp.name); pass = false; }
+    
+    if (pass) {
+        CIRRUS_LOG("Amp %s: PHASE 6 RESULT: PASS", amp.name);
+    } else {
+        CIRRUS_ERR("Amp %s: PHASE 6 RESULT: FAIL", amp.name);
+    }
+    CIRRUS_LOG("Amp %s: ==================================", amp.name);
 }
 
 // =====================================================================
@@ -2129,27 +2176,106 @@ void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
     writeRegister(amp, 0x0000742C, 0x00000079);
     writeRegister(amp, 0x00007438, 0x00585941);
     
-    // Enable Amplifier and VMON/IMON (PWR_CTRL2)
-    uint32_t pwr_ctrl2 = 0;
-    readRegister(amp, 0x00002018, &pwr_ctrl2);
-    pwr_ctrl2 |= 0x00003001; // AMP_EN=1 (Bit 0), IMON_EN=1 (Bit 12), VMON_EN=1 (Bit 13)
-    writeRegister(amp, 0x00002018, pwr_ctrl2);
+    // Snapshot Phase 5: Before Resume
+    snapshotPhase5_DSP(amp);
     
+    // -------------------------------------------------------------
+    // Mailbox Resume Sequence
+    // -------------------------------------------------------------
+    uint64_t resumeStartTime = mach_absolute_time();
+    int resumePolls = 0;
+    uint32_t mbox2_after = 0;
+    
+    CIRRUS_LOG("Amp %s: Resume...", amp.name);
+    writeRegister(amp, 0x00013020, 2); // CSPL_MBOX_CMD_RESUME = 2
+    
+    for (int i = 0; i < 5; i++) {
+        IODelay(1000);
+        readRegister(amp, 0x00013004, &mbox2_after); // DSP_MBOX_2
+        resumePolls++;
+        if (mbox2_after == 0) { // CSPL_MBOX_STS_RUNNING = 0
+            break;
+        }
+    }
+    
+    uint64_t resumeEndTime = mach_absolute_time();
+    uint64_t resume_elapsed_us = 0;
+    absolutetime_to_nanoseconds(resumeEndTime - resumeStartTime, &resume_elapsed_us);
+    
+    uint32_t mbox1_after = 0, dsp_state_after = 0;
+    readRegister(amp, 0x00013020, &mbox1_after);
+    readRegister(amp, 0x02BC1000, &dsp_state_after);
+    
+    CIRRUS_LOG("Amp %s: elapsed = %llu us", amp.name, resume_elapsed_us);
+    CIRRUS_LOG("Amp %s: polls = %d", amp.name, resumePolls);
+    CIRRUS_LOG("Amp %s: ", amp.name);
+    CIRRUS_LOG("Amp %s: After:", amp.name);
+    CIRRUS_LOG("Amp %s: HALO_STATE = %u", amp.name, mbox2_after);
+    CIRRUS_LOG("Amp %s: DSP_STATE  = 0x%08X", amp.name, dsp_state_after);
+    CIRRUS_LOG("Amp %s: MBOX1      = %u", amp.name, mbox1_after);
+    CIRRUS_LOG("Amp %s: MBOX2      = %u", amp.name, mbox2_after);
+    
+    if (mbox2_after == 0) {
+        CIRRUS_LOG("Amp %s: PHASE 5 RESULT: PASS", amp.name);
+    } else {
+        CIRRUS_ERR("Amp %s: PHASE 5 RESULT: FAIL", amp.name);
+    }
+    
+    // -------------------------------------------------------------
+    // Enable Amplifier and VMON/IMON (PWR_CTRL2)
+    // -------------------------------------------------------------
+    uint32_t pwr_ctrl2_old = 0;
+    readRegister(amp, 0x00002018, &pwr_ctrl2_old);
+    
+    // updateRegisterBits: CS35L41_PWR_CTRL2 (0x00002018), mask = 0x00003001, value = 0x00003001
+    updateRegisterBits(amp, 0x00002018, 0x00003001, 0x00003001);
+    
+    uint32_t pwr_ctrl2_verify = 0;
+    readRegister(amp, 0x00002018, &pwr_ctrl2_verify);
+    CIRRUS_LOG("Amp %s: PWR_CTRL2 Transition: 0x%08X -> update_bits(0x3001) -> Verified: 0x%08X", amp.name, pwr_ctrl2_old, pwr_ctrl2_verify);
+    
+    // -------------------------------------------------------------
     // Set GLOBAL_EN = 1
+    // -------------------------------------------------------------
     uint32_t pwr_ctrl1 = 0;
     readRegister(amp, 0x00002014, &pwr_ctrl1); // CS35L41_PWR_CTRL1
     pwr_ctrl1 |= (1 << 0); // GLOBAL_EN
     writeRegister(amp, 0x00002014, pwr_ctrl1);
     
+    // -------------------------------------------------------------
     // Unmute digital volume and set gain
-    writeRegister(amp, 0x00006000, 0x00008000); // AMP_DIG_VOL_CTRL: Unmute, 0dB
-    writeRegister(amp, 0x00006C04, 0x00000233); // AMP_GAIN_CTRL: Gain 17.5dB
+    // -------------------------------------------------------------
+    uint32_t dig_vol = 0, gain_ctrl = 0;
+    readRegister(amp, 0x00006000, &dig_vol);
+    readRegister(amp, 0x00006C04, &gain_ctrl);
+    CIRRUS_LOG("Amp %s: Volume Read: DIG_VOL=0x%08X GAIN_CTRL=0x%08X", amp.name, dig_vol, gain_ctrl);
+    
+    if (mbox2_after == 0) { // DSP RUNNING
+        if (dig_vol != 0x00008000) {
+            CIRRUS_LOG("Amp %s: Updating DIG_VOL to 0x00008000 (was 0x%08X)", amp.name, dig_vol);
+            writeRegister(amp, 0x00006000, 0x00008000); // Unmute, 0dB
+        } else {
+            CIRRUS_LOG("Amp %s: DIG_VOL is already 0x00008000. Skipping write.", amp.name);
+        }
+        
+        if (gain_ctrl != 0x00000233) {
+            CIRRUS_LOG("Amp %s: Updating GAIN_CTRL to 0x00000233 (was 0x%08X)", amp.name, gain_ctrl);
+            writeRegister(amp, 0x00006C04, 0x00000233); // Gain 17.5dB
+        } else {
+            CIRRUS_LOG("Amp %s: GAIN_CTRL is already 0x00000233. Skipping write.", amp.name);
+        }
+    } else {
+        CIRRUS_LOG("Amp %s: Skipping Volume Update because DSP is NOT RUNNING (MBOX2=%u)", amp.name, mbox2_after);
+    }
     
     // Lock Test Key
     writeRegister(amp, 0x00000040, 0x000000CC);
     writeRegister(amp, 0x00000040, 0x00000033);
     
-    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON (GLOBAL_EN=1). Audio Monitor will wait for PUP_DONE.", amp.name);
+    // Snapshot Phase 6
+    snapshotPhase6_Power(amp);
+    
+    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON. Audio Monitor will wait for PUP_DONE.", amp.name);
     
     amp.needsSpkOutEnable = true;
 }
@@ -2224,6 +2350,9 @@ void CirrusAudioFixup::runAudioMonitor() {
                 setProperty(propName, timeline);
                 timeline->release();
             }
+            
+            // Snapshot Playback State
+            snapshotPlayback(amp);
             
             amp.needsSpkOutEnable = false;
         } else {

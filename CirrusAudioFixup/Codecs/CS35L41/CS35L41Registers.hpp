@@ -314,6 +314,7 @@ static const RegisterDesc cs35l41_reg_desc[] = {
 #define CS35L41_DSP1_RX2_SRC        0x00004C44
 #define CS35L41_DSP1_RX3_SRC        0x00004C48
 #define CS35L41_DSP1_RX4_SRC        0x00004C4C
+#define CS35L41_DSP1_RX5_SRC        0x00004C50
 #define CS35L41_DSP1_RX6_SRC        0x00004C54
 #define CS35L41_SP_HIZ_CTRL         0x0000480C
 #define CS35L41_SP_ENABLES          0x00004800

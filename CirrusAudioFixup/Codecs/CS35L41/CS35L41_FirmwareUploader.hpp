@@ -427,6 +427,14 @@ public:
 
             const char *rname = regionTypeName(region.regionType);
             CIRRUS_LOG("Amp %s: Region %d (%s) %d bytes", amp.name, i, rname, region.size);
+            
+            if (region.regionType == RegionType::INFO_TEXT || 
+                region.regionType == RegionType::ALGORITHM_DATA || 
+                region.regionType == RegionType::METADATA ||
+                region.regionType == RegionType::NAME_TEXT) {
+                CIRRUS_LOG("Amp %s:   Region %d (%s) is metadata, skipping upload.", amp.name, i, rname);
+                continue;
+            }
 
             UploadPlan *plan = (UploadPlan *)IOMalloc(sizeof(UploadPlan));
             if (!plan) {

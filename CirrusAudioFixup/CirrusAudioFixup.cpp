@@ -152,16 +152,46 @@ bool CirrusAudioFixup::start(IOService *provider) {
     bool probeEnabled = bootArgEnabled("cirrus_probe");
     setProperty("CirrusBootArgParsed", probeEnabled ? kOSBooleanTrue : kOSBooleanFalse);
 
-    if (probeEnabled) {
+    if (bootArgEnabled("cirrus_readonly")) {
+        CIRRUS_LOG("CirrusAudioFixup starting in READ-ONLY PROBE mode");
         uint32_t delayMs = 100;
         PE_parse_boot_argn("cirrus_probe_delay", &delayMs, sizeof(delayMs));
         scheduleReadOnlyProbe(delayMs);
     } else {
-        CIRRUS_LOG("passive mode; add boot-arg cirrus_probe=1 for read-only I2C probe");
+        CIRRUS_LOG("CirrusAudioFixup starting FULL DRIVER FLOW");
+        fullDriverFlow();
     }
 
     registerService();
     return true;
+}
+
+void CirrusAudioFixup::fullDriverFlow() {
+    CIRRUS_LOG("--- FULL DRIVER FLOW BEGIN ---");
+    
+    // Phase 1 to 4 and 6 will go here
+    for (unsigned i = 0; i < 2; ++i) {
+        CS35L41Amp &amp = mAmps[i];
+        CIRRUS_LOG("Amp %s: Starting Full Init...", amp.name);
+        
+        // Phase 4: ASP / I2S Routing
+        phase4_HardwareConfig(amp);
+        
+        // Phase 5: Firmware Discovery & Upload
+        phase5a_FirmwareDiscovery(amp);
+        const char *phaseArg = "full";
+        phase5d_FirmwareInit(amp, phaseArg);
+        
+        // Phase 5E: ASP Dump for Verification
+        phase5e_DumpASPRegisters(amp);
+        
+        // Phase 6: Power On Amp
+        phase6_PowerAmplifier(amp);
+        
+        CIRRUS_LOG("Amp %s: Full Init Complete.", amp.name);
+    }
+    
+    CIRRUS_LOG("--- FULL DRIVER FLOW COMPLETE ---");
 }
 
 void CirrusAudioFixup::stop(IOService *provider) {
@@ -2077,4 +2107,69 @@ void CirrusAudioFixup::phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phase
 
     IOFree(mappedImg, sizeof(MappedImage));
     IOFree(image, sizeof(FirmwareImage));
+}
+
+// =====================================================================
+// Phase 4: Hardware Config (ASP / I2S / GPIO)
+// =====================================================================
+void CirrusAudioFixup::phase4_HardwareConfig(CS35L41Amp &amp) {
+    CIRRUS_LOG("Amp %s: Entering Phase 4 (Hardware Config)", amp.name);
+    
+    // Unmask specific IRQs
+    writeRegister(amp, 0x00010110, 0x2000003F); // CS35L41_IRQ1_MASK1
+    writeRegister(amp, 0x00010114, 0x80020003); // CS35L41_IRQ1_MASK2
+    writeRegister(amp, 0x00010118, 0x41406000); // CS35L41_IRQ1_MASK3
+    writeRegister(amp, 0x0001011C, 0x2000000F); // CS35L41_IRQ1_MASK4
+    
+    // Route DSP ASPRX sources (from diff_analysis.md)
+    if (amp.address == 0x40) {
+        // Left
+        writeRegister(amp, 0x00004C44, 0x00000008); // CS35L41_DSP1_RX2_SRC
+    } else {
+        // Right
+        writeRegister(amp, 0x00004C44, 0x00000009); // CS35L41_DSP1_RX2_SRC
+    }
+    
+    // ASP Configuration
+    // TX_WL and RX_WL mappings for TDM Slots 0,1,2,3
+    writeRegister(amp, CS35L41_SP_TX_WL, 0x03020100);
+    writeRegister(amp, CS35L41_SP_RX_WL, 0x03020100);
+    
+    CIRRUS_LOG("Amp %s: Phase 4 Complete", amp.name);
+}
+
+// =====================================================================
+// Phase 5E: Dump ASP Registers for Verification
+// =====================================================================
+void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
+    CIRRUS_LOG("Amp %s: Entering Phase 5E (Dump ASP Registers)", amp.name);
+    
+    uint32_t asprx_en = 0, asptx_en = 0, frm_ctrl = 0, fmt = 0, clk = 0;
+    readRegister(amp, 0x00004808, &asprx_en); // CS35L41_SP_RX_EN
+    readRegister(amp, 0x00004804, &asptx_en); // CS35L41_SP_TX_EN
+    readRegister(amp, 0x00004818, &frm_ctrl); // CS35L41_SP_FRAME_CTRL
+    readRegister(amp, 0x0000480C, &fmt);      // CS35L41_SP_FMT
+    readRegister(amp, 0x00004800, &clk);      // CS35L41_SP_CLK_CTRL
+    
+    CIRRUS_LOG("Amp %s: ASP Dump -> RX_EN=0x%08X TX_EN=0x%08X FRM_CTRL=0x%08X FMT=0x%08X CLK=0x%08X",
+               amp.name, asprx_en, asptx_en, frm_ctrl, fmt, clk);
+}
+
+// =====================================================================
+// Phase 6: Power Amplifier (Safe to Active)
+// =====================================================================
+void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
+    CIRRUS_LOG("Amp %s: Entering Phase 6 (Power Amplifier)", amp.name);
+    
+    // Based on cs35l41_safe_to_active_en_spk from Linux driver
+    writeRegister(amp, 0x0000742C, 0x000000F9); // CS35L41_PWR_CTRL2
+    writeRegister(amp, 0x00007438, 0x00580941); // CS35L41_PWR_CTRL3
+    
+    // cs35l41_global_enable -> CS35L41_PWR_CTRL1 GLOBAL_EN
+    uint32_t pwr_ctrl1 = 0;
+    readRegister(amp, 0x00002014, &pwr_ctrl1); // CS35L41_PWR_CTRL1
+    pwr_ctrl1 |= (1 << 0); // GLOBAL_EN
+    writeRegister(amp, 0x00002014, pwr_ctrl1);
+    
+    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON", amp.name);
 }

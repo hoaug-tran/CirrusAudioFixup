@@ -134,6 +134,8 @@ public:
     void free() override;
 
 private:
+    void fullDriverFlow();
+    
     IOService *mProvider { nullptr };
     IOWorkLoop *mWorkLoop { nullptr };
     IOTimerEventSource *mProbeTimer { nullptr };
@@ -195,10 +197,8 @@ private:
     
     void dumpAllRegisters(CS35L41Amp &amp);
     
-    // Phase 5A
+    void phase4_HardwareConfig(CS35L41Amp &amp);
     void phase5a_FirmwareDiscovery(CS35L41Amp &amp);
-    
-    // Phase 5B: DSP Bring-up
     void phase5b_DSPBringup(CS35L41Amp &amp);
     bool phase5b_1_VerifyDSPAlive(CS35L41Amp &amp);
 
@@ -208,6 +208,8 @@ private:
     
     // Phase 5D: Full Initialization
     void phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseArg);
+    void phase5e_DumpASPRegisters(CS35L41Amp &amp);
+    void phase6_PowerAmplifier(CS35L41Amp &amp);
     
     IOService* getAudioController();
     

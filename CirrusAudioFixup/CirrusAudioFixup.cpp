@@ -1766,6 +1766,11 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     setProperty(propName, (uint64_t)mbox_init, 32);
     
     // 5B.4.5 Send RESUME Command
+    uint32_t mbox_1_before = 0, mbox_2_before = 0;
+    readRegister(amp, CS35L41_DSP_MBOX_1, &mbox_1_before);
+    readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_2_before);
+    CIRRUS_LOG("Amp %s: Mailbox BEFORE: MBOX_1 = 0x%08X, MBOX_2 = 0x%08X", amp.name, mbox_1_before, mbox_2_before);
+
     CIRRUS_LOG("Amp %s: Sending DSP RESUME Mailbox Command...", amp.name);
     writeRegister(amp, CS35L41_DSP_MBOX_1, 2); // CSPL_MBOX_CMD_RESUME = 2
     
@@ -1830,11 +1835,24 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     }
     if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
     
+    uint32_t mbox_1_after = 0, mbox_2_after = 0;
+    readRegister(amp, CS35L41_DSP_MBOX_1, &mbox_1_after);
+    readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_2_after);
+    CIRRUS_LOG("Amp %s: Mailbox AFTER : MBOX_1 = 0x%08X, MBOX_2 = 0x%08X", amp.name, mbox_1_after, mbox_2_after);
     if (first_non_zero_time == 0xFFFFFFFF) {
-        CIRRUS_LOG("Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=N/A", ms, transitions, current_mbox);
+        CIRRUS_LOG("Amp %s: Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=N/A", 
+                   amp.name, ms, transitions, current_mbox);
     } else {
-        CIRRUS_LOG("Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=%dms", ms, transitions, current_mbox, first_non_zero_time);
+        CIRRUS_LOG("Amp %s: Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=%dms", 
+                   amp.name, ms, transitions, current_mbox, first_non_zero_time);
     }
+               
+    // 5B.6 Read DSP State Variables
+    uint32_t halo_state = 0, cal_status = 0, max_temp = 0;
+    readRegister(amp, 0x02800250, &halo_state); // Algorithm 1 (0x94) + offset 0x0000
+    readRegister(amp, 0x02800270, &cal_status); // Algorithm 1 (0x94) + offset 0x0008
+    readRegister(amp, 0x02800358, &max_temp);   // Algorithm 1 (0x94) + offset 0x0042
+    CIRRUS_LOG("Amp %s: DSP Controls: HALO_STATE=0x%08X, CAL_STATUS=0x%08X, BDLOG_MAX_TEMP=0x%08X", amp.name, halo_state, cal_status, max_temp);
     
     CIRRUS_LOG("Phase 5B complete for amp %s. Transitions: %d", amp.name, transitions);
 }

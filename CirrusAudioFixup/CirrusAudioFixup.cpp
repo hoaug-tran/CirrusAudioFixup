@@ -174,10 +174,22 @@ void CirrusAudioFixup::fullDriverFlow() {
         CS35L41Amp &amp = mAmps[i];
         CIRRUS_LOG("Amp %s: Starting Full Init...", amp.name);
         
-        // Phase 4: ASP / I2S Routing
+        // Phase 4: Hardware Initialization
+        if (!cs35l41_init_mac(amp)) {
+            CIRRUS_ERR("Amp %s: cs35l41_init_mac failed!", amp.name);
+            continue;
+        }
+        if (!cs35l41_apply_phase4A2(amp)) {
+            CIRRUS_ERR("Amp %s: phase4A2 failed!", amp.name);
+            continue;
+        }
+        applyPLL(amp);
+        applyASP(amp);
+        applyGPIO(amp);
+        
+        // Phase 4: Amp-specific overrides
         phase4_HardwareConfig(amp);
         
-        // Phase 5: Firmware Discovery & Upload
         phase5a_FirmwareDiscovery(amp);
         const char *phaseArg = "full";
         phase5d_FirmwareInit(amp, phaseArg);
@@ -194,8 +206,8 @@ void CirrusAudioFixup::fullDriverFlow() {
     
     mAudioMonitorTimer = IOTimerEventSource::timerEventSource(this, audioMonitorFired);
     if (mAudioMonitorTimer && mWorkLoop->addEventSource(mAudioMonitorTimer) == kIOReturnSuccess) {
-        mAudioMonitorTimer->setTimeoutMS(500);
-        CIRRUS_LOG("Audio Monitor Timer started. Waiting for audio playback (PUP_DONE)...");
+        mAudioMonitorTimer->setTimeoutMS(2000);
+        CIRRUS_LOG("Audio Monitor Timer started (2000ms interval). Waiting for audio playback (PUP_DONE)...");
     }
     
     CIRRUS_LOG("--- FULL DRIVER FLOW COMPLETE ---");
@@ -2056,15 +2068,10 @@ void CirrusAudioFixup::phase4_HardwareConfig(CS35L41Amp &amp) {
     
     // Enable ASP RX and TX paths (ASP_RX1, ASP_RX2, ASP_TX1-4)
     // Bits 16, 17 for RX1, RX2. Bits 0, 1, 2, 3 for TX1-4.
-    writeRegister(amp, 0x00004800, 0x0003000F); // CS35L41_SP_ENABLES
+    // writeRegister(amp, 0x00004800, 0x0003000F); // CS35L41_SP_ENABLES (Using 0x00010001 from Linux instead)
+    writeRegister(amp, 0x00002020, 0x00000006); // CS35L41_CTRL_OVRRIDE
     
-    // ASP Configuration
-    // Map TDM Slots 0,1,2,3
-    writeRegister(amp, CS35L41_SP_FRAME_TX_SLOT, 0x03020100);
-    writeRegister(amp, CS35L41_SP_FRAME_RX_SLOT, 0x03020100);
-    // Set Word Length to 24-bit
-    writeRegister(amp, CS35L41_SP_TX_WL, 0x00000018);
-    writeRegister(amp, CS35L41_SP_RX_WL, 0x00000018);
+
     
     CIRRUS_LOG("Amp %s: Phase 4 Complete", amp.name);
 }
@@ -2122,11 +2129,21 @@ void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
     writeRegister(amp, 0x0000742C, 0x00000079);
     writeRegister(amp, 0x00007438, 0x00585941);
     
+    // Enable Amplifier and VMON/IMON (PWR_CTRL2)
+    uint32_t pwr_ctrl2 = 0;
+    readRegister(amp, 0x00002018, &pwr_ctrl2);
+    pwr_ctrl2 |= 0x00003001; // AMP_EN=1 (Bit 0), IMON_EN=1 (Bit 12), VMON_EN=1 (Bit 13)
+    writeRegister(amp, 0x00002018, pwr_ctrl2);
+    
     // Set GLOBAL_EN = 1
     uint32_t pwr_ctrl1 = 0;
     readRegister(amp, 0x00002014, &pwr_ctrl1); // CS35L41_PWR_CTRL1
     pwr_ctrl1 |= (1 << 0); // GLOBAL_EN
     writeRegister(amp, 0x00002014, pwr_ctrl1);
+    
+    // Unmute digital volume and set gain
+    writeRegister(amp, 0x00006000, 0x00008000); // AMP_DIG_VOL_CTRL: Unmute, 0dB
+    writeRegister(amp, 0x00006C04, 0x00000233); // AMP_GAIN_CTRL: Gain 17.5dB
     
     // Lock Test Key
     writeRegister(amp, 0x00000040, 0x000000CC);
@@ -2215,6 +2232,6 @@ void CirrusAudioFixup::runAudioMonitor() {
     }
     
     if (anyNeedsPoll && mAudioMonitorTimer) {
-        mAudioMonitorTimer->setTimeoutMS(500);
+        mAudioMonitorTimer->setTimeoutMS(2000);
     }
 }

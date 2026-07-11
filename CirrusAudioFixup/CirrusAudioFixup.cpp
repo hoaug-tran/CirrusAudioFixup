@@ -8,8 +8,12 @@
 #include "Codecs/CS35L41/CS35L41_FirmwareDatabase.hpp"
 #include "Codecs/CS35L41/CS35L41_FirmwareParser.hpp"
 #include "Codecs/CS35L41/CS35L41_FirmwareUploader.hpp"
+#include <libkern/c++/OSString.h>
+#include <libkern/c++/OSDictionary.h>
+#include <libkern/c++/OSArray.h>
+#include <libkern/OSAtomic.h>
 
-#define CIRRUS_BUILD_ID "commit-c8df89d-virt-mbox-test2"
+#define CIRRUS_BUILD_ID "commit-c8df89d-virt-mbox-test4-spkout"
 
 #define super IOService
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
@@ -1775,14 +1779,14 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     readRegister(amp, 0x02800358, &pre_max_temp);
     CIRRUS_LOG("Amp %s: DSP Controls BEFORE: HALO_STATE=0x%08X, CAL_STATUS=0x%08X, BDLOG_MAX_TEMP=0x%08X", amp.name, pre_halo_state, pre_cal_status, pre_max_temp);
 
-    // 5B.4.6 Send RESUME Command
+    // 5B.4.6 Send SPK_OUT_ENABLE Command
     uint32_t mbox_1_before = 0, mbox_2_before = 0;
     readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &mbox_1_before);
     readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_2_before);
     CIRRUS_LOG("Amp %s: Mailbox BEFORE: VIRT1_MBOX_1 = 0x%08X, MBOX_2 = 0x%08X", amp.name, mbox_1_before, mbox_2_before);
 
-    CIRRUS_LOG("Amp %s: Sending DSP RESUME Mailbox Command...", amp.name);
-    writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, 2); // CSPL_MBOX_CMD_RESUME = 2
+    CIRRUS_LOG("Amp %s: Sending DSP SPK_OUT_ENABLE (7) Mailbox Command...", amp.name);
+    writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, 7); // CSPL_MBOX_CMD_SPK_OUT_ENABLE = 7
     
     // 5B.5 Mailbox Timeline Polling
     uint32_t current_mbox = post_mbox;

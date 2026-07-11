@@ -2139,6 +2139,23 @@ void CirrusAudioFixup::snapshotPhase5_DSP(CS35L41Amp &amp) {
     CIRRUS_LOG("Amp %s: MBOX2      = %u", amp.name, mbox2);
 }
 
+void CirrusAudioFixup::snapshotPlayback(CS35L41Amp &amp) {
+    uint32_t irq1_sts1 = 0, irq1_sts2 = 0, irq1_sts3 = 0, irq1_sts4 = 0;
+    uint32_t pwrmgt_sts = 0;
+    
+    readRegister(amp, 0x00010010, &irq1_sts1); // CS35L41_IRQ1_STATUS1
+    readRegister(amp, 0x00010014, &irq1_sts2); // CS35L41_IRQ1_STATUS2
+    readRegister(amp, 0x00010018, &irq1_sts3); // CS35L41_IRQ1_STATUS3
+    readRegister(amp, 0x0001001C, &irq1_sts4); // CS35L41_IRQ1_STATUS4
+    readRegister(amp, 0x00002908, &pwrmgt_sts); // CS35L41_PWRMGT_STS
+    
+    CIRRUS_LOG("Amp %s: ======== Playback Snapshot ========", amp.name);
+    CIRRUS_LOG("Amp %s: IRQ1_STATUS1=0x%08X IRQ1_STATUS2=0x%08X", amp.name, irq1_sts1, irq1_sts2);
+    CIRRUS_LOG("Amp %s: IRQ1_STATUS3=0x%08X IRQ1_STATUS4=0x%08X", amp.name, irq1_sts3, irq1_sts4);
+    CIRRUS_LOG("Amp %s: PWRMGT_STS=0x%08X", amp.name, pwrmgt_sts);
+    CIRRUS_LOG("Amp %s: ==================================", amp.name);
+}
+
 void CirrusAudioFixup::snapshotPhase6_Power(CS35L41Amp &amp) {
     uint32_t pwr_ctrl1 = 0, pwr_ctrl2 = 0, pwr_ctrl3 = 0;
     readRegister(amp, 0x00002014, &pwr_ctrl1); // CS35L41_PWR_CTRL1

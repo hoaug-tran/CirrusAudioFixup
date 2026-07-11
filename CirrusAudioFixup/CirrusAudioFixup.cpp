@@ -1539,6 +1539,12 @@ void CirrusAudioFixup::phase5a_FirmwareDiscovery(CS35L41Amp &amp) {
         audioController->release();
     }
     
+    if (subVendor == 0 || subDevice == 0) {
+        CIRRUS_LOG("Amp %s: PCI audio controller not found in IORegistry! Falling back to 17AA:3847", amp.name);
+        subVendor = 0x17AA;
+        subDevice = 0x3847;
+    }
+    
     uint32_t ssid = (subVendor << 16) | subDevice;
     int spkid = 0; // Default to 0, or lookup from ACPI if needed
     

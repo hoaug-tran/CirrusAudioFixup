@@ -302,7 +302,7 @@ static const RegisterDesc cs35l41_reg_desc[] = {
 #define CS35L41_SP_RATE_CTRL        0x00004804
 #define CS35L41_SP_FORMAT           0x00004808
 #define CS35L41_SP_TX_WL            0x00004810
-#define CS35L41_SP_RX_WL            0x00004814
+#define CS35L41_SP_RX_WL            0x00004840
 #define CS35L41_DAC_PCM1_SRC        0x00004C00
 #define CS35L41_ASP_TX1_SRC         0x00004C20
 #define CS35L41_ASP_TX2_SRC         0x00004C24

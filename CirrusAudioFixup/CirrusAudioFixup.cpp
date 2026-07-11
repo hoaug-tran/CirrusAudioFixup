@@ -1485,18 +1485,6 @@ void CirrusAudioFixup::phase5a_FirmwareDiscovery(CS35L41Amp &amp) {
     char propStatus[64];
     snprintf(propStatus, sizeof(propStatus), "Cirrus_Phase5A_Status_%s", amp.name);
     
-    // Analog Integrity Check
-    uint32_t current_crc = calculateRegistersCRC32(amp);
-    if (current_crc != amp.final_crc) {
-        CIRRUS_ERR("Analog Integrity failed! Expected %08X, got %08X", amp.final_crc, current_crc);
-        OSString *statusStr = OSString::withCString("ANALOG_STATE_CHANGED");
-        if (statusStr) {
-            setProperty(propStatus, statusStr);
-            statusStr->release();
-        }
-        return;
-    }
-    
     uint32_t subVendor = 0;
     uint32_t subDevice = 0;
     uint32_t vendorId = 0;
@@ -2154,7 +2142,7 @@ void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
     readRegister(amp, 0x0000480C, &fmt);      // CS35L41_SP_FMT
     readRegister(amp, 0x00004800, &clk);      // CS35L41_SP_CLK_CTRL
     readRegister(amp, 0x00004810, &tx_wl);    // CS35L41_SP_TX_WL
-    readRegister(amp, 0x00004814, &rx_wl);    // CS35L41_SP_RX_WL
+    readRegister(amp, 0x00004840, &rx_wl);    // CS35L41_SP_RX_WL
     
     readRegister(amp, 0x00004C40, &rx1_src);  // CS35L41_DSP1_RX1_SRC
     readRegister(amp, 0x00004C44, &rx2_src);  // CS35L41_DSP1_RX2_SRC

@@ -236,6 +236,8 @@ public:
                 return MappingStatus::UnsupportedRegion;
         }
         
+        CIRRUS_LOG("mapPackedAddress: region=%u fwWordOffset=0x%08X byteOffset=%u -> dspReg=0x%08X", (uint16_t)type, wordOffset, byteOffset, regAddress);
+
         return MappingStatus::OK;
     }
 
@@ -316,6 +318,7 @@ public:
                     if (image.algorithms[a].id == coeff.id) {
                         alg_xm_base = decodePointer(image.algorithms[a].baseWordOffset).wordOffset;
                         alg_ym_base = decodePointer(image.algorithms[a].ymBaseWordOffset).wordOffset;
+                        CIRRUS_LOG("Coeff %u (ID=0x%06X) matched Algorithm %u (xm_base=0x%08X, ym_base=0x%08X)", i, coeff.id, a, alg_xm_base, alg_ym_base);
                         found = true;
                         break;
                     }

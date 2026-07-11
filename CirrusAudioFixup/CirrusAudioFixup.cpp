@@ -1986,6 +1986,12 @@ void CirrusAudioFixup::phase5c_1_DumpXMAndParseAlgorithms(CS35L41Amp &amp, Firmw
     if (dump_success) {
         uint32_t crc = CirrusFirmwareParser::calculate_crc32(xm_dump_buffer, dump_size);
         
+        CIRRUS_LOG("XM RAM Dump First 16 Bytes: %02X %02X %02X %02X | %02X %02X %02X %02X | %02X %02X %02X %02X | %02X %02X %02X %02X",
+                   xm_dump_buffer[0], xm_dump_buffer[1], xm_dump_buffer[2], xm_dump_buffer[3],
+                   xm_dump_buffer[4], xm_dump_buffer[5], xm_dump_buffer[6], xm_dump_buffer[7],
+                   xm_dump_buffer[8], xm_dump_buffer[9], xm_dump_buffer[10], xm_dump_buffer[11],
+                   xm_dump_buffer[12], xm_dump_buffer[13], xm_dump_buffer[14], xm_dump_buffer[15]);
+
         uint32_t zeroes = 0, ffs = 0;
         for (uint32_t i = 0; i < dump_size; i++) {
             if (xm_dump_buffer[i] == 0x00) zeroes++;

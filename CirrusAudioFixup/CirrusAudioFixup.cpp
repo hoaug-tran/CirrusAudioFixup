@@ -2119,9 +2119,12 @@ void CirrusAudioFixup::phase4_HardwareConfig(CS35L41Amp &amp) {
     }
     
     // ASP Configuration
-    // TX_WL and RX_WL mappings for TDM Slots 0,1,2,3
-    writeRegister(amp, CS35L41_SP_TX_WL, 0x03020100);
-    writeRegister(amp, CS35L41_SP_RX_WL, 0x03020100);
+    // Map TDM Slots 0,1,2,3
+    writeRegister(amp, CS35L41_SP_FRAME_TX_SLOT, 0x03020100);
+    writeRegister(amp, CS35L41_SP_FRAME_RX_SLOT, 0x03020100);
+    // Set Word Length to 24-bit
+    writeRegister(amp, CS35L41_SP_TX_WL, 0x00000018);
+    writeRegister(amp, CS35L41_SP_RX_WL, 0x00000018);
     
     CIRRUS_LOG("Amp %s: Phase 4 Complete", amp.name);
 }
@@ -2141,7 +2144,10 @@ void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
     readRegister(amp, 0x00004818, &frm_ctrl); // CS35L41_SP_FRAME_CTRL
     readRegister(amp, 0x0000480C, &fmt);      // CS35L41_SP_FMT
     readRegister(amp, 0x00004800, &clk);      // CS35L41_SP_CLK_CTRL
-    readRegister(amp, 0x00004810, &tx_wl);    // CS35L41_SP_TX_WL
+    uint32_t tx_slot = 0, rx_slot = 0;
+    readRegister(amp, 0x00004810, &tx_slot);  // CS35L41_SP_FRAME_TX_SLOT
+    readRegister(amp, 0x00004820, &rx_slot);  // CS35L41_SP_FRAME_RX_SLOT
+    readRegister(amp, 0x00004830, &tx_wl);    // CS35L41_SP_TX_WL
     readRegister(amp, 0x00004840, &rx_wl);    // CS35L41_SP_RX_WL
     
     readRegister(amp, 0x00004C40, &rx1_src);  // CS35L41_DSP1_RX1_SRC
@@ -2149,11 +2155,16 @@ void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
     readRegister(amp, 0x00004C48, &rx3_src);  // CS35L41_DSP1_RX3_SRC
     readRegister(amp, 0x00004C4C, &rx4_src);  // CS35L41_DSP1_RX4_SRC
     
+    uint32_t pcm1_src = 0;
+    readRegister(amp, 0x00004C00, &pcm1_src); // CS35L41_DAC_PCM1_SRC
+    
     CIRRUS_LOG("Amp %s: ASP Dump -> RX_EN=0x%08X TX_EN=0x%08X FRM_CTRL=0x%08X FMT=0x%08X CLK=0x%08X",
                amp.name, asprx_en, asptx_en, frm_ctrl, fmt, clk);
+    CIRRUS_LOG("Amp %s: ASP SLOT -> TX_SLOT=0x%08X RX_SLOT=0x%08X", amp.name, tx_slot, rx_slot);
     CIRRUS_LOG("Amp %s: ASP WL -> TX_WL=0x%08X RX_WL=0x%08X", amp.name, tx_wl, rx_wl);
     CIRRUS_LOG("Amp %s: ASP SRC -> RX1=0x%08X RX2=0x%08X RX3=0x%08X RX4=0x%08X",
                amp.name, rx1_src, rx2_src, rx3_src, rx4_src);
+    CIRRUS_LOG("Amp %s: PCM SRC -> DAC_PCM1_SRC=0x%08X", amp.name, pcm1_src);
 }
 
 // =====================================================================
@@ -2162,9 +2173,9 @@ void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
 void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
     CIRRUS_LOG("Amp %s: Entering Phase 6 (Power Amplifier)", amp.name);
     
-    // Based on cs35l41_safe_to_active_en_spk from Linux driver
-    writeRegister(amp, 0x0000742C, 0x000000F9); // CS35L41_PWR_CTRL2
-    writeRegister(amp, 0x00007438, 0x00580941); // CS35L41_PWR_CTRL3
+    // Note: If DSP is running and we sent SPK_OUT_ENABLE (7), we MUST NOT write to PWR_CTRL2 and PWR_CTRL3.
+    // The DSP firmware handles the safe-to-active transition internally.
+    // We only need to set GLOBAL_EN.
     
     // cs35l41_global_enable -> CS35L41_PWR_CTRL1 GLOBAL_EN
     uint32_t pwr_ctrl1 = 0;
@@ -2172,5 +2183,7 @@ void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
     pwr_ctrl1 |= (1 << 0); // GLOBAL_EN
     writeRegister(amp, 0x00002014, pwr_ctrl1);
     
-    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON", amp.name);
+    uint32_t final_pwr_ctrl1 = 0;
+    readRegister(amp, 0x00002014, &final_pwr_ctrl1);
+    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON (GLOBAL_EN=%d)", amp.name, (final_pwr_ctrl1 & 1));
 }

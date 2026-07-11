@@ -2111,12 +2111,21 @@ void CirrusAudioFixup::phase4_HardwareConfig(CS35L41Amp &amp) {
     
     // Route DSP ASPRX sources (from diff_analysis.md)
     if (amp.address == 0x40) {
-        // Left
-        writeRegister(amp, 0x00004C44, 0x00000008); // CS35L41_DSP1_RX2_SRC
+        // Left Amp
+        writeRegister(amp, 0x00004C40, 0x00000008); // CS35L41_DSP1_RX1_SRC = ASP_RX1 (Left)
+        writeRegister(amp, 0x00004C44, 0x00000008); // CS35L41_DSP1_RX2_SRC = ASP_RX1 (Left)
     } else {
-        // Right
-        writeRegister(amp, 0x00004C44, 0x00000009); // CS35L41_DSP1_RX2_SRC
+        // Right Amp
+        writeRegister(amp, 0x00004C40, 0x00000009); // CS35L41_DSP1_RX1_SRC = ASP_RX2 (Right)
+        writeRegister(amp, 0x00004C44, 0x00000009); // CS35L41_DSP1_RX2_SRC = ASP_RX2 (Right)
     }
+    
+    // Set DAC PCM Source to DSP_TX1 (0x32) so the DSP output goes to the amplifier
+    writeRegister(amp, CS35L41_DAC_PCM1_SRC, 0x00000032);
+    
+    // Enable ASP RX and TX paths (ASP_RX1, ASP_RX2, ASP_TX1-4)
+    // Bits 16, 17 for RX1, RX2. Bits 0, 1, 2, 3 for TX1-4.
+    writeRegister(amp, 0x00004800, 0x0003000F); // CS35L41_SP_ENABLES
     
     // ASP Configuration
     // Map TDM Slots 0,1,2,3

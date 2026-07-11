@@ -1803,96 +1803,9 @@ void CirrusAudioFixup::phase5b_DSPBringup(CS35L41Amp &amp) {
     readRegister(amp, 0x02800358, &pre_max_temp);
     CIRRUS_LOG("Amp %s: DSP Controls BEFORE: HALO_STATE=0x%08X, CAL_STATUS=0x%08X, BDLOG_MAX_TEMP=0x%08X", amp.name, pre_halo_state, pre_cal_status, pre_max_temp);
 
-    // 5B.4.6 Send SPK_OUT_ENABLE Command
-    uint32_t mbox_1_before = 0, mbox_2_before = 0;
-    readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &mbox_1_before);
-    readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_2_before);
-    CIRRUS_LOG("Amp %s: Mailbox BEFORE: VIRT1_MBOX_1 = 0x%08X, MBOX_2 = 0x%08X", amp.name, mbox_1_before, mbox_2_before);
-
-    CIRRUS_LOG("Amp %s: Sending DSP SPK_OUT_ENABLE (7) Mailbox Command...", amp.name);
-    writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, 7); // CSPL_MBOX_CMD_SPK_OUT_ENABLE = 7
-    
-    // 5B.5 Mailbox Timeline Polling
-    uint32_t current_mbox = post_mbox;
-    uint32_t previous_mbox = post_mbox;
-    OSArray *timeline = OSArray::withCapacity(10);
-    uint32_t transitions = 0;
-    uint32_t first_non_zero_time = 0xFFFFFFFF;
-    
-    if (timeline) {
-        char initialTimeline[64];
-        snprintf(initialTimeline, sizeof(initialTimeline), "0ms: 0x%08X", previous_mbox);
-        OSString *tStr = OSString::withCString(initialTimeline);
-        if (tStr) { timeline->setObject(tStr); tStr->release(); }
-    }
-    
-    uint64_t mbox_start = mach_absolute_time();
-    int timeout_ms = 500;
-    int ms = 0;
-    
-    while (ms <= timeout_ms) {
-        readRegister(amp, CS35L41_DSP_MBOX_2, &current_mbox);
-        
-        if (current_mbox != previous_mbox) {
-            transitions++;
-            if (current_mbox != 0 && first_non_zero_time == 0xFFFFFFFF) {
-                first_non_zero_time = ms;
-            }
-            if (timeline) {
-                char transitionStr[64];
-                snprintf(transitionStr, sizeof(transitionStr), "%dms: 0x%08X", ms, current_mbox);
-                OSString *tStr = OSString::withCString(transitionStr);
-                if (tStr) { timeline->setObject(tStr); tStr->release(); }
-            }
-            previous_mbox = current_mbox;
-        }
-        
-        IODelay(1000); // 1ms delay
-        ms++;
-    }
-    
-    uint64_t mbox_end = mach_absolute_time();
-    
-    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_POLL_%s", amp.name);
-    if (timeline) {
-        setProperty(propName, timeline);
-        timeline->release();
-    }
-    
-    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_TRANSITIONS_%s", amp.name);
-    setProperty(propName, (uint64_t)transitions, 32);
-    
-    snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_READY_TIME_MS_%s", amp.name);
-    setProperty(propName, (uint64_t)((mbox_end - mbox_start) / 1000000), 32);
-    
-    snprintf(propName, sizeof(propName), "Cirrus_DSP_STATE_%s", amp.name);
-    if (transitions == 0 && post_mbox == 0x0) {
-        statusStr = OSString::withCString("FAIL_MAILBOX_TIMEOUT");
-    } else {
-        statusStr = OSString::withCString("READY");
-    }
-    if (statusStr) { setProperty(propName, statusStr); statusStr->release(); }
-    
-    uint32_t mbox_1_after = 0, mbox_2_after = 0;
-    readRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, &mbox_1_after);
-    readRegister(amp, CS35L41_DSP_MBOX_2, &mbox_2_after);
-    CIRRUS_LOG("Amp %s: Mailbox AFTER : VIRT1_MBOX_1 = 0x%08X, MBOX_2 = 0x%08X", amp.name, mbox_1_after, mbox_2_after);
-    if (first_non_zero_time == 0xFFFFFFFF) {
-        CIRRUS_LOG("Amp %s: Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=N/A", 
-                   amp.name, ms, transitions, current_mbox);
-    } else {
-        CIRRUS_LOG("Amp %s: Phase 5B Mailbox Stats: Polls=%d, Transitions=%d, Last=0x%08X, FirstNonZeroTime=%dms", 
-                   amp.name, ms, transitions, current_mbox, first_non_zero_time);
-    }
-               
-    // 5B.6 Read DSP State Variables
-    uint32_t halo_state = 0, cal_status = 0, max_temp = 0;
-    readRegister(amp, 0x02800250, &halo_state); // Algorithm 1 (0x94) + offset 0x0000
-    readRegister(amp, 0x02800270, &cal_status); // Algorithm 1 (0x94) + offset 0x0008
-    readRegister(amp, 0x02800358, &max_temp);   // Algorithm 1 (0x94) + offset 0x0042
-    CIRRUS_LOG("Amp %s: DSP Controls: HALO_STATE=0x%08X, CAL_STATUS=0x%08X, BDLOG_MAX_TEMP=0x%08X", amp.name, halo_state, cal_status, max_temp);
-    
-    CIRRUS_LOG("Phase 5B complete for amp %s. Transitions: %d", amp.name, transitions);
+    // DSP Bring-up verification complete.
+    // SPK_OUT_ENABLE command will be sent in Phase 6 after GLOBAL_EN is set.
+    CIRRUS_LOG("Phase 5B complete for amp %s.", amp.name);
 }
 
 bool CirrusAudioFixup::phase5b_1_VerifyDSPAlive(CS35L41Amp &amp) {
@@ -2186,19 +2099,71 @@ void CirrusAudioFixup::phase5e_DumpASPRegisters(CS35L41Amp &amp) {
 // Phase 6: Power Amplifier (Safe to Active)
 // =====================================================================
 void CirrusAudioFixup::phase6_PowerAmplifier(CS35L41Amp &amp) {
-    CIRRUS_LOG("Amp %s: Entering Phase 6 (Power Amplifier)", amp.name);
+    CIRRUS_LOG("Amp %s: Entering Phase 6 (Power Amplifier - Safe to Active)", amp.name);
     
-    // Note: If DSP is running and we sent SPK_OUT_ENABLE (7), we MUST NOT write to PWR_CTRL2 and PWR_CTRL3.
-    // The DSP firmware handles the safe-to-active transition internally.
-    // We only need to set GLOBAL_EN.
+    // Unlock Test Key
+    writeRegister(amp, 0x00000040, 0x00000055);
+    writeRegister(amp, 0x00000040, 0x000000AA);
     
-    // cs35l41_global_enable -> CS35L41_PWR_CTRL1 GLOBAL_EN
+    // Safe to Active sequence (cs35l41_safe_to_active_start)
+    writeRegister(amp, 0x0000742C, 0x0000000F);
+    writeRegister(amp, 0x0000742C, 0x00000079);
+    writeRegister(amp, 0x00007438, 0x00585941);
+    
+    // Set GLOBAL_EN = 1
     uint32_t pwr_ctrl1 = 0;
     readRegister(amp, 0x00002014, &pwr_ctrl1); // CS35L41_PWR_CTRL1
     pwr_ctrl1 |= (1 << 0); // GLOBAL_EN
     writeRegister(amp, 0x00002014, pwr_ctrl1);
     
-    uint32_t final_pwr_ctrl1 = 0;
-    readRegister(amp, 0x00002014, &final_pwr_ctrl1);
-    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON (GLOBAL_EN=%d)", amp.name, (final_pwr_ctrl1 & 1));
+    // Wait for PUP_DONE (bit 24 of IRQ1_STATUS1 0x10010)
+    int pup_timeout = 100;
+    uint32_t irq_status = 0;
+    while (pup_timeout > 0) {
+        readRegister(amp, 0x00010010, &irq_status); // CS35L41_IRQ1_STATUS1
+        if (irq_status & 0x01000000) {
+            break;
+        }
+        IODelay(1000);
+        pup_timeout--;
+    }
+    
+    if (pup_timeout == 0) {
+        CIRRUS_LOG("Amp %s: Phase 6 Warning - PUP_DONE timeout! irq=0x%08X", amp.name, irq_status);
+    } else {
+        CIRRUS_LOG("Amp %s: Phase 6 PUP_DONE asserted after %d ms", amp.name, 100 - pup_timeout);
+    }
+    
+    // Clear PUP_DONE bit
+    writeRegister(amp, 0x00010010, 0x01000000);
+    
+    // Send SPK_OUT_ENABLE (7) to Mailbox
+    CIRRUS_LOG("Amp %s: Sending DSP SPK_OUT_ENABLE (7) Mailbox Command...", amp.name);
+    writeRegister(amp, CS35L41_DSP_VIRT1_MBOX_1, 7);
+    
+    // Poll MBOX_2 for completion
+    int mbox_timeout = 500;
+    uint32_t mbox2 = 0xFFFFFFFF;
+    while (mbox_timeout > 0) {
+        readRegister(amp, CS35L41_DSP_MBOX_2, &mbox2);
+        if (mbox2 == 0) {
+            break;
+        }
+        IODelay(1000);
+        mbox_timeout--;
+    }
+    
+    CIRRUS_LOG("Amp %s: Phase 6 SPK_OUT_ENABLE completed with MBOX_2=0x%08X (timeout=%d)", amp.name, mbox2, mbox_timeout);
+    
+    // Read DSP State Variables to confirm
+    uint32_t halo_state = 0, cal_status = 0;
+    readRegister(amp, 0x02800250, &halo_state);
+    readRegister(amp, 0x02800270, &cal_status);
+    CIRRUS_LOG("Amp %s: DSP Controls AFTER Mailbox: HALO_STATE=0x%08X, CAL_STATUS=0x%08X", amp.name, halo_state, cal_status);
+    
+    // Lock Test Key
+    writeRegister(amp, 0x00000040, 0x000000CC);
+    writeRegister(amp, 0x00000040, 0x00000033);
+    
+    CIRRUS_LOG("Amp %s: Phase 6 Complete - Amplifier POWERED ON (GLOBAL_EN=1)", amp.name);
 }

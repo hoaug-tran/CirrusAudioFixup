@@ -1,7 +1,7 @@
 #ifndef CS35L41_FIRMWARE_UPLOADER_HPP
 #define CS35L41_FIRMWARE_UPLOADER_HPP
 
-#include "CS35L41_FirmwareParser.hpp"
+#include "FirmwareParser.hpp"
 #include "../../CirrusAudioFixup.hpp"
 
 #define MAX_UPLOAD_TRANSACTIONS 1024

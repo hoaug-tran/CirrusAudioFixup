@@ -1,20 +1,14 @@
-//
-//  CirrusAudioFixup.hpp
-//  CirrusAudioFixup
-//
-
 #ifndef CirrusAudioFixup_hpp
 #define CirrusAudioFixup_hpp
 
-#include <IOKit/IOService.h>
 #include <IOKit/IOService.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOTimerEventSource.h>
 #include <libkern/c++/OSCollectionIterator.h>
 #include <os/log.h>
 
-#include "Codecs/CS35L41/CS35L41Registers.hpp"
-#include "Codecs/CS35L41/CS35L41_OTP.hpp"
+#include "Codecs/CS35L41/Registers.hpp"
+#include "Codecs/CS35L41/OTP.hpp"
 
 #define LOG_PREFIX "CirrusAudioFixup: "
 #define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
@@ -107,7 +101,22 @@ struct CS35L41Amp {
     bool firmwareValidated;
     uint32_t final_crc;
     
-    bool needsSpkOutEnable;
+    unsigned int monitorCount;
+    
+    // Diagnostic State Tracking for Edge-Triggered Logging
+    uint32_t last_irq1_sts1;
+    uint32_t last_irq1_sts3;
+    uint32_t last_pwrmgt_sts;
+    uint32_t last_mbox2;
+    uint32_t last_strmarb_err;
+    uint32_t last_clock_detect;
+    uint32_t last_strmarb_ctrl;
+    
+    struct InterestingControl {
+        char name[64];
+        uint32_t address;
+    } diagnosticControls[10];
+    uint32_t diagnosticControlCount;
 };
 
 struct FirmwareImage;
@@ -141,11 +150,10 @@ private:
     IOService *mProvider { nullptr };
     IOWorkLoop *mWorkLoop { nullptr };
     IOTimerEventSource *mProbeTimer { nullptr };
-    IOTimerEventSource *mAudioMonitorTimer { nullptr };
 
     CS35L41Amp mAmps[2] {
-        { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0, nullptr, 0, nullptr, 0, false, 0, false },
-        { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0, nullptr, 0, nullptr, 0, false, 0, false },
+        { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0, nullptr, 0, nullptr, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, 0 },
+        { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0, nullptr, 0, nullptr, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, 0 }
     };
 
     static const size_t kTraceBufferSize = 1024;
@@ -184,40 +192,40 @@ private:
     bool updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source = TRACE_OTHER);
     bool pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 targetVal, UInt32 timeoutMs, TraceSource source = TRACE_OTHER);
 
-    void snapshotPhase4_ASP(CS35L41Amp &amp);
-    void snapshotPhase5_DSP(CS35L41Amp &amp);
-    void snapshotPhase6_Power(CS35L41Amp &amp);
+    void logASPSnapshot(CS35L41Amp &amp);
+    void logDSPSnapshot(CS35L41Amp &amp);
+    void logPowerSnapshot(CS35L41Amp &amp);
     void snapshotPlayback(CS35L41Amp &amp);
+    void snapshotDiagnostics(CS35L41Amp &amp, const char* stage);
     
-    bool cs35l41_init_mac(CS35L41Amp &amp);
+    bool initCodec(CS35L41Amp &amp);
     
-    // Phase 4A.2A: Test Key Unlock/Lock
-    bool cs35l41_test_key_unlock(CS35L41Amp &amp);
-    bool cs35l41_test_key_lock(CS35L41Amp &amp);
+    // test key registers unlock/lock controls
+    bool unlockTestKey(CS35L41Amp &amp);
+    bool lockTestKey(CS35L41Amp &amp);
     
-    // Phase 4A.2B: Apply Errata
-    bool cs35l41_register_errata_patch(CS35L41Amp &amp);
+    // chip-specific configuration patches
+    bool applyErrataPatch(CS35L41Amp &amp);
     
-    // Phase 4A.2C: OTP Unpack
-    bool cs35l41_otp_unpack(CS35L41Amp &amp);
+    // otp data memory unpacking
+    bool unpackOTP(CS35L41Amp &amp);
     
-    bool cs35l41_apply_phase4A2(CS35L41Amp &amp);
+    bool initializeHardwareErrata(CS35L41Amp &amp);
     
     void dumpAllRegisters(CS35L41Amp &amp);
     
-    void phase4_HardwareConfig(CS35L41Amp &amp);
-    void phase5a_FirmwareDiscovery(CS35L41Amp &amp);
-    void phase5b_DSPBringup(CS35L41Amp &amp);
-    bool phase5b_1_VerifyDSPAlive(CS35L41Amp &amp);
+    void configureHardware(CS35L41Amp &amp);
+    void discoverFirmware(CS35L41Amp &amp);
+    void bringupDSP(CS35L41Amp &amp);
+    bool verifyDSPAlive(CS35L41Amp &amp);
 
-    // Phase 5C: Firmware Upload
-    void phase5c_FirmwareUpload(CS35L41Amp &amp, const char* phaseArg);
-    void phase5c_1_DumpXMAndParseAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage);
+    // firmware data management
+    void uploadFirmware(CS35L41Amp &amp, const char* phaseArg);
+    void parseDSPAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage);
     
-    // Phase 5D: Full Initialization
-    void phase5d_FirmwareInit(CS35L41Amp &amp, const char* phaseArg);
-    void phase5e_DumpASPRegisters(CS35L41Amp &amp);
-    void phase6_PowerAmplifier(CS35L41Amp &amp);
+    void initializeFirmware(CS35L41Amp &amp, const char* phaseArg);
+    void dumpASPRegisters(CS35L41Amp &amp);
+    void powerUpAmplifier(CS35L41Amp &amp);
     
     IOService* getAudioController();
     
@@ -225,20 +233,17 @@ private:
     void runTimeBasedFSMCheck(CS35L41Amp &amp);
     uint32_t calculateRegistersCRC32(CS35L41Amp &amp);
 
-    // Phase 4A.3: Register Diff Verification
+    // snapshot tools for debugging registers states
     void snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot);
     void compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *oldSnapshot, const UInt32 *newSnapshot);
 
-    // Phase 4B functions
+    // hardware mapping and sequence blocks configuration
     bool applyRegisterSequence(CS35L41Amp &amp, const RegisterSequence* sequence, size_t count);
     bool applyPLL(CS35L41Amp &amp);
     bool applyASP(CS35L41Amp &amp);
     bool applyGPIO(CS35L41Amp &amp);
     
     static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
-    static void audioMonitorFired(OSObject *owner, IOTimerEventSource *sender);
-    
-    void runAudioMonitor();
 };
 
 #endif /* CirrusAudioFixup_hpp */

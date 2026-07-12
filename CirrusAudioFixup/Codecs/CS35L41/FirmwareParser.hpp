@@ -20,7 +20,7 @@
 #define WMFW_ADSP2_XM       0x05
 #define WMFW_ADSP2_YM       0x06
 
-// Standard Linux structures
+// standard linux firmware structures
 #pragma pack(push, 1)
 
 struct wmfw_header {
@@ -52,17 +52,17 @@ struct wmfw_region {
 #pragma pack(pop)
 
 #define MAX_FIRMWARE_REGIONS 32
-#define MAX_MAPPED_REGIONS   192  // WMFW regions(~8) + coefficient blocks(up to 128) + headroom
+#define MAX_MAPPED_REGIONS   192  // wmfw regions (~8) + coefficient blocks (up to 128) + headroom
 
-// Halo ID Header layout (24-bit packed words in XM memory)
+// halo id header layout (24-bit packed words in xm memory)
 static constexpr uint32_t kHaloFwIdWord          = 2;  // fw_id is word 2
 static constexpr uint32_t kHaloVersionWord       = 3;  // version is word 3
 static constexpr uint32_t kHaloVendorIdWord      = 4;  // vendor_id is word 4
-static constexpr uint32_t kHaloIdHdrWords        = 9;  // Header is 9 words
-static constexpr uint32_t kHaloAlgTableStartWord = 9;  // Algorithm table starts immediately at word 9
+static constexpr uint32_t kHaloIdHdrWords        = 9;  // header is 9 words
+static constexpr uint32_t kHaloAlgTableStartWord = 9;  // algorithm table starts immediately at word 9
 static constexpr uint32_t kHaloAlgEntryWords     = 5;  // 5 words per algorithm (id, ver, xm_base, ym_base, pm_base)
 
-// Helper: read a 24-bit packed big-endian word from packed XM memory
+// read a 24-bit packed big-endian word from packed xm memory
 static inline uint32_t readPacked24BE(const uint8_t *data, uint32_t wordIdx) {
     const uint32_t b = wordIdx * 3;
     return ((uint32_t)data[b] << 16) | ((uint32_t)data[b+1] << 8) | (uint32_t)data[b+2];
@@ -89,7 +89,7 @@ enum class MappingStatus {
     InvalidOffset
 };
 
-// Intermediate Representation
+// intermediate representation structures
 struct FirmwareSpan {
     const uint8_t *begin;
     uint32_t size;
@@ -119,7 +119,7 @@ struct CoefficientBlock {
     const uint8_t* data;
 };
 
-// WMFW Metadata Cache Structures
+// wmfw metadata cache structures
 struct WMFWControl {
     uint16_t offset;
     uint16_t type;
@@ -151,16 +151,16 @@ struct FirmwareImage {
     uint32_t fw_core;
     uint32_t fw_core_rev;
     
-    // Halo specific
+    // halo specific fields
     uint32_t fw_id;
     uint32_t n_algs;
     uint32_t xm_dump_crc;
     
-    // Extracted Algorithm Headers from UNPACK24_0 (DSP RAM)
+    // extracted algorithm headers from unpack24_0 (dsp ram)
     uint32_t algorithmCount;
     AlgorithmInfo algorithms[32];
     
-    // Specific algorithm match (usually CSPL = 205)
+    // specific algorithm match (usually cspl = 205)
     uint32_t algorithm_id;
     uint32_t algorithm_version;
     uint32_t algorithm_xm_base;
@@ -168,12 +168,12 @@ struct FirmwareImage {
     uint32_t algorithm_ym_base;
     uint32_t algorithm_ym_size;
     
-    // WMFW Metadata Cache
+    // wmfw metadata cache pool
     uint32_t wmfwAlgorithmCount;
-    WMFWAlgorithm wmfwAlgorithms[8]; // Max 8 algorithms in metadata
+    WMFWAlgorithm wmfwAlgorithms[8]; // max 8 algorithms in metadata
     
     uint32_t wmfwControlCount;
-    WMFWControl wmfwControls[512]; // Global pool for controls
+    WMFWControl wmfwControls[512]; // global pool for controls
     
     uint32_t regionCount;
     FirmwareRegion regions[32];
@@ -189,11 +189,11 @@ struct FirmwareImage {
     uint32_t stat_metadata_blocks;
     uint32_t stat_unknown_blocks;
     
-    // Calculated Fingerprint
+    // calculated fingerprint hash
     uint32_t fingerprint;
 };
 
-// Phase 5C.1: Mapper Structures
+// firmware memory mapper structures
 
 struct MappedRegion {
     RegionType regionType;
@@ -261,7 +261,7 @@ public:
             const FirmwareRegion &inReg = image.regions[i];
             MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
             
-            // Map Type
+            // resolve destination region mapping type
             outReg.regionType = inReg.regionType;
             
             outReg.firmwareAddress = inReg.baseWordOffset;
@@ -282,13 +282,13 @@ public:
                     return false;
                 }
             } else {
-                // Non-memory region (algorithms, metadata)
-                outReg.dspRegister = 0xFFFFFFFF; // Not applicable
+                // non-memory region (algorithms, metadata)
+                outReg.dspRegister = 0xFFFFFFFF; // not applicable
             }
             
-            // Cumulate CRC
+            // calculate cumulative check sum
             const uint8_t *crcData = (const uint8_t *)&outReg;
-            // Calculate CRC over the metadata: regionType(4), firmwareAddress(4), dspRegister(4), size(4)
+            // calculate checksum over region metadata structure
             for (size_t k = 0; k < 16; k++) {
                 outMapped.mappingCrc ^= crcData[k];
                 for (size_t j = 0; j < 8; j++) {
@@ -314,13 +314,13 @@ public:
             }
             const CoefficientBlock &coeff = image.coefficients[i];
             
-            // Find algorithm
+            // locate matching algorithm block
             bool found = false;
             uint32_t alg_xm_base = 0;
             uint32_t alg_ym_base = 0;
             
             if (coeff.id == image.fw_id) {
-                // Global coefficient (usually targets XM or YM directly or has special handling)
+                // global coefficient block configuration
                 CIRRUS_LOG("Global Coefficient %u (ID=0x%06X) mapping is not fully supported yet", i, coeff.id);
                 continue;
             } else {
@@ -343,8 +343,7 @@ public:
             MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
             uint32_t type_masked = coeff.type & 0xFF;
             
-            // For CS35L41, the WMFW types for packed memory are used.
-            // WMFW_HALO_XM_PACKED = 0x11, YM_PACKED = 0x12, XM_UNPACKED = 0x5, YM_UNPACKED = 0x6
+            // map packed/unpacked memory target registers
             if (type_masked == WMFW_HALO_XM_PACKED || type_masked == 0x5) {
                 outReg.regionType = (type_masked == 0x5) ? RegionType::XM_UNPACKED : RegionType::XM_PACKED;
                 outReg.firmwareAddress = alg_xm_base + coeff.offset;
@@ -364,7 +363,7 @@ public:
             outReg.data.begin = coeff.data;
             outReg.data.size = coeff.length;
             
-            // Cumulate CRC
+            // calculate cumulative check sum
             const uint8_t *crcData = (const uint8_t *)&outReg;
             for (size_t k = 0; k < 16; k++) {
                 outMapped.mappingCrc ^= crcData[k];
@@ -420,7 +419,7 @@ public:
         }
         pos += sizeof(wmfw_footer);
         
-        // Pass 1: Bound Check Only
+        // pass 1: perform bound checks only
         while (pos < size) {
             if (size - pos < sizeof(wmfw_region)) {
                 CIRRUS_ERR("WMFW region header out of bounds at offset %zu", pos);
@@ -466,7 +465,7 @@ public:
             case WMFW_HALO_YM_PACKED:
                 return (0x02C00000 + (dspWord * 3)) & ~0x3;
             case WMFW_HALO_PM_PACKED:
-                return 0x03800000 + (dspWord * 5); // Assuming PM uses the same base window or similar, though Linux driver does this
+                return 0x03800000 + (dspWord * 5); // assume pm uses the same base window as defined in linux driver
             default:
                 CIRRUS_ERR("regionToReg: Unknown memory region type %u", type);
                 return dspWord;
@@ -502,7 +501,7 @@ public:
         uint32_t alg_id = readLE32(&data[pos]);
         pos += 4;
         
-        // Algorithm Name (uint8)
+        // algorithm name length (uint8)
         if (pos + 1 > size) return;
         uint8_t alg_name_len = data[pos];
         if (pos + alignStringLen(alg_name_len, 1) > size) return;
@@ -510,7 +509,7 @@ public:
         memcpy(alg_name, &data[pos + 1], alg_name_len);
         pos += alignStringLen(alg_name_len, 1);
         
-        // Algorithm Description (uint16)
+        // algorithm description length (uint16)
         if (pos + 2 > size) return;
         uint16_t alg_desc_len = readLE16(&data[pos]);
         if (pos + alignStringLen(alg_desc_len, 2) > size) return;
@@ -560,7 +559,7 @@ public:
             
             uint32_t inner_pos = payload_start;
             
-            // String 1: Coefficient Name (uint8)
+            // parse string 1: coefficient name (uint8)
             if (inner_pos + 1 > coeff_end) break;
             uint8_t c_name_len = data[inner_pos];
             if (inner_pos + alignStringLen(c_name_len, 1) > coeff_end) break;
@@ -568,19 +567,19 @@ public:
             memcpy(c_name, &data[inner_pos + 1], c_name_len);
             inner_pos += alignStringLen(c_name_len, 1);
             
-            // String 2: Coefficient Description (uint8)
+            // parse string 2: coefficient description (uint8)
             if (inner_pos + 1 > coeff_end) break;
             uint8_t c_desc_len = data[inner_pos];
             if (inner_pos + alignStringLen(c_desc_len, 1) > coeff_end) break;
             inner_pos += alignStringLen(c_desc_len, 1);
             
-            // String 3: Unknown String (uint16)
+            // parse string 3: unknown/reserved string (uint16)
             if (inner_pos + 2 > coeff_end) break;
             uint16_t c_unknown_len = readLE16(&data[inner_pos]);
             if (inner_pos + alignStringLen(c_unknown_len, 2) > coeff_end) break;
             inner_pos += alignStringLen(c_unknown_len, 2);
             
-            // Struct fields: ctl_type, flags, len
+            // parse control structure fields: ctl_type, flags, len
             if (inner_pos + 8 > coeff_end) break;
             uint16_t c_ctl_type = readLE16(&data[inner_pos]);
             uint16_t c_flags = readLE16(&data[inner_pos + 2]);
@@ -605,7 +604,7 @@ public:
                 alg.controlCount++;
             }
             
-            pos = coeff_end; // Skip to next coefficient safely
+            pos = coeff_end; // skip to next coefficient structure
         }
     }
 
@@ -673,7 +672,7 @@ public:
             }
             
             if (type == WMFW_HALO_XM_PACKED && offset == 0 && len >= kHaloIdHdrWords * 3) {
-                // This is the first XM region containing the Halo ID Header.
+                // check if this is the first xm region containing the halo id header
                 outImage->fw_id = readPacked24BE(raw_region->data, kHaloFwIdWord);
                 outImage->n_algs = 1; 
                 CIRRUS_LOG("parseWMFW: Found Halo Header. fw_id=0x%06X", outImage->fw_id);
@@ -691,7 +690,7 @@ public:
     }
 
     static bool parseAlgorithmTable(const uint8_t *vmem, size_t vmem_size, FirmwareImage &outImage) {
-        // We are reading from UNPACK24_0, where each word is a 32-bit big-endian value (4 bytes)
+        // read from unpack24_0, where each word is a 32-bit big-endian value (4 bytes)
         const uint32_t kHaloAlgTableStartWord = 10;
         const uint32_t kHaloAlgEntryWords = 6;
 
@@ -718,7 +717,7 @@ public:
         CIRRUS_LOG(" Version     = %u (0x%06X)", fw_ver, fw_ver);
         CIRRUS_LOG(" FW xm_base  = 0x%06X", fw_xm_base);
 
-        // Treat Firmware ID as the first "Algorithm" Region since coefficients bind to it
+        // treat firmware id as the first algorithm region since coefficients bind to it
         AlgorithmInfo &fwAlg = outImage.algorithms[outImage.algorithmCount++];
         fwAlg.id = fw_id;
         fwAlg.baseWordOffset = fw_xm_base;
@@ -747,7 +746,7 @@ public:
             uint32_t alg_id = readUnpacked32BE(vmem, base);
             uint32_t alg_ver = readUnpacked32BE(vmem, base + 1);
             uint32_t alg_xm_base = readUnpacked32BE(vmem, base + 2);
-            uint32_t alg_xm_size = readUnpacked32BE(vmem, base + 3); // Not technically size, but we'll read it
+            uint32_t alg_xm_size = readUnpacked32BE(vmem, base + 3); // not technically size, but read it as a descriptor
             uint32_t alg_ym_base = readUnpacked32BE(vmem, base + 4);
             uint32_t alg_ym_size = readUnpacked32BE(vmem, base + 5);
             
@@ -762,7 +761,7 @@ public:
             alg.baseWordOffset = alg_xm_base;
             alg.ymBaseWordOffset = alg_ym_base;
             alg.size = alg_xm_size;
-            alg.region = RegionType::XM_PACKED; // Kext uses this for logic
+            alg.region = RegionType::XM_PACKED; // kext uses this for logic
             
             valid_algs++;
         }
@@ -773,7 +772,7 @@ public:
     static bool parseBIN(const uint8_t *data, size_t size, FirmwareImage *outImage) {
         if (!outImage) return false;
         
-        // Header is wmfw_coeff_hdr: magic(4), len(4), rev(4), core(4)
+        // parse wmfw coefficient header
         if (size < 12) {
             CIRRUS_ERR("BIN file too small for header");
             return false;
@@ -790,7 +789,8 @@ public:
             return false;
         }
 
-        uint32_t pos = hdr_len; // Coefficients start immediately after the header
+        // coefficients start immediately after the header
+        uint32_t pos = hdr_len;
         
         while (pos < size && outImage->coefficientCount < 128) {
             if (size - pos < 20) { // wmfw_coeff_item is 20 bytes
@@ -802,7 +802,7 @@ public:
             coeff.offset = data[pos+0] | (data[pos+1] << 8); // offset is le16
             coeff.type = data[pos+2] | (data[pos+3] << 8); // type is le16
             coeff.id = data[pos+4] | (data[pos+5] << 8) | (data[pos+6] << 16) | (data[pos+7] << 24); // id is le32
-            // Skip ver(4) and sr(4)
+            // skip version and sample rate fields
             coeff.length = data[pos+16] | (data[pos+17] << 8) | (data[pos+18] << 16) | (data[pos+19] << 24); // len is le32
             
             pos += 20;

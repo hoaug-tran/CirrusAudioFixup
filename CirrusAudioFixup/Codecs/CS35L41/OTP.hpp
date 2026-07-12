@@ -14,7 +14,7 @@ struct ErrataTable {
     size_t numPatches;
 };
 
-// --- B2 Errata Patch from Linux ---
+// b2 errata register patch config values ported from linux kernel source
 static const ErrataPatch cs35l41_revb2_errata_patch[] = {
     { 0x00004100, 0x00000000 }, // CS35L41_VIMON_SPKMON_RESYNC
     { 0x00004310, 0x00000000 }, // 0x4310

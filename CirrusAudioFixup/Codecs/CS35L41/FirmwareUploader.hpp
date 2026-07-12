@@ -66,10 +66,10 @@ public:
             
             uint32_t chunkSize = (remaining > policy.maxPayloadBytes) ? policy.maxPayloadBytes : remaining;
             
-            // Align chunk size to LCM(DSP word size, I2C word size)
-            // I2C word size is 4 bytes (32-bit registers).
-            // PM is 5 bytes -> LCM(5, 4) = 20
-            // XM/YM is 3 bytes -> LCM(3, 4) = 12
+            // align chunk size to lcm(dsp word size, i2c word size)
+            // i2c word size is 4 bytes (32-bit registers)
+            // pm is 5 bytes -> lcm(5, 4) = 20
+            // xm/ym is 3 bytes -> lcm(3, 4) = 12
             uint32_t align = 4;
             switch (region.regionType) {
                 case RegionType::PM_PACKED: align = 20; break;
@@ -87,12 +87,12 @@ public:
             }
             
             UploadTransaction &tx = outPlan.transactions[outPlan.transactionCount];
-            tx.firmwareAddress = region.firmwareAddress; // FW Word Offset
+            tx.firmwareAddress = region.firmwareAddress; // firmware word offset
             tx.payloadOffset = currentOffset;
             tx.payload = region.data.begin + currentOffset;
             tx.size = chunkSize;
             
-            // Calculate register increment based on Region Type
+            // calculate register address increment based on region type
             uint32_t chunkReg = 0;
             MappingStatus status = CirrusFirmwareMapper::mapPackedAddress(region.regionType, region.firmwareAddress, currentOffset, chunkReg);
             if (status != MappingStatus::OK) {
@@ -119,7 +119,7 @@ public:
                 return false;
             }
             
-            // Cumulate CRC over plan
+            // calculate checksum over plan
             uint32_t crcFields[3] = {tx.dspRegister, tx.firmwareAddress, tx.size};
             const uint8_t *crcData = (const uint8_t *)crcFields;
             for (size_t k = 0; k < sizeof(crcFields); k++) {
@@ -210,11 +210,11 @@ public:
         uint32_t totalSize = plan.totalSize;
         const char *rtype  = regionTypeName(plan.regionType);
 
-        CIRRUS_LOG("Amp %s: --- Phase 5C.3 Real Upload Start ---", amp.name);
+        CIRRUS_LOG("amp %s: starting physical upload of region data", amp.name);
         CIRRUS_LOG("Amp %s: Region %d (%s), Transactions: %d, Total: %d bytes, DSP Start: 0x%08X",
                    amp.name, plan.regionIndex, rtype, plan.transactionCount, totalSize, dspStart);
 
-        // Allocate buffers
+        // allocate verification buffers
         UInt8 *backupBuffer = (UInt8 *)IOMallocData(totalSize);
         UInt8 *verifyBuffer = (UInt8 *)IOMallocData(totalSize);
         if (!backupBuffer || !verifyBuffer) {
@@ -230,7 +230,7 @@ public:
             return (uint32_t)(nsecs / 1000000);
         };
 
-        // Backup current DSP memory before writing
+        // backup current dsp memory before overwrite
         CIRRUS_LOG("Amp %s: Backing up %d bytes from 0x%08X...", amp.name, totalSize, dspStart);
         if (!fixup->bulkRead(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER)) {
             CIRRUS_ERR("Amp %s: Backup FAIL - aborting.", amp.name);
@@ -240,19 +240,19 @@ public:
         }
         CIRRUS_LOG("Amp %s: Backup OK (%d bytes)", amp.name, totalSize);
 
-        // Per-transaction: Write, Readback, CRC
+        // process each chunk via write-verify-check sequence
         uint64_t t_total_start = mach_absolute_time();
         uint32_t acc_write_ms = 0, acc_rb_ms = 0, acc_crc_ms = 0, acc_retries = 0;
 
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
 
-            CIRRUS_LOG("Amp %s: --- Transaction %d/%d | DSP=0x%08X FW_Word=0x%06X ChunkByte=0x%06X Payload=[%d..%d] Size=%d ---",
+            CIRRUS_LOG("amp %s: transaction %d/%d (dsp=0x%08x size=%d)",
                    amp.name, i + 1, plan.transactionCount,
-                   tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.payloadOffset, tx.payloadOffset + tx.size - 1, tx.size);
+                   tx.dspRegister, tx.size);
 
-            // Write chunk to DSP
-            uint32_t totalPacketLength = tx.size + 4; // payload + register
+            // write chunk data to dsp registers
+            uint32_t totalPacketLength = tx.size + 4;
             CIRRUS_LOG("Amp %s:   WRITE    : payload = %d bytes, packet = %d bytes (payload + 4)", amp.name, tx.size, totalPacketLength);
             uint64_t t0 = mach_absolute_time();
             bool writeOk = false;
@@ -286,13 +286,13 @@ public:
             }
             CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", amp.name, write_ms);
 
-            // Read back the written chunk
+            // read back the written data chunk to verify
             t0 = mach_absolute_time();
             UInt8 *rbSlot = verifyBuffer + tx.payloadOffset;
             bool readOk = fixup->bulkRead(amp, tx.dspRegister, rbSlot, tx.size, TRACE_OTHER);
             uint32_t rb_ms = to_ms(mach_absolute_time() - t0);
             acc_rb_ms += rb_ms;
-
+ 
             if (!readOk) {
                 CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", amp.name, rb_ms);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", amp.name);
@@ -303,8 +303,8 @@ public:
                 return false;
             }
             CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", amp.name, rb_ms);
-
-            // CRC check: compare written vs read-back
+ 
+            // calculate and check crc-32 signatures
             t0 = mach_absolute_time();
             uint32_t payCrc = 0xFFFFFFFF, rbCrc = 0xFFFFFFFF;
             const uint8_t *paySlice = tx.payload;
@@ -320,12 +320,12 @@ public:
             rbCrc  = ~rbCrc;
             uint32_t crc_ms = to_ms(mach_absolute_time() - t0);
             acc_crc_ms += crc_ms;
-
+ 
             if (payCrc != rbCrc) {
                 CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]",
                            amp.name, crc_ms, payCrc, rbCrc);
                            
-                // Dump the first 16 bytes to see where it differs
+                // display first 16 bytes to trace payload difference
                 uint32_t dump_len = min((uint32_t)tx.size, (uint32_t)16);
                 char payHex[64] = {0};
                 char rbHex[64] = {0};
@@ -335,8 +335,8 @@ public:
                 }
                 CIRRUS_LOG("Amp %s:   PAYLOAD  : %s", amp.name, payHex);
                 CIRRUS_LOG("Amp %s:   READBACK : %s", amp.name, rbHex);
-
-                // memcmp: narrow down to exact byte
+ 
+                // run exact byte comparison to pinpoint mismatch offset
                 for (uint32_t b = 0; b < tx.size; b++) {
                     if (paySlice[b] != rbSlot[b]) {
                         CIRRUS_LOG("Amp %s:   memcmp   : offset 0x%06X (Exp=0x%02X Got=0x%02X)",
@@ -353,12 +353,12 @@ public:
             CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", amp.name, crc_ms, payCrc);
             CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", amp.name);
         }
-
-        // Summary
+ 
+        // print performance statistics summary
         uint32_t total_ms = to_ms(mach_absolute_time() - t_total_start);
         CIRRUS_LOG("Amp %s: Upload Complete | Tx=%d PASS, Write=%d ms, RB=%d ms, CRC=%d ms, Total=%d ms",
                    amp.name, plan.transactionCount, acc_write_ms, acc_rb_ms, acc_crc_ms, total_ms);
-
+ 
         if (outStats) {
             outStats->writeMs   = acc_write_ms;
             outStats->readbackMs = acc_rb_ms;
@@ -366,7 +366,7 @@ public:
             outStats->totalMs   = total_ms;
             outStats->retries   = acc_retries;
         }
-
+ 
         IOFreeData(backupBuffer, totalSize);
         IOFreeData(verifyBuffer, totalSize);
         return true;
@@ -374,9 +374,8 @@ public:
 };
 
 
-// Phase 5C.4: Region Scheduler
-// Calls UploadPlanner + RealUploader for each executable region in order.
-// Stops at first failure. Does not touch uploader internals.
+// region scheduler coordinating the upload of executable memory blocks
+// stops immediately at the first block failure
 
 struct RegionResult {
     uint32_t   regionIndex;

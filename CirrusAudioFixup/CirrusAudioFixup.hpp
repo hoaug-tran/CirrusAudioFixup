@@ -103,7 +103,7 @@ struct CS35L41Amp {
     
     unsigned int monitorCount;
     
-    // Diagnostic State Tracking for Edge-Triggered Logging
+    // tracks diagnostic state to avoid log flood on repeating values
     uint32_t last_irq1_sts1;
     uint32_t last_irq1_sts3;
     uint32_t last_pwrmgt_sts;
@@ -200,14 +200,14 @@ private:
     
     bool initCodec(CS35L41Amp &amp);
     
-    // test key registers unlock/lock controls
+    // controls to unlock and lock write access to test registers
     bool unlockTestKey(CS35L41Amp &amp);
     bool lockTestKey(CS35L41Amp &amp);
     
-    // chip-specific configuration patches
+    // custom errata register patches specific to chip revision
     bool applyErrataPatch(CS35L41Amp &amp);
     
-    // otp data memory unpacking
+    // unpacks factory calibration values from otp memory
     bool unpackOTP(CS35L41Amp &amp);
     
     bool initializeHardwareErrata(CS35L41Amp &amp);
@@ -219,7 +219,7 @@ private:
     void bringupDSP(CS35L41Amp &amp);
     bool verifyDSPAlive(CS35L41Amp &amp);
 
-    // firmware data management
+    // manages loading and uploading dsp firmware binaries
     void uploadFirmware(CS35L41Amp &amp, const char* phaseArg);
     void parseDSPAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage);
     
@@ -233,11 +233,11 @@ private:
     void runTimeBasedFSMCheck(CS35L41Amp &amp);
     uint32_t calculateRegistersCRC32(CS35L41Amp &amp);
 
-    // snapshot tools for debugging registers states
+    // compares register values before and after a change
     void snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot);
     void compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *oldSnapshot, const UInt32 *newSnapshot);
 
-    // hardware mapping and sequence blocks configuration
+    // helper methods to write blocks of config values
     bool applyRegisterSequence(CS35L41Amp &amp, const RegisterSequence* sequence, size_t count);
     bool applyPLL(CS35L41Amp &amp);
     bool applyASP(CS35L41Amp &amp);

@@ -55,17 +55,18 @@ Below is a detailed guide of the functions, structures, and algorithms implement
   5. Schedules the main diagnostic loop: `probeAmp` is called for both the Left (`0x40`) and Right (`0x41`) amplifiers.
 
 ### 2. Main Workflow Orchestrator
-- **`probeAmp(CS35L41Amp &amp)`**
-  This is the state machine orchestrating the bootstrap phase of each individual amplifier. It runs through the following sequence:
-  1. Checks if the kext is booted in `cirrus_readonly` mode (if yes, it stops here to prevent writes).
-  2. Runs `initCodec` to verify basic chip IDs and hardware revisions.
-  3. Applies the revision-specific hardware errata patches (`initializeHardwareErrata`).
-  4. Unpacks the factory calibration data from OTP memory (`unpackOTP`).
-  5. Configures the phase-locked loops (`applyPLL`).
-  6. Configures the digital serial audio interface (`applyASP`).
-  7. Configures the amplifier GPIO lines (`applyGPIO`).
-  8. Attempts to load firmware and start the DSP subsystem (`discoverFirmware`, `bringupDSP`, `uploadFirmware`, `initializeFirmware`).
-  9. If the DSP fails (e.g. because firmware is rejected or in ROM mode), it rolls back and starts the non-DSP fallback sequence (`powerUpAmplifier`) to route audio directly from the ASP serial input to the DAC.
+- **`fullDriverFlow()`**
+  This is the main state machine orchestrating the bootstrap phase of each individual amplifier by default. It runs through the following sequence:
+  1. Runs `initCodec` to verify basic chip IDs and hardware revisions.
+  2. Applies the revision-specific hardware errata patches (`initializeHardwareErrata`).
+  3. Unpacks the factory calibration data from OTP memory (`unpackOTP`).
+  4. Configures the phase-locked loops (`applyPLL`).
+  5. Configures the digital serial audio interface (`applyASP`).
+  6. Configures the amplifier GPIO lines (`applyGPIO`).
+  7. Configures system-specific hardware settings (`configureHardware`).
+  8. Discovers matching firmware based on SSID (`discoverFirmware`).
+  9. Automatically loads the speaker protection firmware/tuning blocks and boots the DSP subsystem (`initializeFirmware`).
+  10. Powers up the analog amplifier stage (`powerUpAmplifier`).
 
 ### 3. Low-Level Helper Methods
 - **`readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *val)`** / **`writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 val)`**
@@ -150,9 +151,9 @@ The clock ratio between macOS AppleHDA and the CS35L41 must match perfectly. If 
 
 ---
 
-## Configuration Boot Arguments
+## Configuration Boot Arguments (Optional / For Debugging)
 
-List of NVRAM parameters to customize driver behavior:
+By default, **no boot arguments are required** to run the full initialization and DSP firmware boot flow. For debugging, the following NVRAM parameters can be used:
 
 | Parameter | Value | Description |
 | :--- | :--- | :--- |

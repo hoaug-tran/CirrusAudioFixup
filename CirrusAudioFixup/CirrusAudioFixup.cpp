@@ -1449,6 +1449,11 @@ bool CirrusAudioFixup::applyASP(CS35L41Amp &amp) {
     uint32_t dac_src = (strcmp(amp.name, "right") == 0) ? 0x09 : 0x08;
     writeRegister(amp, CS35L41_DAC_PCM1_SRC, dac_src);
 
+    // configure dsp rx sources dynamically (0x08 for left, 0x09 for right)
+    uint32_t dsp_rx_src = (strcmp(amp.name, "right") == 0) ? 0x09 : 0x08;
+    writeRegister(amp, CS35L41_DSP1_RX1_SRC, dsp_rx_src);
+    writeRegister(amp, CS35L41_DSP1_RX2_SRC, dsp_rx_src);
+
 
     uint64_t endTime = mach_absolute_time();
     uint64_t elapsed_us = 0;
@@ -1517,6 +1522,16 @@ IOService* CirrusAudioFixup::getAudioController() {
     int bestScore = -1;
     
     while ((service = OSDynamicCast(IOService, iter->getNextObject()))) {
+        // skip disabled, powered-off, or unpopulated pci devices returning 0xffff/0xffffffff
+        uint32_t pciVendor = 0;
+        OSData *venData = OSDynamicCast(OSData, service->getProperty("vendor-id"));
+        if (venData && venData->getLength() >= 4) {
+            pciVendor = *((uint32_t*)venData->getBytesNoCopy());
+        }
+        if (pciVendor == 0xFFFF || pciVendor == 0xFFFFFFFF) {
+            continue;
+        }
+
         int score = 0;
         
         OSData *classCodeData = OSDynamicCast(OSData, service->getProperty("class-code"));
@@ -1624,9 +1639,11 @@ void CirrusAudioFixup::discoverFirmware(CS35L41Amp &amp) {
         audioController->release();
     }
     
-    // fall back if pci info isn't found in registry
-    if (subVendor == 0 || subDevice == 0) {
-        CIRRUS_LOG("audio controller pci not found, using default 17aa:3847");
+    // fall back if pci info isn't found in registry or is invalid
+    if (subVendor == 0 || subDevice == 0 || 
+        subVendor == 0xFFFF || subDevice == 0xFFFF || 
+        subVendor == 0xFFFFFFFF || subDevice == 0xFFFFFFFF) {
+        CIRRUS_LOG("audio controller pci not found or invalid (subVendor=0x%08X, subDevice=0x%08X), using default 17aa:3847", subVendor, subDevice);
         subVendor = 0x17AA;
         subDevice = 0x3847;
     }

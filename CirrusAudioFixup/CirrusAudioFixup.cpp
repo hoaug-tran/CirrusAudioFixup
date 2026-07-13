@@ -185,6 +185,10 @@ void CirrusAudioFixup::fullDriverFlow() {
         configureHardware(amp);
         
         discoverFirmware(amp);
+
+        if (amp.firmwareValidated) {
+            initializeFirmware(amp, "5D.0");
+        }
         
         // log current serial port configuration
         logASPSnapshot(amp);

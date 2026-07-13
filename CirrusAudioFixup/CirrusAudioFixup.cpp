@@ -1133,39 +1133,35 @@ bool CirrusAudioFixup::initializeHardwareErrata(CS35L41Amp &amp) {
     setProperty(propName, crc_unlock, 32);
     CIRRUS_LOG("checksum after unlock on %s: 0x%08X", amp.name, crc_unlock);
     
-    if (bootArgStrEquals("cirrus_phase", "4A2B") || bootArgStrEquals("cirrus_phase", "4A2C")) {
-        // 2. Errata Patch
-        if (!applyErrataPatch(amp)) {
-            return false;
-        }
-        
-        snapshotRegisters(amp, snapshot2);
-        CIRRUS_LOG("register diffs after applying errata patch on %s:", amp.name);
-        compareRegisterSnapshots(amp, snapshot1, snapshot2);
-        
-        UInt32 crc_errata = calculateRegistersCRC32(amp);
-        snprintf(propName, sizeof(propName), "Cirrus_CRC_Errata_%s", amp.name);
-        setProperty(propName, crc_errata, 32);
-        CIRRUS_LOG("checksum after errata patch on %s: 0x%08X", amp.name, crc_errata);
+    // 2. Errata Patch
+    if (!applyErrataPatch(amp)) {
+        return false;
     }
     
-    if (bootArgStrEquals("cirrus_phase", "4A2C")) {
-        // unpack otp values
-        if (!unpackOTP(amp)) {
-            CIRRUS_ERR("otp unpacking failed on %s, locking test key as rollback", amp.name);
-            lockTestKey(amp); // rollback on error
-            return false;
-        }
-        
-        snapshotRegisters(amp, snapshot3);
-        CIRRUS_LOG("register diffs after unpacking otp on %s:", amp.name);
-        compareRegisterSnapshots(amp, snapshot2, snapshot3);
-        
-        UInt32 crc_otp = calculateRegistersCRC32(amp);
-        snprintf(propName, sizeof(propName), "Cirrus_CRC_OTP_%s", amp.name);
-        setProperty(propName, crc_otp, 32);
-        CIRRUS_LOG("checksum after otp unpack on %s: 0x%08X", amp.name, crc_otp);
+    snapshotRegisters(amp, snapshot2);
+    CIRRUS_LOG("register diffs after applying errata patch on %s:", amp.name);
+    compareRegisterSnapshots(amp, snapshot1, snapshot2);
+    
+    UInt32 crc_errata = calculateRegistersCRC32(amp);
+    snprintf(propName, sizeof(propName), "Cirrus_CRC_Errata_%s", amp.name);
+    setProperty(propName, crc_errata, 32);
+    CIRRUS_LOG("checksum after errata patch on %s: 0x%08X", amp.name, crc_errata);
+    
+    // 3. unpack otp values
+    if (!unpackOTP(amp)) {
+        CIRRUS_ERR("otp unpacking failed on %s, locking test key as rollback", amp.name);
+        lockTestKey(amp); // rollback on error
+        return false;
     }
+    
+    snapshotRegisters(amp, snapshot3);
+    CIRRUS_LOG("register diffs after unpacking otp on %s:", amp.name);
+    compareRegisterSnapshots(amp, snapshot2, snapshot3);
+    
+    UInt32 crc_otp = calculateRegistersCRC32(amp);
+    snprintf(propName, sizeof(propName), "Cirrus_CRC_OTP_%s", amp.name);
+    setProperty(propName, crc_otp, 32);
+    CIRRUS_LOG("checksum after otp unpack on %s: 0x%08X", amp.name, crc_otp);
     
     // 4. Lock Test Key
     if (!lockTestKey(amp)) {

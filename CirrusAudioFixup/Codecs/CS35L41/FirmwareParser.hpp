@@ -225,14 +225,23 @@ class CirrusFirmwareMapper {
 public:
     static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t &regAddress) {
         switch (type) {
+            // Addressing MUST match Linux cs_dsp_halo_region_to_reg():
+            //   XM/YM packed: (base + offset*3) & ~0x3
+            //   PM packed:     base + offset*5
+            //   XM/YM unpacked (ADSP2): base + offset*4
+            // byteOffset is the byte offset within the region payload during chunked
+            // upload; since the DSP register space is byte-addressed and chunks are
+            // 4-byte aligned, it is added directly to the mapped register address.
+            // (The previous *4 / (byteOffset/3)*4 formula was a regression that did not
+            //  match Linux or the last known-good boot log.)
             case RegionType::PM_PACKED:
                 regAddress = 0x03800000 + (wordOffset * 5) + byteOffset;
                 break;
             case RegionType::XM_PACKED:
-                regAddress = ((0x02000000 + (wordOffset * 3)) & ~0x3) + byteOffset;
+                regAddress = ((0x02000000 + (wordOffset * 3)) & ~0x3u) + byteOffset;
                 break;
             case RegionType::YM_PACKED:
-                regAddress = ((0x02C00000 + (wordOffset * 3)) & ~0x3) + byteOffset;
+                regAddress = ((0x02C00000 + (wordOffset * 3)) & ~0x3u) + byteOffset;
                 break;
             case RegionType::XM_UNPACKED:
                 regAddress = 0x02800000 + (wordOffset * 4) + byteOffset;
@@ -313,51 +322,49 @@ public:
                 return false;
             }
             const CoefficientBlock &coeff = image.coefficients[i];
-            
-            // locate matching algorithm block
+            MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
+            uint32_t type_masked = coeff.type & 0xFF;
+            uint32_t byteOffset = coeff.offset;
+            uint32_t algorithmBase = 0;
             bool found = false;
-            uint32_t alg_xm_base = 0;
-            uint32_t alg_ym_base = 0;
-            
-            if (coeff.id == image.fw_id) {
-                // global coefficient block configuration
-                CIRRUS_LOG("Global Coefficient %u (ID=0x%06X) mapping is not fully supported yet", i, coeff.id);
-                continue;
-            } else {
+
+            if (type_masked == WMFW_HALO_XM_PACKED || type_masked == 0x5) {
+                outReg.regionType = (type_masked == 0x5) ? RegionType::XM_UNPACKED : RegionType::XM_PACKED;
                 for (uint32_t a = 0; a < image.algorithmCount; a++) {
                     if (image.algorithms[a].id == coeff.id) {
-                        alg_xm_base = decodePointer(image.algorithms[a].baseWordOffset).wordOffset;
-                        alg_ym_base = decodePointer(image.algorithms[a].ymBaseWordOffset).wordOffset;
-                        CIRRUS_LOG("Coeff %u (ID=0x%06X) matched Algorithm %u (xm_base=0x%08X, ym_base=0x%08X)", i, coeff.id, a, alg_xm_base, alg_ym_base);
+                        algorithmBase = decodePointer(image.algorithms[a].baseWordOffset).wordOffset;
                         found = true;
                         break;
                     }
                 }
-            }
-            
-            if (!found) {
-                CIRRUS_LOG("Skipping orphan coefficient block %u (ID=0x%06X)", i, coeff.id);
-                continue;
-            }
-            
-            MappedRegion &outReg = outMapped.regions[outMapped.regionCount];
-            uint32_t type_masked = coeff.type & 0xFF;
-            
-            // map packed/unpacked memory target registers
-            if (type_masked == WMFW_HALO_XM_PACKED || type_masked == 0x5) {
-                outReg.regionType = (type_masked == 0x5) ? RegionType::XM_UNPACKED : RegionType::XM_PACKED;
-                outReg.firmwareAddress = alg_xm_base + coeff.offset;
-                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
-                if (status != MappingStatus::OK) return false;
             } else if (type_masked == WMFW_HALO_YM_PACKED || type_masked == 0x6) {
                 outReg.regionType = (type_masked == 0x6) ? RegionType::YM_UNPACKED : RegionType::YM_PACKED;
-                outReg.firmwareAddress = alg_ym_base + coeff.offset;
-                MappingStatus status = mapPackedAddress(outReg.regionType, outReg.firmwareAddress, 0, outReg.dspRegister);
-                if (status != MappingStatus::OK) return false;
+                for (uint32_t a = 0; a < image.algorithmCount; a++) {
+                    if (image.algorithms[a].id == coeff.id) {
+                        algorithmBase = decodePointer(image.algorithms[a].ymBaseWordOffset).wordOffset;
+                        found = true;
+                        break;
+                    }
+                }
             } else {
-                CIRRUS_LOG("Unsupported Coefficient Type 0x%X", type_masked);
+                CIRRUS_LOG("Skipping non-memory coefficient block %u (ID=0x%06X type=0x%X)",
+                           i, coeff.id, type_masked);
                 continue;
             }
+
+            if (!found) {
+                CIRRUS_ERR("No algorithm 0x%06X for coefficient block %u type=0x%X", coeff.id, i, type_masked);
+                return false;
+            }
+
+            // Exact Linux cs_dsp_load_coeff() semantics:
+            // reg = region_to_reg(mem, alg_region->base); reg += offset.
+            outReg.firmwareAddress = algorithmBase;
+            MappingStatus status = mapPackedAddress(outReg.regionType, algorithmBase, 0, outReg.dspRegister);
+            if (status != MappingStatus::OK) return false;
+            outReg.dspRegister += byteOffset;
+            CIRRUS_LOG("Coefficient %u: ID=0x%06X type=0x%X alg_base=0x%06X byte_offset=0x%08X mapped=0x%08X",
+                       i, coeff.id, type_masked, algorithmBase, byteOffset, outReg.dspRegister);
             
             outReg.size = coeff.length;
             outReg.data.begin = coeff.data;
@@ -802,8 +809,15 @@ public:
             coeff.offset = data[pos+0] | (data[pos+1] << 8); // offset is le16
             coeff.type = data[pos+2] | (data[pos+3] << 8); // type is le16
             coeff.id = data[pos+4] | (data[pos+5] << 8) | (data[pos+6] << 16) | (data[pos+7] << 24); // id is le32
-            // skip version and sample rate fields
+            // version is at pos+8, offset32 is at pos+12
+            uint32_t offset32 = data[pos+12] | (data[pos+13] << 8) | (data[pos+14] << 16) | (data[pos+15] << 24);
             coeff.length = data[pos+16] | (data[pos+17] << 8) | (data[pos+18] << 16) | (data[pos+19] << 24); // len is le32
+            
+            if (coeff.type == 0xF411 || coeff.type == 0xF412 || coeff.type == 0xF405 || coeff.type == 0xF406) {
+                // WMFW_xxx_LONG types use offset32
+                coeff.offset = offset32;
+                coeff.type &= 0xFF; // strip extended flags
+            }
             
             pos += 20;
             

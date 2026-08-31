@@ -102,6 +102,8 @@ struct CS35L41Amp {
     uint32_t final_crc;
     
     unsigned int monitorCount;
+    bool initialized;              // true once powerUpAmplifier completed; gates monitor re-init (monitorCount is always 0 in bypass mode)
+    bool dspAlive;                 // true only when HALO_STATE reached RUN; false triggers firmware-only retry on pll_lock=1
     
     // tracks diagnostic state to avoid log flood on repeating values
     uint32_t last_irq1_sts1;
@@ -111,6 +113,11 @@ struct CS35L41Amp {
     uint32_t last_strmarb_err;
     uint32_t last_clock_detect;
     uint32_t last_strmarb_ctrl;
+    
+    // playback detection via DSP timestamp counter
+    uint32_t lastTimestamp;        // previous reading of DSP1_TIMESTAMP_COUNT
+    bool playbackActive;           // true when I2S data is actively flowing
+    uint32_t playbackStableCount;  // number of consecutive monitor cycles with same playback state
     
     struct InterestingControl {
         char name[64];
@@ -129,8 +136,10 @@ struct FirmwareResource {
     const char *binName;
     const uint8_t *wmfw;
     size_t wmfwSize;
-    const uint8_t *bin;
+    const uint8_t *bin;       // left/default channel tuning
     size_t binSize;
+    const uint8_t *binRight;  // right channel tuning (r0); null -> use bin for both
+    size_t binRightSize;
     bool isDummy;
 };
 
@@ -146,6 +155,7 @@ public:
 
 private:
     void fullDriverFlow();
+    void runBackgroundMonitor();
     
     IOService *mProvider { nullptr };
     IOWorkLoop *mWorkLoop { nullptr };
@@ -194,6 +204,7 @@ private:
 
     void logASPSnapshot(CS35L41Amp &amp);
     void logDSPSnapshot(CS35L41Amp &amp);
+    void logDSPBootReport(CS35L41Amp &amp);
     void logPowerSnapshot(CS35L41Amp &amp);
     void snapshotPlayback(CS35L41Amp &amp);
     void snapshotDiagnostics(CS35L41Amp &amp, const char* stage);
@@ -215,6 +226,7 @@ private:
     void dumpAllRegisters(CS35L41Amp &amp);
     
     void configureHardware(CS35L41Amp &amp);
+    void syncAlc287HdaCodec();
     void discoverFirmware(CS35L41Amp &amp);
     void bringupDSP(CS35L41Amp &amp);
     bool verifyDSPAlive(CS35L41Amp &amp);
@@ -223,6 +235,7 @@ private:
     void uploadFirmware(CS35L41Amp &amp, const char* phaseArg);
     void parseDSPAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage);
     
+    void stopDSP(CS35L41Amp &amp);
     void initializeFirmware(CS35L41Amp &amp, const char* phaseArg);
     void dumpASPRegisters(CS35L41Amp &amp);
     void powerUpAmplifier(CS35L41Amp &amp);

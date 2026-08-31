@@ -348,10 +348,15 @@ public:
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
                 IOFreeData(backupBuffer, totalSize);
                 IOFreeData(verifyBuffer, totalSize);
+                // NOTE: rbSlot is an interior pointer into verifyBuffer (verifyBuffer +
+                // tx.payloadOffset), NOT a separate allocation. It must never be freed
+                // on its own — verifyBuffer is freed above. (Previous code freed rbSlot
+                // here, corrupting the kernel heap on every CRC-fail transaction.)
                 return false;
             }
             CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", amp.name, crc_ms, payCrc);
             CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", amp.name);
+            // rbSlot is an interior pointer into verifyBuffer — do NOT free it here.
         }
  
         // print performance statistics summary
@@ -395,17 +400,14 @@ struct UploadSession {
     uint32_t     totalTransactions;
     uint32_t     totalMs;
     bool         complete;
-    bool         ignoreCrcFailures;
 };
 
 class CirrusFirmwareScheduler {
 public:
     static bool run(CS35L41Amp &amp, CirrusAudioFixup *fixup,
-                    MappedImage &mappedImg, UploadSession &session,
-                    bool ignoreCrcFailures = false)
+                    MappedImage &mappedImg, UploadSession &session)
     {
         session = {};
-        session.ignoreCrcFailures = ignoreCrcFailures;
 
         UploadPolicy policy;
         policy.maxPayloadBytes = 252;
@@ -478,15 +480,8 @@ public:
                 session.totalTransactions += res.transactionCount;
                 CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", amp.name, i, rname, region.dspRegister, elapsed_ms);
             } else {
-                if (ignoreCrcFailures) {
-                    CIRRUS_LOG("Amp %s:   Region %d (%s) FAIL — ignoring CRC error for coefficients", amp.name, i, rname);
-                    session.passCount++; // Count as pass so it doesn't abort the whole session
-                    session.totalBytes        += res.bytes;
-                    session.totalTransactions += res.transactionCount;
-                } else {
-                    CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", amp.name, i, rname);
-                    break;
-                }
+                CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", amp.name, i, rname);
+                break;
             }
         }
 

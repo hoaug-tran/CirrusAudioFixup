@@ -253,6 +253,7 @@ static const RegisterDesc cs35l41_reg_desc[] = {
     { 0x2B805D0, "CS35L41_DSP1_SCRATCH3", true, true },
     { 0x2B805D8, "CS35L41_DSP1_SCRATCH4", true, true },
     { 0x2BC1000, "CS35L41_DSP1_CCM_CORE_CTRL", true, false },
+    { 0x2B80010, "CS35L41_DSP1_CORE_SOFT_RESET", true, false },
     { 0x2BC1008, "CS35L41_DSP1_CCM_CLK_OVERRIDE", true, false },
     { 0x2BC2000, "CS35L41_DSP1_XM_MSTR_EN", true, false },
     { 0x2BC2008, "CS35L41_DSP1_XM_CORE_PRI", true, false },
@@ -325,6 +326,7 @@ static const RegisterDesc cs35l41_reg_desc[] = {
 #define CS35L41_GPIO_PAD_CONTROL    0x0000242C
 
 #define CS35L41_DSP1_CCM_CORE_CTRL      0x02BC1000
+#define CS35L41_DSP1_CORE_SOFT_RESET    0x02B80010
 #define CS35L41_DSP1_SYS_ID             0x025E0000
 #define CS35L41_DSP1_SYS_VERSION        0x025E0004
 #define CS35L41_DSP1_SYS_CORE_ID        0x025E0008
@@ -333,7 +335,11 @@ static const RegisterDesc cs35l41_reg_desc[] = {
 #define CS35L41_DSP_VIRT1_MBOX_1        0x00013020
 
 #define CSPL_MBOX_CMD_RESUME            2
+#define CSPL_MBOX_CMD_PAUSE             1
+#define CSPL_MBOX_CMD_SPK_OUT_ENABLE    7
 #define CSPL_MBOX_STS_RUNNING           0
+#define CSPL_MBOX_STS_PAUSED            1
+#define CSPL_MBOX_STS_RDY_FOR_REINIT    2
 #define CS35L41_IRQ1_STATUS1            0x00010010
 #define CS35L41_IRQ1_STATUS2            0x00010014
 #define CS35L41_IRQ2_STATUS             0x00010804

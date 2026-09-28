@@ -116,7 +116,7 @@ Below is a detailed guide of the functions, structures, and algorithms implement
 ### 8. Fallback Direct DAC Routing (Bypassing DSP)
 - **`powerUpAmplifier(CS35L41Amp &amp)`**
   Since the DSP rejects mailbox commands without firmware, this method executes the Linux fallback routine to bypass the DSP entirely, routing the raw I2S stream directly to the speaker DAC:
-  1. Map `CS35L41_DAC_PCM1_SRC` to `0x08` (Left) and `0x09` (Right) to feed the DAC directly from the serial input.
+  1. Map `CS35L41_DAC_PCM1_SRC` to `0x08` (`ASPRX1`) on both amplifiers, matching Linux; left/right placement comes from the ASP slot/channel map, not a different DAC source.
   2. Unlock test key registers.
   3. Write safe-to-active transition values: write `0x0F` and `0x79` to `0x0000742C`, and `0x00585941` to `0x00007438`.
   4. Enable the global power bit: write `1` to `CS35L41_PWR_CTRL1 (0x00002014)`.
@@ -124,20 +124,44 @@ Below is a detailed guide of the functions, structures, and algorithms implement
   6. Enable speakers paths: write `0xF9` to `0x0000742C`, and `0x00580941` to `0x00007438`.
   7. Lock test key registers.
   8. Enable the output stages and monitors by writing `0x00003001` to `CS35L41_PWR_CTRL2 (0x00002018)`.
-  9. Unmute the digital volume `CS35L41_AMP_DIG_VOL_CTRL (0x00002090)` to `0x00008000` (0dB).
+  9. Unmute the digital volume `CS35L41_AMP_DIG_VOL_CTRL (0x00002090)` to `0x00000000` (0 dB), matching Linux.
 
 ---
 
-## Known Roadblocks & Challenges
+## Playback Integration Notes
 
-If you want to contribute and continue this project, these are the primary roadblocks preventing sound playback:
+These are the verified integration constraints for this machine:
 
-### 1. The EAPD Codec Power Down Problem
-The physical reset/shutdown lines of the CS35L41 amplifiers are tied to the EAPD (External Amplifier Power Down) pins of the ALC287 codec. 
-Even when the kext completes the sequence and writes `GLOBAL_EN=1`, macOS AppleHDA aggressively pulls the EAPDs low on codec nodes `0x14`, `0x1b`, and `0x21` when no audio is playing. This cuts power to the amplifiers. We tried forcing EAPD pins high manually via HDA verbs, but the system remained silent.
+### 1. Amplifier Lifecycle
+
+Linux binds both CS35L41 components directly to the Realtek HDA codec and
+receives OPEN/PREPARE/CLEANUP/CLOSE callbacks. macOS has no equivalent public
+CS35L41 component hook, so CirrusAudioFixup observes the onboard HDA stream
+descriptor and mirrors those transitions. EAPD nodes `0x14`, `0x1b`, and `0x21`
+are not used as a substitute for that lifecycle; the ACPI reset GPIO and the
+CS35L41 power registers remain separate concerns.
 
 ### 2. AppleALC Layout and Clock Routing
-The clock ratio between macOS AppleHDA and the CS35L41 must match perfectly. If the ALC287 codec routing is modified or set to 24-bit slots, the PLL immediately loses lock, producing no audio. Finding a way to cleanly sync AppleALC layouts with the CS35L41 I2S clocks remains unresolved.
+
+Use AppleALC **layout-id 16** for the Lenovo Legion 7 16ACHG6 / ALC287
+(`10ec:0287`, subsystem `17aa:3847`). The verified internal-speaker path is:
+
+```text
+ALC287 converter NID 0x03 -> speaker pin NID 0x17
+```
+
+This matches all three available sources: the working Linux codec dump (NID
+`0x03` carries the active stream while `0x06` is idle), Linux autoconfiguration
+(`line_outs=1 (0x17) type:speaker`), and AppleALC `Platforms16.xml` (decimal
+nodes `3 -> 23`). NID `0x06 -> 0x1e` is not the internal-speaker playback path.
+
+CirrusAudioFixup therefore does not issue routing verbs. AppleHDA/AppleALC owns
+the codec route, while this kext observes the HDA playback descriptor and runs
+the CS35L41 OPEN/PREPARE/CLEANUP/CLOSE-equivalent power sequence.
+
+Inject layout 16 on the onboard HDA device, for example with OpenCore device
+property `layout-id = 10000000` (little-endian data), or boot argument
+`alcid=16`. Do not set both methods to different values.
 
 ---
 

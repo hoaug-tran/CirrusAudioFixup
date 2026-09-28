@@ -125,7 +125,7 @@ struct CS35L41Amp {
     } diagnosticControls[10];
     uint32_t diagnosticControlCount;
     uint32_t firmwareIdVersion { 0 }; // HALO firmware ID header version, not WMFW container version
-    uint32_t dspRetryDelay { 0 };     // monitor ticks before retrying a failed DSP upload/boot
+    uint32_t monitorLogCountdown { 0 }; // throttles idle/active diagnostic heartbeat
 };
 
 struct FirmwareImage;
@@ -165,6 +165,10 @@ private:
     bool mHdaStreamActive { false };
     bool mHdaConverterPrepared { false };
     bool mHdaControllerObserved { false };
+    bool mHdaTopologyLogged { false };
+    uint8_t mHdaLastDescriptor { 0xFF };
+    uint8_t mHdaLastStreamTag { 0 };
+    uint16_t mHdaLastFormat { 0 };
 
     CS35L41Amp mAmps[2] {
         { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0, nullptr, 0, nullptr, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, 0 },

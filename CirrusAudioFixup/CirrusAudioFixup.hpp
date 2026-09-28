@@ -124,6 +124,8 @@ struct CS35L41Amp {
         uint32_t address;
     } diagnosticControls[10];
     uint32_t diagnosticControlCount;
+    uint32_t firmwareIdVersion { 0 }; // HALO firmware ID header version, not WMFW container version
+    uint32_t dspRetryDelay { 0 };     // monitor ticks before retrying a failed DSP upload/boot
 };
 
 struct FirmwareImage;
@@ -160,6 +162,9 @@ private:
     IOService *mProvider { nullptr };
     IOWorkLoop *mWorkLoop { nullptr };
     IOTimerEventSource *mProbeTimer { nullptr };
+    bool mHdaStreamActive { false };
+    bool mHdaConverterPrepared { false };
+    bool mHdaControllerObserved { false };
 
     CS35L41Amp mAmps[2] {
         { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0, nullptr, 0, nullptr, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, 0 },
@@ -226,7 +231,7 @@ private:
     void dumpAllRegisters(CS35L41Amp &amp);
     
     void configureHardware(CS35L41Amp &amp);
-    void syncAlc287HdaCodec();
+    bool syncAlc287HdaCodec();
     void discoverFirmware(CS35L41Amp &amp);
     void bringupDSP(CS35L41Amp &amp);
     bool verifyDSPAlive(CS35L41Amp &amp);

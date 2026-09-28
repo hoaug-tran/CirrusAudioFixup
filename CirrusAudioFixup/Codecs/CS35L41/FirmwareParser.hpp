@@ -153,6 +153,7 @@ struct FirmwareImage {
     
     // halo specific fields
     uint32_t fw_id;
+    uint32_t halo_fw_version;
     uint32_t n_algs;
     uint32_t xm_dump_crc;
     
@@ -681,8 +682,10 @@ public:
             if (type == WMFW_HALO_XM_PACKED && offset == 0 && len >= kHaloIdHdrWords * 3) {
                 // check if this is the first xm region containing the halo id header
                 outImage->fw_id = readPacked24BE(raw_region->data, kHaloFwIdWord);
+                outImage->halo_fw_version = readPacked24BE(raw_region->data, kHaloVersionWord);
                 outImage->n_algs = 1; 
-                CIRRUS_LOG("parseWMFW: Found Halo Header. fw_id=0x%06X", outImage->fw_id);
+                CIRRUS_LOG("parseWMFW: Found Halo Header. fw_id=0x%06X version=0x%06X",
+                           outImage->fw_id, outImage->halo_fw_version);
             }
             
             pos += len;
@@ -711,6 +714,7 @@ public:
         uint32_t vendor_id = readUnpacked32BE(vmem, 2);
         uint32_t fw_id = readUnpacked32BE(vmem, 3);
         uint32_t fw_ver = readUnpacked32BE(vmem, 4);
+        outImage.halo_fw_version = fw_ver;
         uint32_t fw_xm_base = readUnpacked32BE(vmem, 5);
         uint32_t fw_xm_size = readUnpacked32BE(vmem, 6);
         uint32_t fw_ym_base = readUnpacked32BE(vmem, 7);

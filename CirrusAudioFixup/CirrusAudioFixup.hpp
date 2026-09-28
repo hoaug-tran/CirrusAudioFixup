@@ -116,7 +116,7 @@ struct CS35L41Amp {
     
     // playback detection via DSP timestamp counter
     uint32_t lastTimestamp;        // previous reading of DSP1_TIMESTAMP_COUNT
-    bool playbackActive;           // true when I2S data is actively flowing
+    bool playbackActive;           // true only after the amp start sequence is verified
     uint32_t playbackStableCount;  // number of consecutive monitor cycles with same playback state
     
     struct InterestingControl {
@@ -210,6 +210,7 @@ private:
     bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, TraceSource source = TRACE_OTHER);
     bool updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source = TRACE_OTHER);
     bool pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 targetVal, UInt32 timeoutMs, TraceSource source = TRACE_OTHER);
+    bool sendMailboxCommand(CS35L41Amp &amp, UInt32 command, UInt32 expectedStatus);
 
     void logASPSnapshot(CS35L41Amp &amp);
     void logDSPSnapshot(CS35L41Amp &amp);
@@ -234,7 +235,7 @@ private:
     
     void dumpAllRegisters(CS35L41Amp &amp);
     
-    void configureHardware(CS35L41Amp &amp);
+    bool configureHardware(CS35L41Amp &amp);
     bool syncAlc287HdaCodec();
     void discoverFirmware(CS35L41Amp &amp);
     void bringupDSP(CS35L41Amp &amp);
@@ -248,6 +249,7 @@ private:
     void initializeFirmware(CS35L41Amp &amp, const char* phaseArg);
     void dumpASPRegisters(CS35L41Amp &amp);
     void powerUpAmplifier(CS35L41Amp &amp);
+    bool verifyIdleConfiguration(CS35L41Amp &amp);
     
     IOService* getAudioController();
     

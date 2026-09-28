@@ -185,6 +185,14 @@ By default, **no boot arguments are required** to run the full initialization an
 | `cirrus_readonly` | `1` | Activates read-only monitoring (safe mode). |
 | `cirrus_phase` | `<phase>` | Restricts driver start to debugging phases (`4A1`, `4B`, `5B`, `5C`). |
 | `cirrus_dump_compact`| `1` | Formats register dumps cleanly to save NVRAM block size. |
+| `cirrus_deepdiag` | `1` | Enables expensive full-register CRC/snapshot scans. Keep this disabled for normal boots. |
+
+Normal boot keeps both CS35L41 interrupt banks masked because this kext uses
+polling and does not install Linux's regmap IRQ handlers. GPIO configuration
+matches the CLSA0100 platform description: GPIO1 remains an input/no VSPK
+switch, while GPIO2 is configured as the open-drain interrupt function. The
+driver validates the idle and playback power/routing states before publishing
+an amplifier as initialized or active.
 
 ---
 

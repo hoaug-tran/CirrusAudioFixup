@@ -48,6 +48,73 @@ enum TraceSource {
     TRACE_OTHER
 };
 
+enum DriverStage : uint32_t {
+    STAGE_NONE = 0,
+    STAGE_PROBE,
+    STAGE_RESET,
+    STAGE_OTP_BOOT,
+    STAGE_ERRATA,
+    STAGE_CLOCK,
+    STAGE_ASP,
+    STAGE_GPIO,
+    STAGE_PLATFORM,
+    STAGE_FIRMWARE_DISCOVERY,
+    STAGE_FIRMWARE_UPLOAD,
+    STAGE_DSP_BOOT,
+    STAGE_IDLE_VERIFY,
+    STAGE_HDA_DETECT,
+    STAGE_PLAYBACK_OPEN,
+    STAGE_PLAYBACK_PREPARE,
+    STAGE_PLAYBACK_ACTIVE,
+    STAGE_PLAYBACK_CLEANUP,
+    STAGE_PLAYBACK_CLOSE,
+    STAGE_SAFE_IDLE,
+};
+
+enum DiagnosticFailure : uint32_t {
+    DIAG_OK = 0,
+    DIAG_PROVIDER_MISSING,
+    DIAG_I2C_TRANSFER,
+    DIAG_RESET_GPIO,
+    DIAG_DEVICE_ID,
+    DIAG_RESET_WRITE,
+    DIAG_OTP_TIMEOUT,
+    DIAG_ERRATA,
+    DIAG_OTP_UNPACK,
+    DIAG_PLL_CONFIG,
+    DIAG_ASP_CONFIG,
+    DIAG_GPIO_CONFIG,
+    DIAG_PLATFORM_CONFIG,
+    DIAG_FIRMWARE_MISSING,
+    DIAG_FIRMWARE_PARSE,
+    DIAG_FIRMWARE_UPLOAD,
+    DIAG_COEFFICIENT_PARSE,
+    DIAG_COEFFICIENT_UPLOAD,
+    DIAG_DSP_BOOT,
+    DIAG_DSP_MAILBOX,
+    DIAG_IDLE_INVARIANT,
+    DIAG_HDA_CONTROLLER,
+    DIAG_HDA_STREAM_FORMAT,
+    DIAG_PLL_UNLOCKED,
+    DIAG_POWER_UP_TIMEOUT,
+    DIAG_PLAYBACK_INVARIANT,
+    DIAG_POWER_DOWN_TIMEOUT,
+    DIAG_IDLE_ROLLBACK,
+};
+
+struct DiagnosticState {
+    DriverStage stage { STAGE_NONE };
+    DriverStage lastGoodStage { STAGE_NONE };
+    DiagnosticFailure firstFailure { DIAG_OK };
+    DiagnosticFailure latestFailure { DIAG_OK };
+    uint32_t failureCount { 0 };
+    uint32_t reg { 0 };
+    uint32_t expected { 0 };
+    uint32_t actual { 0 };
+    IOReturn ioReturn { kIOReturnSuccess };
+    DiagnosticFailure snapshotFailure { DIAG_OK };
+};
+
 struct TraceEntry {
     uint64_t timestamp;
     uint8_t amp;        // 0 for left, 1 for right
@@ -126,6 +193,7 @@ struct CS35L41Amp {
     uint32_t diagnosticControlCount;
     uint32_t firmwareIdVersion { 0 }; // HALO firmware ID header version, not WMFW container version
     uint32_t monitorLogCountdown { 0 }; // throttles idle/active diagnostic heartbeat
+    DiagnosticState diagnostic;
 };
 
 struct FirmwareImage;
@@ -169,10 +237,13 @@ private:
     uint8_t mHdaLastDescriptor { 0xFF };
     uint8_t mHdaLastStreamTag { 0 };
     uint16_t mHdaLastFormat { 0 };
+    uint32_t mHdaMissCount { 0 };
+    IOReturn mLastTransferReturn { kIOReturnSuccess };
+    bool mCapturingFailureSnapshot { false };
 
     CS35L41Amp mAmps[2] {
-        { "left",  CS35L41_I2C_ADDR_LEFT,  false, 0, 0, nullptr, 0, nullptr, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, 0 },
-        { "right", CS35L41_I2C_ADDR_RIGHT, false, 0, 0, nullptr, 0, nullptr, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, {}, 0 }
+        { "left",  CS35L41_I2C_ADDR_LEFT },
+        { "right", CS35L41_I2C_ADDR_RIGHT }
     };
 
     static const size_t kTraceBufferSize = 1024;
@@ -184,8 +255,20 @@ private:
 
     void initTraceBuffer();
     void recordTrace(TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen, IOReturn ret);
-    void dumpTraceBuffer();
+    void dumpTraceBuffer(const char *propertyName = "Cirrus_Trace_Dump",
+                         const char *mirrorPropertyName = nullptr);
     void publishStatistics();
+    void setDiagnosticStage(CS35L41Amp &amp, DriverStage stage);
+    void markDiagnosticSuccess(CS35L41Amp &amp, DriverStage stage);
+    void recordDiagnosticFailure(CS35L41Amp &amp, DiagnosticFailure failure,
+                                 UInt32 reg = 0, UInt32 expected = 0,
+                                 UInt32 actual = 0,
+                                 IOReturn ioReturn = kIOReturnSuccess,
+                                 bool captureSnapshot = true);
+    void captureFailureSnapshot(CS35L41Amp &amp, DiagnosticFailure failure);
+    void publishDriverVerdict();
+    static const char *stageName(DriverStage stage);
+    static const char *failureName(DiagnosticFailure failure);
 
     bool bootArgEnabled(const char *name);
     bool bootArgStrEquals(const char *name, const char *expectedVal);
@@ -248,7 +331,7 @@ private:
     void stopDSP(CS35L41Amp &amp);
     void initializeFirmware(CS35L41Amp &amp, const char* phaseArg);
     void dumpASPRegisters(CS35L41Amp &amp);
-    void powerUpAmplifier(CS35L41Amp &amp);
+    bool powerUpAmplifier(CS35L41Amp &amp);
     bool verifyIdleConfiguration(CS35L41Amp &amp);
     
     IOService* getAudioController();

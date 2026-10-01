@@ -194,6 +194,40 @@ switch, while GPIO2 is configured as the open-drain interrupt function. The
 driver validates the idle and playback power/routing states before publishing
 an amplifier as initialized or active.
 
+## Failure Forensics
+
+The driver maintains a per-amplifier diagnostic state machine. It deliberately
+does not log loop iterations; it records subsystem boundaries, state
+transitions, failed invariants, timeouts, rollbacks, and I2C transactions.
+Important IORegistry properties include:
+
+- `Cirrus_Driver_Verdict`: `READY_DSP`, `READY_BYPASS`, or `FAILED_INIT`.
+- `Cirrus_Diag_Stage_left/right`: stage executing when the latest event occurred.
+- `Cirrus_Diag_LastGood_left/right`: last completely verified stage.
+- `Cirrus_Diag_FirstFailure_left/right`: preserved root failure; later failures do not overwrite it.
+- `Cirrus_Diag_LatestFailure_left/right`: most recent failure or consequence.
+- `Cirrus_Diag_FailureReg`, `Expected`, `Actual`, and `IOReturn`: machine-readable evidence.
+- `Cirrus_Trace_First_left/right` and `Cirrus_Trace_Latest_left/right`: circular I2C flight recorders exported automatically for the root failure and latest distinct failure class.
+- `Cirrus_Playback_Verdict_left/right`: verified active digital path or verified safe idle.
+
+After a failed boot, collect both views before rebooting:
+
+```bash
+log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
+ioreg -lw0 | grep -E 'Cirrus_(Driver|Diag|Trace|Playback|HDA|DSP)'
+```
+
+Interpret the boundary in this order:
+
+1. `I2C_TRANSFER`, `PROVIDER_MISSING`: VoodooI2C transport/provider problem.
+2. `DEVICE_ID`, `RESET_WRITE`, `OTP_TIMEOUT`: reset GPIO, address, power rail, or physical bus problem.
+3. `ERRATA`, `OTP_UNPACK`: silicon-revision/calibration path problem.
+4. `FIRMWARE_*`, `COEFFICIENT_*`, `DSP_BOOT`, `DSP_MAILBOX`: firmware mapping/upload/runtime problem; bypass remains independently testable.
+5. `HDA_CONTROLLER`, `HDA_STREAM_FORMAT`: AppleHDA/controller/layout side never produced a usable output stream.
+6. `PLL_UNLOCKED`: HDA is RUNning but BCLK/LRCLK is not reaching the CS35L41.
+7. `POWER_UP_TIMEOUT`, `PLAYBACK_INVARIANT`: serial clocks exist but the amplifier did not enter active state.
+8. `ACTIVE_DIGITAL_PATH_VERIFIED` with physical silence: the remaining boundary is zero/incorrect I2S sample content or the downstream analog/boost/speaker path. This is explicitly reported instead of claiming that software success proves audible output.
+
 ---
 
 ## How to Build

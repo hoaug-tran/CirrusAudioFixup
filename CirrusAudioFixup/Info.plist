@@ -32,6 +32,9 @@
 
     <key>OSBundleLibraries</key>
     <dict>
+        <key>com.apple.iokit.IOPCIFamily</key>
+        <string>2.9</string>
+
         <key>com.apple.kpi.iokit</key>
         <string>20.0</string>
 

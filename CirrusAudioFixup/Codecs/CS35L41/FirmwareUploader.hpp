@@ -45,62 +45,36 @@ public:
         outPlan.transactionCount = 0;
         outPlan.totalSize = 0;
         outPlan.planCrc = 0xFFFFFFFF;
-        
-        if (region.size == 0) {
-            return true; // Nothing to do
-        }
-        
-        if (policy.maxPayloadBytes == 0) {
-            CIRRUS_ERR("UploadPolicy maxPayloadBytes cannot be 0");
-            return false;
-        }
+
+        uint32_t mappedBase = 0;
+        if (CirrusFirmwareMapper::mapPackedAddress(region.regionType, 0, 0, mappedBase) != MappingStatus::OK ||
+            policy.maxPayloadBytes < 4 || policy.maxPayloadBytes > 252 ||
+            (region.size && !region.data.begin) || region.data.size < region.size ||
+            (region.dspRegister & 3) || (region.size & 3) ||
+            uint64_t(region.dspRegister) + region.size > 0x100000000ULL) return false;
+        if (!region.size) return true;
+        uint32_t chunkLimit = policy.maxPayloadBytes & ~uint32_t(3);
+        if ((uint64_t(region.size) + chunkLimit - 1) / chunkLimit > MAX_UPLOAD_TRANSACTIONS) return false;
 
         uint32_t remaining = region.size;
         uint32_t currentOffset = 0;
-        
+
         while (remaining > 0) {
             if (outPlan.transactionCount >= MAX_UPLOAD_TRANSACTIONS) {
                 CIRRUS_ERR("UPLOAD_PLAN_INVALID: Too many transactions");
                 return false;
             }
-            
-            uint32_t chunkSize = (remaining > policy.maxPayloadBytes) ? policy.maxPayloadBytes : remaining;
-            
-            // align chunk size to lcm(dsp word size, i2c word size)
-            // i2c word size is 4 bytes (32-bit registers)
-            // pm is 5 bytes -> lcm(5, 4) = 20
-            // xm/ym is 3 bytes -> lcm(3, 4) = 12
-            uint32_t align = 4;
-            switch (region.regionType) {
-                case RegionType::PM_PACKED: align = 20; break;
-                case RegionType::XM_PACKED:
-                case RegionType::YM_PACKED: align = 12; break;
-                default: align = 4; break;
-            }
-            if (chunkSize > align) {
-                chunkSize -= (chunkSize % align);
-            }
-            
-            if (chunkSize == 0) {
-                CIRRUS_ERR("UPLOAD_PLAN_INVALID: chunkSize dropped to 0 due to alignment");
-                return false;
-            }
-            
+
+            uint32_t chunkSize = remaining > chunkLimit ? chunkLimit : remaining;
+
             UploadTransaction &tx = outPlan.transactions[outPlan.transactionCount];
-            tx.firmwareAddress = region.firmwareAddress; // firmware word offset
+            tx.firmwareAddress = region.firmwareAddress;
             tx.payloadOffset = currentOffset;
             tx.payload = region.data.begin + currentOffset;
             tx.size = chunkSize;
-            
-            // calculate register address increment based on region type
-            uint32_t chunkReg = 0;
-            MappingStatus status = CirrusFirmwareMapper::mapPackedAddress(region.regionType, region.firmwareAddress, currentOffset, chunkReg);
-            if (status != MappingStatus::OK) {
-                CIRRUS_ERR("UPLOAD_PLAN_INVALID: Failed to map chunk offset 0x%06X", tx.firmwareAddress);
-                return false;
-            }
-            tx.dspRegister = chunkReg;
-            
+
+            tx.dspRegister = region.dspRegister + currentOffset;
+
             if (policy.alignRegister && (tx.dspRegister % 4 != 0)) {
                 CIRRUS_ERR("UPLOAD_PLAN_INVALID: dspRegister 0x%08X is not 4-byte aligned", tx.dspRegister);
                 return false;
@@ -109,17 +83,7 @@ public:
                 CIRRUS_ERR("UPLOAD_PLAN_INVALID: payload size %d is not 4-byte aligned", tx.size);
                 return false;
             }
-            
-            if (tx.firmwareAddress + tx.size < tx.firmwareAddress) {
-                CIRRUS_ERR("UPLOAD_PLAN_INVALID: firmwareAddress wrap-around");
-                return false;
-            }
-            if (tx.dspRegister + tx.size < tx.dspRegister) {
-                CIRRUS_ERR("UPLOAD_PLAN_INVALID: dspRegister wrap-around");
-                return false;
-            }
-            
-            // calculate checksum over plan
+
             uint32_t crcFields[3] = {tx.dspRegister, tx.firmwareAddress, tx.size};
             const uint8_t *crcData = (const uint8_t *)crcFields;
             for (size_t k = 0; k < sizeof(crcFields); k++) {
@@ -128,19 +92,19 @@ public:
                     outPlan.planCrc = (outPlan.planCrc >> 1) ^ (0xEDB88320 & (-(outPlan.planCrc & 1)));
                 }
             }
-            
+
             outPlan.totalSize += tx.size;
             outPlan.transactionCount++;
-            
+
             currentOffset += chunkSize;
             remaining -= chunkSize;
         }
-        
+
         if (outPlan.totalSize != region.size) {
             CIRRUS_ERR("UPLOAD_PLAN_INVALID: Continuity check failed (%d vs %d)", outPlan.totalSize, region.size);
             return false;
         }
-        
+
         outPlan.planCrc = ~outPlan.planCrc;
         return true;
     }
@@ -150,13 +114,13 @@ class CirrusFirmwareDryRunSimulator {
 public:
     static void simulate(const UploadPlan &plan) {
         CIRRUS_LOG("--- Dry-Run Simulation for Region #%d ---", plan.regionIndex);
-        
+
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction &tx = plan.transactions[i];
-            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Payload=[%d..%d], Size=%d", 
+            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Payload=[%d..%d], Size=%d",
                        i, tx.dspRegister, tx.firmwareAddress, tx.payloadOffset, tx.payloadOffset, tx.payloadOffset + tx.size - 1, tx.size);
         }
-        
+
         const char *typeName = "UNKNOWN";
         switch (plan.regionType) {
             case RegionType::PM_PACKED: typeName = "PM_PACKED"; break;
@@ -187,7 +151,6 @@ public:
     }
 };
 
-// Helper: region type name
 static inline const char *regionTypeName(RegionType t) {
     switch (t) {
         case RegionType::PM_PACKED:      return "PM_PACKED";
@@ -204,7 +167,18 @@ static inline const char *regionTypeName(RegionType t) {
 class CirrusFirmwareRealUploader {
 public:
     static bool upload(CS35L41Amp &amp, CirrusAudioFixup *fixup, const UploadPlan &plan, UploadStats *outStats = nullptr) {
-        if (plan.transactionCount == 0 || plan.totalSize == 0) return true;
+        if (outStats) *outStats = {};
+        if (!fixup || plan.transactionCount > MAX_UPLOAD_TRANSACTIONS) return false;
+        if (!plan.transactionCount) return plan.totalSize == 0;
+        uint64_t covered = 0;
+        for (uint32_t i = 0; i < plan.transactionCount; ++i) {
+            const auto &tx = plan.transactions[i];
+            if (!tx.payload || !tx.size || tx.size > 252 || (tx.size & 3) || (tx.dspRegister & 3) ||
+                tx.payloadOffset != covered || uint64_t(tx.dspRegister) + tx.size > 0x100000000ULL ||
+                uint64_t(plan.transactions[0].dspRegister) + covered != tx.dspRegister) return false;
+            covered += tx.size;
+        }
+        if (covered != plan.totalSize) return false;
 
         uint32_t dspStart  = plan.transactions[0].dspRegister;
         uint32_t totalSize = plan.totalSize;
@@ -214,7 +188,6 @@ public:
         CIRRUS_LOG("Amp %s: Region %d (%s), Transactions: %d, Total: %d bytes, DSP Start: 0x%08X",
                    amp.name, plan.regionIndex, rtype, plan.transactionCount, totalSize, dspStart);
 
-        // allocate verification buffers
         UInt8 *backupBuffer = (UInt8 *)IOMallocData(totalSize);
         UInt8 *verifyBuffer = (UInt8 *)IOMallocData(totalSize);
         if (!backupBuffer || !verifyBuffer) {
@@ -230,17 +203,27 @@ public:
             return (uint32_t)(nsecs / 1000000);
         };
 
-        // backup current dsp memory before overwrite
-        CIRRUS_LOG("Amp %s: Backing up %d bytes from 0x%08X...", amp.name, totalSize, dspStart);
-        if (!fixup->bulkRead(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER)) {
-            CIRRUS_ERR("Amp %s: Backup FAIL - aborting.", amp.name);
-            IOFreeData(backupBuffer, totalSize);
-            IOFreeData(verifyBuffer, totalSize);
-            return false;
+        for (uint32_t i = 0; i < plan.transactionCount; ++i) {
+            const auto &tx = plan.transactions[i];
+            if (!fixup->bulkRead(amp, tx.dspRegister, backupBuffer + tx.payloadOffset, tx.size, TRACE_OTHER)) {
+                IOFreeData(backupBuffer, totalSize);
+                IOFreeData(verifyBuffer, totalSize);
+                return false;
+            }
         }
-        CIRRUS_LOG("Amp %s: Backup OK (%d bytes)", amp.name, totalSize);
+        auto restoreRegion = [&]() -> bool {
+            bool restored = true;
+            for (uint32_t i = 0; i < plan.transactionCount; ++i) {
+                const auto &tx = plan.transactions[i];
+                bool written = fixup->bulkWrite(amp, tx.dspRegister, backupBuffer + tx.payloadOffset, tx.size, TRACE_OTHER);
+                bool read = fixup->bulkRead(amp, tx.dspRegister, verifyBuffer + tx.payloadOffset, tx.size, TRACE_OTHER);
+                restored = written && read &&
+                    !memcmp(backupBuffer + tx.payloadOffset, verifyBuffer + tx.payloadOffset, tx.size) && restored;
+            }
+            CIRRUS_LOG("Amp %s: REGION_RESTORE=%s; whole image remains invalid", amp.name, restored ? "VERIFIED" : "FAILED");
+            return restored;
+        };
 
-        // process each chunk via write-verify-check sequence
         uint64_t t_total_start = mach_absolute_time();
         uint32_t acc_write_ms = 0, acc_rb_ms = 0, acc_crc_ms = 0, acc_retries = 0;
 
@@ -251,7 +234,6 @@ public:
                    amp.name, i + 1, plan.transactionCount,
                    tx.dspRegister, tx.size);
 
-            // write chunk data to dsp registers
             uint32_t totalPacketLength = tx.size + 4;
             CIRRUS_LOG("Amp %s:   WRITE    : payload = %d bytes, packet = %d bytes (payload + 4)", amp.name, tx.size, totalPacketLength);
             uint64_t t0 = mach_absolute_time();
@@ -278,7 +260,7 @@ public:
                 CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, Status=0x%08X, %d ms)", amp.name, rc, write_ms);
                 CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", amp.name);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", amp.name);
-                bool rbOk = fixup->bulkWrite(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER);
+                bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
                 IOFreeData(backupBuffer, totalSize);
                 IOFreeData(verifyBuffer, totalSize);
@@ -286,25 +268,23 @@ public:
             }
             CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", amp.name, write_ms);
 
-            // read back the written data chunk to verify
             t0 = mach_absolute_time();
             UInt8 *rbSlot = verifyBuffer + tx.payloadOffset;
             bool readOk = fixup->bulkRead(amp, tx.dspRegister, rbSlot, tx.size, TRACE_OTHER);
             uint32_t rb_ms = to_ms(mach_absolute_time() - t0);
             acc_rb_ms += rb_ms;
- 
+
             if (!readOk) {
                 CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", amp.name, rb_ms);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", amp.name);
-                bool rbOk = fixup->bulkWrite(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER);
+                bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
                 IOFreeData(backupBuffer, totalSize);
                 IOFreeData(verifyBuffer, totalSize);
                 return false;
             }
             CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", amp.name, rb_ms);
- 
-            // calculate and check crc-32 signatures
+
             t0 = mach_absolute_time();
             uint32_t payCrc = 0xFFFFFFFF, rbCrc = 0xFFFFFFFF;
             const uint8_t *paySlice = tx.payload;
@@ -320,12 +300,11 @@ public:
             rbCrc  = ~rbCrc;
             uint32_t crc_ms = to_ms(mach_absolute_time() - t0);
             acc_crc_ms += crc_ms;
- 
-            if (payCrc != rbCrc) {
+
+            if (payCrc != rbCrc || memcmp(paySlice, rbSlot, tx.size)) {
                 CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]",
                            amp.name, crc_ms, payCrc, rbCrc);
-                           
-                // display first 16 bytes to trace payload difference
+
                 uint32_t dump_len = min((uint32_t)tx.size, (uint32_t)16);
                 char payHex[64] = {0};
                 char rbHex[64] = {0};
@@ -335,8 +314,7 @@ public:
                 }
                 CIRRUS_LOG("Amp %s:   PAYLOAD  : %s", amp.name, payHex);
                 CIRRUS_LOG("Amp %s:   READBACK : %s", amp.name, rbHex);
- 
-                // run exact byte comparison to pinpoint mismatch offset
+
                 for (uint32_t b = 0; b < tx.size; b++) {
                     if (paySlice[b] != rbSlot[b]) {
                         CIRRUS_LOG("Amp %s:   memcmp   : offset 0x%06X (Exp=0x%02X Got=0x%02X)",
@@ -344,26 +322,22 @@ public:
                         break;
                     }
                 }
-                bool rbOk = fixup->bulkWrite(amp, dspStart, backupBuffer, totalSize, TRACE_OTHER);
+                bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
                 IOFreeData(backupBuffer, totalSize);
                 IOFreeData(verifyBuffer, totalSize);
-                // NOTE: rbSlot is an interior pointer into verifyBuffer (verifyBuffer +
-                // tx.payloadOffset), NOT a separate allocation. It must never be freed
-                // on its own — verifyBuffer is freed above. (Previous code freed rbSlot
-                // here, corrupting the kernel heap on every CRC-fail transaction.)
+
                 return false;
             }
             CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", amp.name, crc_ms, payCrc);
             CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", amp.name);
-            // rbSlot is an interior pointer into verifyBuffer — do NOT free it here.
+
         }
- 
-        // print performance statistics summary
+
         uint32_t total_ms = to_ms(mach_absolute_time() - t_total_start);
         CIRRUS_LOG("Amp %s: Upload Complete | Tx=%d PASS, Write=%d ms, RB=%d ms, CRC=%d ms, Total=%d ms",
                    amp.name, plan.transactionCount, acc_write_ms, acc_rb_ms, acc_crc_ms, total_ms);
- 
+
         if (outStats) {
             outStats->writeMs   = acc_write_ms;
             outStats->readbackMs = acc_rb_ms;
@@ -371,16 +345,12 @@ public:
             outStats->totalMs   = total_ms;
             outStats->retries   = acc_retries;
         }
- 
+
         IOFreeData(backupBuffer, totalSize);
         IOFreeData(verifyBuffer, totalSize);
         return true;
     }
 };
-
-
-// region scheduler coordinating the upload of executable memory blocks
-// stops immediately at the first block failure
 
 struct RegionResult {
     uint32_t   regionIndex;
@@ -408,11 +378,23 @@ public:
                     MappedImage &mappedImg, UploadSession &session)
     {
         session = {};
-
-        UploadPolicy policy;
-        policy.maxPayloadBytes = 252;
-        policy.alignRegister    = false;
-        policy.alignPayload     = false;
+        if (mappedImg.regionCount > MAX_MAPPED_REGIONS) return false;
+        uint32_t expectedRegions = 0;
+        UploadPolicy policy {252, true, true};
+        UploadPlan *preflight = (UploadPlan *)IOMalloc(sizeof(UploadPlan));
+        if (!preflight) return false;
+        bool valid = true;
+        for (uint32_t i = 0; i < mappedImg.regionCount; ++i) {
+            const auto &region = mappedImg.regions[i];
+            if (region.regionType == RegionType::INFO_TEXT || region.regionType == RegionType::NAME_TEXT ||
+                region.regionType == RegionType::METADATA || region.regionType == RegionType::ALGORITHM_DATA) continue;
+            if (++expectedRegions > 32 || !CirrusFirmwareUploadPlanner::generatePlan(i, region, policy, *preflight)) {
+                valid = false;
+                break;
+            }
+        }
+        IOFree(preflight, sizeof(UploadPlan));
+        if (!valid || !expectedRegions) return false;
 
         uint64_t t_session_start = mach_absolute_time();
 
@@ -421,16 +403,11 @@ public:
         for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
             const MappedRegion &region = mappedImg.regions[i];
 
-            if (session.regionCount >= 32) {
-                CIRRUS_ERR("Amp %s: Too many regions in session", amp.name);
-                break;
-            }
-
             const char *rname = regionTypeName(region.regionType);
             CIRRUS_LOG("Amp %s: Region %d (%s) %d bytes", amp.name, i, rname, region.size);
-            
-            if (region.regionType == RegionType::INFO_TEXT || 
-                region.regionType == RegionType::ALGORITHM_DATA || 
+
+            if (region.regionType == RegionType::INFO_TEXT ||
+                region.regionType == RegionType::ALGORITHM_DATA ||
                 region.regionType == RegionType::METADATA ||
                 region.regionType == RegionType::NAME_TEXT) {
                 CIRRUS_LOG("Amp %s:   Region %d (%s) is metadata, skipping upload.", amp.name, i, rname);
@@ -488,7 +465,7 @@ public:
         uint64_t t_ns = 0;
         absolutetime_to_nanoseconds(mach_absolute_time() - t_session_start, &t_ns);
         session.totalMs = (uint32_t)(t_ns / 1000000);
-        session.complete = (session.regionCount > 0 && session.passCount == session.regionCount);
+        session.complete = session.regionCount == expectedRegions && session.passCount == expectedRegions;
 
         CIRRUS_LOG("Amp %s: ================================", amp.name);
         CIRRUS_LOG("Amp %s: WMFW Upload Summary", amp.name);
@@ -518,4 +495,4 @@ public:
     }
 };
 
-#endif // CS35L41_FIRMWARE_UPLOADER_HPP
+#endif

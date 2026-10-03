@@ -5437,7 +5437,6 @@ const uint8_t cs35l41_dsp1_spk_prot_17aa3847_wmfw[] = {
   0x90, 0x01, 0x00, 0x00,
 };
 
-
 const uint8_t cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin[] = {
   0x57, 0x4d, 0x44, 0x52, 0x10, 0x00, 0x00, 0x00, 0x00, 0x15, 0x00, 0x01,
   0x00, 0x00, 0x03, 0x04, 0x00, 0x00, 0x00, 0xfe, 0x00, 0x00, 0x00, 0x00,
@@ -5856,8 +5855,6 @@ const uint8_t cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin[] = {
   0x69, 0x6f, 0x6e, 0x22, 0x3a, 0x20, 0x22, 0x31, 0x2e, 0x30, 0x22, 0x0a,
   0x7d, 0x00, 0x00, 0x00,
 };
-
-
 
 const uint8_t cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin[] = {
   0x57, 0x4d, 0x44, 0x52, 0x10, 0x00, 0x00, 0x00, 0x00, 0x15, 0x00, 0x01,
@@ -6279,11 +6276,8 @@ const uint8_t cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin[] = {
 };
 
 const FirmwareResource firmwareTable[] = {
-    { 0x17AA, 0x382B, 0, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid0.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin), false },
-    { 0x17AA, 0x382B, 1, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid1.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin), false },
-    { 0x17AA, 0x3847, 0, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid0.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin), false },
     { 0x17AA, 0x3847, 1, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid1.bin", cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin, sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin), false }
 };
 const size_t firmwareTableSize = sizeof(firmwareTable) / sizeof(firmwareTable[0]);
 
-#endif // CS35L41_FIRMWARE_DATABASE_HPP
+#endif

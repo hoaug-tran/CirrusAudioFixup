@@ -103,6 +103,8 @@ struct FirmwareResource {
     bool isDummy;
 };
 
+class CirrusAudioFixup;
+
 class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
 private:
     CirrusAudioFixup* mFixup;

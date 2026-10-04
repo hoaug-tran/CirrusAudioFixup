@@ -12,6 +12,7 @@
 #include <libkern/c++/OSString.h>
 
 #define super IOService
+using namespace cirrus::diagnostics;
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
 
     static UInt32 readBE32(const UInt8* data) {

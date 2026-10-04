@@ -276,7 +276,7 @@ void CirrusAudioFixup::fullDriverFlow() {
         if (!initCodec(amp)) {
             CIRRUS_ERR("failed to initialize codec for %s", amp.name);
             if (amp.diagnostic.latestFailure == DIAG_OK)
-                recordDiagnosticFailure(amp, DIAG_DEVICE_ID, CS35L41_DEVID_REG, CS35L41_DEVICE_ID, amp.deviceId);
+                recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId, cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
             abortInitialization();
             continue;
         }
@@ -437,10 +437,10 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
             }
         }
         mPowerAvailable = false;
-        mHdaStreamActive = mHdaControllerObserved = mHdaConverterPrepared = false;
-        mHdaLastDescriptor = 0xFF;
-        mHdaLastStreamTag = 0;
-        mHdaLastFormat = 0;
+        mHdaState.streamActive = mHdaState.observed = mHdaState.converterPrepared = false;
+        mHdaState.lastDescriptor = 0xFF;
+        mHdaState.lastStreamTag = 0;
+        mHdaState.lastFormat = 0;
         setProperty("Cirrus_PM_Powered", uint64_t(0), 32);
     } else {
         mPowerAvailable = true;
@@ -1053,7 +1053,7 @@ bool CirrusAudioFixup::supportedHdaFormat(uint16_t format) {
 }
 
 bool CirrusAudioFixup::syncAlc287HdaCodec() {
-    const bool wasPrepared = mHdaConverterPrepared;
+    const bool wasPrepared = mHdaState.converterPrepared;
     auto publishStatus = [&](const char* text) {
         OSString* status = OSString::withCString(text);
         if (status) {
@@ -1061,11 +1061,11 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
             status->release();
         }
     };
-    mHdaControllerObserved = false;
-    mHdaStreamActive = mHdaConverterPrepared = false;
-    mHdaLastDescriptor = 0xFF;
-    mHdaLastStreamTag = 0;
-    mHdaLastFormat = 0;
+    mHdaState.observed = false;
+    mHdaState.streamActive = mHdaState.converterPrepared = false;
+    mHdaState.lastDescriptor = 0xFF;
+    mHdaState.lastStreamTag = 0;
+    mHdaState.lastFormat = 0;
     if (!mPowerAvailable || mStopping)
         return false;
     IOService* audioCtrl = getAudioController();
@@ -1100,7 +1100,7 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
         return false;
     }
     volatile uint8_t* base = (volatile uint8_t*)map->getVirtualAddress();
-    mHdaControllerObserved = base != nullptr;
+    mHdaState.observed = base != nullptr;
     if (!base)
         publishStatus("INVALID_BAR_ADDRESS");
 
@@ -1114,7 +1114,7 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
         uint32_t gctl = *(volatile uint32_t*)(base + 0x08);
         if (gcap == 0xFFFF || gctl == 0xFFFFFFFF || !(gctl & 1)) {
             publishStatus("CONTROLLER_NOT_READY");
-            mHdaControllerObserved = false;
+            mHdaState.observed = false;
             map->release();
             audioCtrl->release();
             return false;
@@ -1126,7 +1126,7 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
         uint8_t descriptorCount = inputStreams + outputStreams + bidirectionalStreams;
         if (map->getLength() < 0x80U + uint32_t(descriptorCount) * 0x20U) {
             publishStatus("TRUNCATED_STREAM_DESCRIPTORS");
-            mHdaControllerObserved = false;
+            mHdaState.observed = false;
             map->release();
             audioCtrl->release();
             return false;
@@ -1182,11 +1182,11 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
     }
     if (base)
         publishStatus(converterPrepared ? "RUNNING_ROUTE_UNCONFIRMED" : outputRunning ? "UNSUPPORTED_STREAM_FORMAT" : "IDLE");
-    mHdaConverterPrepared = converterPrepared;
-    mHdaStreamActive = streamActive;
-    mHdaLastDescriptor = activeDescriptor;
-    mHdaLastStreamTag = activeStream;
-    mHdaLastFormat = activeFormat;
+    mHdaState.converterPrepared = converterPrepared;
+    mHdaState.streamActive = streamActive;
+    mHdaState.lastDescriptor = activeDescriptor;
+    mHdaState.lastStreamTag = activeStream;
+    mHdaState.lastFormat = activeFormat;
     map->release();
     audioCtrl->release();
     return streamActive;
@@ -1296,7 +1296,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             continue;
         }
 
-        if (amp.initialized && !amp.playbackActive && mHdaControllerObserved && !hdaStreamActive) {
+        if (amp.initialized && !amp.playbackActive && mHdaState.observed && !hdaStreamActive) {
             amp.playbackStableCount = 0;
             continue;
         }
@@ -1345,7 +1345,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             continue;
         }
 
-        bool hasAudio = mHdaControllerObserved && hdaStreamActive;
+        bool hasAudio = mHdaState.observed && hdaStreamActive;
 
         if (amp.playbackActive && hasAudio) {
             const bool dspMode = amp.monitorCount >= 1;
@@ -1392,8 +1392,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
 
             CIRRUS_LOG("background monitor %s: global_en=%d pll_lock=%d mbox2=0x%08X ts=0x%08X->0x%08X audio=%d active=%d "
                        "hda_sd=%u tag=%u fmt=0x%04X sp_en=0x%08X sp_rate=0x%08X sp_fmt=0x%08X dac_src=0x%08X vol=0x%08X mode=%s",
-                       amp.name, global_en, pll_lock, mbox2, amp.lastTimestamp, timestamp, hasAudio, amp.playbackActive, mHdaLastDescriptor,
-                       mHdaLastStreamTag, mHdaLastFormat, asp_enables, sp_rate, sp_fmt, dac_src, amp_vol,
+                       amp.name, global_en, pll_lock, mbox2, amp.lastTimestamp, timestamp, hasAudio, amp.playbackActive, mHdaState.lastDescriptor,
+                       mHdaState.lastStreamTag, mHdaState.lastFormat, asp_enables, sp_rate, sp_fmt, dac_src, amp_vol,
                        (amp.monitorCount >= 1) ? "DSP" : "BYPASS");
             amp.monitorLogCountdown = 0;
         }
@@ -1403,8 +1403,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         if (hasAudio && !amp.playbackActive) {
             amp.playbackStableCount++;
             if (amp.playbackStableCount >= 1) {
-                const uint32_t startStreamTag = mHdaLastStreamTag;
-                const uint32_t startStreamFormat = mHdaLastFormat;
+                const uint32_t startStreamTag = mHdaState.lastStreamTag;
+                const uint32_t startStreamFormat = mHdaState.lastFormat;
                 bool dspMode = (amp.monitorCount >= 1);
                 if ((!dspMode && !bootArgEnabled("-cirrusnodsp")) || (dspMode && (!amp.dspAlive || !amp.firmwareValidated))) {
                     amp.playbackFaulted = true;
@@ -1557,8 +1557,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     abortStart();
                     continue;
                 }
-                if (!streamStillActive || !mHdaControllerObserved || mHdaLastStreamTag != startStreamTag ||
-                    mHdaLastFormat != startStreamFormat) {
+                if (!streamStillActive || !mHdaState.observed || mHdaState.lastStreamTag != startStreamTag ||
+                    mHdaState.lastFormat != startStreamFormat) {
                     stopPlayback(amp);
                     continue;
                 }
@@ -1600,7 +1600,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                                amp.name, post_pwr1, post_pwr2, post_vol, post_gain);
                     CIRRUS_LOG("DIAG_BOUNDARY amp=%s HDA_RUN=%d stream_tag=%u format=0x%04X PLL_LOCK=%d PUP_DONE=1 GLOBAL_EN=1 AMP_EN=1; "
                                "speaker converter route and physical audio remain unverified",
-                               amp.name, streamStillActive, mHdaLastStreamTag, mHdaLastFormat, (pll_sts & 2) != 0);
+                               amp.name, streamStillActive, mHdaState.lastStreamTag, mHdaState.lastFormat, (pll_sts & 2) != 0);
                     snapshotDiagnostics(amp, "PLAYBACK ACTIVE VERIFIED");
                 } else {
                     CIRRUS_ERR("Background Monitor: Playback start verification failed on %s (read=%d pup=%d pwr1=0x%08X pwr2=0x%08X "
@@ -1621,7 +1621,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
     }
 
     if (mProbeTimer) {
-        mProbeTimer->setTimeoutMS(mHdaStreamActive ? 100 : 50);
+        mProbeTimer->setTimeoutMS(mHdaState.streamActive ? 100 : 50);
     }
 }
 
@@ -1631,7 +1631,7 @@ void CirrusAudioFixup::probeAmp(AmplifierState& amp) {
 
     CIRRUS_LOG("amp %s probe address=0x%02X", amp.name, amp.address);
 
-    if (!readRegister(amp, CS35L41_DEVID_REG, &deviceId, TRACE_PROBE)) {
+    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &deviceId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s device-id read failed", amp.name);
         return;
     }
@@ -1643,7 +1643,7 @@ void CirrusAudioFixup::probeAmp(AmplifierState& amp) {
 
     amp.deviceId = deviceId;
     amp.revisionId = revisionId;
-    amp.present = (deviceId == CS35L41_DEVICE_ID);
+    amp.present = (deviceId == cirrus::devices::cs35l41::registers::kValDeviceId);
     if (!amp.present) {
         CIRRUS_ERR("Codec 0x%08X on %s is unsupported! Please add -cirrusdbg and report to developer.", deviceId, amp.name);
     }
@@ -2026,7 +2026,7 @@ void CirrusAudioFixup::captureFailureSnapshot(AmplifierState& amp, DiagnosticFai
     uint32_t irq1 = 0, irq2 = 0, irq3 = 0, irq4 = 0, pll = 0;
     uint32_t spEn = 0, spRate = 0, spFmt = 0, spHiz = 0, rxSlot = 0, dac = 0;
     uint32_t core = 0, halo = 0, mbox1 = 0, mbox2 = 0, scratch1 = 0;
-    readRegister(amp, CS35L41_DEVID_REG, &devid, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &devid, TRACE_DUMP);
     readRegister(amp, CS35L41_REVID_REG, &revid, TRACE_DUMP);
     readRegister(amp, CS35L41_PWR_CTRL1_REG, &pwr1, TRACE_DUMP);
     readRegister(amp, CS35L41_PWR_CTRL2_REG, &pwr2, TRACE_DUMP);
@@ -2052,7 +2052,7 @@ void CirrusAudioFixup::captureFailureSnapshot(AmplifierState& amp, DiagnosticFai
     mCapturingFailureSnapshot = false;
 
     CIRRUS_ERR("DIAG_SNAPSHOT amp=%s code=%s hda_observed=%d hda_run=%d sd=%u tag=%u fmt=0x%04X", amp.name, failureName(failure),
-               mHdaControllerObserved, mHdaStreamActive, mHdaLastDescriptor, mHdaLastStreamTag, mHdaLastFormat);
+               mHdaState.observed, mHdaState.streamActive, mHdaState.lastDescriptor, mHdaState.lastStreamTag, mHdaState.lastFormat);
     CIRRUS_ERR("DIAG_SNAPSHOT amp=%s id=0x%08X rev=0x%08X pwr=[0x%08X 0x%08X 0x%08X] pwr_sts=0x%08X", amp.name, devid, revid, pwr1, pwr2,
                pwr3, pwrSts);
     CIRRUS_ERR("DIAG_SNAPSHOT amp=%s irq=[0x%08X 0x%08X 0x%08X 0x%08X] pll_lock=%d asp=[en=0x%08X rate=0x%08X fmt=0x%08X hiz=0x%08X "
@@ -3190,7 +3190,7 @@ void CirrusAudioFixup::discoverFirmware(AmplifierState& amp) {
             IOLog(CIRRUS_LOG_PREFIX "Amp: %s, I2C Address: 0x%02X\n", amp.name, amp.address);
             IOLog(CIRRUS_LOG_PREFIX "Hardware ID: DEVID=0x%08X REVID=0x%08X\n", amp.deviceId, amp.revisionId);
             IOLog(CIRRUS_LOG_PREFIX "Speaker ID: %u (explicit=%d)\n", spkid, explicitSpeaker ? 1 : 0);
-            IOLog(CIRRUS_LOG_PREFIX "HDA Stream: Tag=%u Format=0x%04X\n", mHdaLastStreamTag, mHdaLastFormat);
+            IOLog(CIRRUS_LOG_PREFIX "HDA Stream: Tag=%u Format=0x%04X\n", mHdaState.lastStreamTag, mHdaState.lastFormat);
             IOLog(CIRRUS_LOG_PREFIX "=== END HARDWARE PROFILE DUMP ===\n");
         }
         recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING, 0, 0x17AA3847, ssid);

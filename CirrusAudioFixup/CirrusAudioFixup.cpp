@@ -445,7 +445,7 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
     } else {
         mPowerAvailable = true;
         mNeedsReinitialization = !bootArgEnabled("-cirrusro");
-        mHdaTopologyLogged = false;
+        mHdaState.topologyLogged = false;
         setProperty("Cirrus_PM_Powered", uint64_t(1), 32);
 
         if (mNeedsReinitialization) {
@@ -660,7 +660,8 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
         if (CirrusFirmwareMapper::mapFirmwareImage(*image, *wmfwMapped)) {
             CIRRUS_LOG("mapping wmfw image successful on %s, starting upload", amp.name);
             UploadSession session;
-            wmfwUploaded = CirrusFirmwareScheduler::run(amp, this, *wmfwMapped, session);
+            FixupRegisterIOAdapter io(this, amp);
+            wmfwUploaded = CirrusFirmwareScheduler::run(amp.name, io, *wmfwMapped, session);
         } else {
             CIRRUS_ERR("failed to map wmfw image on %s", amp.name);
             recordDiagnosticFailure(amp, DIAG_FIRMWARE_PARSE);
@@ -775,7 +776,8 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
             if (CirrusFirmwareMapper::mapCoefficients(*image, *coeffMapped) && coeffMapped->regionCount > 0) {
                 CIRRUS_LOG("starting coefficient file upload on %s", amp.name);
                 UploadSession session;
-                coefficientsUploaded = CirrusFirmwareScheduler::run(amp, this, *coeffMapped, session);
+                FixupRegisterIOAdapter io(this, amp);
+                coefficientsUploaded = CirrusFirmwareScheduler::run(amp.name, io, *coeffMapped, session);
             } else {
                 CIRRUS_ERR("coefficient mapping produced no uploadable regions on %s", amp.name);
                 recordDiagnosticFailure(amp, DIAG_COEFFICIENT_PARSE);
@@ -888,7 +890,7 @@ bool CirrusAudioFixup::applyCalibration(AmplifierState& amp, const FirmwareImage
         return false;
     }
 
-    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
     bool foundData = false;
     bool invalidData = false;
     int32_t ambientVal = 0;
@@ -1132,11 +1134,11 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
             return false;
         }
 
-        if (!mHdaTopologyLogged) {
+        if (!mHdaState.topologyLogged) {
             CIRRUS_LOG("HDA controller %s %04X:%04X GCAP=0x%04X ISS=%u OSS=%u BSS=%u; speaker converter/pin route is unverified",
                        pciDev->getName() ? pciDev->getName() : "unnamed", pciDev->configRead16(kIOPCIConfigVendorID),
                        pciDev->configRead16(kIOPCIConfigDeviceID), gcap, inputStreams, outputStreams, bidirectionalStreams);
-            mHdaTopologyLogged = true;
+            mHdaState.topologyLogged = true;
         }
 
         for (uint8_t index = firstOutput; index < descriptorCount; ++index) {
@@ -2168,7 +2170,7 @@ bool CirrusAudioFixup::bulkRead(AmplifierState& amp, UInt32 reg, UInt8* data, si
     bool success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, (UInt16)length);
 
     IOReturn retCode = mLastTransferReturn;
-    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
     recordTrace(source, ampIdx, false, true, reg, (UInt32)length, retCode);
     if (!success && !mCapturingFailureSnapshot) {
         recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, mLastTransferReturn);
@@ -2204,7 +2206,7 @@ bool CirrusAudioFixup::bulkWrite(AmplifierState& amp, UInt32 reg, const UInt8* d
     bool ret = transferToAddress(amp.address, writeBuffer, 4 + length, nullptr, 0);
 
     IOReturn retCode = mLastTransferReturn;
-    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
     recordTrace(source, ampIdx, true, true, reg, (uint32_t)length, retCode);
     if (!ret && !mCapturingFailureSnapshot) {
         recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, mLastTransferReturn);
@@ -2230,7 +2232,7 @@ bool CirrusAudioFixup::readRegister(AmplifierState& amp, UInt32 reg, UInt32* val
     bool success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), readBuffer, sizeof(readBuffer));
 
     IOReturn retCode = mLastTransferReturn;
-    uint8_t ampIdx = (amp.address == CS35L41_I2C_ADDR_RIGHT) ? 1 : 0;
+    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
 
     if (success) {
         *value = readBE32(readBuffer);
@@ -3264,7 +3266,7 @@ void CirrusAudioFixup::discoverFirmware(AmplifierState& amp) {
     snprintf(propFW, sizeof(propFW), "Cirrus_BIN_Size_%s", amp.name);
     setProperty(propFW, (uint64_t)foundRes->binSize, 32);
 
-    bool isRight = (amp.address == CS35L41_I2C_ADDR_RIGHT);
+    bool isRight = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight);
     const uint8_t* chanBin = (isRight && foundRes->binRight) ? foundRes->binRight : foundRes->bin;
     size_t chanBinSize = (isRight && foundRes->binRight) ? foundRes->binRightSize : foundRes->binSize;
 
@@ -3484,7 +3486,8 @@ void CirrusAudioFixup::uploadFirmware(AmplifierState& amp, const char* phaseArg)
     }
 
     UploadSession session;
-    if (CirrusFirmwareScheduler::run(amp, this, *mappedImg, session)) {
+    FixupRegisterIOAdapter io(this, amp);
+    if (CirrusFirmwareScheduler::run(amp.name, io, *mappedImg, session)) {
         CIRRUS_LOG("firmware upload complete on %s", amp.name);
     } else {
         CIRRUS_ERR("firmware upload failed on %s", amp.name);

@@ -3322,40 +3322,40 @@ bool CirrusAudioFixup::bringupDSP(AmplifierState& amp) {
         return false;
     }
 
-    cirrus::firmware::FirmwareImage wmfwImage;
-    if (!cirrus::firmware::CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, &wmfwImage)) {
+    FirmwareImage wmfwImage;
+    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, &wmfwImage)) {
         CIRRUS_ERR("failed to parse WMFW on %s", amp.name);
         return false;
     }
 
-    cirrus::firmware::FirmwareImage binImage;
+    FirmwareImage binImage;
     if (amp.binData && amp.binSize) {
-        if (!cirrus::firmware::CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, &binImage)) {
+        if (!CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, &binImage)) {
             CIRRUS_ERR("failed to parse BIN on %s", amp.name);
         }
     }
 
-    cirrus::firmware::MappedImage mappedWmfw;
-    if (!cirrus::firmware::CirrusFirmwareMapper::mapFirmwareImage(wmfwImage, mappedWmfw)) {
+    MappedImage mappedWmfw;
+    if (!CirrusFirmwareMapper::mapFirmwareImage(wmfwImage, mappedWmfw)) {
         CIRRUS_ERR("failed to map WMFW image on %s", amp.name);
         return false;
     }
 
-    cirrus::firmware::MappedImage mappedBin;
+    MappedImage mappedBin;
     if (amp.binData && amp.binSize && binImage.regionCount > 0) {
-        cirrus::firmware::CirrusFirmwareMapper::mapFirmwareImage(binImage, mappedBin);
+        CirrusFirmwareMapper::mapFirmwareImage(binImage, mappedBin);
     }
 
     FixupRegisterIOAdapter io(this, amp);
-    cirrus::firmware::UploadSession sessionWmfw;
-    if (!cirrus::firmware::CirrusFirmwareScheduler::run(amp.name, io, mappedWmfw, sessionWmfw)) {
+    UploadSession sessionWmfw;
+    if (!CirrusFirmwareScheduler::run(amp.name, io, mappedWmfw, sessionWmfw)) {
         CIRRUS_ERR("failed to upload WMFW on %s", amp.name);
         return false;
     }
 
     if (amp.binData && amp.binSize && mappedBin.regionCount > 0) {
-        cirrus::firmware::UploadSession sessionBin;
-        if (!cirrus::firmware::CirrusFirmwareScheduler::run(amp.name, io, mappedBin, sessionBin)) {
+        UploadSession sessionBin;
+        if (!CirrusFirmwareScheduler::run(amp.name, io, mappedBin, sessionBin)) {
             CIRRUS_ERR("failed to upload BIN on %s", amp.name);
             return false;
         }

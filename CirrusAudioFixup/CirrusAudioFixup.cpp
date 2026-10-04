@@ -40,6 +40,14 @@ public:
     bool pollBit(uint32_t address, uint32_t mask, uint32_t expected, uint32_t timeoutMs) override {
         return mFixup->pollRegisterBit(mAmp, address, mask, expected, timeoutMs, cirrus::diagnostics::TRACE_PROBE);
     }
+
+    bool bulkRead(uint32_t address, uint8_t* data, size_t length) override {
+        return mFixup->bulkRead(mAmp, address, data, length, cirrus::diagnostics::TRACE_FIRMWARE);
+    }
+
+    bool bulkWrite(uint32_t address, const uint8_t* data, size_t length) override {
+        return mFixup->bulkWrite(mAmp, address, data, length, cirrus::diagnostics::TRACE_FIRMWARE);
+    }
 };
 
 static UInt32 readBE32(const UInt8* data) {
@@ -1072,18 +1080,18 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
         return false;
     IOService* audioCtrl = getAudioController();
     if (!audioCtrl) {
-        if (mHdaMissCount < 20 && ++mHdaMissCount == 20) {
+        if (mHdaState.missCount < 20 && ++mHdaState.missCount == 20) {
             for (unsigned i = 0; i < 2; ++i) {
                 setDiagnosticStage(mAmps[i], STAGE_HDA_DETECT);
                 recordDiagnosticFailure(mAmps[i], DIAG_HDA_CONTROLLER, 0, 1, 0, kIOReturnNotFound, false);
             }
         }
-        publishStatus(mHdaMissCount >= 20 ? "MISSING_AFTER_20_POLLS" : "MISSING");
+        publishStatus(mHdaState.missCount >= 20 ? "MISSING_AFTER_20_POLLS" : "MISSING");
         return false;
     }
-    if (mHdaMissCount != 0) {
-        CIRRUS_LOG("HDA controller discovered after %u missed polls", mHdaMissCount);
-        mHdaMissCount = 0;
+    if (mHdaState.missCount != 0) {
+        CIRRUS_LOG("HDA controller discovered after %u missed polls", mHdaState.missCount);
+        mHdaState.missCount = 0;
     }
 
     IOPCIDevice* pciDev = OSDynamicCast(IOPCIDevice, audioCtrl);

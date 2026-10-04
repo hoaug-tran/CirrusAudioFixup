@@ -25,7 +25,13 @@ preamble = r'''
 #define OSSwapLittleToHostInt32(x) (x)
 constexpr unsigned CS35L41_I2C_ADDR_LEFT=0x40, CS35L41_I2C_ADDR_RIGHT=0x41;
 constexpr unsigned WMFW_ADSP2_XM=5, TRACE_FIRMWARE=3, DIAG_CALIBRATION=30;
-struct OSObject { virtual ~OSObject()=default; };
+unsigned borrowedReads=0,outstandingRefs=0;
+struct OSObject {
+    unsigned refs=1;
+    virtual ~OSObject()=default;
+    void retain() { ++refs; ++outstandingRefs; }
+    void release() { assert(refs>1); --refs; --outstandingRefs; }
+};
 struct OSString : OSObject {
     std::string value;
     static OSString* withCString(const char* v) { auto p=new OSString; p->value=v; return p; }
@@ -33,16 +39,19 @@ struct OSString : OSObject {
 };
 struct OSData : OSObject {
     std::vector<uint8_t> bytes;
-    uint32_t getLength() { return bytes.size(); }
-    const void* getBytesNoCopy() { return bytes.data(); }
+    uint32_t getLength() { if(refs<2) ++borrowedReads; return bytes.size(); }
+    const void* getBytesNoCopy() { if(refs<2) ++borrowedReads; return bytes.data(); }
 };
 struct IORegistryEntry {
     static OSObject* data;
+    static bool legacyOnly;
     static IORegistryEntry* fromPath(const char*) { static IORegistryEntry r; return &r; }
-    OSObject* getProperty(const char*) { return data; }
+    OSObject* getProperty(const char* name) { return legacyOnly && strchr(name,':') ? nullptr : data; }
+    OSObject* copyProperty(const char* name) { auto p=getProperty(name); if(p) p->retain(); return p; }
     void release() {}
 };
 OSObject* IORegistryEntry::data=nullptr;
+bool IORegistryEntry::legacyOnly=false;
 std::map<std::string,uint32_t> args;
 bool PE_parse_boot_argn(const char* name,void* p,size_t n) {
     auto it=args.find(name); if(it==args.end()) return false;
@@ -73,9 +82,11 @@ public:
     unsigned writes=0,reads=0,failWrite=0,failRead=0,corruptRead=0,failures=0;
     std::map<uint32_t,uint32_t> memory;
     std::map<std::string,std::string> properties;
+    std::map<std::string,uint64_t> numbers;
     bool bootArgEnabled(const char*) { return skip; }
     void setProperty(const char* n,OSString* s) { properties[n]=s->value; }
-    void setProperty(const char*,uint64_t,unsigned) {}
+    void setProperty(const char* n,uint64_t v,unsigned) { numbers[n]=v; }
+    void removeProperty(const char* n) { numbers.erase(n); properties.erase(n); }
     bool writeRegister(CS35L41Amp&,uint32_t r,uint32_t v,unsigned) {
         if(++writes==failWrite) return false; memory[r]=v; return true;
     }
@@ -149,7 +160,46 @@ int main() {
     CirrusFirmwareParser::missing=false;
     CirrusAudioFixup normal; normal.boot(amp,&image);
     check(normal.booted && amp.firmwareValidated,"valid calibration permits boot");
-    printf("%s calibration: EFI bounds, L/R values, 12 I/O faults, boot gate, explicit input validation\n",failures?"FAIL":"PASS");
+    IORegistryEntry::legacyOnly=true;
+    CirrusAudioFixup legacy;
+    check(legacy.applyCalibration(amp,&image),"unqualified EFI property fallback accepted");
+    IORegistryEntry::legacyOnly=false;
+    OSObject wrongType;
+    IORegistryEntry::data=&wrongType;
+    CirrusAudioFixup wrong;
+    check(!wrong.applyCalibration(amp,&image) && wrong.writes==0,"wrong EFI property type rejected");
+    check(wrongType.refs==1,"wrong-type property released");
+    const char* expectedStatuses[]={"NOT_AVAILABLE","SKIPPED_BY_BOOT_ARG","CONTROL_RESOLUTION_FAILED",
+        "INVALID_EFI_DATA","INVALID_BOOT_ARG_DATA","VERIFY_FAILED","VERIFY_FAILED","VERIFY_FAILED"};
+    for(unsigned mode=0;mode<9;++mode) {
+        args.clear(); IORegistryEntry::data=&data; CirrusFirmwareParser::missing=false;
+        CirrusAudioFixup d;
+        CS35L41Amp right; right.name="R"; right.address=0x41;
+        check(d.applyCalibration(amp,&image) && d.applyCalibration(right,&image),"seed both channel properties");
+        check(d.numbers.size()==8,"both channels publish four verified values");
+        if(mode==0) IORegistryEntry::data=nullptr;
+        if(mode==1) d.skip=true;
+        if(mode==2) CirrusFirmwareParser::missing=true;
+        if(mode==3) IORegistryEntry::data=&wrongType;
+        if(mode==4) { IORegistryEntry::data=nullptr; args={{"cirrus_cal_r0_l",5846}}; }
+        if(mode==5) d.failWrite=d.writes+1;
+        if(mode==6) d.failRead=d.reads+1;
+        if(mode==7) d.corruptRead=d.reads+1;
+        bool ok=d.applyCalibration(amp,mode==8?nullptr:&image);
+        check(ok==(mode<2),"repeat invocation preserves success/failure contract");
+        for(auto field:{"R0","Ambient","Valid","Checksum"}) {
+            check(!d.numbers.count(std::string("Cirrus_Calibration_")+field+"_L"),"repeat invocation clears old channel evidence");
+            check(d.numbers.count(std::string("Cirrus_Calibration_")+field+"_R")==1,"other channel evidence preserved");
+        }
+        if(mode<8) check(d.properties["Cirrus_Calibration_Status_L"]==expectedStatuses[mode],"repeat status describes current attempt");
+        else check(!d.properties.count("Cirrus_Calibration_Status_L"),"null image cannot retain successful status");
+        d.skip=false; d.failWrite=d.failRead=d.corruptRead=0;
+        args.clear(); IORegistryEntry::data=&data; CirrusFirmwareParser::missing=false;
+        check(d.applyCalibration(amp,&image) && d.numbers.size()==8,"successful retry republishes current evidence");
+    }
+    check(borrowedReads==0,"EFI data retained throughout parsing");
+    check(outstandingRefs==0 && data.refs==1 && wrongType.refs==1,"property references balanced across all paths");
+    printf("%s calibration: EFI bounds, ownership, L/R values, 12 I/O faults, boot gate, repeated state transitions\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }
 '''

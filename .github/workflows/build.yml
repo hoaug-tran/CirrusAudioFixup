@@ -28,7 +28,7 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
-      - name: Host firmware, playback, bringup, HDA, transport and calibration regression checks
+      - name: Host firmware, playback, bringup, HDA, transport, calibration and diagnostic regression checks
         run: |
           python3 Tests/reproduce_host.py
           python3 Tests/check_runtime.py
@@ -36,6 +36,7 @@ jobs:
           python3 Tests/check_hda.py
           python3 Tests/check_transport.py
           python3 Tests/check_calibration.py
+          python3 Tests/check_diagnostics.py
 
       - name: List targets
         run: xcodebuild -project CirrusAudioFixup.xcodeproj -list

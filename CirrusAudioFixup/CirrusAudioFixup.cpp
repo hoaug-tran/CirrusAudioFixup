@@ -784,6 +784,12 @@ struct cs35l41_amp_efi_data {
 } __attribute__((packed));
 
 bool CirrusAudioFixup::applyCalibration(CS35L41Amp &amp, const FirmwareImage *image) {
+    const char *fields[] = { "Status", "R0", "Ambient", "Valid", "Checksum" };
+    for (const char *field : fields) {
+        char property[80];
+        snprintf(property, sizeof(property), "Cirrus_Calibration_%s_%s", field, amp.name);
+        removeProperty(property);
+    }
     if (!image) return false;
 
     if (bootArgEnabled("cirrus_nocal")) {
@@ -838,9 +844,9 @@ bool CirrusAudioFixup::applyCalibration(CS35L41Amp &amp, const FirmwareImage *im
         options = IORegistryEntry::fromPath("IODeviceTree:/chosen");
     }
     if (options) {
-        OSObject *prop = options->getProperty("02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData");
+        OSObject *prop = options->copyProperty("02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData");
         if (!prop) {
-            prop = options->getProperty("CirrusSmartAmpCalibrationData");
+            prop = options->copyProperty("CirrusSmartAmpCalibrationData");
         }
         invalidData = prop != nullptr;
         OSData *calData = OSDynamicCast(OSData, prop);
@@ -862,6 +868,7 @@ bool CirrusAudioFixup::applyCalibration(CS35L41Amp &amp, const FirmwareImage *im
                 }
             }
         }
+        if (prop) prop->release();
         options->release();
     }
     if (invalidData) {
@@ -1838,7 +1845,8 @@ void CirrusAudioFixup::recordDiagnosticFailure(CS35L41Amp &amp, DiagnosticFailur
                                                IOReturn ioReturn, bool captureSnapshot) {
     DiagnosticState &diag = amp.diagnostic;
     bool first = diag.firstFailure == DIAG_OK;
-    bool changed = diag.latestFailure != failure || diag.reg != reg || diag.actual != actual;
+    bool changed = diag.latestFailure != failure || diag.reg != reg || diag.actual != actual ||
+                   diag.expected != expected || diag.ioReturn != ioReturn;
     if (first) diag.firstFailure = failure;
     diag.latestFailure = failure;
     diag.failureCount++;

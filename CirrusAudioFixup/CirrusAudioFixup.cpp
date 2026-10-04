@@ -3452,7 +3452,7 @@ bool CirrusAudioFixup::parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& ou
         size_t chunk = length - offset;
         if (chunk > 252)
             chunk = 252;
-        if (!bulkRead(amp, 0x02800000 + offset, table + offset, chunk, TRACE_FIRMWARE))
+        if (!bulkRead(amp, static_cast<uint32_t>(0x02800000 + offset), table + offset, chunk, TRACE_FIRMWARE))
             return false;
         offset += chunk;
     }
@@ -3512,7 +3512,6 @@ bool CirrusAudioFixup::configureHardware(AmplifierState& amp) {
 }
 
 void CirrusAudioFixup::logASPSnapshot(AmplifierState& amp) {
-    {
         uint32_t enables = 0, rate = 0, fmt = 0, hiz = 0;
         uint32_t tx_wl = 0, rx_wl = 0, tx_slot = 0, rx_slot = 0;
         uint32_t rx1_src = 0, rx2_src = 0, rx3_src = 0, rx4_src = 0, rx5_src = 0;

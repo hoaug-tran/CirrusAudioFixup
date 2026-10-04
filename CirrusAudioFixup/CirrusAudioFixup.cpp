@@ -15,7 +15,34 @@
 using namespace cirrus::diagnostics;
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
 
-    static UInt32 readBE32(const UInt8* data) {
+    class CirrusAudioFixup;
+
+class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
+private:
+    CirrusAudioFixup* mFixup;
+    AmplifierState& mAmp;
+
+public:
+    FixupRegisterIOAdapter(CirrusAudioFixup* fixup, AmplifierState& amp) : mFixup(fixup), mAmp(amp) {}
+
+    bool read(uint32_t address, uint32_t* value) override {
+        return mFixup->readRegister(mAmp, address, value, cirrus::diagnostics::TRACE_PROBE);
+    }
+
+    bool write(uint32_t address, uint32_t value) override {
+        return mFixup->writeRegister(mAmp, address, value, cirrus::diagnostics::TRACE_PROBE);
+    }
+
+    bool updateBits(uint32_t address, uint32_t mask, uint32_t value) override {
+        return mFixup->updateRegisterBits(mAmp, address, mask, value, cirrus::diagnostics::TRACE_PROBE);
+    }
+
+    bool pollBit(uint32_t address, uint32_t mask, uint32_t expected, uint32_t timeoutMs) override {
+        return mFixup->pollRegisterBit(mAmp, address, mask, expected, timeoutMs, cirrus::diagnostics::TRACE_PROBE);
+    }
+};
+
+static UInt32 readBE32(const UInt8* data) {
     return (static_cast<UInt32>(data[0]) << 24) | (static_cast<UInt32>(data[1]) << 16) | (static_cast<UInt32>(data[2]) << 8) |
            static_cast<UInt32>(data[3]);
 }

@@ -1204,10 +1204,10 @@ bool CirrusAudioFixup::syncAlc287HdaCodec() {
 
 bool CirrusAudioFixup::checkProtectionStatus(AmplifierState& amp) {
     uint32_t status = 0;
-    if (!readRegister(amp, CS35L41_IRQ1_STATUS1_REG, &status, TRACE_PLAYBACK))
+    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kIrq1Status1Register, &status, TRACE_PLAYBACK))
         return false;
     if (status & cirrus::devices::cs35l41::registers::kMaskProtectionFault) {
-        recordDiagnosticFailure(amp, DIAG_AMP_PROTECTION, CS35L41_IRQ1_STATUS1_REG, 0, status);
+        recordDiagnosticFailure(amp, DIAG_AMP_PROTECTION, cirrus::devices::cs35l41::registers::kIrq1Status1Register, 0, status);
         return false;
     }
     return true;
@@ -1220,7 +1220,7 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
     bool ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, 0, TRACE_PLAYBACK);
     ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678, TRACE_PLAYBACK) && ok;
     uint32_t before = 0;
-    bool known = readRegister(amp, CS35L41_PWR_CTRL1_REG, &before, TRACE_PLAYBACK);
+    bool known = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &before, TRACE_PLAYBACK);
     bool needPdn = !known || (before & 1);
     ok = known && ok;
     bool unlocked = unlockTestKey(amp);
@@ -1229,7 +1229,7 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
         ok = writeRegister(amp, 0x00007438, 0x00585941, TRACE_PLAYBACK) && ok;
     if (needPdn)
         ok = writeRegister(amp, 0x00010010, 0x00800000, TRACE_PLAYBACK) && ok;
-    ok = updateRegisterBits(amp, CS35L41_PWR_CTRL1_REG, 1, 0, TRACE_PLAYBACK) && ok;
+    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl1, 1, 0, TRACE_PLAYBACK) && ok;
     if (unlocked)
         ok = writeRegister(amp, 0x0000742C, 0x00000009, TRACE_PLAYBACK) && ok;
     bool pdnDone = !needPdn;
@@ -1250,7 +1250,7 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
         ok = writeRegister(amp, 0x00007438, 0x00580941, TRACE_PLAYBACK) && ok;
     ok = lockTestKey(amp) && ok;
     ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegGpio1Control1, 0x00000001, TRACE_PLAYBACK) && ok;
-    ok = updateRegisterBits(amp, CS35L41_PWR_CTRL2_REG, 1, 0, TRACE_PLAYBACK) && ok;
+    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2, 1, 0, TRACE_PLAYBACK) && ok;
     if (amp.dspAlive) {
         bool paused = sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxPause,
                                          cirrus::devices::cs35l41::registers::kStatusMailboxPaused);
@@ -1260,12 +1260,12 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
             stopDSP(amp);
         }
     }
-    ok = updateRegisterBits(amp, CS35L41_PWR_CTRL2_REG, 0x00003000 | cirrus::devices::cs35l41::registers::kMaskBoostEnable, 0,
+    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2, 0x00003000 | cirrus::devices::cs35l41::registers::kMaskBoostEnable, 0,
                             TRACE_PLAYBACK) &&
          ok;
     uint32_t pwr1 = 0, pwr2 = 0, volume = 0, gain = 0;
-    bool readable = readRegister(amp, CS35L41_PWR_CTRL1_REG, &pwr1, TRACE_PLAYBACK) &&
-                    readRegister(amp, CS35L41_PWR_CTRL2_REG, &pwr2, TRACE_PLAYBACK) &&
+    bool readable = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &pwr1, TRACE_PLAYBACK) &&
+                    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &pwr2, TRACE_PLAYBACK) &&
                     readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &volume, TRACE_PLAYBACK) &&
                     readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, &gain, TRACE_PLAYBACK);
     bool safe = ok && pdnDone && readable && !(pwr1 & 1) &&
@@ -1273,7 +1273,7 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
     amp.playbackActive = !safe;
     if (!safe) {
         amp.playbackFaulted = true;
-        recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK, CS35L41_PWR_CTRL2_REG, 0, pwr2);
+        recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK, cirrus::devices::cs35l41::registers::kPowerControl2, 0, pwr2);
     } else if (!amp.playbackFaulted) {
         amp.cleanupAttempts = 0;
         markDiagnosticSuccess(amp, STAGE_SAFE_IDLE);
@@ -1360,7 +1360,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         if (amp.playbackActive && hasAudio) {
             const bool dspMode = amp.monitorCount >= 1;
             uint32_t pwr2 = 0, core = 0, halo = 0;
-            bool powerReadable = readRegister(amp, CS35L41_PWR_CTRL2_REG, &pwr2, TRACE_PLAYBACK);
+            bool powerReadable = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &pwr2, TRACE_PLAYBACK);
             bool dspHealthy = bootArgEnabled("-cirrusnodsp");
             if (dspMode) {
                 dspHealthy = amp.dspAlive && amp.firmwareValidated && amp.haloStateRegister &&
@@ -1379,7 +1379,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2,
                                             pll_lock_sts);
                 else
-                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, CS35L41_PWR_CTRL2_REG, dspMode ? 0x3001U : 1U, pwr2);
+                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, cirrus::devices::cs35l41::registers::kPowerControl2, dspMode ? 0x3001U : 1U, pwr2);
                 amp.playbackFaulted = true;
                 stopPlayback(amp);
                 continue;
@@ -1459,7 +1459,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019);
                     checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1Rx5Source, 0x00000029);
                     checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1Rx6Source, 0x00000029);
-                    sequenceOk = sequenceOk && updateRegisterBits(amp, CS35L41_PWR_CTRL2_REG, 0x00003000, 0x00003000);
+                    sequenceOk = sequenceOk && updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2, 0x00003000, 0x00003000);
                     dspCommandOk = sequenceOk && sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxResume,
                                                                     cirrus::devices::cs35l41::registers::kStatusMailboxRunning);
                     sequenceOk = sequenceOk && dspCommandOk;
@@ -1486,7 +1486,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 }
 
                 if (!sequenceOk ||
-                    !updateRegisterBits(amp, CS35L41_PWR_CTRL2_REG, 1 | cirrus::devices::cs35l41::registers::kMaskBoostEnable, 1)) {
+                    !updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2, 1 | cirrus::devices::cs35l41::registers::kMaskBoostEnable, 1)) {
                     abortStart();
                     continue;
                 }
@@ -1501,7 +1501,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 checkedWrite(0x0000742C, 0x00000079);
                 checkedWrite(0x00007438, 0x00585941);
 
-                sequenceOk = sequenceOk && updateRegisterBits(amp, CS35L41_PWR_CTRL1_REG, 1, 1);
+                sequenceOk = sequenceOk && updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl1, 1, 1);
                 if (!sequenceOk) {
                     abortStart();
                     continue;
@@ -1556,7 +1556,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 }
 
                 uint32_t readyPwr1 = 0, readyPwr2 = 0, readyDac = 0, readyAsp = 0;
-                bool ready = readRegister(amp, CS35L41_PWR_CTRL1_REG, &readyPwr1) && readRegister(amp, CS35L41_PWR_CTRL2_REG, &readyPwr2) &&
+                bool ready = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &readyPwr1) && readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &readyPwr2) &&
                              readRegister(amp, cirrus::devices::cs35l41::registers::kRegDacPcm1Source, &readyDac) &&
                              readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, &readyAsp) && (readyPwr1 & 1) &&
                              (readyPwr2 & (0x3001 | cirrus::devices::cs35l41::registers::kMaskBoostEnable)) == (dspMode ? 0x3001U : 1U) &&
@@ -1616,7 +1616,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     CIRRUS_ERR("Background Monitor: Playback start verification failed on %s (read=%d pup=%d pwr1=0x%08X pwr2=0x%08X "
                                "gain=0x%08X); rolling back",
                                amp.name, stateReadable, pupDone, post_pwr1, post_pwr2, post_gain);
-                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, CS35L41_PWR_CTRL1_REG, 0x00000001, post_pwr1);
+                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, cirrus::devices::cs35l41::registers::kPowerControl1, 0x00000001, post_pwr1);
                     abortStart();
                 }
             }
@@ -1646,7 +1646,7 @@ void CirrusAudioFixup::probeAmp(AmplifierState& amp) {
         return;
     }
 
-    if (!readRegister(amp, CS35L41_REVID_REG, &revisionId, TRACE_PROBE)) {
+    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRevisionIdRegister, &revisionId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s revision read failed", amp.name);
         return;
     }
@@ -2037,11 +2037,11 @@ void CirrusAudioFixup::captureFailureSnapshot(AmplifierState& amp, DiagnosticFai
     uint32_t spEn = 0, spRate = 0, spFmt = 0, spHiz = 0, rxSlot = 0, dac = 0;
     uint32_t core = 0, halo = 0, mbox1 = 0, mbox2 = 0, scratch1 = 0;
     readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &devid, TRACE_DUMP);
-    readRegister(amp, CS35L41_REVID_REG, &revid, TRACE_DUMP);
-    readRegister(amp, CS35L41_PWR_CTRL1_REG, &pwr1, TRACE_DUMP);
-    readRegister(amp, CS35L41_PWR_CTRL2_REG, &pwr2, TRACE_DUMP);
-    readRegister(amp, CS35L41_PWR_CTRL3_REG, &pwr3, TRACE_DUMP);
-    readRegister(amp, CS35L41_PWRMGT_STS_REG, &pwrSts, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kRevisionIdRegister, &revid, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &pwr1, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &pwr2, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl3, &pwr3, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerManagementStatus, &pwrSts, TRACE_DUMP);
     readRegister(amp, 0x00010010, &irq1, TRACE_DUMP);
     readRegister(amp, 0x00010014, &irq2, TRACE_DUMP);
     readRegister(amp, 0x00010018, &irq3, TRACE_DUMP);
@@ -2057,7 +2057,7 @@ void CirrusAudioFixup::captureFailureSnapshot(AmplifierState& amp, DiagnosticFai
     bool haloReadable = amp.haloStateRegister && readRegister(amp, amp.haloStateRegister, &halo, TRACE_DUMP);
     CIRRUS_LOG("HALO snapshot on %s: address=0x%08X readable=%d", amp.name, amp.haloStateRegister, haloReadable);
     readRegister(amp, 0x00013020, &mbox1, TRACE_DUMP);
-    readRegister(amp, CS35L41_DSP_MBOX_2_REG, &mbox2, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::cs35l41::registers::kDspMbox2Register, &mbox2, TRACE_DUMP);
     readRegister(amp, 0x02B805C0, &scratch1, TRACE_DUMP);
     mCapturingFailureSnapshot = false;
 
@@ -2318,11 +2318,11 @@ bool CirrusAudioFixup::sendMailboxCommand(AmplifierState& amp, UInt32 command, U
     UInt32 status = 0;
     for (unsigned attempt = 0; attempt < 5; ++attempt) {
         IODelay(1000);
-        if (!readRegister(amp, CS35L41_DSP_MBOX_2_REG, &status, TRACE_PLAYBACK))
+        if (!readRegister(amp, cirrus::devices::cs35l41::registers::kDspMbox2Register, &status, TRACE_PLAYBACK))
             return false;
         if (status == 0xFFFFFFFFU || status == 0x00FFFFFFU) {
             CIRRUS_ERR("DSP mailbox reported error on %s for command %u: 0x%08X", amp.name, command, status);
-            recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, CS35L41_DSP_MBOX_2_REG, expectedStatus, status);
+            recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::cs35l41::registers::kDspMbox2Register, expectedStatus, status);
             return false;
         }
         if (status == expectedStatus)
@@ -2330,7 +2330,7 @@ bool CirrusAudioFixup::sendMailboxCommand(AmplifierState& amp, UInt32 command, U
     }
 
     CIRRUS_ERR("DSP mailbox command %u timed out on %s (expected=%u status=0x%08X)", command, amp.name, expectedStatus, status);
-    recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, CS35L41_DSP_MBOX_2_REG, expectedStatus, status);
+    recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::cs35l41::registers::kDspMbox2Register, expectedStatus, status);
     return false;
 }
 

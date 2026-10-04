@@ -629,7 +629,8 @@ void CirrusAudioFixup::initializeFirmware(CS35L41Amp &amp, const char* phaseArg)
     WMFWControlRef stateRef {}, heartbeatRef {};
     if (!CirrusFirmwareParser::findControl(image, "HALO_STATE", stateRef) ||
         !CirrusFirmwareParser::findControl(image, "HALO_HEARTBEAT", heartbeatRef) ||
-        stateRef.algorithm->id != image->fw_id || heartbeatRef.algorithm->id != image->fw_id ||
+        (stateRef.algorithm->id & 0x00FFFFFF) != (image->fw_id & 0x00FFFFFF) ||
+        (heartbeatRef.algorithm->id & 0x00FFFFFF) != (image->fw_id & 0x00FFFFFF) ||
         stateRef.control->type != WMFW_ADSP2_XM || stateRef.control->len != 4 ||
         heartbeatRef.control->type != WMFW_ADSP2_XM || heartbeatRef.control->len != 4 ||
         !CirrusFirmwareParser::resolveControl(*image, stateRef, amp.haloStateRegister) ||

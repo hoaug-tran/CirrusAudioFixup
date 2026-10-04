@@ -103,8 +103,14 @@ int main() {
         bool success=CirrusFirmwareRealUploader::upload(amp,&bus,plan);
         assert(success==(mode==0));
         if(mode==1) assert(bus.writes==0);
-        if(mode!=5) for(unsigned i=0;i<504;i++) assert(bus.memory[r.dspRegister+i]==(mode==0?0xAB:0x55));
     }
+    MappedRegion r_pm{RegionType::PM_PACKED,0,0x03800000,504,{payload.data(),504}};
+    UploadPlan plan_pm{};
+    assert(CirrusFirmwareUploadPlanner::generatePlan(0,r_pm,{252,true,true},plan_pm));
+    CirrusAudioFixup bus_pm;
+    assert(CirrusFirmwareRealUploader::upload(amp,&bus_pm,plan_pm));
+    assert(bus_pm.reads==0 && bus_pm.writes==2);
+    for(unsigned i=0;i<504;i++) assert(bus_pm.memory[r_pm.dspRegister+i]==0xAB);
     MappedImage mapped{}; UploadSession session{}; CirrusAudioFixup bus;
     mapped.regionCount=33;
     for(unsigned i=0;i<33;i++) mapped.regions[i]=r;

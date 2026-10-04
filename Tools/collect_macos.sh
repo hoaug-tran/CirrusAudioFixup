@@ -22,7 +22,11 @@ capture audio system_profiler SPAudioDataType
 capture services ioreg -lw0 -p IOService
 capture acpi ioreg -lw0 -p IOACPIPlane
 capture power-plane ioreg -lw0 -p IOPower
+capture dmesg dmesg
+capture sudo-dmesg sudo -n dmesg
+capture kernel-log log show --last boot --style syslog --predicate 'process == "kernel"'
 capture cirrus-log log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
+capture cirrus-full-log log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup" OR sender CONTAINS "CirrusAudioFixup" OR eventMessage CONTAINS "CS35L41" OR sender CONTAINS "AppleALC" OR eventMessage CONTAINS "VoodooI2C"'
 if [ "$#" -gt 0 ]; then
     kext=$1
     binary="$kext/Contents/MacOS/CirrusAudioFixup"

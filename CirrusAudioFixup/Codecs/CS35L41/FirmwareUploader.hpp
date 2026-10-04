@@ -188,9 +188,10 @@ public:
         CIRRUS_LOG("Amp %s: Region %d (%s), Transactions: %d, Total: %d bytes, DSP Start: 0x%08X",
                    amp.name, plan.regionIndex, rtype, plan.transactionCount, totalSize, dspStart);
 
-        UInt8 *backupBuffer = (UInt8 *)IOMallocData(totalSize);
-        UInt8 *verifyBuffer = (UInt8 *)IOMallocData(totalSize);
-        if (!backupBuffer || !verifyBuffer) {
+        bool isPM = (plan.regionType == RegionType::PM_PACKED);
+        UInt8 *backupBuffer = isPM ? nullptr : (UInt8 *)IOMallocData(totalSize);
+        UInt8 *verifyBuffer = isPM ? nullptr : (UInt8 *)IOMallocData(totalSize);
+        if (!isPM && (!backupBuffer || !verifyBuffer)) {
             CIRRUS_ERR("Amp %s: Failed to allocate Backup/Verify buffers", amp.name);
             if (backupBuffer) IOFreeData(backupBuffer, totalSize);
             if (verifyBuffer) IOFreeData(verifyBuffer, totalSize);
@@ -203,15 +204,18 @@ public:
             return (uint32_t)(nsecs / 1000000);
         };
 
-        for (uint32_t i = 0; i < plan.transactionCount; ++i) {
-            const auto &tx = plan.transactions[i];
-            if (!fixup->bulkRead(amp, tx.dspRegister, backupBuffer + tx.payloadOffset, tx.size, TRACE_OTHER)) {
-                IOFreeData(backupBuffer, totalSize);
-                IOFreeData(verifyBuffer, totalSize);
-                return false;
+        if (!isPM) {
+            for (uint32_t i = 0; i < plan.transactionCount; ++i) {
+                const auto &tx = plan.transactions[i];
+                if (!fixup->bulkRead(amp, tx.dspRegister, backupBuffer + tx.payloadOffset, tx.size, TRACE_OTHER)) {
+                    IOFreeData(backupBuffer, totalSize);
+                    IOFreeData(verifyBuffer, totalSize);
+                    return false;
+                }
             }
         }
         auto restoreRegion = [&]() -> bool {
+            if (isPM || !backupBuffer || !verifyBuffer) return true;
             bool restored = true;
             for (uint32_t i = 0; i < plan.transactionCount; ++i) {
                 const auto &tx = plan.transactions[i];
@@ -262,11 +266,18 @@ public:
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", amp.name);
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
-                IOFreeData(backupBuffer, totalSize);
-                IOFreeData(verifyBuffer, totalSize);
+                if (backupBuffer) IOFreeData(backupBuffer, totalSize);
+                if (verifyBuffer) IOFreeData(verifyBuffer, totalSize);
                 return false;
             }
             CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", amp.name, write_ms);
+
+            if (isPM) {
+                CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", amp.name);
+                CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", amp.name);
+                CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", amp.name);
+                continue;
+            }
 
             t0 = mach_absolute_time();
             UInt8 *rbSlot = verifyBuffer + tx.payloadOffset;
@@ -279,8 +290,8 @@ public:
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", amp.name);
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
-                IOFreeData(backupBuffer, totalSize);
-                IOFreeData(verifyBuffer, totalSize);
+                if (backupBuffer) IOFreeData(backupBuffer, totalSize);
+                if (verifyBuffer) IOFreeData(verifyBuffer, totalSize);
                 return false;
             }
             CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", amp.name, rb_ms);
@@ -324,8 +335,8 @@ public:
                 }
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", amp.name, rbOk ? "PASS" : "FAIL");
-                IOFreeData(backupBuffer, totalSize);
-                IOFreeData(verifyBuffer, totalSize);
+                if (backupBuffer) IOFreeData(backupBuffer, totalSize);
+                if (verifyBuffer) IOFreeData(verifyBuffer, totalSize);
 
                 return false;
             }
@@ -346,8 +357,8 @@ public:
             outStats->retries   = acc_retries;
         }
 
-        IOFreeData(backupBuffer, totalSize);
-        IOFreeData(verifyBuffer, totalSize);
+        if (backupBuffer) IOFreeData(backupBuffer, totalSize);
+        if (verifyBuffer) IOFreeData(verifyBuffer, totalSize);
         return true;
     }
 };

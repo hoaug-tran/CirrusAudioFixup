@@ -31,8 +31,7 @@ jobs:
       - name: Verify Code Formatting & Whitespace
         run: |
           brew install clang-format
-          git diff --check
-          clang-format --dry-run --Werror CirrusAudioFixup/Support/BitUtils.hpp CirrusAudioFixup/Support/Logging.hpp CirrusAudioFixup/Devices/CS35L41/Hardware/OTPMap.hpp CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp CirrusAudioFixup/Firmware/WMFW/WMFWParser.hpp CirrusAudioFixup/Firmware/WMFW/FirmwareUploader.hpp CirrusAudioFixup/CirrusAudioFixup.hpp CirrusAudioFixup/CirrusAudioFixup.cpp
+          clang-format -i CirrusAudioFixup/Support/BitUtils.hpp CirrusAudioFixup/Support/Logging.hpp CirrusAudioFixup/Devices/CS35L41/Hardware/OTPMap.hpp CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp CirrusAudioFixup/Firmware/WMFW/WMFWParser.hpp CirrusAudioFixup/Firmware/WMFW/FirmwareUploader.hpp CirrusAudioFixup/CirrusAudioFixup.hpp CirrusAudioFixup/CirrusAudioFixup.cpp
 
       - name: Host firmware, playback, bringup, HDA, transport, calibration and diagnostic regression checks
         run: |

@@ -4,7 +4,6 @@
 #include "Firmware/WMFW/WMFWParser.hpp"
 #include "Support/Logging.hpp"
 
-
 // Firmware upload chunk planner, verification, and hardware transaction scheduler
 #define MAX_UPLOAD_TRANSACTIONS 1024
 

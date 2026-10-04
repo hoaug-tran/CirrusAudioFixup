@@ -1,7 +1,12 @@
 #pragma once
 
+#include "Core/RegisterIO.hpp"
+#include "Devices/CS35L41/CS35L41Device.hpp"
 #include "Devices/CS35L41/Hardware/OTPMap.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Diagnostics/DiagnosticTypes.hpp"
+#include "Firmware/WMFW/FirmwareUploader.hpp"
+#include "Platform/HDA/HDAController.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
 
@@ -15,14 +20,7 @@
 
 #include <os/log.h>
 
-#include "Diagnostics/DiagnosticTypes.hpp"
-#include "Core/RegisterIO.hpp"
-#include "Devices/CS35L41/CS35L41Device.hpp"
-#include "Firmware/WMFW/FirmwareUploader.hpp"
-#include "Platform/HDA/HDAController.hpp"
-
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
-
 
 // VoodooI2C transfer request packet layout expected by VoodooI2CDeviceNub
 struct VoodooI2CAddressedTransfer {
@@ -166,7 +164,8 @@ private:
     IOReturn mLastTransferReturn{kIOReturnSuccess};
     bool mCapturingFailureSnapshot{false};
 
-    AmplifierState mAmps[2]{{"left", cirrus::devices::cs35l41::registers::kI2cAddressLeft}, {"right", cirrus::devices::cs35l41::registers::kI2cAddressRight}};
+    AmplifierState mAmps[2]{{"left", cirrus::devices::cs35l41::registers::kI2cAddressLeft},
+                            {"right", cirrus::devices::cs35l41::registers::kI2cAddressRight}};
 
     static const size_t kTraceBufferSize = 1024;
     cirrus::diagnostics::TraceEntry mTraceBuffer[kTraceBufferSize];
@@ -176,13 +175,15 @@ private:
     IOLock* mTraceLock{nullptr};
 
     void initTraceBuffer();
-    void recordTrace(cirrus::diagnostics::TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen, IOReturn ret);
+    void recordTrace(cirrus::diagnostics::TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen,
+                     IOReturn ret);
     void dumpTraceBuffer(const char* propertyName = "Cirrus_Trace_Dump", const char* mirrorPropertyName = nullptr);
     void publishStatistics();
     void setDiagnosticStage(AmplifierState& amp, cirrus::diagnostics::DriverStage stage);
     void markDiagnosticSuccess(AmplifierState& amp, cirrus::diagnostics::DriverStage stage);
-    void recordDiagnosticFailure(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure, uint32_t reg = 0, uint32_t expected = 0, uint32_t actual = 0,
-                                 IOReturn ioReturn = kIOReturnSuccess, bool captureSnapshot = true);
+    void recordDiagnosticFailure(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure, uint32_t reg = 0,
+                                 uint32_t expected = 0, uint32_t actual = 0, IOReturn ioReturn = kIOReturnSuccess,
+                                 bool captureSnapshot = true);
     void captureFailureSnapshot(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure);
     void publishDriverVerdict();
     static const char* stageName(cirrus::diagnostics::DriverStage stage);
@@ -201,13 +202,18 @@ private:
     bool transferToAddress(uint8_t address, uint8_t* writeBuffer, uint16_t writeLength, uint8_t* readBuffer, uint16_t readLength);
 
 public:
-    bool bulkWrite(AmplifierState& amp, uint32_t reg, const uint8_t* data, size_t length, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
-    bool bulkRead(AmplifierState& amp, uint32_t reg, uint8_t* data, size_t length, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool bulkWrite(AmplifierState& amp, uint32_t reg, const uint8_t* data, size_t length,
+                   cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool bulkRead(AmplifierState& amp, uint32_t reg, uint8_t* data, size_t length,
+                  cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
 
 private:
-    bool readRegister(AmplifierState& amp, uint32_t reg, uint32_t* value, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
-    bool writeRegister(AmplifierState& amp, uint32_t reg, uint32_t value, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
-    bool updateRegisterBits(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t value, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool readRegister(AmplifierState& amp, uint32_t reg, uint32_t* value,
+                      cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool writeRegister(AmplifierState& amp, uint32_t reg, uint32_t value,
+                       cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool updateRegisterBits(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t value,
+                            cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
     bool pollRegisterBit(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t targetVal, uint32_t timeoutMs,
                          cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
 

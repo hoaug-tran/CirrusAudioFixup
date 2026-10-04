@@ -585,4 +585,3 @@ static const RegisterDesc cs35l41_reg_desc[] = {
     {0x2BC3140, "CS35L41_DSP1_MPU_LOCK_CONFIG", true, false},
     {0x2BC3180, "CS35L41_DSP1_MPU_WDT_RST_CTRL", true, false},
 };
-

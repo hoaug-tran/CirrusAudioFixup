@@ -2766,7 +2766,7 @@ bool CirrusAudioFixup::applyASP(AmplifierState& amp) {
 
     FixupRegisterIOAdapter io(this, amp);
     cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
-    
+
     device.setupASP(io, strcmp(amp.name, "right") == 0, amp.firmwareValidated);
 
     uint64_t endTime = mach_absolute_time();
@@ -2792,7 +2792,7 @@ bool CirrusAudioFixup::applyGPIO(AmplifierState& amp) {
 
     FixupRegisterIOAdapter io(this, amp);
     cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
-    
+
     device.setupGPIO(io);
 
     uint64_t endTime = mach_absolute_time();
@@ -3472,275 +3472,276 @@ bool CirrusAudioFixup::configureHardware(AmplifierState& amp) {
     return device.configureHardware(io);
 }
 
-void CirrusAudioFixup::logASPSnapshot(AmplifierState& amp) { {
+void CirrusAudioFixup::logASPSnapshot(AmplifierState& amp) {
+    {
+        uint32_t enables = 0, rate = 0, fmt = 0, hiz = 0;
+        uint32_t tx_wl = 0, rx_wl = 0, tx_slot = 0, rx_slot = 0;
+        uint32_t rx1_src = 0, rx2_src = 0, rx3_src = 0, rx4_src = 0, rx5_src = 0;
 
-    uint32_t enables = 0, rate = 0, fmt = 0, hiz = 0;
-    uint32_t tx_wl = 0, rx_wl = 0, tx_slot = 0, rx_slot = 0;
-    uint32_t rx1_src = 0, rx2_src = 0, rx3_src = 0, rx4_src = 0, rx5_src = 0;
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, &enables);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRateControl, &rate);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, &fmt);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortHighImpedanceControl, &hiz);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameTxSlot, &tx_slot);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameRxSlot, &rx_slot);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortTxWordLength, &tx_wl);
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRxWordLength, &rx_wl);
+        readRegister(amp, 0x00004C40, &rx1_src);
+        readRegister(amp, 0x00004C44, &rx2_src);
+        readRegister(amp, 0x00004C48, &rx3_src);
+        readRegister(amp, 0x00004C4C, &rx4_src);
+        readRegister(amp, 0x00004C50, &rx5_src);
 
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, &enables);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRateControl, &rate);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, &fmt);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortHighImpedanceControl, &hiz);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameTxSlot, &tx_slot);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameRxSlot, &rx_slot);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortTxWordLength, &tx_wl);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRxWordLength, &rx_wl);
-    readRegister(amp, 0x00004C40, &rx1_src);
-    readRegister(amp, 0x00004C44, &rx2_src);
-    readRegister(amp, 0x00004C48, &rx3_src);
-    readRegister(amp, 0x00004C4C, &rx4_src);
-    readRegister(amp, 0x00004C50, &rx5_src);
+        CIRRUS_LOG("asp snapshot for %s: enables=0x%08X rate=0x%08X format=0x%08X hiz=0x%08X", amp.name, enables, rate, fmt, hiz);
+        CIRRUS_LOG("asp snapshot slots for %s: rx_slot=0x%08X tx_slot=0x%08X rx_wl=0x%08X tx_wl=0x%08X", amp.name, rx_slot, tx_slot, rx_wl,
+                   tx_wl);
+        CIRRUS_LOG("asp snapshot routing for %s: rx1_src=0x%08X rx2_src=0x%08X rx3_src=0x%08X rx4_src=0x%08X rx5_src=0x%08X", amp.name,
+                   rx1_src, rx2_src, rx3_src, rx4_src, rx5_src);
 
-    CIRRUS_LOG("asp snapshot for %s: enables=0x%08X rate=0x%08X format=0x%08X hiz=0x%08X", amp.name, enables, rate, fmt, hiz);
-    CIRRUS_LOG("asp snapshot slots for %s: rx_slot=0x%08X tx_slot=0x%08X rx_wl=0x%08X tx_wl=0x%08X", amp.name, rx_slot, tx_slot, rx_wl,
-               tx_wl);
-    CIRRUS_LOG("asp snapshot routing for %s: rx1_src=0x%08X rx2_src=0x%08X rx3_src=0x%08X rx4_src=0x%08X rx5_src=0x%08X", amp.name, rx1_src,
-               rx2_src, rx3_src, rx4_src, rx5_src);
+        bool pass = true;
+        uint32_t expected_rx_slot = (strcmp(amp.name, "right") == 0) ? 1 : 0;
+        if ((rx_slot & 0x3F) != expected_rx_slot) {
+            CIRRUS_ERR("asp rx slot mismatch on %s", amp.name);
+            pass = false;
+        }
 
-    bool pass = true;
-    uint32_t expected_rx_slot = (strcmp(amp.name, "right") == 0) ? 1 : 0;
-    if ((rx_slot & 0x3F) != expected_rx_slot) {
-        CIRRUS_ERR("asp rx slot mismatch on %s", amp.name);
-        pass = false;
+        uint32_t expected_rx1_src = 0x08;
+        uint32_t expected_rx2_src = (amp.monitorCount >= 1) ? 0x08 : 0x09;
+        if (rx1_src != expected_rx1_src) {
+            CIRRUS_ERR("asp rx1 source routing mismatch on %s", amp.name);
+            pass = false;
+        }
+        if (rx2_src != expected_rx2_src) {
+            CIRRUS_ERR("asp rx2 source routing mismatch on %s", amp.name);
+            pass = false;
+        }
+
+        if (pass) {
+            CIRRUS_LOG("asp validation check: pass on %s", amp.name);
+        } else {
+            CIRRUS_ERR("asp validation check: fail on %s", amp.name);
+        }
     }
 
-    uint32_t expected_rx1_src = 0x08;
-    uint32_t expected_rx2_src = (amp.monitorCount >= 1) ? 0x08 : 0x09;
-    if (rx1_src != expected_rx1_src) {
-        CIRRUS_ERR("asp rx1 source routing mismatch on %s", amp.name);
-        pass = false;
-    }
-    if (rx2_src != expected_rx2_src) {
-        CIRRUS_ERR("asp rx2 source routing mismatch on %s", amp.name);
-        pass = false;
+    void CirrusAudioFixup::logDSPSnapshot(AmplifierState & amp) {
+        uint32_t dsp_state = 0, mbox1 = 0, mbox2 = 0;
+        readRegister(amp, 0x00013004, &mbox2);
+        readRegister(amp, 0x00013020, &mbox1);
+        readRegister(amp, 0x02BC1000, &dsp_state);
+
+        CIRRUS_LOG("dsp status snapshot for %s: state=0x%08X core=0x%08X mbox1=%u mbox2=%u", amp.name, mbox2, dsp_state, mbox1, mbox2);
     }
 
-    if (pass) {
-        CIRRUS_LOG("asp validation check: pass on %s", amp.name);
-    } else {
-        CIRRUS_ERR("asp validation check: fail on %s", amp.name);
-    }
-}
+    void CirrusAudioFixup::logDSPBootReport(AmplifierState & amp) {
+        uint32_t core_ctrl = 0, sys_id = 0, halo_state = 0;
+        uint32_t mbox1 = 0, mbox2 = 0;
+        uint32_t xm_vio = 0, ym_vio = 0, pm_vio = 0;
+        uint32_t xm_vio_addr = 0, ym_vio_addr = 0, pm_vio_addr = 0;
+        uint32_t sc1 = 0, sc2 = 0, sc3 = 0, sc4 = 0;
+        uint32_t ts0 = 0, ts1 = 0, ts2 = 0;
 
-void CirrusAudioFixup::logDSPSnapshot(AmplifierState& amp) {
-    uint32_t dsp_state = 0, mbox1 = 0, mbox2 = 0;
-    readRegister(amp, 0x00013004, &mbox2);
-    readRegister(amp, 0x00013020, &mbox1);
-    readRegister(amp, 0x02BC1000, &dsp_state);
+        bool readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &core_ctrl, TRACE_DUMP);
+        readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemId, &sys_id, TRACE_DUMP) && readable;
+        readable = amp.haloStateRegister && readRegister(amp, amp.haloStateRegister, &halo_state, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x00013020, &mbox1, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x00013004, &mbox2, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x2BC3104, &xm_vio, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x2BC3100, &xm_vio_addr, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x2BC310C, &ym_vio, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x2BC3108, &ym_vio_addr, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x2BC3114, &pm_vio, TRACE_DUMP) && readable;
+        readable = readRegister(amp, 0x2BC3110, &pm_vio_addr, TRACE_DUMP) && readable;
+        readRegister(amp, 0x2B805C0, &sc1, TRACE_DUMP);
+        readRegister(amp, 0x2B805C8, &sc2, TRACE_DUMP);
+        readRegister(amp, 0x2B805D0, &sc3, TRACE_DUMP);
+        readRegister(amp, 0x2B805D8, &sc4, TRACE_DUMP);
 
-    CIRRUS_LOG("dsp status snapshot for %s: state=0x%08X core=0x%08X mbox1=%u mbox2=%u", amp.name, mbox2, dsp_state, mbox1, mbox2);
-}
+        bool hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts0, TRACE_DUMP);
+        IODelay(2000);
+        hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts1, TRACE_DUMP) && hbReadable;
+        IODelay(2000);
+        hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts2, TRACE_DUMP) && hbReadable;
 
-void CirrusAudioFixup::logDSPBootReport(AmplifierState& amp) {
-    uint32_t core_ctrl = 0, sys_id = 0, halo_state = 0;
-    uint32_t mbox1 = 0, mbox2 = 0;
-    uint32_t xm_vio = 0, ym_vio = 0, pm_vio = 0;
-    uint32_t xm_vio_addr = 0, ym_vio_addr = 0, pm_vio_addr = 0;
-    uint32_t sc1 = 0, sc2 = 0, sc3 = 0, sc4 = 0;
-    uint32_t ts0 = 0, ts1 = 0, ts2 = 0;
+        bool core_en = (core_ctrl & cirrus::devices::cs35l41::registers::kValHaloCoreEnable) != 0;
+        bool core_out_of_reset = (core_ctrl & cirrus::devices::cs35l41::registers::kValHaloCoreReset) == 0;
+        bool sysid_ok = (sys_id != 0x00000000 && sys_id != 0xFFFFFFFF);
+        bool run_ok = (halo_state == 2);
+        bool mbox_ok = (mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxRunning ||
+                        mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxPaused);
+        const uint32_t MPU_VIO_MASK = 0x007E0000;
+        bool mpu_clean = ((xm_vio & MPU_VIO_MASK) == 0 && (ym_vio & MPU_VIO_MASK) == 0 && (pm_vio & MPU_VIO_MASK) == 0);
+        bool hb_alive = (ts0 != ts1 && ts1 != ts2);
 
-    bool readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &core_ctrl, TRACE_DUMP);
-    readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemId, &sys_id, TRACE_DUMP) && readable;
-    readable = amp.haloStateRegister && readRegister(amp, amp.haloStateRegister, &halo_state, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x00013020, &mbox1, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x00013004, &mbox2, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x2BC3104, &xm_vio, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x2BC3100, &xm_vio_addr, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x2BC310C, &ym_vio, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x2BC3108, &ym_vio_addr, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x2BC3114, &pm_vio, TRACE_DUMP) && readable;
-    readable = readRegister(amp, 0x2BC3110, &pm_vio_addr, TRACE_DUMP) && readable;
-    readRegister(amp, 0x2B805C0, &sc1, TRACE_DUMP);
-    readRegister(amp, 0x2B805C8, &sc2, TRACE_DUMP);
-    readRegister(amp, 0x2B805D0, &sc3, TRACE_DUMP);
-    readRegister(amp, 0x2B805D8, &sc4, TRACE_DUMP);
+        const char* verdict;
+        const char* rootCause;
+        if (!readable) {
+            verdict = "UNVERIFIED";
+            rootCause = "required register read failed or control unresolved";
+        } else if (!amp.firmwareValidated || !amp.dspAlive) {
+            verdict = "DISABLED";
+            rootCause = "initialization failed; current registers may reflect cleanup";
+        } else if (core_en && core_out_of_reset && sysid_ok && run_ok && mpu_clean && mbox_ok) {
+            verdict = "HEALTHY";
+            rootCause = "HALO RUN and mailbox verified; heartbeat is diagnostic only";
+        } else {
+            verdict = "FAIL";
+            rootCause = "required DSP state invariant failed; inspect raw registers";
+        }
 
-    bool hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts0, TRACE_DUMP);
-    IODelay(2000);
-    hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts1, TRACE_DUMP) && hbReadable;
-    IODelay(2000);
-    hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts2, TRACE_DUMP) && hbReadable;
+        CIRRUS_LOG("===== DSP BOOT REPORT for %s =====", amp.name);
+        CIRRUS_LOG("  VERDICT   : %s", verdict);
+        CIRRUS_LOG("  ROOT CAUSE: %s", rootCause);
+        CIRRUS_LOG("  core      : ctrl=0x%08X en=%s reset_released=%s", core_ctrl, core_en ? "yes" : "NO",
+                   core_out_of_reset ? "yes" : "NO");
+        CIRRUS_LOG("  sys_id    : 0x%08X (%s)", sys_id, sysid_ok ? "ok" : "BAD");
+        CIRRUS_LOG("  halo_state: 0x%08X (%s, want RUN=2)", halo_state, run_ok ? "RUN" : "not-run");
+        CIRRUS_LOG("  mailbox   : mbox1=0x%08X mbox2=0x%08X (%s)", mbox1, mbox2, mbox_ok ? "ok" : "not-running");
+        CIRRUS_LOG("  mpu       : %s xm_vio=0x%08X@0x%08X ym_vio=0x%08X@0x%08X pm_vio=0x%08X@0x%08X", mpu_clean ? "clean" : "FAULT", xm_vio,
+                   xm_vio_addr, ym_vio, ym_vio_addr, pm_vio, pm_vio_addr);
+        CIRRUS_LOG("  scratch   : [0x%08X 0x%08X 0x%08X 0x%08X] (firmware panic code if non-zero)", sc1, sc2, sc3, sc4);
+        CIRRUS_LOG("  heartbeat : t0=0x%08X t1=0x%08X t2=0x%08X (%s)", ts0, ts1, ts2,
+                   !hbReadable ? "READ_FAILED"
+                   : hb_alive  ? "CHANGING"
+                               : "UNCHANGED_NOT_A_BOOT_VERDICT");
+        CIRRUS_LOG("===== END DSP BOOT REPORT for %s =====", amp.name);
 
-    bool core_en = (core_ctrl & cirrus::devices::cs35l41::registers::kValHaloCoreEnable) != 0;
-    bool core_out_of_reset = (core_ctrl & cirrus::devices::cs35l41::registers::kValHaloCoreReset) == 0;
-    bool sysid_ok = (sys_id != 0x00000000 && sys_id != 0xFFFFFFFF);
-    bool run_ok = (halo_state == 2);
-    bool mbox_ok = (mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxRunning ||
-                    mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxPaused);
-    const uint32_t MPU_VIO_MASK = 0x007E0000;
-    bool mpu_clean = ((xm_vio & MPU_VIO_MASK) == 0 && (ym_vio & MPU_VIO_MASK) == 0 && (pm_vio & MPU_VIO_MASK) == 0);
-    bool hb_alive = (ts0 != ts1 && ts1 != ts2);
-
-    const char* verdict;
-    const char* rootCause;
-    if (!readable) {
-        verdict = "UNVERIFIED";
-        rootCause = "required register read failed or control unresolved";
-    } else if (!amp.firmwareValidated || !amp.dspAlive) {
-        verdict = "DISABLED";
-        rootCause = "initialization failed; current registers may reflect cleanup";
-    } else if (core_en && core_out_of_reset && sysid_ok && run_ok && mpu_clean && mbox_ok) {
-        verdict = "HEALTHY";
-        rootCause = "HALO RUN and mailbox verified; heartbeat is diagnostic only";
-    } else {
-        verdict = "FAIL";
-        rootCause = "required DSP state invariant failed; inspect raw registers";
-    }
-
-    CIRRUS_LOG("===== DSP BOOT REPORT for %s =====", amp.name);
-    CIRRUS_LOG("  VERDICT   : %s", verdict);
-    CIRRUS_LOG("  ROOT CAUSE: %s", rootCause);
-    CIRRUS_LOG("  core      : ctrl=0x%08X en=%s reset_released=%s", core_ctrl, core_en ? "yes" : "NO", core_out_of_reset ? "yes" : "NO");
-    CIRRUS_LOG("  sys_id    : 0x%08X (%s)", sys_id, sysid_ok ? "ok" : "BAD");
-    CIRRUS_LOG("  halo_state: 0x%08X (%s, want RUN=2)", halo_state, run_ok ? "RUN" : "not-run");
-    CIRRUS_LOG("  mailbox   : mbox1=0x%08X mbox2=0x%08X (%s)", mbox1, mbox2, mbox_ok ? "ok" : "not-running");
-    CIRRUS_LOG("  mpu       : %s xm_vio=0x%08X@0x%08X ym_vio=0x%08X@0x%08X pm_vio=0x%08X@0x%08X", mpu_clean ? "clean" : "FAULT", xm_vio,
-               xm_vio_addr, ym_vio, ym_vio_addr, pm_vio, pm_vio_addr);
-    CIRRUS_LOG("  scratch   : [0x%08X 0x%08X 0x%08X 0x%08X] (firmware panic code if non-zero)", sc1, sc2, sc3, sc4);
-    CIRRUS_LOG("  heartbeat : t0=0x%08X t1=0x%08X t2=0x%08X (%s)", ts0, ts1, ts2,
-               !hbReadable ? "READ_FAILED"
-               : hb_alive  ? "CHANGING"
-                           : "UNCHANGED_NOT_A_BOOT_VERDICT");
-    CIRRUS_LOG("===== END DSP BOOT REPORT for %s =====", amp.name);
-
-    char propName[80];
-    snprintf(propName, sizeof(propName), "Cirrus_DSP_BOOT_VERDICT_%s", amp.name);
-    OSString* vStr = OSString::withCString(verdict);
-    if (vStr) {
-        setProperty(propName, vStr);
-        vStr->release();
-    }
-    snprintf(propName, sizeof(propName), "Cirrus_DSP_BOOT_ROOTCAUSE_%s", amp.name);
-    OSString* rStr = OSString::withCString(rootCause);
-    if (rStr) {
-        setProperty(propName, rStr);
-        rStr->release();
-    }
-}
-
-void CirrusAudioFixup::snapshotPlayback(AmplifierState& amp) {
-    uint32_t irq1_sts1 = 0, irq1_sts2 = 0, irq1_sts3 = 0, irq1_sts4 = 0;
-    uint32_t pwrmgt_sts = 0;
-
-    readRegister(amp, 0x00010010, &irq1_sts1);
-    readRegister(amp, 0x00010014, &irq1_sts2);
-    readRegister(amp, 0x00010018, &irq1_sts3);
-    readRegister(amp, 0x0001001C, &irq1_sts4);
-    readRegister(amp, 0x00002908, &pwrmgt_sts);
-
-    CIRRUS_LOG("playback interrupts snapshot for %s: irq1=0x%08X irq2=0x%08X irq3=0x%08X irq4=0x%08X power_status=0x%08X", amp.name,
-               irq1_sts1, irq1_sts2, irq1_sts3, irq1_sts4, pwrmgt_sts);
-}
-
-void CirrusAudioFixup::snapshotDiagnostics(AmplifierState& amp, const char* stage) {
-    uint32_t irq1[4] = {0}, irq1_mask[4] = {0};
-    uint32_t irq2[4] = {0}, irq2_mask[4] = {0};
-    uint32_t sp_en = 0, sp_rate = 0, sp_fmt = 0, sp_hiz = 0;
-    uint32_t pwr_sts = 0, strm_err = 0;
-
-    CIRRUS_LOG("diagnostics dump (%s) for amplifier %s:", stage, amp.name);
-
-    readRegister(amp, 0x00010010, &irq1[0]);
-    readRegister(amp, 0x00010014, &irq1[1]);
-    readRegister(amp, 0x00010018, &irq1[2]);
-    readRegister(amp, 0x0001001C, &irq1[3]);
-
-    uint32_t raw_sts3 = 0;
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &raw_sts3);
-    bool pup_done = (irq1[0] & 0x01000000) != 0;
-    bool amp_short = (irq1[0] & 0x80000000) != 0;
-    bool dsp_error = (irq1[0] & 0x00000002) != 0;
-    bool pll_lock = (raw_sts3 & 0x00000002) != 0;
-
-    CIRRUS_LOG("decoded interrupts on %s: pup_done=%d amp_short=%d dsp_err=%d pll_lock=%d", amp.name, pup_done, amp_short, dsp_error,
-               pll_lock);
-    CIRRUS_LOG("irq1 status values on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X raw3=0x%08X", amp.name, irq1[0], irq1[1], irq1[2], irq1[3],
-               raw_sts3);
-
-    readRegister(amp, 0x00010110, &irq1_mask[0]);
-    readRegister(amp, 0x00010114, &irq1_mask[1]);
-    readRegister(amp, 0x00010118, &irq1_mask[2]);
-    readRegister(amp, 0x0001011C, &irq1_mask[3]);
-    CIRRUS_LOG("irq1 mask registers on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X", amp.name, irq1_mask[0], irq1_mask[1], irq1_mask[2],
-               irq1_mask[3]);
-
-    readRegister(amp, 0x00010810, &irq2[0]);
-    readRegister(amp, 0x00010814, &irq2[1]);
-    readRegister(amp, 0x00010818, &irq2[2]);
-    readRegister(amp, 0x0001081C, &irq2[3]);
-    CIRRUS_LOG("irq2 status registers on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X", amp.name, irq2[0], irq2[1], irq2[2], irq2[3]);
-
-    readRegister(amp, 0x00010910, &irq2_mask[0]);
-    readRegister(amp, 0x00010914, &irq2_mask[1]);
-    readRegister(amp, 0x00010918, &irq2_mask[2]);
-    readRegister(amp, 0x0001091C, &irq2_mask[3]);
-    CIRRUS_LOG("irq2 mask registers on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X", amp.name, irq2_mask[0], irq2_mask[1], irq2_mask[2],
-               irq2_mask[3]);
-
-    readRegister(amp, 0x00004800, &sp_en);
-    readRegister(amp, 0x00004804, &sp_rate);
-    readRegister(amp, 0x00004808, &sp_fmt);
-    readRegister(amp, 0x0000480C, &sp_hiz);
-    CIRRUS_LOG("serial port configuration for %s: enables=0x%08X rate=0x%08X", amp.name, sp_en, sp_rate);
-    CIRRUS_LOG("serial port format for %s: format=0x%08X hiz=0x%08X", amp.name, sp_fmt, sp_hiz);
-
-    readRegister(amp, 0x00002908, &pwr_sts);
-    readRegister(amp, 0x02BC5A08, &strm_err);
-    CIRRUS_LOG("power status on %s: power_mgt=0x%08X arb_error=0x%08X", amp.name, pwr_sts, strm_err);
-
-    uint32_t dsp_ts = 0, mdsync_rx = 0;
-    readRegister(amp, 0x025C0800, &dsp_ts);
-    readRegister(amp, 0x00003420, &mdsync_rx);
-    CIRRUS_LOG("dsp execution registers on %s: timestamp=0x%08X mdsync=0x%08X", amp.name, dsp_ts, mdsync_rx);
-
-    uint32_t dsp_mbox1 = 0, dsp_mbox2 = 0;
-    readRegister(amp, 0x00013020, &dsp_mbox1);
-    readRegister(amp, 0x00013004, &dsp_mbox2);
-    CIRRUS_LOG("mailbox states on %s: mbox1=0x%08X mbox2=0x%08X", amp.name, dsp_mbox1, dsp_mbox2);
-
-    for (uint32_t i = 0; i < amp.diagnosticControlCount; i++) {
-        uint32_t val = 0;
-        bool valid = readRegister(amp, amp.diagnosticControls[i].address, &val);
-        CIRRUS_LOG("control register on %s: %s (0x%08X) valid=%d value=0x%08X", amp.name, amp.diagnosticControls[i].name,
-                   amp.diagnosticControls[i].address, valid, val);
-    }
-}
-
-void CirrusAudioFixup::logPowerSnapshot(AmplifierState& amp) {
-    uint32_t pwr_ctrl1 = 0, pwr_ctrl2 = 0, pwr_ctrl3 = 0;
-    readRegister(amp, 0x00002014, &pwr_ctrl1);
-    readRegister(amp, 0x00002018, &pwr_ctrl2);
-    readRegister(amp, 0x0000201C, &pwr_ctrl3);
-
-    CIRRUS_LOG("power rails snapshot for %s: ctrl1=0x%08X ctrl2=0x%08X ctrl3=0x%08X", amp.name, pwr_ctrl1, pwr_ctrl2, pwr_ctrl3);
-
-    bool pass = true;
-
-    if ((pwr_ctrl1 & 1) != 0) {
-        CIRRUS_ERR("global enable unexpectedly active while idle on %s", amp.name);
-        pass = false;
-    }
-    if ((pwr_ctrl2 & 1) != 0) {
-        CIRRUS_ERR("amplifier stage unexpectedly enabled while idle on %s", amp.name);
-        pass = false;
+        char propName[80];
+        snprintf(propName, sizeof(propName), "Cirrus_DSP_BOOT_VERDICT_%s", amp.name);
+        OSString* vStr = OSString::withCString(verdict);
+        if (vStr) {
+            setProperty(propName, vStr);
+            vStr->release();
+        }
+        snprintf(propName, sizeof(propName), "Cirrus_DSP_BOOT_ROOTCAUSE_%s", amp.name);
+        OSString* rStr = OSString::withCString(rootCause);
+        if (rStr) {
+            setProperty(propName, rStr);
+            rStr->release();
+        }
     }
 
-    if (pass) {
-        CIRRUS_LOG("idle power verify results: pass on %s (GLOBAL_EN safely off)", amp.name);
-    } else {
-        CIRRUS_ERR("power verify results: fail on %s", amp.name);
+    void CirrusAudioFixup::snapshotPlayback(AmplifierState & amp) {
+        uint32_t irq1_sts1 = 0, irq1_sts2 = 0, irq1_sts3 = 0, irq1_sts4 = 0;
+        uint32_t pwrmgt_sts = 0;
+
+        readRegister(amp, 0x00010010, &irq1_sts1);
+        readRegister(amp, 0x00010014, &irq1_sts2);
+        readRegister(amp, 0x00010018, &irq1_sts3);
+        readRegister(amp, 0x0001001C, &irq1_sts4);
+        readRegister(amp, 0x00002908, &pwrmgt_sts);
+
+        CIRRUS_LOG("playback interrupts snapshot for %s: irq1=0x%08X irq2=0x%08X irq3=0x%08X irq4=0x%08X power_status=0x%08X", amp.name,
+                   irq1_sts1, irq1_sts2, irq1_sts3, irq1_sts4, pwrmgt_sts);
     }
-}
 
-bool CirrusAudioFixup::powerUpAmplifier(AmplifierState& amp) {
-    FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
-    return device.powerUpAmplifier(io, amp.firmwareValidated);
-}
+    void CirrusAudioFixup::snapshotDiagnostics(AmplifierState & amp, const char* stage) {
+        uint32_t irq1[4] = {0}, irq1_mask[4] = {0};
+        uint32_t irq2[4] = {0}, irq2_mask[4] = {0};
+        uint32_t sp_en = 0, sp_rate = 0, sp_fmt = 0, sp_hiz = 0;
+        uint32_t pwr_sts = 0, strm_err = 0;
 
-bool CirrusAudioFixup::verifyIdleConfiguration(AmplifierState& amp) {
-    FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
-    return device.verifyIdleConfiguration(io);
-}
+        CIRRUS_LOG("diagnostics dump (%s) for amplifier %s:", stage, amp.name);
+
+        readRegister(amp, 0x00010010, &irq1[0]);
+        readRegister(amp, 0x00010014, &irq1[1]);
+        readRegister(amp, 0x00010018, &irq1[2]);
+        readRegister(amp, 0x0001001C, &irq1[3]);
+
+        uint32_t raw_sts3 = 0;
+        readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &raw_sts3);
+        bool pup_done = (irq1[0] & 0x01000000) != 0;
+        bool amp_short = (irq1[0] & 0x80000000) != 0;
+        bool dsp_error = (irq1[0] & 0x00000002) != 0;
+        bool pll_lock = (raw_sts3 & 0x00000002) != 0;
+
+        CIRRUS_LOG("decoded interrupts on %s: pup_done=%d amp_short=%d dsp_err=%d pll_lock=%d", amp.name, pup_done, amp_short, dsp_error,
+                   pll_lock);
+        CIRRUS_LOG("irq1 status values on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X raw3=0x%08X", amp.name, irq1[0], irq1[1], irq1[2],
+                   irq1[3], raw_sts3);
+
+        readRegister(amp, 0x00010110, &irq1_mask[0]);
+        readRegister(amp, 0x00010114, &irq1_mask[1]);
+        readRegister(amp, 0x00010118, &irq1_mask[2]);
+        readRegister(amp, 0x0001011C, &irq1_mask[3]);
+        CIRRUS_LOG("irq1 mask registers on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X", amp.name, irq1_mask[0], irq1_mask[1], irq1_mask[2],
+                   irq1_mask[3]);
+
+        readRegister(amp, 0x00010810, &irq2[0]);
+        readRegister(amp, 0x00010814, &irq2[1]);
+        readRegister(amp, 0x00010818, &irq2[2]);
+        readRegister(amp, 0x0001081C, &irq2[3]);
+        CIRRUS_LOG("irq2 status registers on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X", amp.name, irq2[0], irq2[1], irq2[2], irq2[3]);
+
+        readRegister(amp, 0x00010910, &irq2_mask[0]);
+        readRegister(amp, 0x00010914, &irq2_mask[1]);
+        readRegister(amp, 0x00010918, &irq2_mask[2]);
+        readRegister(amp, 0x0001091C, &irq2_mask[3]);
+        CIRRUS_LOG("irq2 mask registers on %s: 1=0x%08X 2=0x%08X 3=0x%08X 4=0x%08X", amp.name, irq2_mask[0], irq2_mask[1], irq2_mask[2],
+                   irq2_mask[3]);
+
+        readRegister(amp, 0x00004800, &sp_en);
+        readRegister(amp, 0x00004804, &sp_rate);
+        readRegister(amp, 0x00004808, &sp_fmt);
+        readRegister(amp, 0x0000480C, &sp_hiz);
+        CIRRUS_LOG("serial port configuration for %s: enables=0x%08X rate=0x%08X", amp.name, sp_en, sp_rate);
+        CIRRUS_LOG("serial port format for %s: format=0x%08X hiz=0x%08X", amp.name, sp_fmt, sp_hiz);
+
+        readRegister(amp, 0x00002908, &pwr_sts);
+        readRegister(amp, 0x02BC5A08, &strm_err);
+        CIRRUS_LOG("power status on %s: power_mgt=0x%08X arb_error=0x%08X", amp.name, pwr_sts, strm_err);
+
+        uint32_t dsp_ts = 0, mdsync_rx = 0;
+        readRegister(amp, 0x025C0800, &dsp_ts);
+        readRegister(amp, 0x00003420, &mdsync_rx);
+        CIRRUS_LOG("dsp execution registers on %s: timestamp=0x%08X mdsync=0x%08X", amp.name, dsp_ts, mdsync_rx);
+
+        uint32_t dsp_mbox1 = 0, dsp_mbox2 = 0;
+        readRegister(amp, 0x00013020, &dsp_mbox1);
+        readRegister(amp, 0x00013004, &dsp_mbox2);
+        CIRRUS_LOG("mailbox states on %s: mbox1=0x%08X mbox2=0x%08X", amp.name, dsp_mbox1, dsp_mbox2);
+
+        for (uint32_t i = 0; i < amp.diagnosticControlCount; i++) {
+            uint32_t val = 0;
+            bool valid = readRegister(amp, amp.diagnosticControls[i].address, &val);
+            CIRRUS_LOG("control register on %s: %s (0x%08X) valid=%d value=0x%08X", amp.name, amp.diagnosticControls[i].name,
+                       amp.diagnosticControls[i].address, valid, val);
+        }
+    }
+
+    void CirrusAudioFixup::logPowerSnapshot(AmplifierState & amp) {
+        uint32_t pwr_ctrl1 = 0, pwr_ctrl2 = 0, pwr_ctrl3 = 0;
+        readRegister(amp, 0x00002014, &pwr_ctrl1);
+        readRegister(amp, 0x00002018, &pwr_ctrl2);
+        readRegister(amp, 0x0000201C, &pwr_ctrl3);
+
+        CIRRUS_LOG("power rails snapshot for %s: ctrl1=0x%08X ctrl2=0x%08X ctrl3=0x%08X", amp.name, pwr_ctrl1, pwr_ctrl2, pwr_ctrl3);
+
+        bool pass = true;
+
+        if ((pwr_ctrl1 & 1) != 0) {
+            CIRRUS_ERR("global enable unexpectedly active while idle on %s", amp.name);
+            pass = false;
+        }
+        if ((pwr_ctrl2 & 1) != 0) {
+            CIRRUS_ERR("amplifier stage unexpectedly enabled while idle on %s", amp.name);
+            pass = false;
+        }
+
+        if (pass) {
+            CIRRUS_LOG("idle power verify results: pass on %s (GLOBAL_EN safely off)", amp.name);
+        } else {
+            CIRRUS_ERR("power verify results: fail on %s", amp.name);
+        }
+    }
+
+    bool CirrusAudioFixup::powerUpAmplifier(AmplifierState & amp) {
+        FixupRegisterIOAdapter io(this, amp);
+        cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+        return device.powerUpAmplifier(io, amp.firmwareValidated);
+    }
+
+    bool CirrusAudioFixup::verifyIdleConfiguration(AmplifierState & amp) {
+        FixupRegisterIOAdapter io(this, amp);
+        cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+        return device.verifyIdleConfiguration(io);
+    }

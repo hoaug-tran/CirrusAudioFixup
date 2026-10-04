@@ -3066,7 +3066,45 @@ void CirrusAudioFixup::discoverFirmware(CS35L41Amp &amp) {
         audioController->release();
     }
 
-    uint32_t ssid = (subVendor << 16) | subDevice;
+    uint32_t codecSSID = 0;
+    const char *codecClasses[] = { "IOHDACodecDevice", "AppleHDACodecGeneric", "AppleHDACodec" };
+    for (size_t c = 0; c < 3 && codecSSID == 0; c++) {
+        OSDictionary *match = serviceMatching(codecClasses[c]);
+        if (!match) continue;
+        OSIterator *iter = getMatchingServices(match);
+        match->release();
+        if (!iter) continue;
+        IORegistryEntry *entry;
+        while ((entry = OSDynamicCast(IORegistryEntry, iter->getNextObject()))) {
+            OSData *subData = OSDynamicCast(OSData, entry->getProperty("subsystem-id"));
+            if (!subData) subData = OSDynamicCast(OSData, entry->getProperty("SubsystemID"));
+            if (subData && subData->getLength() >= 4) {
+                codecSSID = *(const uint32_t *)subData->getBytesNoCopy();
+                break;
+            }
+            OSNumber *subNum = OSDynamicCast(OSNumber, entry->getProperty("subsystem-id"));
+            if (!subNum) subNum = OSDynamicCast(OSNumber, entry->getProperty("SubsystemID"));
+            if (subNum) {
+                codecSSID = subNum->unsigned32BitValue();
+                break;
+            }
+        }
+        iter->release();
+    }
+
+    uint32_t ssid = 0;
+    if (codecSSID != 0) {
+        ssid = codecSSID;
+        subVendor = ssid >> 16;
+        subDevice = ssid & 0xFFFF;
+    } else {
+        ssid = (subVendor << 16) | subDevice;
+        if (subVendor == 0x17AA && subDevice == 0x382B) {
+            subDevice = 0x3847;
+            ssid = 0x17AA3847;
+        }
+    }
+
     uint32_t explicitSSID = 0;
     if (PE_parse_boot_argn("cirrus_ssid", &explicitSSID, sizeof(explicitSSID))) {
         ssid = explicitSSID;
@@ -3077,12 +3115,6 @@ void CirrusAudioFixup::discoverFirmware(CS35L41Amp &amp) {
 
     uint32_t spkid = 1;
     bool explicitSpeaker = PE_parse_boot_argn("cirrus_spkid", &spkid, sizeof(spkid));
-    if (ssid != 0x17AA3847 || spkid != 1) {
-        recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING, 0, 0x17AA3847, ssid);
-        OSString *status = OSString::withCString("UNSUPPORTED_OR_UNKNOWN_BOARD_SPEAKER");
-        if (status) { setProperty(propStatus, status); status->release(); }
-        return;
-    }
     CIRRUS_LOG("Firmware identity %s: SSID=0x%08X speaker=%u source=%s",
                amp.name, ssid, spkid, explicitSpeaker ? "BOOT_ARGUMENT" : "BOARD_PROFILE_ASSUMPTION");
 
@@ -3094,7 +3126,7 @@ void CirrusAudioFixup::discoverFirmware(CS35L41Amp &amp) {
     for (size_t i = 0; i < firmwareTableSize; i++) {
         if (firmwareTable[i].subsystemVendor == subVendor &&
             firmwareTable[i].subsystemDevice == subDevice &&
-            firmwareTable[i].spkid == spkid) {
+            (firmwareTable[i].spkid == spkid || firmwareTable[i].spkid == 0)) {
             foundRes = &firmwareTable[i];
             break;
         }
@@ -3102,6 +3134,7 @@ void CirrusAudioFixup::discoverFirmware(CS35L41Amp &amp) {
 
     if (!foundRes) {
         CIRRUS_ERR("firmware resource matching ssid %08X and spkid %d was not found", ssid, spkid);
+        recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING, 0, 0x17AA3847, ssid);
         OSString *statusStr = OSString::withCString("UNSUPPORTED_SSID");
         if (statusStr) {
             setProperty(propStatus, statusStr);

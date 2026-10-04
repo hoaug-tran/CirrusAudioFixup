@@ -104,6 +104,8 @@ struct FirmwareResource {
 };
 
 class CirrusAudioFixup : public IOService {
+    friend class FixupRegisterIOAdapter;
+
 OSDeclareDefaultStructors(CirrusAudioFixup)
 
     public : bool init(OSDictionary* properties = nullptr) override;

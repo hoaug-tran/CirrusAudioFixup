@@ -1166,6 +1166,7 @@ bool CirrusAudioFixup::stopPlayback(CS35L41Amp &amp) {
     if (!pdnDone) recordDiagnosticFailure(amp, DIAG_POWER_DOWN_TIMEOUT, 0x00010010, 0x00800000, irq);
     if (unlocked) ok = writeRegister(amp, 0x00007438, 0x00580941, TRACE_PLAYBACK) && ok;
     ok = lockTestKey(amp) && ok;
+    ok = writeRegister(amp, CS35L41_GPIO1_CTRL1, 0x00000001, TRACE_PLAYBACK) && ok;
     ok = updateRegisterBits(amp, CS35L41_PWR_CTRL2_REG, 1, 0, TRACE_PLAYBACK) && ok;
     if (amp.dspAlive) {
         bool paused = sendMailboxCommand(amp, CSPL_MBOX_CMD_PAUSE, CSPL_MBOX_STS_PAUSED);
@@ -1396,24 +1397,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     continue;
                 }
 
-                uint32_t pll_sts = 0;
-                int pll_timeout = 50;
-                while (pll_timeout > 0) {
-                    if (!readRegister(amp, 0x00010098, &pll_sts)) {
-                        sequenceOk = false;
-                        break;
-                    }
-                    if (pll_sts & 0x02) break;
-                    IODelay(1000);
-                    pll_timeout--;
-                }
-                CIRRUS_LOG("Background Monitor: PLL lock status on %s: sts=0x%08X (locked=%d)",
-                           amp.name, pll_sts, (pll_sts & 0x02) ? 1 : 0);
-                if (!sequenceOk || (pll_sts & 0x02) == 0) {
-                    recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, 0x00010098, 0x00000002, pll_sts);
-                    abortStart();
-                    continue;
-                }
+                checkedWrite(CS35L41_GPIO1_CTRL1, 0x00008001);
                 checkedWrite(0x00010010, 0x01000000);
 
                 setDiagnosticStage(amp, STAGE_PLAYBACK_PREPARE);
@@ -1500,6 +1484,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     abortStart();
                     continue;
                 }
+                uint32_t pll_sts = 0;
                 if (!readRegister(amp, CS35L41_IRQ1_RAW_STATUS3, &pll_sts, TRACE_PLAYBACK) || !(pll_sts & 2)) {
                     recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, CS35L41_IRQ1_RAW_STATUS3, 2, pll_sts);
                     abortStart();

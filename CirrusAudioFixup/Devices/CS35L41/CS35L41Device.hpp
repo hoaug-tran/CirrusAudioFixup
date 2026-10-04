@@ -25,6 +25,7 @@ private:
     bool mPresent{false};
     bool mInitialized{false};
     bool mDspAlive{false};
+    uint32_t mStateReg{0};
 
 public:
     CS35L41Device(const char* name, uint8_t address) : mName(name), mAddress(address) {}
@@ -132,13 +133,13 @@ public:
 
     
     bool unlockTestKey(core::RegisterIO& io) {
-        return io.write(registers::kRegTestKeyControl, registers::kValTestKeyUnlock1) &&
-               io.write(registers::kRegTestKeyControl, registers::kValTestKeyUnlock2);
+        return io.write(registers::kRegTestKeyControl, 0x00000055) &&
+               io.write(registers::kRegTestKeyControl, 0x000000AA);
     }
 
     bool lockTestKey(core::RegisterIO& io) {
-        return io.write(registers::kRegTestKeyControl, registers::kValTestKeyLock1) &&
-               io.write(registers::kRegTestKeyControl, registers::kValTestKeyLock2);
+        return io.write(registers::kRegTestKeyControl, 0x000000CC) &&
+               io.write(registers::kRegTestKeyControl, 0x00000033);
     }
 
     
@@ -206,14 +207,11 @@ public:
         uint32_t rev_only = mRevisionId & 0xFF;
 
         switch (rev_only) {
-        case 0xB0:
-            patch = cs35l41_errata_revb0;
-            count = sizeof(cs35l41_errata_revb0) / sizeof(ErrataPatch);
-            break;
-        case 0xB1:
         case 0xB2:
-            patch = cs35l41_errata_revb2;
-            count = sizeof(cs35l41_errata_revb2) / sizeof(ErrataPatch);
+            patch = kCs35l41RevB2ErrataPatch;
+            count = sizeof(kCs35l41RevB2ErrataPatch) / sizeof(ErrataPatch);
+            break;
+        default:
             break;
         }
 
@@ -260,13 +258,13 @@ public:
         }
         
         uint32_t sts1 = 0;
-        io.read(registers::kRegIrq1RawStatus1, &sts1);
+        io.read(0x00010090, &sts1);
         io.write(registers::kRegIrq1Status1, sts1);
 
         uint32_t pu = 0;
-        io.read(registers::kRegPowerManagement, &pu);
-        pu |= 0x00000001; // CS35L41_GLOBAL_EN
-        io.write(registers::kRegPowerManagement, pu);
+        io.read(0x00002900, &pu);
+        pu |= 0x00000001;
+        io.write(0x00002900, pu);
 
         return true;
     }
@@ -284,7 +282,7 @@ public:
 
         // Enforce HALO run state and pause Mailbox
         uint32_t mbox_init = 0;
-        if (!io.read(registers::kRegDspMbox2, &mbox_init)) return false;
+        if (!io.read(registers::kRegDspMailbox2, &mbox_init)) return false;
 
         uint32_t halo_state = 0;
         bool hbReadable = false;
@@ -299,9 +297,9 @@ public:
         if (halo_state == 2) {
             // Pause Mailbox
             uint32_t sts = 0;
-            io.write(registers::kRegDspMbox1, 0x01); // CSPL_MBOX_CMD_PAUSE
+            io.write(registers::kRegDspMailbox1, 0x01);
             for (int i = 0; i < 15; i++) {
-                if (io.read(registers::kRegDspMbox2, &sts) && sts == 0x02) {
+                if (io.read(registers::kRegDspMailbox2, &sts) && sts == 0x02) {
                     break;
                 }
                 IOSleep(10);

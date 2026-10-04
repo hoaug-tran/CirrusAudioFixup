@@ -6,7 +6,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
-REGISTERS = (ROOT / 'CirrusAudioFixup/Codecs/CS35L41/Registers.hpp').read_text(encoding='utf-8')
+REGISTERS = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp').read_text(encoding='utf-8')
 
 def function(name):
     start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
@@ -15,10 +15,11 @@ def function(name):
 
 names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringupDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'transferToAddress', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
 functions = '\n'.join(function(name) for name in names)
-sequences = '\n'.join(re.search(r'static const RegisterSequence '+name+r'\[\] = \{.*?\n\};', SOURCE, re.S).group(0)
+sequences = '\n'.join(re.search(r'static const RegisterSequence\s+'+name+r'\[\]\s*=\s*\{.*?\};', SOURCE, re.S).group(0)
                       for name in ['pll_sequence', 'asp_sequence'])
 constants = '\n'.join(line for line in (HEADER+'\n'+REGISTERS).splitlines() if re.match(r'#define (?:CS35L41_|HALO_|CSPL_)\w+\s+(?:0x|[0-9])',line))
-states = HEADER[HEADER.index('enum TraceSource'):HEADER.index('struct TraceEntry')]
+states_start = HEADER.find('enum class TraceSource') if 'enum class TraceSource' in HEADER else HEADER.index('enum TraceSource')
+states = HEADER[states_start:HEADER.index('struct TraceEntry')]
 amp = HEADER[HEADER.index('struct CS35L41Amp {'):HEADER.index('struct FirmwareImage;')]
 
 preamble = r'''

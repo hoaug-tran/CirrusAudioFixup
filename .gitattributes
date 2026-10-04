@@ -1,0 +1,22 @@
+* text=auto eol=lf
+
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.m text eol=lf
+*.mm text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.plist text eol=lf
+*.pbxproj text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.clang-format text eol=lf
+.editorconfig text eol=lf
+
+*.bin binary
+*.wmfw binary
+*.png binary
+*.zip binary

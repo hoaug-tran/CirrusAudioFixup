@@ -28,8 +28,14 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
+      - name: Verify Code Formatting & Whitespace
+        run: |
+          git diff --check
+          clang-format --dry-run --Werror CirrusAudioFixup/Support/BitUtils.hpp CirrusAudioFixup/Support/Logging.hpp CirrusAudioFixup/Devices/CS35L41/Hardware/OTPMap.hpp CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp CirrusAudioFixup/Firmware/WMFW/WMFWParser.hpp CirrusAudioFixup/Firmware/WMFW/FirmwareUploader.hpp CirrusAudioFixup/CirrusAudioFixup.hpp CirrusAudioFixup/CirrusAudioFixup.cpp
+
       - name: Host firmware, playback, bringup, HDA, transport, calibration and diagnostic regression checks
         run: |
+          python3 Tests/check_registers.py
           python3 Tests/reproduce_host.py
           python3 Tests/check_runtime.py
           python3 Tests/check_bringup.py

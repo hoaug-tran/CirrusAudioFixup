@@ -7,7 +7,8 @@ source = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='ut
 header = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
 start = source.index('void CirrusAudioFixup::recordDiagnosticFailure(')
 function = source[start:source.index('\n}', start) + 2]
-states = header[header.index('enum DriverStage'):header.index('struct TraceEntry')]
+states_start = header.find('enum class DriverStage') if 'enum class DriverStage' in header else header.index('enum DriverStage')
+states = header[states_start:header.index('struct TraceEntry')]
 preamble = r'''
 #include <cstdint>
 #include <cstdio>

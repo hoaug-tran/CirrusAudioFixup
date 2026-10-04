@@ -6,48 +6,48 @@
 	objectVersion = 56;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		CAFE00000011 /* CirrusAudioFixup.cpp in Sources */ = {
+
+		CAFE00000011  = {
 			isa = PBXBuildFile;
-			fileRef = CAFE00000001 /* CirrusAudioFixup.cpp */;
+			fileRef = CAFE00000001 ;
 		};
 		// NOTE: Kernel.framework is NOT in the build phase.
 		// On Xcode 16+ / macOS SDK 15+, kernel symbols are
 		// provided implicitly via -mkernel + -lkmod + -lcc_kext.
 		// Adding Kernel.framework to the link phase causes:
 		//   ld: framework not found Kernel
-/* End PBXBuildFile section */
 
-/* Begin PBXFileReference section */
-		CAFE00000001 /* CirrusAudioFixup.cpp */ = {
+
+
+		CAFE00000001  = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.cpp;
 			path = CirrusAudioFixup.cpp;
 			sourceTree = "<group>";
 		};
-		CAFE00000002 /* CirrusAudioFixup.hpp */ = {
+		CAFE00000002  = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
 			path = CirrusAudioFixup.hpp;
 			sourceTree = "<group>";
 		};
-		CAFE00000003 /* Info.plist */ = {
+		CAFE00000003  = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.plist.xml;
 			path = Info.plist;
 			sourceTree = "<group>";
 		};
-		CAFE00000005 /* CirrusAudioFixup.kext */ = {
+		CAFE00000005  = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.cfbundle;
 			includeInIndex = 0;
 			path = CirrusAudioFixup.kext;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-/* End PBXFileReference section */
 
-/* Begin PBXFrameworksBuildPhase section */
-		CAFE00000031 /* Frameworks */ = {
+
+
+		CAFE00000031  = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -55,45 +55,45 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXFrameworksBuildPhase section */
 
-/* Begin PBXGroup section */
-		CAFE00000020 /* Root */ = {
+
+
+		CAFE00000020  = {
 			isa = PBXGroup;
 			children = (
-				CAFE00000021 /* CirrusAudioFixup */,
-				CAFE00000023 /* Products */,
+				CAFE00000021 ,
+				CAFE00000023 ,
 			);
 			sourceTree = "<group>";
 		};
-		CAFE00000021 /* CirrusAudioFixup */ = {
+		CAFE00000021  = {
 			isa = PBXGroup;
 			children = (
-				CAFE00000001 /* CirrusAudioFixup.cpp */,
-				CAFE00000002 /* CirrusAudioFixup.hpp */,
-				CAFE00000003 /* Info.plist */,
+				CAFE00000001 ,
+				CAFE00000002 ,
+				CAFE00000003 ,
 			);
 			name = CirrusAudioFixup;
 			path = CirrusAudioFixup;
 			sourceTree = "<group>";
 		};
-		CAFE00000023 /* Products */ = {
+		CAFE00000023  = {
 			isa = PBXGroup;
 			children = (
-				CAFE00000005 /* CirrusAudioFixup.kext */,
+				CAFE00000005 ,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-/* End PBXGroup section */
 
-/* Begin PBXNativeTarget section */
-		CAFE00000040 /* CirrusAudioFixup */ = {
+
+
+		CAFE00000040  = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CAFE00000061;
 			buildPhases = (
-				CAFE00000030 /* Sources */,
-				CAFE00000031 /* Frameworks */,
+				CAFE00000030 ,
+				CAFE00000031 ,
 			);
 			buildRules = (
 			);
@@ -101,13 +101,13 @@
 			);
 			name = CirrusAudioFixup;
 			productName = CirrusAudioFixup;
-			productReference = CAFE00000005 /* CirrusAudioFixup.kext */;
+			productReference = CAFE00000005 ;
 			productType = "com.apple.product-type.kernel-extension";
 		};
-/* End PBXNativeTarget section */
 
-/* Begin PBXProject section */
-		CAFE00000050 /* Project object */ = {
+
+
+		CAFE00000050  = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
@@ -127,33 +127,34 @@
 				Base,
 			);
 			mainGroup = CAFE00000020;
-			productRefGroup = CAFE00000023 /* Products */;
+			productRefGroup = CAFE00000023 ;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				CAFE00000040 /* CirrusAudioFixup */,
+				CAFE00000040 ,
 			);
 		};
-/* End PBXProject section */
 
-/* Begin PBXSourcesBuildPhase section */
-		CAFE00000030 /* Sources */ = {
+
+
+		CAFE00000030  = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CAFE00000011 /* CirrusAudioFixup.cpp in Sources */,
+				CAFE00000011 ,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXSourcesBuildPhase section */
 
-/* Begin XCBuildConfiguration section */
 
-		/* ── Project Debug ────────────────────────────────── */
-		CAFE00000070 /* Debug */ = {
+
+
+
+		CAFE00000070  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/CirrusAudioFixup";
 				ARCHS = x86_64;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				SDKROOT = macosx;
@@ -161,11 +162,12 @@
 			name = Debug;
 		};
 
-		/* ── Project Release ──────────────────────────────── */
-		CAFE00000071 /* Release */ = {
+
+		CAFE00000071  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/CirrusAudioFixup";
 				ARCHS = x86_64;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				SDKROOT = macosx;
@@ -173,8 +175,8 @@
 			name = Release;
 		};
 
-		/* ── Target Debug ─────────────────────────────────── */
-		CAFE00000072 /* Debug */ = {
+
+		CAFE00000072  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
@@ -231,8 +233,8 @@
 			name = Debug;
 		};
 
-		/* ── Target Release ───────────────────────────────── */
-		CAFE00000073 /* Release */ = {
+
+		CAFE00000073  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
@@ -277,29 +279,29 @@
 			name = Release;
 		};
 
-/* End XCBuildConfiguration section */
 
-/* Begin XCConfigurationList section */
-		CAFE00000060 /* Build configuration list for PBXProject */ = {
+
+
+		CAFE00000060  = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CAFE00000070 /* Debug */,
-				CAFE00000071 /* Release */,
+				CAFE00000070 ,
+				CAFE00000071 ,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CAFE00000061 /* Build configuration list for PBXNativeTarget */ = {
+		CAFE00000061  = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CAFE00000072 /* Debug */,
-				CAFE00000073 /* Release */,
+				CAFE00000072 ,
+				CAFE00000073 ,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-/* End XCConfigurationList section */
+
 
 	};
-	rootObject = CAFE00000050 /* Project object */;
+	rootObject = CAFE00000050 ;
 }

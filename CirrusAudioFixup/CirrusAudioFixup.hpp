@@ -1,189 +1,73 @@
-#ifndef CirrusAudioFixup_hpp
-#define CirrusAudioFixup_hpp
+#pragma once
 
-#include <IOKit/IOService.h>
-#include <IOKit/IOLib.h>
-#include <IOKit/IOTimerEventSource.h>
+#include "Devices/CS35L41/Hardware/OTPMap.hpp"
+#include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Support/BitUtils.hpp"
+#include "Support/Logging.hpp"
+
 #include <IOKit/IOCommandGate.h>
+#include <IOKit/IOLib.h>
+#include <IOKit/IOService.h>
+#include <IOKit/IOTimerEventSource.h>
 #include <IOKit/pwr_mgt/IOPM.h>
 #include <IOKit/pwr_mgt/IOPMpowerState.h>
 #include <libkern/c++/OSCollectionIterator.h>
+
 #include <os/log.h>
 
-#include "Codecs/CS35L41/Registers.hpp"
-#include "Codecs/CS35L41/OTP.hpp"
-
-#define LOG_PREFIX "CirrusAudioFixup: "
-#define CIRRUS_LOG(fmt, ...) IOLog(LOG_PREFIX fmt "\n", ##__VA_ARGS__)
-#define CIRRUS_ERR(fmt, ...) IOLog(LOG_PREFIX "ERROR: " fmt "\n", ##__VA_ARGS__)
-
-#define GENMASK(h, l) (((~0U) >> (31 - (h))) & (~0U << (l)))
+#include "Diagnostics/DiagnosticTypes.hpp"
+#include "Core/RegisterIO.hpp"
+#include "Devices/CS35L41/CS35L41Device.hpp"
+#include "Firmware/WMFW/FirmwareUploader.hpp"
+#include "Platform/HDA/HDAController.hpp"
 
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 
-#define CS35L41_I2C_ADDR_LEFT   0x40
-#define CS35L41_I2C_ADDR_RIGHT  0x41
-#define CS35L41_DEVICE_ID       0x00035A40
-#define CS35L41_DEVID_REG       0x00000000
-#define CS35L41_REVID_REG       0x00000004
-#define CS35L41_FABID_REG       0x00000008
-#define CS35L41_OTPID_REG       0x00000010
-#define CS35L41_PWR_CTRL1_REG   0x00002014
-#define CS35L41_PWR_CTRL2_REG   0x00002018
-#define CS35L41_PWR_CTRL3_REG   0x0000201C
-#define CS35L41_AMP_OUT_MUTE_REG 0x00002024
-#define CS35L41_PWRMGT_STS_REG  0x00002908
-#define CS35L41_IRQ1_STATUS1_REG 0x00010010
-#define CS35L41_IRQ2_STATUS1_REG 0x00010810
-#define CS35L41_IRQ1_MASK1_REG   0x00010110
-#define CS35L41_IRQ2_MASK1_REG   0x00010910
-#define CS35L41_DSP_MBOX_1_REG   0x00013000
-#define CS35L41_DSP_MBOX_2_REG   0x00013004
-#define CS35L41_DSP_MBOX_3_REG   0x00013008
-#define CS35L41_DSP_MBOX_4_REG   0x0001300C
 
-enum TraceSource {
-    TRACE_PROBE,
-    TRACE_DUMP,
-    TRACE_CONSISTENCY,
-    TRACE_FIRMWARE,
-    TRACE_PLAYBACK,
-    TRACE_OTHER
-};
-
-enum DriverStage : uint32_t {
-    STAGE_NONE = 0,
-    STAGE_PROBE,
-    STAGE_RESET,
-    STAGE_OTP_BOOT,
-    STAGE_ERRATA,
-    STAGE_CLOCK,
-    STAGE_ASP,
-    STAGE_GPIO,
-    STAGE_PLATFORM,
-    STAGE_FIRMWARE_DISCOVERY,
-    STAGE_FIRMWARE_UPLOAD,
-    STAGE_DSP_BOOT,
-    STAGE_IDLE_VERIFY,
-    STAGE_HDA_DETECT,
-    STAGE_PLAYBACK_OPEN,
-    STAGE_PLAYBACK_PREPARE,
-    STAGE_PLAYBACK_ACTIVE,
-    STAGE_PLAYBACK_CLEANUP,
-    STAGE_PLAYBACK_CLOSE,
-    STAGE_SAFE_IDLE,
-};
-
-enum DiagnosticFailure : uint32_t {
-    DIAG_OK = 0,
-    DIAG_PROVIDER_MISSING,
-    DIAG_I2C_TRANSFER,
-    DIAG_RESET_GPIO,
-    DIAG_DEVICE_ID,
-    DIAG_RESET_WRITE,
-    DIAG_OTP_TIMEOUT,
-    DIAG_ERRATA,
-    DIAG_OTP_UNPACK,
-    DIAG_PLL_CONFIG,
-    DIAG_ASP_CONFIG,
-    DIAG_GPIO_CONFIG,
-    DIAG_PLATFORM_CONFIG,
-    DIAG_FIRMWARE_MISSING,
-    DIAG_FIRMWARE_PARSE,
-    DIAG_FIRMWARE_UPLOAD,
-    DIAG_COEFFICIENT_PARSE,
-    DIAG_COEFFICIENT_UPLOAD,
-    DIAG_DSP_BOOT,
-    DIAG_DSP_MAILBOX,
-    DIAG_IDLE_INVARIANT,
-    DIAG_HDA_CONTROLLER,
-    DIAG_HDA_STREAM_FORMAT,
-    DIAG_PLL_UNLOCKED,
-    DIAG_POWER_UP_TIMEOUT,
-    DIAG_PLAYBACK_INVARIANT,
-    DIAG_POWER_DOWN_TIMEOUT,
-    DIAG_IDLE_ROLLBACK,
-    DIAG_OTP_BOOT_ERROR,
-    DIAG_AMP_PROTECTION,
-    DIAG_CALIBRATION,
-};
-
-struct DiagnosticState {
-    DriverStage stage { STAGE_NONE };
-    DriverStage lastGoodStage { STAGE_NONE };
-    DiagnosticFailure firstFailure { DIAG_OK };
-    DiagnosticFailure latestFailure { DIAG_OK };
-    uint32_t failureCount { 0 };
-    uint32_t reg { 0 };
-    uint32_t expected { 0 };
-    uint32_t actual { 0 };
-    IOReturn ioReturn { kIOReturnSuccess };
-    DiagnosticFailure snapshotFailure { DIAG_OK };
-};
-
-struct TraceEntry {
-    uint64_t timestamp;
-    uint8_t amp;
-    bool isWrite;
-    bool isBulk;
-    uint32_t reg;
-    uint32_t value;
-    IOReturn ret;
-    TraceSource source;
-};
-
-struct TraceStats {
-    uint32_t readSuccess;
-    uint32_t readFail;
-    uint32_t writeSuccess;
-    uint32_t writeFail;
-    uint32_t bulkSuccess;
-    uint32_t bulkFail;
-    uint32_t noackCount;
-    uint32_t retries;
-};
-
+// VoodooI2C transfer request packet layout expected by VoodooI2CDeviceNub
 struct VoodooI2CAddressedTransfer {
-    UInt8 address;
-    UInt8 *writeBuffer;
-    UInt16 writeLength;
-    UInt8 *readBuffer;
-    UInt16 readLength;
+    uint8_t address;
+    uint8_t* writeBuffer;
+    uint16_t writeLength;
+    uint8_t* readBuffer;
+    uint16_t readLength;
 };
 
+// Sequence table entry for batch register writes, bit updates, and delays
 struct RegisterSequence {
-    UInt32 reg;
-    UInt32 mask;
-    UInt32 value;
-    UInt32 delay_us;
+    uint32_t reg;
+    uint32_t mask;
+    uint32_t value;
+    uint32_t delay_us;
     bool updateBits;
 };
 
-struct CS35L41Amp {
-    const char *name;
-    UInt8 address;
+// Hardware state and telemetry tracking for a single amplifier channel (left or right)
+struct AmplifierState {
+    const char* name;
+    uint8_t address;
     bool present;
-    UInt32 deviceId;
-    UInt32 revisionId;
+    uint32_t deviceId;
+    uint32_t revisionId;
 
-    const uint8_t *wmfwData;
+    const uint8_t* wmfwData;
     size_t wmfwSize;
-    const uint8_t *binData;
+    const uint8_t* binData;
     size_t binSize;
     bool firmwareValidated;
-    uint32_t final_crc;
+    uint32_t finalCrc;
 
     unsigned int monitorCount;
     bool initialized;
     bool dspAlive;
 
-    uint32_t last_irq1_sts1;
-    uint32_t last_irq1_sts3;
-    uint32_t last_pwrmgt_sts;
-    uint32_t last_mbox2;
-    uint32_t last_strmarb_err;
-    uint32_t last_clock_detect;
-    uint32_t last_strmarb_ctrl;
+    uint32_t lastIrq1Status1;
+    uint32_t lastIrq1Status3;
+    uint32_t lastPowerManagementStatus;
+    uint32_t lastMailbox2;
+    uint32_t lastStreamArbitrationError;
+    uint32_t lastClockDetect;
+    uint32_t lastStreamArbitrationControl;
 
     uint32_t lastTimestamp;
     bool playbackActive;
@@ -194,178 +78,225 @@ struct CS35L41Amp {
         uint32_t address;
     } diagnosticControls[14];
     uint32_t diagnosticControlCount;
-    uint32_t firmwareIdVersion { 0 };
-    uint32_t monitorLogCountdown { 0 };
-    uint32_t haloStateRegister { 0 };
-    uint32_t haloHeartbeatRegister { 0 };
-    bool playbackFaulted { false };
-    uint32_t cleanupAttempts { 0 };
-    DiagnosticState diagnostic;
+    uint32_t firmwareIdVersion{0};
+    uint32_t monitorLogCountdown{0};
+    uint32_t haloStateRegister{0};
+    uint32_t haloHeartbeatRegister{0};
+    bool playbackFaulted{false};
+    uint32_t cleanupAttempts{0};
+    cirrus::diagnostics::DiagnosticState diagnostic;
 };
 
 struct FirmwareImage;
 
+// Firmware binary descriptor mapped to vendor SSID and speaker subsystem ID
 struct FirmwareResource {
     uint32_t subsystemVendor;
     uint32_t subsystemDevice;
     uint32_t spkid;
-    const char *fwName;
-    const char *binName;
-    const uint8_t *wmfw;
+    const char* fwName;
+    const char* binName;
+    const uint8_t* wmfw;
     size_t wmfwSize;
-    const uint8_t *bin;
+    const uint8_t* bin;
     size_t binSize;
-    const uint8_t *binRight;
+    const uint8_t* binRight;
     size_t binRightSize;
     bool isDummy;
 };
 
-class CirrusAudioFixup : public IOService {
-    OSDeclareDefaultStructors(CirrusAudioFixup)
+class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
+private:
+    CirrusAudioFixup* mFixup;
+    AmplifierState& mAmp;
 
 public:
-    bool init(OSDictionary *properties = nullptr) override;
-    IOService *probe(IOService *provider, SInt32 *score) override;
-    bool start(IOService *provider) override;
-    void stop(IOService *provider) override;
-    void free() override;
-    IOReturn setPowerState(unsigned long state, IOService *device) override;
+    FixupRegisterIOAdapter(CirrusAudioFixup* fixup, AmplifierState& amp) : mFixup(fixup), mAmp(amp) {}
 
-private:
-    void fullDriverFlow();
-    void runBackgroundMonitor();
+    bool read(uint32_t address, uint32_t* value) override {
+        return mFixup->readRegister(mAmp, address, value, cirrus::diagnostics::TRACE_PROBE);
+    }
 
-    IOService *mProvider { nullptr };
-    IOWorkLoop *mWorkLoop { nullptr };
-    IOTimerEventSource *mProbeTimer { nullptr };
-    IOCommandGate *mCommandGate { nullptr };
-    bool mPMInitialized { false };
-    IOPMPowerState mPowerStates[2] {};
-    bool mPowerAvailable { true };
-    bool mStopping { false };
-    bool mNeedsReinitialization { false };
-    bool setupPowerManagement(IOService *provider);
-    void handlePowerChange(bool powered);
-    static IOReturn lifecycleAction(OSObject *owner, void *operation, void *, void *, void *);
-    bool mHdaStreamActive { false };
-    bool mHdaConverterPrepared { false };
-    bool mHdaControllerObserved { false };
-    bool mHdaTopologyLogged { false };
-    uint8_t mHdaLastDescriptor { 0xFF };
-    uint8_t mHdaLastStreamTag { 0 };
-    uint16_t mHdaLastFormat { 0 };
-    uint32_t mHdaMissCount { 0 };
-    IOReturn mLastTransferReturn { kIOReturnSuccess };
-    bool mCapturingFailureSnapshot { false };
+    bool write(uint32_t address, uint32_t value) override {
+        return mFixup->writeRegister(mAmp, address, value, cirrus::diagnostics::TRACE_PROBE);
+    }
 
-    CS35L41Amp mAmps[2] {
-        { "left",  CS35L41_I2C_ADDR_LEFT },
-        { "right", CS35L41_I2C_ADDR_RIGHT }
-    };
+    bool updateBits(uint32_t address, uint32_t mask, uint32_t value) override {
+        return mFixup->updateRegisterBits(mAmp, address, mask, value, cirrus::diagnostics::TRACE_PROBE);
+    }
 
-    static const size_t kTraceBufferSize = 1024;
-    TraceEntry mTraceBuffer[kTraceBufferSize];
-    uint32_t mTraceHead { 0 };
-    uint32_t mTraceTail { 0 };
-    TraceStats mTraceStats { 0 };
-    IOLock *mTraceLock { nullptr };
-
-    void initTraceBuffer();
-    void recordTrace(TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen, IOReturn ret);
-    void dumpTraceBuffer(const char *propertyName = "Cirrus_Trace_Dump",
-                         const char *mirrorPropertyName = nullptr);
-    void publishStatistics();
-    void setDiagnosticStage(CS35L41Amp &amp, DriverStage stage);
-    void markDiagnosticSuccess(CS35L41Amp &amp, DriverStage stage);
-    void recordDiagnosticFailure(CS35L41Amp &amp, DiagnosticFailure failure,
-                                 UInt32 reg = 0, UInt32 expected = 0,
-                                 UInt32 actual = 0,
-                                 IOReturn ioReturn = kIOReturnSuccess,
-                                 bool captureSnapshot = true);
-    void captureFailureSnapshot(CS35L41Amp &amp, DiagnosticFailure failure);
-    void publishDriverVerdict();
-    static const char *stageName(DriverStage stage);
-    static const char *failureName(DiagnosticFailure failure);
-
-    bool bootArgEnabled(const char *name);
-    bool bootArgStrEquals(const char *name, const char *expectedVal);
-    void logProviderInfo(IOService *provider);
-    void dumpProviderProperties(IOService *provider);
-    bool setupProbeTimer();
-    void scheduleReadOnlyProbe(UInt32 delayMs);
-    void runReadOnlyProbe();
-    void probeAmp(CS35L41Amp &amp);
-
-    bool transferToAddress(UInt8 address,
-                           UInt8 *writeBuffer,
-                           UInt16 writeLength,
-                           UInt8 *readBuffer,
-                           UInt16 readLength);
-
-public:
-    bool bulkWrite(CS35L41Amp &amp, UInt32 reg, const UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
-    bool bulkRead(CS35L41Amp &amp, UInt32 reg, UInt8 *data, size_t length, TraceSource source = TRACE_OTHER);
-private:
-    bool readRegister(CS35L41Amp &amp, UInt32 reg, UInt32 *value, TraceSource source = TRACE_OTHER);
-    bool writeRegister(CS35L41Amp &amp, UInt32 reg, UInt32 value, TraceSource source = TRACE_OTHER);
-    bool updateRegisterBits(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 value, TraceSource source = TRACE_OTHER);
-    bool pollRegisterBit(CS35L41Amp &amp, UInt32 reg, UInt32 mask, UInt32 targetVal, UInt32 timeoutMs, TraceSource source = TRACE_OTHER);
-    bool sendMailboxCommand(CS35L41Amp &amp, UInt32 command, UInt32 expectedStatus);
-
-    void logASPSnapshot(CS35L41Amp &amp);
-    void logDSPSnapshot(CS35L41Amp &amp);
-    void logDSPBootReport(CS35L41Amp &amp);
-    void logPowerSnapshot(CS35L41Amp &amp);
-    void snapshotPlayback(CS35L41Amp &amp);
-    void snapshotDiagnostics(CS35L41Amp &amp, const char* stage);
-
-    bool initCodec(CS35L41Amp &amp);
-
-    bool unlockTestKey(CS35L41Amp &amp);
-    bool lockTestKey(CS35L41Amp &amp);
-
-    bool applyErrataPatch(CS35L41Amp &amp);
-
-    bool unpackOTP(CS35L41Amp &amp);
-
-    bool initializeHardwareErrata(CS35L41Amp &amp);
-
-    void dumpAllRegisters(CS35L41Amp &amp);
-
-    bool configureHardware(CS35L41Amp &amp);
-    bool syncAlc287HdaCodec();
-    static bool supportedHdaFormat(uint16_t format);
-    void discoverFirmware(CS35L41Amp &amp);
-    bool bringupDSP(CS35L41Amp &amp);
-    bool stopPlayback(CS35L41Amp &amp);
-    bool checkProtectionStatus(CS35L41Amp &amp);
-    bool verifyDSPAlive(CS35L41Amp &amp);
-
-    void uploadFirmware(CS35L41Amp &amp, const char* phaseArg);
-    bool parseDSPAlgorithms(CS35L41Amp &amp, FirmwareImage &outImage);
-
-    bool stopDSP(CS35L41Amp &amp);
-    bool applyCalibration(CS35L41Amp &amp, const FirmwareImage *image);
-    void initializeFirmware(CS35L41Amp &amp, const char* phaseArg);
-    void dumpASPRegisters(CS35L41Amp &amp);
-    bool powerUpAmplifier(CS35L41Amp &amp);
-    bool verifyIdleConfiguration(CS35L41Amp &amp);
-
-    IOService* getAudioController();
-
-    void testRegisterConsistency(CS35L41Amp &amp);
-    void runTimeBasedFSMCheck(CS35L41Amp &amp);
-    uint32_t calculateRegistersCRC32(CS35L41Amp &amp);
-
-    void snapshotRegisters(CS35L41Amp &amp, UInt32 *snapshot);
-    void compareRegisterSnapshots(CS35L41Amp &amp, const UInt32 *oldSnapshot, const UInt32 *newSnapshot);
-
-    bool applyRegisterSequence(CS35L41Amp &amp, const RegisterSequence* sequence, size_t count);
-    bool applyPLL(CS35L41Amp &amp);
-    bool applyASP(CS35L41Amp &amp);
-    bool applyGPIO(CS35L41Amp &amp);
-
-    static void probeTimerFired(OSObject *owner, IOTimerEventSource *sender);
+    bool pollBit(uint32_t address, uint32_t mask, uint32_t expected, uint32_t timeoutMs) override {
+        return mFixup->pollRegisterBit(mAmp, address, mask, expected, timeoutMs, cirrus::diagnostics::TRACE_PROBE);
+    }
 };
 
-#endif
+class CirrusAudioFixup : public IOService {
+OSDeclareDefaultStructors(CirrusAudioFixup)
+
+    public : bool init(OSDictionary* properties = nullptr) override;
+    IOService* probe(IOService* provider, SInt32* score) override;
+    bool start(IOService* provider) override;
+    void stop(IOService* provider) override;
+    void free() override;
+    IOReturn setPowerState(unsigned long state, IOService* device) override;
+
+private:
+    // Orchestrates full bringup: soft reset, wait for OTP boot, silicon errata, clocks, and DSP
+    void fullDriverFlow();
+
+    // Watchdog checking DSP alive status, PLL lock, and latching faults
+    void runBackgroundMonitor();
+
+    IOService* mProvider{nullptr};
+    IOWorkLoop* mWorkLoop{nullptr};
+    IOTimerEventSource* mProbeTimer{nullptr};
+    IOCommandGate* mCommandGate{nullptr};
+    bool mPMInitialized{false};
+    IOPMPowerState mPowerStates[2]{};
+    bool mPowerAvailable{true};
+    bool mStopping{false};
+    bool mNeedsReinitialization{false};
+
+    bool setupPowerManagement(IOService* provider);
+    void handlePowerChange(bool powered);
+    static IOReturn lifecycleAction(OSObject* owner, void* operation, void*, void*, void*);
+
+    cirrus::platform::hda::HDAStreamState mHdaState;
+
+    IOReturn mLastTransferReturn{kIOReturnSuccess};
+    bool mCapturingFailureSnapshot{false};
+
+    AmplifierState mAmps[2]{{"left", cirrus::devices::cs35l41::registers::kI2cAddressLeft}, {"right", cirrus::devices::cs35l41::registers::kI2cAddressRight}};
+
+    static const size_t kTraceBufferSize = 1024;
+    cirrus::diagnostics::TraceEntry mTraceBuffer[kTraceBufferSize];
+    uint32_t mTraceHead{0};
+    uint32_t mTraceTail{0};
+    cirrus::diagnostics::TraceStats mTraceStats{0};
+    IOLock* mTraceLock{nullptr};
+
+    void initTraceBuffer();
+    void recordTrace(cirrus::diagnostics::TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen, IOReturn ret);
+    void dumpTraceBuffer(const char* propertyName = "Cirrus_Trace_Dump", const char* mirrorPropertyName = nullptr);
+    void publishStatistics();
+    void setDiagnosticStage(AmplifierState& amp, cirrus::diagnostics::DriverStage stage);
+    void markDiagnosticSuccess(AmplifierState& amp, cirrus::diagnostics::DriverStage stage);
+    void recordDiagnosticFailure(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure, uint32_t reg = 0, uint32_t expected = 0, uint32_t actual = 0,
+                                 IOReturn ioReturn = kIOReturnSuccess, bool captureSnapshot = true);
+    void captureFailureSnapshot(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure);
+    void publishDriverVerdict();
+    static const char* stageName(cirrus::diagnostics::DriverStage stage);
+    static const char* failureName(cirrus::diagnostics::DiagnosticFailure failure);
+
+    bool bootArgEnabled(const char* name);
+    bool bootArgStrEquals(const char* name, const char* expectedVal);
+    void logProviderInfo(IOService* provider);
+    void dumpProviderProperties(IOService* provider);
+    bool setupProbeTimer();
+    void scheduleReadOnlyProbe(uint32_t delayMs);
+    void runReadOnlyProbe();
+    void probeAmp(AmplifierState& amp);
+
+    // VoodooI2C transfer chunk size is capped at 252 bytes to prevent controller FIFO overrun
+    bool transferToAddress(uint8_t address, uint8_t* writeBuffer, uint16_t writeLength, uint8_t* readBuffer, uint16_t readLength);
+
+public:
+    bool bulkWrite(AmplifierState& amp, uint32_t reg, const uint8_t* data, size_t length, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool bulkRead(AmplifierState& amp, uint32_t reg, uint8_t* data, size_t length, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+
+private:
+    bool readRegister(AmplifierState& amp, uint32_t reg, uint32_t* value, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool writeRegister(AmplifierState& amp, uint32_t reg, uint32_t value, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool updateRegisterBits(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t value, cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+    bool pollRegisterBit(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t targetVal, uint32_t timeoutMs,
+                         cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
+
+    // Writes mailbox command word and polls for status ACK (pause, resume, spk-protect)
+    bool sendMailboxCommand(AmplifierState& amp, uint32_t command, uint32_t expectedStatus);
+
+    void logASPSnapshot(AmplifierState& amp);
+    void logDSPSnapshot(AmplifierState& amp);
+    void logDSPBootReport(AmplifierState& amp);
+    void logPowerSnapshot(AmplifierState& amp);
+    void snapshotPlayback(AmplifierState& amp);
+    void snapshotDiagnostics(AmplifierState& amp, const char* stage);
+
+    // Hardware reset and revision errata initialization
+    bool initCodec(AmplifierState& amp);
+
+    // Test keys unlock protected engineering registers before patching errata
+    bool unlockTestKey(AmplifierState& amp);
+    bool lockTestKey(AmplifierState& amp);
+
+    // Silicon revision errata matching Linux cs35l41 driver
+    bool applyErrataPatch(AmplifierState& amp);
+
+    // Reads OTP memory map to trim analog speaker circuitry
+    bool unpackOTP(AmplifierState& amp);
+
+    bool initializeHardwareErrata(AmplifierState& amp);
+    void dumpAllRegisters(AmplifierState& amp);
+    bool configureHardware(AmplifierState& amp);
+
+    // Snoops AppleHDA stream state to align sample rate and audio format with CS35L41 ASP
+    bool syncAlc287HdaCodec();
+    bool synchronizeHdaStream() { return syncAlc287HdaCodec(); }
+    bool synchronizeHdaCodec() { return syncAlc287HdaCodec(); }
+    static bool supportedHdaFormat(uint16_t format);
+
+    void discoverFirmware(AmplifierState& amp);
+
+    // Uploads firmware + tuning bin, releases DSP reset, and verifies heartbeat
+    bool bringupDSP(AmplifierState& amp);
+    bool bootDsp(AmplifierState& amp) { return bringupDSP(amp); }
+
+    void startBringup() { fullDriverFlow(); }
+    bool resetAndInitCodec(AmplifierState& amp) { return initCodec(amp); }
+    bool loadOtpCalibration(AmplifierState& amp) { return unpackOTP(amp); }
+
+    // Quiesces audio stream and powers down class D output
+    bool stopPlayback(AmplifierState& amp);
+    bool checkProtectionStatus(AmplifierState& amp);
+    bool verifyDSPAlive(AmplifierState& amp);
+
+    void uploadFirmware(AmplifierState& amp, const char* phaseArg);
+    bool parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& outImage);
+    bool stopDSP(AmplifierState& amp);
+
+    // Applies speaker calibration (R0) from NVRAM into DSP algorithm memory
+    bool applyCalibration(AmplifierState& amp, const FirmwareImage* image);
+    void initializeFirmware(AmplifierState& amp, const char* phaseArg);
+    void dumpASPRegisters(AmplifierState& amp);
+
+    // Transitions amplifier power state to active class D operation
+    bool powerUpAmplifier(AmplifierState& amp);
+    bool verifyIdleConfiguration(AmplifierState& amp);
+
+    IOService* audioController();
+    IOService* getAudioController();
+
+    void testRegisterConsistency(AmplifierState& amp);
+    void runTimeBasedFSMCheck(AmplifierState& amp);
+
+    // Computes CRC-32 checksum across critical hardware registers
+    uint32_t calculateRegistersCRC32(AmplifierState& amp);
+
+    void snapshotRegisters(AmplifierState& amp, uint32_t* snapshot);
+    void compareRegisterSnapshots(AmplifierState& amp, const uint32_t* oldSnapshot, const uint32_t* newSnapshot);
+
+    bool applyRegisterSequence(AmplifierState& amp, const RegisterSequence* sequence, size_t count);
+
+    // Configures internal PLL using SCLK (BCLK) or MCLK reference
+    bool applyPLL(AmplifierState& amp);
+    bool configurePll(AmplifierState& amp) { return applyPLL(amp); }
+
+    // Sets Audio Serial Port format (I2S, 24/32-bit slot, sample rate)
+    bool applyASP(AmplifierState& amp);
+    bool configureAsp(AmplifierState& amp) { return applyASP(amp); }
+
+    // Programs GPIO pins for interrupt signaling or boost converter control
+    bool applyGPIO(AmplifierState& amp);
+    bool configureGpio(AmplifierState& amp) { return applyGPIO(amp); }
+
+    static void probeTimerFired(OSObject* owner, IOTimerEventSource* sender);
+};

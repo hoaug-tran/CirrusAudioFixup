@@ -4,7 +4,8 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-CODEC = ROOT / 'CirrusAudioFixup/Codecs/CS35L41'
+CODEC = ROOT / 'CirrusAudioFixup/Firmware/WMFW'
+DEVICE = ROOT / 'CirrusAudioFixup/Devices/CS35L41/Resources'
 with tempfile.TemporaryDirectory(prefix='cirrus-host-check-') as directory:
     tmp = Path(directory)
     (tmp / 'IOKit').mkdir()
@@ -39,32 +40,40 @@ struct OSNumber : OSObject { unsigned unsigned32BitValue() { return 0; } };
 constexpr int TRACE_OTHER = 0;
 ''', encoding='utf-8')
     uploader = (CODEC / 'FirmwareUploader.hpp').read_text(encoding='utf-8')
-    uploader = uploader.replace('#include "../../CirrusAudioFixup.hpp"', '#include "fake.hpp"')
+    uploader = uploader.replace('#include "Core/RegisterIO.hpp"', '#include "fake.hpp"').replace('#include "Firmware/WMFW/WMFWParser.hpp"', '#include "WMFWParser.hpp"')
     (tmp / 'uploader.hpp').write_text(uploader, encoding='utf-8')
-    database = (CODEC / 'FirmwareDatabase.hpp').read_text(encoding='utf-8')
+    database = (DEVICE / 'FirmwareDatabase.hpp').read_text(encoding='utf-8')
     arrays = '\n'.join(re.findall(r'const uint8_t \w+\[\s*\d*\s*\] = \{.*?\};', database, re.S))
     (tmp / 'arrays.hpp').write_text(arrays, encoding='utf-8')
     header = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
     resource_type = header[header.index('struct FirmwareResource {'):header.index('class CirrusAudioFixup :')]
-    table = database[database.index('const FirmwareResource firmwareTable[]'):database.rindex('#endif')]
+    table = database[database.index('const FirmwareResource firmwareTable[]'):]
     (tmp / 'resources.hpp').write_text(resource_type + table, encoding='utf-8')
     (tmp / 'fake.hpp').write_text(r'''
 #pragma once
+#include <IOKit/IOLib.h>
 #include <map>
+#include "Core/RegisterIO.hpp"
 struct CS35L41Amp { const char* name="host"; };
-class CirrusAudioFixup {
+class CirrusAudioFixup : public cirrus::core::RegisterIO {
 public:
     std::map<uint32_t,uint8_t> memory;
     unsigned reads=0,writes=0,failRead=0,failWrite=0,failWriteEnd=0,corruptRead=0;
     OSObject* getProperty(const char*) { return nullptr; }
-    bool bulkRead(CS35L41Amp&,uint32_t r,uint8_t* p,unsigned n,int) {
+    
+    bool read(uint32_t, uint32_t*) override { return false; }
+    bool write(uint32_t, uint32_t) override { return false; }
+    bool updateBits(uint32_t, uint32_t, uint32_t) override { return false; }
+    bool pollBit(uint32_t, uint32_t, uint32_t, uint32_t) override { return false; }
+
+    bool bulkRead(uint32_t r,uint8_t* p,size_t n) override {
         assert(n && n<=252 && !(n&3) && !(r&3));
         if (++reads==failRead) return false;
         for(unsigned i=0;i<n;i++) p[i]=memory[r+i];
         if(reads==corruptRead) p[0]^=1;
         return true;
     }
-    bool bulkWrite(CS35L41Amp&,uint32_t r,const uint8_t* p,unsigned n,int) {
+    bool bulkWrite(uint32_t r,const uint8_t* p,size_t n) override {
         assert(n && n<=252 && !(n&3) && !(r&3));
         ++writes;
         if(writes>=failWrite && writes<=failWriteEnd) {
@@ -76,7 +85,7 @@ public:
     }
 };
 ''', encoding='utf-8')
-    command = ['g++', '-std=c++17', '-O0', '-g', '-I'+str(tmp), '-I'+str(CODEC),
+    command = ['g++', '-std=c++17', '-O0', '-g', '-I'+str(tmp), '-I'+str(CODEC), '-I'+str(ROOT/'CirrusAudioFixup'),
                str(Path(__file__).with_name('host_regression.cpp')), '-o', str(tmp/'check.exe')]
     subprocess.run(command, check=True)
     subprocess.run([str(tmp/'check.exe')], check=True)

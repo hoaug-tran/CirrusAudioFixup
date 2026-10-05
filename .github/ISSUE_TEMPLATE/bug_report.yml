@@ -1,0 +1,99 @@
+name: Bug report
+description: Report a boot, attach, I2C, HDA, DSP, or playback problem
+title: "[Bug]: "
+labels: ["type: bug", "status: needs-logs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report "no sound" without logs. This driver is experimental and audible output is not confirmed.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I can boot without CirrusAudioFixup if this kext breaks boot.
+          required: true
+        - label: I am using a custom VoodooI2C build with VoodooI2CTransferToAddress.
+          required: true
+        - label: I am using a known AppleALC layout for my HDA route.
+          required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "14.7, 15.0, ..."
+    validations:
+      required: true
+  - type: input
+    id: laptop
+    attributes:
+      label: Laptop model
+      placeholder: "Vendor model, board id if known"
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: CPU platform
+      placeholder: "Intel or AMD, generation if known"
+    validations:
+      required: true
+  - type: input
+    id: hda
+    attributes:
+      label: HDA codec and subsystem id
+      placeholder: "10ec:0287, subsystem 17aa:3847"
+    validations:
+      required: true
+  - type: input
+    id: i2c
+    attributes:
+      label: ACPI match and I2C addresses
+      placeholder: "CLSA0100, 0x40, 0x41"
+    validations:
+      required: true
+  - type: textarea
+    id: kexts
+    attributes:
+      label: Kext list and load order
+      description: Include Lilu, AppleALC, VoodooI2C, and CirrusAudioFixup versions or commits.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: bootargs
+    attributes:
+      label: Boot arguments
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened
+      description: State expected result and actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Required logs
+      description: Paste the output from README log commands.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: ioreg
+    attributes:
+      label: IORegistry evidence
+      description: Include Cirrus_* properties and the VoodooI2C device node.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra notes
+      description: Linux codec dump, pin config, AppleALC layout, or firmware source if relevant.
+      render: text

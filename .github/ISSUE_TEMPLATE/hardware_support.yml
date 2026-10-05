@@ -1,0 +1,86 @@
+name: Hardware support
+description: Request support for a new laptop, HDA codec, or amplifier profile
+title: "[Hardware]: "
+labels: ["type: hardware-support", "status: needs-logs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New hardware support needs real registry data, HDA route data, and firmware evidence. Do not request support based only on laptop model name.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I understand support is not automatic and may require code changes.
+          required: true
+        - label: I can test debug builds and recover from boot failure.
+          required: true
+        - label: I will not submit firmware or tuning files from an unknown source.
+          required: true
+  - type: input
+    id: laptop
+    attributes:
+      label: Laptop model
+      placeholder: "Vendor model and board id"
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: CPU platform
+      placeholder: "Intel or AMD, generation if known"
+    validations:
+      required: true
+  - type: input
+    id: hda
+    attributes:
+      label: HDA codec id and subsystem id
+      placeholder: "vendor:device, subsystem vendor:device"
+    validations:
+      required: true
+  - type: input
+    id: acpi
+    attributes:
+      label: ACPI device name under VoodooI2C
+      placeholder: "CLSA0100, CSC3551, ..."
+    validations:
+      required: true
+  - type: input
+    id: amps
+    attributes:
+      label: Amplifier model and I2C addresses
+      placeholder: "CS35L41 at 0x40 and 0x41"
+    validations:
+      required: true
+  - type: textarea
+    id: applealc
+    attributes:
+      label: AppleALC route
+      description: Layout id, converter NID, speaker pin NID, and evidence.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: linux
+    attributes:
+      label: Linux evidence
+      description: Codec dump, dmesg snippets, ACPI node, or known Linux driver binding.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: ioreg
+    attributes:
+      label: macOS IORegistry evidence
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: firmware
+    attributes:
+      label: Firmware and tuning source
+      description: State whether you have real matching .wmfw and .bin files, and where they came from.
+      render: text
+    validations:
+      required: false

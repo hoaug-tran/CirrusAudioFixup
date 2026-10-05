@@ -1,10 +1,17 @@
 #pragma once
 
-#include "CirrusAudioFixup.hpp"
+#include <stddef.h>
+#include <stdint.h>
+
+#if defined(__APPLE__)
+#include <IOKit/IOTypes.h>
+#else
+using IOReturn = int;
+constexpr int kIOReturnSuccess = 0;
+#endif
 
 namespace cirrus::diagnostics {
 
-// Categories for tracing register transactions in the diagnostic ring-buffer
 enum class TraceSource : uint32_t { Probe = 0, Dump, Consistency, Firmware, Playback, Other };
 
 inline constexpr TraceSource TRACE_PROBE = TraceSource::Probe;
@@ -14,7 +21,6 @@ inline constexpr TraceSource TRACE_FIRMWARE = TraceSource::Firmware;
 inline constexpr TraceSource TRACE_PLAYBACK = TraceSource::Playback;
 inline constexpr TraceSource TRACE_OTHER = TraceSource::Other;
 
-// Execution stages for hardware bringup, DSP booting, and audio runtime
 enum class DriverStage : uint32_t {
     None = 0,
     Probe,
@@ -59,7 +65,6 @@ inline constexpr DriverStage STAGE_PLAYBACK_CLEANUP = DriverStage::PlaybackClean
 inline constexpr DriverStage STAGE_PLAYBACK_CLOSE = DriverStage::PlaybackClose;
 inline constexpr DriverStage STAGE_SAFE_IDLE = DriverStage::SafeIdle;
 
-// Diagnostic failure codes latched when a hardware step fails
 enum class DiagnosticFailure : uint32_t {
     Ok = 0,
     ProviderMissing,
@@ -126,7 +131,6 @@ inline constexpr DiagnosticFailure DIAG_OTP_BOOT_ERROR = DiagnosticFailure::OtpB
 inline constexpr DiagnosticFailure DIAG_AMP_PROTECTION = DiagnosticFailure::AmpProtection;
 inline constexpr DiagnosticFailure DIAG_CALIBRATION = DiagnosticFailure::Calibration;
 
-// Latched diagnostic failure state and register snapshot for each amp channel
 struct DiagnosticState {
     DriverStage stage{STAGE_NONE};
     DriverStage lastGoodStage{STAGE_NONE};
@@ -140,7 +144,6 @@ struct DiagnosticState {
     DiagnosticFailure snapshotFailure{DIAG_OK};
 };
 
-// Transaction log entry stored in circular trace buffer
 struct TraceEntry {
     uint64_t timestamp;
     uint8_t amp;
@@ -152,7 +155,6 @@ struct TraceEntry {
     TraceSource source;
 };
 
-// Aggregate I2C bus transaction counters
 struct TraceStats {
     uint32_t readSuccess;
     uint32_t readFail;
@@ -164,7 +166,6 @@ struct TraceStats {
     uint32_t retries;
 };
 
-// Driver lifecycle execution verdict for IORegistry export
 enum class DriverVerdict : uint32_t {
     Unknown = 0,
     Success,
@@ -176,4 +177,4 @@ enum class DriverVerdict : uint32_t {
     BusTransferError,
 };
 
-} // namespace cirrus::diagnostics
+}

@@ -1,13 +1,16 @@
 #pragma once
 
+#if defined(__APPLE__)
 #include <IOKit/IOLib.h>
-
 #ifndef IOMallocData
 #define IOMallocData(size) IOMalloc(size)
 #define IOFreeData(ptr, size) IOFree(ptr, size)
 #endif
+#else
+#include <stdio.h>
+#define IOLog(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#endif
 
-// Runtime debug toggle controlled by -cirrusdbg boot-arg
 extern bool gCirrusDebug;
 
 #define CIRRUS_LOG_PREFIX "CirrusAudioFixup: "

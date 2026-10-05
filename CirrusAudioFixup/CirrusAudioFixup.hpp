@@ -22,7 +22,6 @@
 
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 
-// VoodooI2C transfer request packet layout expected by VoodooI2CDeviceNub
 struct VoodooI2CAddressedTransfer {
     uint8_t address;
     uint8_t* writeBuffer;
@@ -31,16 +30,14 @@ struct VoodooI2CAddressedTransfer {
     uint16_t readLength;
 };
 
-// Sequence table entry for batch register writes, bit updates, and delays
 struct RegisterSequence {
     uint32_t reg;
     uint32_t mask;
     uint32_t value;
-    uint32_t delay_us;
+    uint32_t delayUs;
     bool updateBits;
 };
 
-// Hardware state and telemetry tracking for a single amplifier channel (left or right)
 struct AmplifierState {
     const char* name;
     uint8_t address;
@@ -87,7 +84,6 @@ struct AmplifierState {
 
 struct FirmwareImage;
 
-// Firmware binary descriptor mapped to vendor SSID and speaker subsystem ID
 struct FirmwareResource {
     uint32_t subsystemVendor;
     uint32_t subsystemDevice;
@@ -116,10 +112,9 @@ OSDeclareDefaultStructors(CirrusAudioFixup)
     IOReturn setPowerState(unsigned long state, IOService* device) override;
 
 private:
-    // Orchestrates full bringup: soft reset, wait for OTP boot, silicon errata, clocks, and DSP
+
     void fullDriverFlow();
 
-    // Watchdog checking DSP alive status, PLL lock, and latching faults
     void runBackgroundMonitor();
 
     IOService* mProvider{nullptr};
@@ -141,8 +136,12 @@ private:
     IOReturn mLastTransferReturn{kIOReturnSuccess};
     bool mCapturingFailureSnapshot{false};
 
-    AmplifierState mAmps[2]{{"left", cirrus::devices::cs35l41::registers::kI2cAddressLeft},
-                            {"right", cirrus::devices::cs35l41::registers::kI2cAddressRight}};
+    static constexpr size_t kMaxAmps = 4;
+    size_t mAmpCount{2};
+    AmplifierState mAmps[kMaxAmps]{{"left", cirrus::devices::cs35l41::registers::kI2cAddressLeft},
+                                   {"right", cirrus::devices::cs35l41::registers::kI2cAddressRight},
+                                   {"top_left", 0x42},
+                                   {"top_right", 0x43}};
 
     static const size_t kTraceBufferSize = 1024;
     cirrus::diagnostics::TraceEntry mTraceBuffer[kTraceBufferSize];
@@ -174,8 +173,8 @@ private:
     void scheduleReadOnlyProbe(uint32_t delayMs);
     void runReadOnlyProbe();
     void probeAmp(AmplifierState& amp);
+    size_t detectAmplifiers();
 
-    // VoodooI2C transfer chunk size is capped at 252 bytes to prevent controller FIFO overrun
     bool transferToAddress(uint8_t address, uint8_t* writeBuffer, uint16_t writeLength, uint8_t* readBuffer, uint16_t readLength);
 
 public:
@@ -194,7 +193,6 @@ private:
     bool pollRegisterBit(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t targetVal, uint32_t timeoutMs,
                          cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
 
-    // Writes mailbox command word and polls for status ACK (pause, resume, spk-protect)
     bool sendMailboxCommand(AmplifierState& amp, uint32_t command, uint32_t expectedStatus);
 
     void logASPSnapshot(AmplifierState& amp);
@@ -204,24 +202,19 @@ private:
     void snapshotPlayback(AmplifierState& amp);
     void snapshotDiagnostics(AmplifierState& amp, const char* stage);
 
-    // Hardware reset and revision errata initialization
     bool initCodec(AmplifierState& amp);
 
-    // Test keys unlock protected engineering registers before patching errata
     bool unlockTestKey(AmplifierState& amp);
     bool lockTestKey(AmplifierState& amp);
 
-    // Silicon revision errata matching Linux cs35l41 driver
     bool applyErrataPatch(AmplifierState& amp);
 
-    // Reads OTP memory map to trim analog speaker circuitry
     bool unpackOTP(AmplifierState& amp);
 
     bool initializeHardwareErrata(AmplifierState& amp);
     void dumpAllRegisters(AmplifierState& amp);
     bool configureHardware(AmplifierState& amp);
 
-    // Snoops AppleHDA stream state to align sample rate and audio format with CS35L41 ASP
     bool syncAlc287HdaCodec();
     bool synchronizeHdaStream() { return syncAlc287HdaCodec(); }
     bool synchronizeHdaCodec() { return syncAlc287HdaCodec(); }
@@ -229,7 +222,6 @@ private:
 
     void discoverFirmware(AmplifierState& amp);
 
-    // Uploads firmware + tuning bin, releases DSP reset, and verifies heartbeat
     bool bringupDSP(AmplifierState& amp);
     bool bootDsp(AmplifierState& amp) { return bringupDSP(amp); }
 
@@ -237,7 +229,6 @@ private:
     bool resetAndInitCodec(AmplifierState& amp) { return initCodec(amp); }
     bool loadOtpCalibration(AmplifierState& amp) { return unpackOTP(amp); }
 
-    // Quiesces audio stream and powers down class D output
     bool stopPlayback(AmplifierState& amp);
     bool checkProtectionStatus(AmplifierState& amp);
     bool verifyDSPAlive(AmplifierState& amp);
@@ -246,12 +237,10 @@ private:
     bool parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& outImage);
     bool stopDSP(AmplifierState& amp);
 
-    // Applies speaker calibration (R0) from NVRAM into DSP algorithm memory
     bool applyCalibration(AmplifierState& amp, const FirmwareImage* image);
     void initializeFirmware(AmplifierState& amp, const char* phaseArg);
     void dumpASPRegisters(AmplifierState& amp);
 
-    // Transitions amplifier power state to active class D operation
     bool powerUpAmplifier(AmplifierState& amp);
     bool verifyIdleConfiguration(AmplifierState& amp);
 
@@ -261,7 +250,6 @@ private:
     void testRegisterConsistency(AmplifierState& amp);
     void runTimeBasedFSMCheck(AmplifierState& amp);
 
-    // Computes CRC-32 checksum across critical hardware registers
     uint32_t calculateRegistersCRC32(AmplifierState& amp);
 
     void snapshotRegisters(AmplifierState& amp, uint32_t* snapshot);
@@ -269,15 +257,12 @@ private:
 
     bool applyRegisterSequence(AmplifierState& amp, const RegisterSequence* sequence, size_t count);
 
-    // Configures internal PLL using SCLK (BCLK) or MCLK reference
     bool applyPLL(AmplifierState& amp);
     bool configurePll(AmplifierState& amp) { return applyPLL(amp); }
 
-    // Sets Audio Serial Port format (I2S, 24/32-bit slot, sample rate)
     bool applyASP(AmplifierState& amp);
     bool configureAsp(AmplifierState& amp) { return applyASP(amp); }
 
-    // Programs GPIO pins for interrupt signaling or boost converter control
     bool applyGPIO(AmplifierState& amp);
     bool configureGpio(AmplifierState& amp) { return applyGPIO(amp); }
 

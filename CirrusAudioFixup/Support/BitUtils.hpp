@@ -3,14 +3,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// Register manipulation utilities matching Linux BIT() and GENMASK()
 namespace cirrus::support {
 
 constexpr uint32_t bit(uint32_t index) {
     return 1U << index;
 }
 
-// Matches Linux kernel GENMASK(h, l) for 32-bit register bitfields
 constexpr uint32_t genMask(uint32_t high, uint32_t low) {
     return (~0U >> (31U - high)) & (~0U << low);
 }
@@ -24,7 +22,6 @@ static_assert(genMask(3, 0) == 0x0000000FU, "genMask must match Linux GENMASK");
 static_assert(genMask(31, 0) == 0xFFFFFFFFU, "genMask must match Linux GENMASK");
 static_assert(genMask(15, 8) == 0x0000FF00U, "genMask must match Linux GENMASK");
 
-// Type-safe bitwise operators for enum classes via SFINAE trait
 template <typename E>
 struct EnableBitmaskOperators {
     static constexpr bool kEnabled = false;
@@ -46,7 +43,7 @@ constexpr auto toUnderlying(E value) {
     return static_cast<__underlying_type(E)>(value);
 }
 
-} // namespace cirrus::support
+}
 
 #define CIRRUS_ENABLE_BITMASK_OPERATORS(Enum)                                                                                              \
     template <>                                                                                                                            \

@@ -5,7 +5,6 @@
 
 namespace cirrus::platform::hda {
 
-// State encapsulated from the HDA stream observations
 struct HDAStreamState {
     bool observed{false};
     bool streamActive{false};
@@ -24,17 +23,14 @@ public:
         return instance;
     }
 
-    // Probes the HDA controller and updates stream telemetry
     bool syncCodec(HDAStreamState& state);
 
-    // Determines if a specific format is supported by the CS35L41 ASP
     static bool supportedFormat(uint16_t format);
 
 private:
     HDAController() = default;
 
-    // Searches the IORegistry for the active AppleHDA-attached PCI controller
     IOService* getAudioController();
 };
 
-} // namespace cirrus::platform::hda
+}

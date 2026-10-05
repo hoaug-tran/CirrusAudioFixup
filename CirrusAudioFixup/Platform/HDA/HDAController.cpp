@@ -5,7 +5,6 @@
 
 namespace cirrus::platform::hda {
 
-// Helper variables
 static bool gTopologyLogged = false;
 static uint32_t gMissCount = 0;
 
@@ -150,4 +149,4 @@ bool HDAController::syncCodec(HDAStreamState& state) {
     return outputRunning;
 }
 
-} // namespace cirrus::platform::hda
+}

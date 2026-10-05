@@ -7,18 +7,15 @@
 
 namespace cirrus::firmware::wmfw {
 
-// Maximum number of bus transactions batched into a single region upload plan
 constexpr size_t kMaxUploadTransactions = 1024;
 #define MAX_UPLOAD_TRANSACTIONS 1024
 
-// Bus transfer constraints (payload chunk size, register and payload alignment)
 struct UploadPolicy {
     uint32_t maxPayloadBytes;
     bool alignRegister;
     bool alignPayload;
 };
 
-// Single hardware write transaction dispatched over physical transport
 struct UploadTransaction {
     uint32_t dspRegister;
     uint32_t firmwareAddress;
@@ -27,7 +24,6 @@ struct UploadTransaction {
     const uint8_t* payload;
 };
 
-// Staged sequence of bus transactions required to flash a firmware memory region
 struct UploadPlan {
     RegionType regionType;
     uint32_t regionIndex;
@@ -37,7 +33,6 @@ struct UploadPlan {
     uint32_t planCrc;
 };
 
-// Telemetry recording bus timing and retry counters during firmware upload
 struct UploadStats {
     uint32_t writeMs;
     uint32_t readbackMs;
@@ -46,9 +41,8 @@ struct UploadStats {
     uint32_t retries;
 };
 
-} // namespace cirrus::firmware::wmfw
+}
 
-// Global aliases for legacy compatibility
 using UploadPolicy = cirrus::firmware::wmfw::UploadPolicy;
 using UploadTransaction = cirrus::firmware::wmfw::UploadTransaction;
 using UploadPlan = cirrus::firmware::wmfw::UploadPlan;

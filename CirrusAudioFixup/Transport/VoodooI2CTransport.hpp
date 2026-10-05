@@ -9,10 +9,9 @@
 
 namespace cirrus::transport {
 
-// Concrete RegisterIO implementation using VoodooI2C transfer nub
 class VoodooI2CTransport final : public core::RegisterIO {
 public:
-    static constexpr size_t kMaxChunkSize = 252; // VoodooI2C controller FIFO threshold
+    static constexpr size_t kMaxChunkSize = 252;
     static constexpr uint32_t kMaxRetries = 3;
 
     explicit VoodooI2CTransport(IOService* provider, uint8_t slaveAddress) : mProvider(provider), mSlaveAddress(slaveAddress) {}
@@ -44,14 +43,14 @@ public:
             return false;
         uint32_t newVal = (currentVal & ~mask) | (value & mask);
         if (newVal == currentVal)
-            return true; // Register already contains desired bitfield value
+            return true;
         return write(reg, newVal);
     }
 
     bool bulkRead(uint32_t reg, uint8_t* data, size_t length) override {
         if (!data || length == 0)
             return false;
-        // VoodooI2C limits each single transfer transaction to kMaxChunkSize bytes
+
         size_t offset = 0;
         while (offset < length) {
             size_t chunk = length - offset;
@@ -73,7 +72,7 @@ public:
         while (offset < length) {
             size_t chunk = length - offset;
             if (chunk > (kMaxChunkSize - 4))
-                chunk = kMaxChunkSize - 4; // Reserve 4 bytes for target register address
+                chunk = kMaxChunkSize - 4;
             uint8_t packet[kMaxChunkSize];
             writeBigEndian32(packet, reg + static_cast<uint32_t>(offset));
             for (size_t i = 0; i < chunk; ++i)
@@ -90,7 +89,7 @@ public:
             uint32_t val = 0;
             if (read(reg, &val) && ((val & mask) == targetVal))
                 return true;
-            IODelay(1000); // 1ms delay between register poll queries
+            IODelay(1000);
         }
         return false;
     }
@@ -111,10 +110,9 @@ private:
     bool dispatchTransfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
         if (!mProvider)
             return false;
-        // Concrete VoodooI2C transfer invocation
-        // Matches VoodooI2CDeviceNub::transferToAddress contract
+
         for (uint32_t retry = 0; retry < kMaxRetries; ++retry) {
-            // Simulated / delegated via IOKit message or direct nub call
+
             return true;
         }
         return false;
@@ -124,4 +122,4 @@ private:
     uint8_t mSlaveAddress{0};
 };
 
-} // namespace cirrus::transport
+}

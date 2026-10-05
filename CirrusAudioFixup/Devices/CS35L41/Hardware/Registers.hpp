@@ -5,28 +5,20 @@
 
 namespace cirrus::devices::cs35l41::registers {
 
-// ==============================================================================
-// 1. Hardware Register Addresses (kReg*)
-// ==============================================================================
-
-// Identification and Silicon Info
 constexpr uint32_t kRegDeviceId = 0x00000000;
 constexpr uint32_t kRegRevisionId = 0x00000004;
 constexpr uint32_t kRegFabricationId = 0x00000008;
 constexpr uint32_t kRegOtpId = 0x00000010;
 
-// Power Management and Output Control
 constexpr uint32_t kRegPowerControl1 = 0x00002014;
 constexpr uint32_t kRegPowerControl2 = 0x00002018;
 constexpr uint32_t kRegPowerControl3 = 0x0000201C;
 constexpr uint32_t kRegAmpOutputMute = 0x00002024;
 constexpr uint32_t kRegPowerManagementStatus = 0x00002908;
 
-// Software Reset and Engineering Test Keys
 constexpr uint32_t kRegSoftwareReset = 0x00000000;
 constexpr uint32_t kRegTestKeyControl = 0x00000040;
 
-// Interrupt Status, Raw Status, and Mask Registers
 constexpr uint32_t kRegIrq1Status1 = 0x00010010;
 constexpr uint32_t kRegIrq1Status2 = 0x00010014;
 constexpr uint32_t kRegIrq1Status3 = 0x00010018;
@@ -43,12 +35,10 @@ constexpr uint32_t kRegIrq2Mask2 = 0x00010914;
 constexpr uint32_t kRegIrq2Mask3 = 0x00010918;
 constexpr uint32_t kRegIrq2Mask4 = 0x0001091C;
 
-// Clocking and PLL
 constexpr uint32_t kRegPllClockControl = 0x00002C04;
 constexpr uint32_t kRegDspClockControl = 0x00002C08;
 constexpr uint32_t kRegGlobalClockControl = 0x00002C0C;
 
-// Audio Serial Port (ASP)
 constexpr uint32_t kRegSerialPortRateControl = 0x00004804;
 constexpr uint32_t kRegSerialPortFormat = 0x00004808;
 constexpr uint32_t kRegSerialPortFrameTxSlot = 0x00004810;
@@ -69,16 +59,13 @@ constexpr uint32_t kRegDsp1Rx6Source = 0x00004C54;
 constexpr uint32_t kRegSerialPortHighImpedanceControl = 0x0000480C;
 constexpr uint32_t kRegSerialPortEnables = 0x00004800;
 
-// Volume and Gain Control
 constexpr uint32_t kRegAmplifierDigitalVolumeControl = 0x00006000;
 constexpr uint32_t kRegAmplifierGainControl = 0x00006C04;
 
-// GPIO Configuration
 constexpr uint32_t kRegGpio1Control1 = 0x00011008;
 constexpr uint32_t kRegGpio2Control1 = 0x0001100C;
 constexpr uint32_t kRegGpioPadControl = 0x0000242C;
 
-// DSP Sample Rates and Decimators
 constexpr uint32_t kRegDsp1Rx1Rate = 0x02B80080;
 constexpr uint32_t kRegDsp1Rx2Rate = 0x02B80088;
 constexpr uint32_t kRegDsp1Rx3Rate = 0x02B80090;
@@ -96,21 +83,18 @@ constexpr uint32_t kRegDsp1Tx6Rate = 0x02B802A8;
 constexpr uint32_t kRegDsp1Tx7Rate = 0x02B802B0;
 constexpr uint32_t kRegDsp1Tx8Rate = 0x02B802B8;
 
-// DSP Core Control and Identification
 constexpr uint32_t kRegDsp1CcmCoreControl = 0x02BC1000;
 constexpr uint32_t kRegDsp1CoreSoftReset = 0x02B80010;
 constexpr uint32_t kRegDsp1SystemId = 0x025E0000;
 constexpr uint32_t kRegDsp1SystemVersion = 0x025E0004;
 constexpr uint32_t kRegDsp1SystemCoreId = 0x025E0008;
 
-// DSP Mailbox Interface Registers
 constexpr uint32_t kRegDspMailbox1 = 0x00013000;
 constexpr uint32_t kRegDspMailbox2 = 0x00013004;
 constexpr uint32_t kRegDspMbox3 = 0x00013008;
 constexpr uint32_t kRegDspMbox4 = 0x0001300C;
 constexpr uint32_t kRegDspVirtual1Mailbox1 = 0x00013020;
 
-// Halo MPU Access Control Registers
 constexpr uint32_t kRegDsp1MpuLockConfig = 0x02BC3140;
 constexpr uint32_t kRegDsp1MpuXmAccess0 = 0x02BC3000;
 constexpr uint32_t kRegDsp1MpuYmAccess0 = 0x02BC3004;
@@ -133,39 +117,26 @@ constexpr uint32_t kRegDsp1MpuWndwAccess3 = 0x02BC3050;
 constexpr uint32_t kRegDsp1MpuXregAccess3 = 0x02BC3054;
 constexpr uint32_t kRegDsp1MpuYregAccess3 = 0x02BC305C;
 
-// ==============================================================================
-// 2. Hardware Values and Bit Masks (kVal*, kMask*, kCmd*, kStatus*)
-// ==============================================================================
-
-// Hardware Identification Values
 constexpr uint32_t kValDeviceId = 0x00035A40;
 constexpr uint32_t kValSoftwareReset = 0x00005A00;
 constexpr uint32_t kValHaloCoreEnable = 0x00000001;
 constexpr uint32_t kValHaloCoreReset = 0x00000200;
 
-// Bit Masks (applied to specific registers)
-constexpr uint32_t kMaskOtpBootDone = 0x00000002;     // IRQ1_STATUS_4 bit 1
-constexpr uint32_t kMaskOtpBootError = 0x80000000;    // IRQ1_STATUS_3 bit 31
-constexpr uint32_t kMaskBoostEnable = 0x00000030;     // PWR_CTRL_1 bits 4..5
-constexpr uint32_t kMaskProtectionFault = 0x800281C0; // IRQ1_STATUS_1 protection faults
+constexpr uint32_t kMaskOtpBootDone = 0x00000002;
+constexpr uint32_t kMaskOtpBootError = 0x80000000;
+constexpr uint32_t kMaskBoostEnable = 0x00000030;
+constexpr uint32_t kMaskProtectionFault = 0x800281C0;
 
-// Mailbox Command Words
 constexpr uint32_t kCmdMailboxResume = 2;
 constexpr uint32_t kCmdMailboxPause = 1;
 constexpr uint32_t kCmdMailboxSpeakerOutputEnable = 7;
 
-// Mailbox Status Codes
 constexpr uint32_t kStatusMailboxRunning = 0;
 constexpr uint32_t kStatusMailboxPaused = 1;
 constexpr uint32_t kStatusMailboxReadyForReinitialization = 2;
 
-// I2C 7-bit Slave Addresses
 constexpr uint8_t kI2cAddressLeft = 0x40;
 constexpr uint8_t kI2cAddressRight = 0x41;
-
-// ==============================================================================
-// 3. Backward-Compatible Register Aliases
-// ==============================================================================
 
 constexpr uint32_t kDeviceIdRegister = kRegDeviceId;
 constexpr uint32_t kRevisionIdRegister = kRegRevisionId;
@@ -303,7 +274,7 @@ constexpr uint32_t kDsp1MpuWndwAccess3 = kRegDsp1MpuWndwAccess3;
 constexpr uint32_t kDsp1MpuXregAccess3 = kRegDsp1MpuXregAccess3;
 constexpr uint32_t kDsp1MpuYregAccess3 = kRegDsp1MpuYregAccess3;
 
-} // namespace cirrus::devices::cs35l41::registers
+}
 
 struct RegisterDesc {
     uint32_t addr;

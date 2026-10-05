@@ -5,7 +5,6 @@
 
 namespace cirrus::core {
 
-// Common PCM sample rates supported across Cirrus smart amplifiers
 enum class SampleRate : uint32_t {
     Rate44k1 = 44100,
     Rate48k0 = 48000,
@@ -15,7 +14,6 @@ enum class SampleRate : uint32_t {
     Rate192k0 = 192000,
 };
 
-// PCM bit resolution per audio slot
 enum class BitDepth : uint8_t {
     Bits16 = 16,
     Bits20 = 20,
@@ -23,7 +21,6 @@ enum class BitDepth : uint8_t {
     Bits32 = 32,
 };
 
-// Logical speaker channel mapping across multi-amplifier configurations
 enum class AudioChannel : uint8_t {
     Left = 0,
     Right = 1,
@@ -32,7 +29,6 @@ enum class AudioChannel : uint8_t {
     MaxChannels = 4,
 };
 
-// Power states for amplifier hardware lifecycle
 enum class DevicePowerState : uint8_t {
     Off = 0,
     Sleep,
@@ -40,14 +36,12 @@ enum class DevicePowerState : uint8_t {
     Active,
 };
 
-// Supported physical bus interconnect types
 enum class BusTransportType : uint8_t {
     I2C = 0,
     SPI,
     SoundWire,
 };
 
-// Cirrus Logic boosted smart amplifier silicon family
 enum class CodecModel : uint16_t {
     Unknown = 0,
     CS35L41 = 0x3541,
@@ -56,4 +50,4 @@ enum class CodecModel : uint16_t {
     CS35L56 = 0x3556,
 };
 
-} // namespace cirrus::core
+}

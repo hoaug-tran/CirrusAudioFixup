@@ -5,7 +5,6 @@
 
 #include <stdint.h>
 
-// Bitfield descriptor mapping packed OTP calibration bits to target registers
 struct OtpPackedElement {
     uint32_t reg;
     uint8_t shift;
@@ -56,7 +55,6 @@ static const OtpPackedElement kOtpMap2[] = {
     {0x00017040, 16, 8},  {0x00017040, 24, 8},  {0x00017044, 0, 24},
 };
 
-// Maps chip OTP revision ID to corresponding packed field map and offsets
 struct OtpMapElement {
     uint32_t id;
     const OtpPackedElement* map;

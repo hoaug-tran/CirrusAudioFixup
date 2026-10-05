@@ -52,7 +52,6 @@ struct wmfw_region {
 #define MAX_FIRMWARE_REGIONS 32
 #define MAX_MAPPED_REGIONS 192
 
-// Memory regions and payload types defined by Cirrus WMFW specification
 enum class RegionType : uint32_t {
     PmPacked = 0x10,
     XmPacked = 0x11,
@@ -77,7 +76,6 @@ enum class RegionType : uint32_t {
     UNKNOWN = Unknown,
 };
 
-// Result codes returned when mapping packed DSP addresses to bus registers
 enum class MappingStatus {
     Ok = 0,
     UnsupportedRegion,
@@ -92,7 +90,6 @@ struct FirmwareSpan {
     uint32_t size;
 };
 
-// Contiguous memory section within a WMFW file
 struct FirmwareRegion {
     RegionType regionType;
     uint32_t baseWordOffset;
@@ -100,7 +97,6 @@ struct FirmwareRegion {
     uint32_t length;
 };
 
-// Halo DSP algorithm metadata (ID, version, and memory window base offsets)
 struct AlgorithmInfo {
     uint32_t id;
     uint32_t version;
@@ -110,7 +106,6 @@ struct AlgorithmInfo {
     uint32_t size;
 };
 
-// Speaker protection or tuning coefficient block associated with an algorithm ID
 struct CoefficientBlock {
     uint32_t id;
     uint32_t version;
@@ -121,7 +116,6 @@ struct CoefficientBlock {
     const uint8_t* data;
 };
 
-// Cirrus mixer control descriptor extracted from WMFW algorithm block
 struct WMFWControl {
     uint16_t offset;
     uint16_t type;
@@ -144,7 +138,6 @@ struct WMFWControlRef {
     const WMFWControl* control;
 };
 
-// Parsed representation of WMFW firmware and tuning coefficients
 struct FirmwareImage {
     union {
         uint32_t magic;
@@ -260,7 +253,6 @@ struct FirmwareImage {
     uint32_t fingerprint;
 };
 
-// Firmware memory segment translated to a CS35L41 hardware bus register address
 struct MappedRegion {
     RegionType regionType;
     uint32_t firmwareAddress;
@@ -286,7 +278,7 @@ inline HaloMemoryPointer decodePointer(uint32_t value) {
 
 class CirrusFirmwareMapper {
 public:
-    // Maps Halo DSP packed memory banks (PM stride 5, XM/YM stride 3) to 32-bit register addresses
+
     static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t& regAddress) {
         uint64_t base = 0, stride = 0;
         switch (type) {
@@ -450,7 +442,7 @@ public:
 
 class CirrusFirmwareParser {
 public:
-    // Standard IEEE 802.3 CRC-32 used for firmware image and coefficient validation
+
     static uint32_t calculateCrc32(const uint8_t* data, size_t length) {
         uint32_t crc = 0xFFFFFFFF;
         for (size_t i = 0; i < length; i++) {
@@ -464,7 +456,6 @@ public:
 
     static inline uint32_t calculate_crc32(const uint8_t* data, size_t length) { return calculateCrc32(data, length); }
 
-    // Cirrus WMFW v1 header check (magic "WMFW", 40-byte header, core type 4 = Halo, format ver 3)
     static bool validateWMFW(const uint8_t* data, size_t size) {
         if (!data || size < 40 || size > 0xFFFFFFFFULL || memcmp(data, "WMFW", 4))
             return false;
@@ -490,7 +481,7 @@ public:
     }
     static inline uint16_t readLE16(const uint8_t* p) { return p[0] | (p[1] << 8); }
 
-    static inline uint32_t alignStringLen(uint32_t str_len, uint32_t field_bytes) { return ((str_len + field_bytes) + 3) & ~0x03; }
+    static inline uint32_t alignStringLen(uint32_t strLen, uint32_t fieldBytes) { return ((strLen + fieldBytes) + 3) & ~0x03; }
 
     static uint32_t regionToReg(uint16_t type, uint32_t dspWord) {
         uint32_t reg = 0;

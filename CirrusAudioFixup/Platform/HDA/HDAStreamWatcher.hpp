@@ -8,26 +8,24 @@
 
 namespace cirrus::platform::hda {
 
-// Intel High Definition Audio (HDA) MMIO stream descriptor register offsets
 namespace registers {
 constexpr uint32_t kStreamDescriptorBase = 0x80;
 constexpr uint32_t kStreamDescriptorStride = 0x20;
 constexpr uint32_t kStreamControl = 0x00;
 constexpr uint32_t kStreamStatus = 0x03;
 constexpr uint32_t kStreamFormat = 0x12;
-} // namespace registers
+}
 
-// Snoops Intel/AMD High Definition Audio controller MMIO registers to align stream rates with smart amps
 class HDAStreamWatcher {
 public:
     static bool isFormatSupported(uint16_t format) {
         if (!format)
             return false;
-        // Non-PCM formats (AC-3, DTS) are not supported on direct amplifier ASP ports
+
         if (format & 0x8000)
             return false;
         uint8_t bits = (format >> 4) & 0x07;
-        // Supported word lengths: 16-bit, 20-bit, 24-bit, 32-bit
+
         if (bits > 4)
             return false;
         return true;
@@ -59,4 +57,4 @@ public:
     }
 };
 
-} // namespace cirrus::platform::hda
+}

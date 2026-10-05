@@ -8,7 +8,6 @@
 
 namespace cirrus::diagnostics {
 
-// Circular diagnostic buffer capturing real-time register transactions and bus telemetry
 class DiagnosticTracer {
 public:
     static constexpr size_t kDefaultBufferSize = 1024;
@@ -59,4 +58,4 @@ public:
     }
 };
 
-} // namespace cirrus::diagnostics
+}

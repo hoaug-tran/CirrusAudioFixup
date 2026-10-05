@@ -4,17 +4,14 @@
 #include "Firmware/WMFW/WMFWParser.hpp"
 #include "Support/Logging.hpp"
 
-// Firmware upload chunk planner, verification, and hardware transaction scheduler
 #define MAX_UPLOAD_TRANSACTIONS 1024
 
-// Bus transfer constraints (payload chunk size, register and payload alignment)
 struct UploadPolicy {
     uint32_t maxPayloadBytes;
     bool alignRegister;
     bool alignPayload;
 };
 
-// Single hardware write transaction dispatched over VoodooI2C
 struct UploadTransaction {
     uint32_t dspRegister;
     uint32_t firmwareAddress;
@@ -23,7 +20,6 @@ struct UploadTransaction {
     const uint8_t* payload;
 };
 
-// Staged sequence of bus transactions required to flash a firmware memory region
 struct UploadPlan {
     RegionType regionType;
     uint32_t regionIndex;
@@ -33,7 +29,6 @@ struct UploadPlan {
     uint32_t planCrc;
 };
 
-// Telemetry recording bus timing and retry counters during firmware upload
 struct UploadStats {
     uint32_t writeMs;
     uint32_t readbackMs;
@@ -44,7 +39,7 @@ struct UploadStats {
 
 class CirrusFirmwareUploadPlanner {
 public:
-    // Splits a memory region into bus transactions capped at 252 bytes (VoodooI2C FIFO limit)
+
     static bool generatePlan(uint32_t regionIndex, const MappedRegion& region, const UploadPolicy& policy, UploadPlan& outPlan) {
         outPlan.regionType = region.regionType;
         outPlan.regionIndex = regionIndex;
@@ -240,7 +235,7 @@ public:
             return false;
         }
 
-        auto to_ms = [&](uint64_t diff) -> uint32_t {
+        auto toMs = [&](uint64_t diff) -> uint32_t {
             uint64_t nsecs = 0;
             absolutetime_to_nanoseconds(diff, &nsecs);
             return (uint32_t)(nsecs / 1000000);
@@ -272,7 +267,7 @@ public:
         };
 
         uint64_t t_total_start = mach_absolute_time();
-        uint32_t acc_write_ms = 0, acc_rb_ms = 0, acc_crc_ms = 0, acc_retries = 0;
+        uint32_t accWriteMs = 0, accRbMs = 0, accCrcMs = 0, accRetries = 0;
 
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction& tx = plan.transactions[i];
@@ -290,15 +285,15 @@ public:
                 }
                 if (attempt < 2) {
                     CIRRUS_LOG("Amp %s:   WRITE    : FAIL (Attempt 1/2) retrying...", deviceName);
-                    acc_retries++;
+                    accRetries++;
                     IOSleep(10);
                 }
             }
-            uint32_t write_ms = to_ms(mach_absolute_time() - t0);
-            acc_write_ms += write_ms;
+            uint32_t writeMs = toMs(mach_absolute_time() - t0);
+            accWriteMs += writeMs;
 
             if (!writeOk) {
-                CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, %d ms)", deviceName, write_ms);
+                CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, %d ms)", deviceName, writeMs);
                 CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
@@ -309,7 +304,7 @@ public:
                     IOFreeData(verifyBuffer, totalSize);
                 return false;
             }
-            CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", deviceName, write_ms);
+            CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", deviceName, writeMs);
 
             if (isPM) {
                 CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
@@ -321,11 +316,11 @@ public:
             t0 = mach_absolute_time();
             uint8_t* rbSlot = verifyBuffer + tx.payloadOffset;
             bool readOk = io.bulkRead(tx.dspRegister, rbSlot, tx.size);
-            uint32_t rb_ms = to_ms(mach_absolute_time() - t0);
-            acc_rb_ms += rb_ms;
+            uint32_t rbMs = toMs(mach_absolute_time() - t0);
+            accRbMs += rbMs;
 
             if (!readOk) {
-                CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", deviceName, rb_ms);
+                CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", deviceName, rbMs);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
@@ -335,7 +330,7 @@ public:
                     IOFreeData(verifyBuffer, totalSize);
                 return false;
             }
-            CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", deviceName, rb_ms);
+            CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", deviceName, rbMs);
 
             t0 = mach_absolute_time();
             uint32_t payCrc = 0xFFFFFFFF, rbCrc = 0xFFFFFFFF;
@@ -350,16 +345,16 @@ public:
             }
             payCrc = ~payCrc;
             rbCrc = ~rbCrc;
-            uint32_t crc_ms = to_ms(mach_absolute_time() - t0);
-            acc_crc_ms += crc_ms;
+            uint32_t crcMs = toMs(mach_absolute_time() - t0);
+            accCrcMs += crcMs;
 
             if (payCrc != rbCrc || memcmp(paySlice, rbSlot, tx.size)) {
-                CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]", deviceName, crc_ms, payCrc, rbCrc);
+                CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]", deviceName, crcMs, payCrc, rbCrc);
 
-                uint32_t dump_len = min((uint32_t)tx.size, (uint32_t)16);
+                uint32_t dumpLen = min((uint32_t)tx.size, (uint32_t)16);
                 char payHex[64] = {0};
                 char rbHex[64] = {0};
-                for (uint32_t d = 0; d < dump_len; d++) {
+                for (uint32_t d = 0; d < dumpLen; d++) {
                     snprintf(payHex + d * 3, sizeof(payHex) - d * 3, "%02X ", paySlice[d]);
                     snprintf(rbHex + d * 3, sizeof(rbHex) - d * 3, "%02X ", rbSlot[d]);
                 }
@@ -381,20 +376,20 @@ public:
 
                 return false;
             }
-            CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", deviceName, crc_ms, payCrc);
+            CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", deviceName, crcMs, payCrc);
             CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", deviceName);
         }
 
-        uint32_t total_ms = to_ms(mach_absolute_time() - t_total_start);
+        uint32_t totalMs = toMs(mach_absolute_time() - t_total_start);
         CIRRUS_LOG("Amp %s: Upload Complete | Tx=%d PASS, Write=%d ms, RB=%d ms, CRC=%d ms, Total=%d ms", deviceName, plan.transactionCount,
-                   acc_write_ms, acc_rb_ms, acc_crc_ms, total_ms);
+                   accWriteMs, accRbMs, accCrcMs, totalMs);
 
         if (outStats) {
-            outStats->writeMs = acc_write_ms;
-            outStats->readbackMs = acc_rb_ms;
-            outStats->crcMs = acc_crc_ms;
-            outStats->totalMs = total_ms;
-            outStats->retries = acc_retries;
+            outStats->writeMs = accWriteMs;
+            outStats->readbackMs = accRbMs;
+            outStats->crcMs = accCrcMs;
+            outStats->totalMs = totalMs;
+            outStats->retries = accRetries;
         }
 
         if (backupBuffer)
@@ -491,7 +486,7 @@ public:
 
             uint64_t nsecs = 0;
             absolutetime_to_nanoseconds(t1 - t0, &nsecs);
-            uint32_t elapsed_ms = (uint32_t)(nsecs / 1000000);
+            uint32_t elapsedMs = (uint32_t)(nsecs / 1000000);
 
             RegionResult& res = session.results[session.regionCount++];
             res.regionIndex = i;
@@ -500,7 +495,7 @@ public:
             res.transactionCount = plan->transactionCount;
             res.success = ok;
             res.planCrc = plan->planCrc;
-            res.elapsedMs = elapsed_ms;
+            res.elapsedMs = elapsedMs;
 
             IOFree(plan, sizeof(UploadPlan));
 

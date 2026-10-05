@@ -123,22 +123,6 @@ bool CirrusAudioFixup::start(IOService* provider) {
     logProviderInfo(provider);
     dumpProviderProperties(provider);
 
-    if (bootArgEnabled("-cirrusro")) {
-        if (!setupProbeTimer()) {
-            mProvider = nullptr;
-            super::stop(provider);
-            return false;
-        }
-        uint32_t delayMs = 100;
-        PE_parse_boot_argn("-cirrusdelay", &delayMs, sizeof(delayMs));
-        scheduleReadOnlyProbe(delayMs);
-        if (!setupPowerManagement(provider)) {
-            stop(provider);
-            return false;
-        }
-        registerService();
-        return true;
-    }
 
     IOMemoryDescriptor* bmd = nullptr;
     IOService* gpioOwner = nullptr;

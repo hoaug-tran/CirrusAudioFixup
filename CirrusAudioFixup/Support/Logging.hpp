@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) && (defined(KERNEL) || defined(_KERNEL) || defined(__KERNEL__))
 #include <IOKit/IOLib.h>
 #ifndef IOMallocData
 #define IOMallocData(size) IOMalloc(size)

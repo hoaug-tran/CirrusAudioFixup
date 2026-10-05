@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) && (defined(KERNEL) || defined(_KERNEL) || defined(__KERNEL__))
 #include <IOKit/IOTypes.h>
 #else
 using IOReturn = int;

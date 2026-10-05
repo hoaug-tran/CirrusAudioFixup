@@ -7,7 +7,7 @@
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
-#if defined(__APPLE__)
+#if defined(__APPLE__) && (defined(KERNEL) || defined(_KERNEL) || defined(__KERNEL__))
 #include <IOKit/IOLib.h>
 #else
 inline void IODelay(unsigned) {}

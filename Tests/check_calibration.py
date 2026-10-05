@@ -1,14 +1,16 @@
+import re
 from pathlib import Path
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
-start = SOURCE.index('struct cs35l41_amp_cal_data {')
-end = SOURCE.index('\nvoid CirrusAudioFixup::scheduleReadOnlyProbe', start)
+start = re.search(r'struct\s+cs35l41_amp_cal_data\s*\{', SOURCE).start()
+end = start + re.search(r'\nvoid\s+CirrusAudioFixup::scheduleReadOnlyProbe', SOURCE[start:]).start()
 calibration = SOURCE[start:end]
-gate_start = SOURCE.index('    if (!applyCalibration(amp, image))')
-gate_end = SOURCE.index('    bool booted = bringupDSP(amp);', gate_start) + len('    bool booted = bringupDSP(amp);')
+gate_start = re.search(r'if\s*\(!applyCalibration\(amp,\s*image\)\)', SOURCE).start()
+m_boot = re.search(r'bool\s+booted\s*=\s*bringupDSP\(amp\);', SOURCE[gate_start:])
+gate_end = gate_start + m_boot.end()
 gate = SOURCE[gate_start:gate_end]
 preamble = r'''
 #include <cassert>

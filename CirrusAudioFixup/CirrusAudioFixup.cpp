@@ -4083,7 +4083,7 @@ void CirrusAudioFixup::logPowerSnapshot(AmplifierState& amp) {
         CIRRUS_ERR("global enable unexpectedly active while idle on %s", amp.name);
         pass = false;
     }
-    if ((pwr_ctrl2 & 1) != 0) {
+    if ((pwrCtrl2 & 1) != 0) {
         CIRRUS_ERR("amplifier stage unexpectedly enabled while idle on %s", amp.name);
         pass = false;
     }

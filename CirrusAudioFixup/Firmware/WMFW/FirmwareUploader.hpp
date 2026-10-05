@@ -351,7 +351,7 @@ public:
             if (payCrc != rbCrc || memcmp(paySlice, rbSlot, tx.size)) {
                 CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]", deviceName, crcMs, payCrc, rbCrc);
 
-                uint32_t dumpLen = min((uint32_t)tx.size, (uint32_t)16);
+                uint32_t dumpLen = (tx.size < 16) ? (uint32_t)tx.size : 16;
                 char payHex[64] = {0};
                 char rbHex[64] = {0};
                 for (uint32_t d = 0; d < dumpLen; d++) {
@@ -503,7 +503,7 @@ public:
                 session.passCount++;
                 session.totalBytes += res.bytes;
                 session.totalTransactions += res.transactionCount;
-                CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", deviceName, i, rname, region.dspRegister, elapsed_ms);
+                CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", deviceName, i, rname, region.dspRegister, elapsedMs);
             } else {
                 CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", deviceName, i, rname);
                 break;

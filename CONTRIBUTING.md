@@ -1,40 +1,70 @@
-# Contributing
+# Contributing to CirrusAudioFixup
 
-Thanks for helping with CirrusAudioFixup.
+Thank you for contributing to CirrusAudioFixup. As a kernel-level audio extension dealing directly with hardware power rails and amplifier DSPs, reliability and speaker safety are our top priorities.
 
-This is kernel and amplifier code. Small, proven changes are better than broad rewrites.
+---
 
-## Ground rules
+## General Principles
 
 > [!IMPORTANT]
-> Boot safety comes first. Do not broaden `Info.plist` matching unless you have IORegistry proof and a rollback plan.
+> **Boot & Hardware Safety First:**
+> - Never submit unverified firmware, aggressive gain boosts, or experimental voltage changes without real hardware validation.
+> - Do not broaden `Info.plist` matches or add placeholder entries without verified IORegistry dumps and an emergency rollback plan.
+> - Keep pull requests focused on a single feature, bugfix, or hardware target.
 
-> [!WARNING]
-> Speaker safety matters. Do not add firmware, tuning, gain, boost, or power changes without hardware evidence.
+---
 
-## What a good change looks like
+## Adding Support for New Hardware
 
-A good pull request is:
+When submitting support for a new laptop model or amplifier configuration, please open a PR or Issue with the following details:
 
-- small enough to review,
-- scoped to one problem,
-- backed by logs or tests,
-- clear about hardware used,
-- safe when firmware or playback fails.
+1. **Platform Details**: Laptop model name, CPU platform (e.g., AMD Cezanne / Intel Tiger Lake).
+2. **Audio Hardware Identifiers**:
+   - Audio Codec ID & Subsystem ID (SSID, e.g., `17AA:3847`).
+   - ACPI Device Name under VoodooI2C (e.g., `CLSA0100` or `CSC3551`).
+   - Amplifier model (e.g., Cirrus Logic CS35L41) and I2C target addresses (e.g., `0x40`, `0x41`).
+   - AppleALC layout-id and tested audio path (Converter NID to Speaker Pin NID).
+3. **Dumps & Evidence**:
+   - ACPI table dump (`DSDT` / `SSDT`).
+   - Linux ALSA codec dump (`/proc/asound/card*/codec#*`).
+   - IORegistry dump containing active `Cirrus_*` properties.
+   - Source of firmware (`.wmfw`) and calibration binaries (`.bin`) from upstream `linux-firmware`.
 
-Avoid:
+---
 
-- fake hardware support,
-- placeholder firmware rows,
-- broad ACPI matches,
-- machine-specific names in generic code,
-- cleanup mixed with behavior changes,
-- large rewrites without test value.
+## Coding Standards & Kernel Constraints
 
-## Required checks
+### C++ & XNU Kernel Environment
+- **Standard**: C++17.
+- **Constraints**:
+  - No C++ exceptions (`-fno-exceptions`).
+  - No RTTI (`-fno-rtti`).
+  - No STL containers in kernel code (`std::vector`, `std::map`, etc. are forbidden in kernel space; use IOKit collections or fixed-size structures).
+  - Use `#pragma once` for all internal header files.
+  - No raw `new` / `delete` outside of IOKit memory allocation helpers (`IOLockAlloc`, `IOMalloc`, `IOFree`).
 
-Run these before opening a PR:
+### Code Style & Naming Conventions
+| Element | Convention | Example |
+| :--- | :--- | :--- |
+| **Classes / Structs** | `PascalCase` | `AmplifierState`, `CS35L41Device` |
+| **Methods / Functions** | `lowerCamelCase` | `synchronizeHdaStream()`, `stopPlayback()` |
+| **Member Variables** | `m` + `PascalCase` | `mPowerAvailable`, `mProbeTimer` |
+| **Constants / Enums** | `k` + `PascalCase` | `kMaxAmps`, `kRegPowerControl1` |
+| **Namespaces** | `lowercase` | `cirrus::devices::cs35l41` |
+| **Macros** | `UPPER_SNAKE_CASE` | `CIRRUS_LOG`, `CIRRUS_ERR` |
 
+### Documentation & Comments
+- Write clean, expressive, and self-documenting code.
+- Use comments where they provide real engineering value: explaining non-obvious hardware quirks, silicon errata workarounds, timing constraints, or datasheet references.
+- Avoid leaving dead, commented-out code blocks or trivial comments that merely repeat what the code does.
+
+---
+
+## Validation & Required Checks
+
+Before submitting a pull request, ensure all host-side tests and the release build pass cleanly:
+
+### 1. Run Host Python Test Suite
 ```bash
 python Tests/reproduce_host.py
 python Tests/check_registers.py
@@ -45,128 +75,23 @@ python Tests/check_calibration.py
 python Tests/check_bringup.py
 python Tests/check_runtime.py
 ```
+> [!NOTE]
+> Tests include intentional fault-injection sweeps. Intermittent `ERROR` log messages in the test output are expected; the suite must finish with exit code `0` and print `PASS`.
 
-On macOS, also run:
-
+### 2. Build on macOS
 ```bash
-xcodebuild -project CirrusAudioFixup.xcodeproj -target CirrusAudioFixup -configuration Release -sdk macosx CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project CirrusAudioFixup.xcodeproj \
+           -target CirrusAudioFixup \
+           -configuration Release \
+           -sdk macosx \
+           CODE_SIGNING_REQUIRED=NO \
+           CODE_SIGN_IDENTITY="" \
+           CODE_SIGNING_ALLOWED=NO build
 ```
 
-`ERROR` lines in host tests can be expected. These tests inject faults. The command must exit with code `0`.
+---
 
-## Hardware support checklist
+## License & Attribution
 
-For new laptop support, provide:
-
-- laptop model,
-- CPU platform,
-- HDA codec id and subsystem id,
-- ACPI device name under VoodooI2C,
-- amplifier model,
-- I2C addresses,
-- amplifier device id and revision id,
-- AppleALC layout id,
-- Linux codec dump if available,
-- IORegistry output with relevant `Cirrus_*` keys,
-- source of firmware and tuning files if adding resources.
-
-Do not map a new laptop to an existing tuning profile unless the hardware and acoustics are known to match.
-
-## Firmware rules
-
-Firmware resources are scoped per amplifier family.
-
-For CS35L41, use:
-
-```text
-CirrusAudioFixup/Devices/CS35L41/Resources/Firmware.hpp
-```
-
-Future amplifier families should use their own device folder and their own `Resources/Firmware.hpp`.
-
-Rules:
-
-- Use real `.wmfw` and `.bin` files only.
-- Keep table entries tied to real SSID and speaker id data.
-- Do not add dummy rows.
-- Do not mix firmware from another amplifier family.
-- Keep import changes reproducible with `Tools/import_firmware.py`.
-
-## Code style
-
-| Element | Style |
-| --- | --- |
-| Classes and structs | `PascalCase` |
-| Methods and functions | `lowerCamelCase` |
-| Local variables | `lowerCamelCase` |
-| Private members | `m` + `PascalCase` |
-| Constants | `kPascalCase` |
-| Namespaces | lowercase |
-| Macros | `CIRRUS_UPPER_SNAKE_CASE`, only when needed |
-
-Use hardware names exactly when they are part of the hardware identity:
-
-- `CS35L41`
-- `HDA`
-- `WMFW`
-- `OTP`
-
-Inside variable names, acronyms become one word:
-
-```cpp
-bootDsp
-hdaStreamActive
-i2cAddress
-gpioConfigured
-```
-
-## C++ and kext constraints
-
-- Use C++17.
-- No exceptions.
-- No RTTI.
-- No STL containers in kernel code.
-- No `new` or `delete` outside IOKit allocation helpers.
-- No dynamic global initialization with side effects.
-- Use `#pragma once` for internal headers.
-- Keep includes at the top of files.
-- Avoid `../` include paths.
-- Keep `CirrusAudioFixup` as the IOKit orchestration layer, not a register dump.
-
-## Registers and constants
-
-- Register addresses are `constexpr uint32_t`.
-- Keep register names close to upstream or datasheet names.
-- Prefer `cirrus::support::genMask`, `bit`, and `arraySize` over generic macros.
-- Renaming a register constant needs a test or clear proof that values stayed equal.
-
-## Comments
-
-Use comments only when they help preserve hardware knowledge:
-
-- quirks,
-- errata,
-- timing rules,
-- ordering rules,
-- upstream references,
-- non-obvious safety choices.
-
-Do not add comments that repeat what names already say. Do not leave commented-out code.
-
-## Pull request rules
-
-Before marking a PR ready:
-
-- Tests pass.
-- Build passes on macOS or CI.
-- Logs are attached for hardware changes.
-- Boot risk is explained.
-- Speaker safety risk is explained.
-- Rollback path is clear.
-- README or templates are updated if user-facing behavior changed.
-
-## License and attribution
-
-This project uses `GPL-2.0-only`.
-
-Keep attribution when porting behavior from Linux drivers such as `cs35l41-hda` and `cs_dsp`.
+- This project is licensed under **GPL-2.0-only**.
+- When adapting register sequences or driver logic from upstream Linux drivers (such as `cs35l41-hda`, `cs35l41-lib`, or `wm_adsp`), preserve upstream copyright notices and attribution.

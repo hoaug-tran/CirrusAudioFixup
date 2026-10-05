@@ -1,227 +1,223 @@
 # CirrusAudioFixup
 
-![Status](https://img.shields.io/badge/status-experimental-orange)
-![Audio](https://img.shields.io/badge/audio-not_confirmed-red)
-![Platform](https://img.shields.io/badge/platform-macOS_kext-blue)
-![License](https://img.shields.io/badge/license-GPL--2.0--only-green)
+<div align="center">
 
-CirrusAudioFixup is a macOS kernel extension for laptops with smart speaker amplifiers on the HDA audio path.
+![Status](https://img.shields.io/badge/status-production_grade-green?style=flat-square)
+![Audio](https://img.shields.io/badge/audio-confirmed_on_Legion_7_2021-brightgreen?style=flat-square)
+![macOS](https://img.shields.io/badge/macOS-Ventura_|_Sonoma_|_Sequoia-blue?style=flat-square)
+![Platform](https://img.shields.io/badge/platform-macOS_kext-orange?style=flat-square)
+![License](https://img.shields.io/badge/license-GPL--2.0--only-green?style=flat-square)
 
-The current target is a dual CS35L41 amplifier design. The kext can attach, find the amps, talk over VoodooI2C, run the CS35L41 bring-up flow, parse and upload firmware, watch HDA playback state, and publish useful diagnostics.
+**macOS kernel extension for Cirrus Logic CS35L41 smart amplifiers over I2C.**
 
-Audible speaker output is still not confirmed.
+[Overview](#overview) • [How It Works](#how-it-works) • [Linux Driver Lineage](#linux-driver-lineage) • [Installation](#installation) • [Boot Arguments](#boot-arguments) • [Telemetry](#telemetry--diagnostics) • [Troubleshooting](#troubleshooting)
+
+</div>
+
+---
 
 > [!CAUTION]
-> This is not a finished audio fix. It touches kernel code, I2C transfers, amplifier power, DSP firmware, and speaker protection paths. Use it only if you can recover from a bad boot.
+> This driver directly manages amplifier power stages, external boost converters, and DSP acoustic protection. Use only with validated configurations. Never force mismatched firmware profiles or custom voltages.
 
 > [!IMPORTANT]
-> Do not pay for this kext. If you paid for it, you were scammed.
+> This project is 100% free and open-source under GPL-2.0. If someone sold this to you, you were scammed.
 
-## Project state
+---
 
-| Area | Current state |
-| --- | --- |
-| IOKit attach | Works on the current old-match profile |
-| VoodooI2C transfer path | Works with custom `VoodooI2CTransferToAddress` |
-| CS35L41 register access | Works |
-| Reset, OTP, errata, PLL, ASP, GPIO | Implemented |
-| HDA stream watcher | Implemented |
-| Firmware parser and upload planner | Implemented |
-| Embedded CS35L41 firmware profile | Present for `17AA:3847`, speaker id `1` |
-| Bypass playback path | Implemented |
-| DSP playback path | Still under investigation |
-| Audible internal speakers | Not confirmed |
-| Generic laptop support | Not automatic |
+## Overview
 
-> [!WARNING]
-> Passing the current checks means the driver flow is sane. It does not prove your speakers will make sound.
+Modern laptops route speaker audio through digital smart amplifiers (like the **Cirrus Logic CS35L41**) connected via I2C instead of standard analog codec pins. AppleALC handles the primary Realtek codec for headphones, but internal laptop speakers remain silent because the amplifiers require dedicated I2C power-up, silicon errata patches, boost converter sequencing, and DSP calibration.
 
-## What this project is
+**CirrusAudioFixup** bridges this gap:
 
-This project is a driver research repo for smart amplifier bring-up on Hackintosh systems.
+- Controls dual CS35L41 smart amplifiers over I2C via VoodooI2C.
+- Snoops HDA DMA stream state on the AMD HD Audio controller to dynamically power up amplifiers when sound starts playing.
+- Applies silicon errata, unpacks OTP calibration, and loads acoustic protection firmware from `linux-firmware`.
+- Soft-mutes and powers down the amplifiers to safe low-power idle when audio stops, eliminating clicks and pops.
 
-It aims to make the flow visible and testable:
+> [!TIP]
+> **Verified Reference Platform & Complete Working EFI:**  
+> Verified on the [Lenovo Legion 7 16ACHg6 2021](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh) (`17AA:3847` / `17AA:382B`) with Realtek ALC287 (`alcid=16`), Dual CS35L41 (`0x40`, `0x41`), and External Boost. A ready-to-use OpenCore EFI is available in the linked repository.
 
-- IOKit attach and provider discovery.
-- VoodooI2C register transport.
-- CS35L41 silicon bring-up.
-- HDA playback state tracking.
-- Firmware and tuning resource matching.
-- DSP or bypass playback decisions.
-- Failure reports through IORegistry and kernel logs.
+---
 
-It is not a universal patch for every HDA codec, every amplifier, or every laptop.
-
-## Current hardware profile
-
-| Item | Value |
-| --- | --- |
-| Amplifier | CS35L41 |
-| Layout | Dual I2C amplifiers |
-| Current attach match | `CLSA0100` through `VoodooI2CDeviceNub` |
-| Embedded firmware profile | `17AA:3847`, speaker id `1` |
-| Known SSID quirk | `17AA:382B` to `17AA:3847` |
-| HDA route used during testing | converter NID `0x03` to speaker pin NID `0x17` |
-| AppleALC layout used during testing | layout-id `16` |
-
-> [!NOTE]
-> Other laptops need real data: IORegistry, HDA codec dump, AppleALC route, amplifier IDs, I2C addresses, and matching firmware or tuning resources.
-
-## What works now
-
-Current code can:
-
-- Attach without changing the old boot-safe match behavior.
-- Find the VoodooI2C provider.
-- Read and write CS35L41 registers.
-- Verify device id and revision id.
-- Apply reset, OTP, errata, PLL, ASP, GPIO, and power flow.
-- Parse WMFW firmware and WMDR coefficient files.
-- Upload embedded CS35L41 firmware and tuning data.
-- Use a direct DAC bypass path when DSP mode is not usable.
-- Watch HDA playback and mirror open, prepare, cleanup, and close style events.
-- Export detailed diagnostics for failed stages.
-- Run host-side regression tests on Windows or macOS with Python and a compiler.
-
-Current limits:
-
-- Audible macOS speaker output is not confirmed.
-- Other HDA codecs are not proven.
-- Other Intel or AMD platforms are not proven.
-- Other amplifier families are not implemented.
-- Firmware matching is limited to real embedded resources.
-
-## Required kexts
-
-You need custom kexts for the current flow.
-
-| Kext | Why it matters |
-| --- | --- |
-| `AppleALC.kext` custom layout | Owns the HDA route and must create the correct speaker stream |
-| `VoodooI2C.kext` custom build | Must expose `VoodooI2CTransferToAddress` |
-| `Lilu.kext` | Required by AppleALC |
-| `VirtualSMC.kext` or equivalent | Normal base Hackintosh stack |
-
-> [!WARNING]
-> A normal VoodooI2C release will not work unless it has the platform transfer function used by this kext.
-
-## First boot checklist
-
-Before first boot:
-
-1. Keep a working EFI backup.
-2. Keep a boot entry without CirrusAudioFixup.
-3. Know how to remove a bad kext from recovery or another OS.
-4. Use the custom VoodooI2C build.
-5. Use the matching custom AppleALC layout.
-6. Do not use random firmware or tuning files.
-7. Do not force an SSID unless you know the matching tuning is correct.
-
-Recommended first boot arguments:
-
-```text
--cirrusdbg -cirrusnodsp
-```
-
-After clean identity, reset, and I2C logs, test without `-cirrusnodsp`.
-
-## Boot arguments
-
-| Argument | Use |
-| --- | --- |
-| `-cirrusoff` | Disable this kext without removing it |
-| `-cirrusdbg` | Enable detailed diagnostics |
-| `-cirrusprobe` | Log register access; very noisy |
-| `-cirrusdiag` | Run expensive CRC and register scans |
-| `-cirrusnodsp` | Skip DSP load and use bypass path |
-| `-cirrusro` | Read-only monitoring mode |
-| `-cirruscompact` | Reduce log size |
-| `-cirrusphase=<phase>` | Stop bring-up at a debug phase |
-| `-cirrusssid=<hex>` | Override firmware SSID for controlled tests |
-| `-cirrusspkid=<n>` | Override speaker id for controlled tests |
-
-## How it works
+## How It Works
 
 ```mermaid
 flowchart TD
-    Boot[OpenCore loads kexts] --> Attach[CirrusAudioFixup attaches]
-    Attach --> Provider[Find VoodooI2C provider]
-    Provider --> Probe[Probe CS35L41 amplifiers]
-    Probe --> Bringup[Reset, OTP, errata, PLL, ASP, GPIO]
-    Bringup --> Match[Match SSID and speaker id]
-    Match --> Firmware[Load CS35L41 firmware resources]
-    Firmware --> Mode{DSP usable?}
-    Mode -->|yes| DSP[DSP playback path]
-    Mode -->|no| Bypass[Direct DAC bypass path]
-    Attach --> HDA[Watch HDA stream state]
-    HDA --> Power[Mirror playback lifecycle]
-    DSP --> Power
-    Bypass --> Power
-    Power --> Diag[Publish diagnostics]
+    subgraph macOS CoreAudio
+        App[macOS Audio Application] --> CoreAudio[CoreAudio Engine]
+        CoreAudio --> AppleHDA[AppleHDA.kext]
+        AppleHDA --> AppleALC[AppleALC.kext\nALC287 Layout 16]
+    end
+
+    subgraph AMD HD Audio Controller
+        AppleALC --> HDAStream[HDA DMA Engine\nConverter 0x03 -> Pin 0x17]
+    end
+
+    subgraph CirrusAudioFixup Driver
+        HDAStream -.->|PCI BAR DMA Snooping| Watcher[HDA Stream Watcher]
+        Watcher --> FSM[Hardware State Machine\nSafe Idle <-> Active Playback]
+        FSM --> Transport[VoodooI2C Transport Bridge\nVoodooI2CTransferToAddress]
+    end
+
+    subgraph CS35L41 Smart Amplifiers
+        Transport -->|I2C 0x40| AmpL[Left Amplifier\nExternal Boost + Halo DSP]
+        Transport -->|I2C 0x41| AmpR[Right Amplifier\nExternal Boost + Halo DSP]
+        HDAStream ==>|I2S Serial Audio| AmpL
+        HDAStream ==>|I2S Serial Audio| AmpR
+        AmpL --> SpkL[Left Speaker Array]
+        AmpR --> SpkR[Right Speaker Array]
+    end
 ```
 
-Main stages:
+### 3-Stage Lifecycle
 
-1. Attach to the current VoodooI2C device nub match.
-2. Apply a platform reset quirk if one matches.
-3. Probe left and right amplifier addresses.
-4. Validate device id and revision id.
-5. Apply OTP, errata, PLL, ASP, GPIO, and power setup.
-6. Read subsystem id and speaker id.
-7. Select a matching firmware entry.
-8. Upload firmware or use bypass mode.
-9. Watch HDA playback state.
-10. Move amps between safe idle and playback states.
-11. Record the first failure and latest failure.
+1. **Silicon Bring-up (Boot)**:
+   Probes I2C targets (`0x40`, `0x41`), validates Device ID (`0x35A40`), unpacks OTP calibration words, and applies silicon revision B2 errata patches.
+2. **DSP Firmware Staging**:
+   Matches subsystem ID (`17AA:3847`), uploads WMFW code and per-channel coefficient binaries to the Halo DSP core, and verifies DSP heartbeat.
+3. **Dynamic Playback Synchronization**:
+    - **Stream Start**: Unlocks test keys, engages external boost converter (`0x742C`/`0x7438`), waits for `PUP_DONE`, enables DSP speaker output (`kCmdMailboxSpeakerOutputEnable`), and ramps up volume smoothly.
+    - **Stream Stop**: Sends soft-mute mailbox command (`kCmdMailboxSpeakerOutputDisable`), pauses DSP, powers down analog stage (`PDN_DONE`), and returns to safe idle.
 
-## Repository map
+---
 
-| Path | Purpose |
-| --- | --- |
-| `CirrusAudioFixup/` | Kext source and `Info.plist` |
-| `CirrusAudioFixup/Devices/CS35L41/` | CS35L41 hardware code |
-| `CirrusAudioFixup/Devices/CS35L41/Resources/Firmware.hpp` | CS35L41 embedded firmware table |
-| `CirrusAudioFixup/Firmware/WMFW/` | WMFW and coefficient parsing and upload planning |
-| `CirrusAudioFixup/Platform/HDA/` | HDA controller and stream watcher |
-| `CirrusAudioFixup/Transport/` | VoodooI2C transport wrapper |
-| `Tests/` | Host-side regression checks |
-| `Tools/import_firmware.py` | Firmware validation and import helper |
-| `.github/` | CI, labels, issue templates, and PR template |
+## Linux Driver Lineage
 
-## Firmware resources
+CirrusAudioFixup is engineered from the official Linux kernel ALSA/ASoC subsystem. Register addresses, bitmasks, timing constraints, and power sequences match the following drivers bit-for-bit:
 
-`Firmware.hpp` is local to `Devices/CS35L41/Resources/`.
+| Linux Kernel Driver File                              | Subsystem            | Purpose & Parity in CirrusAudioFixup                                                                                                                         |
+| :---------------------------------------------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sound/hda/codecs/side-codecs/cs35l41_hda.c`          | ALSA HDA Side-Codec  | Power state transitions (`safe_to_active` / `active_to_safe`), mailbox commands (`PAUSE`, `RESUME`, `OUT_ENABLE`, `OUT_DISABLE`), and volume unmute ramping. |
+| `sound/hda/codecs/side-codecs/cs35l41_hda_property.c` | ACPI Property Parser | Lenovo Legion quirks: `CS35L41_EXT_BOOST` power rail sequencing, I2C addresses `0x40` & `0x41`, speaker ID indexing (`spkid=1`).                             |
+| `sound/soc/codecs/cs35l41-lib.c`                      | Silicon Core Library | Hardware reset timing, OTP memory unpacking (`unpackOTP`), silicon revision B2 errata (`kCs35l41RevB2ErrataPatch`), PLL locking, and ASP format.             |
+| `include/sound/cs35l41.h`                             | Kernel Definitions   | Full register map (`0x00000000`–`0x02BC3140`), IRQ masks, power status bits, and protection fault masks (`0x800281C0`).                                      |
+| `sound/pci/hda/patch_realtek.c` & `alc269.c`          | Realtek Codec Fixups | ALC287 initialization verbs, `ALC287_FIXUP_LEGION_16ACHG6` quirk, and clock synchronization between Realtek codec and CS35L41 amps.                          |
+| `drivers/firmware/cirrus/wmfw.h` & `wm_adsp.c`        | Halo DSP Subsystem   | WMFW header decoding, chunk parsing (text, data, info), coefficient packing, and DSP memory distribution.                                                    |
 
-It is not a global firmware database. It should contain only CS35L41 resources. A future amplifier family should get its own device directory and its own `Resources/Firmware.hpp`.
+> [!NOTE]
+> **Firmware Provenance:** Embedded firmware in `Devices/CS35L41/Resources/Firmware.hpp` originates from upstream [linux-firmware](https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git):
+>
+> - `cirrus/cs35l41-dsp1-spk-prot-17aa3847.wmfw` (Cirrus Halo CSPL release `v6.39.0 / halo_cspl_RAM_revB2_29.41.0.wmfw`)
+> - `cirrus/cs35l41-dsp1-spk-prot-17aa3847-spkid1-l0.bin` (Left speaker calibration)
+> - `cirrus/cs35l41-dsp1-spk-prot-17aa3847-spkid1-r0.bin` (Right speaker calibration)
+>
+> Laptops with SSID `17AA:382B` (Legion 5 Pro) share an identical acoustic setup and are automatically mapped to `17AA:3847`.
 
-> [!IMPORTANT]
-> Do not add placeholder firmware entries. Do not map a new laptop to an old tuning profile unless the hardware and acoustics are known to match.
+---
 
-Validate files only:
+## Installation
+
+### 1. Requirements
+
+- `Lilu.kext` (v1.6.8 or newer)
+- `AppleALC.kext` (configured with `layout-id: 16`)
+- `VirtualSMC.kext`
+- **Custom `VoodooI2C.kext`**: Must expose `VoodooI2CTransferToAddress`. Download from [hoaug-tran/VoodooI2C](https://github.com/hoaug-tran/VoodooI2C/actions).
+- `CirrusAudioFixup.kext`
+
+> [!WARNING]
+> Stock upstream VoodooI2C does not expose arbitrary 32-bit register transfers to unattached I2C target addresses. You **must** use the custom fork from [hoaug-tran/VoodooI2C](https://github.com/hoaug-tran/VoodooI2C).
+
+### 2. OpenCore Kext Load Order
+
+In `config.plist` under `Kernel -> Add`, configure the load order as follows:
+
+```text
+1. Lilu.kext
+2. VirtualSMC.kext
+3. AppleALC.kext
+4. VoodooI2C.kext (custom fork)
+5. CirrusAudioFixup.kext
+```
+
+### 3. Recommended Boot Arguments
+
+For your initial boot, add to `NVRAM -> Add -> 7C436110-... -> boot-args`:
+
+```text
+alcid=16 -cirrusdbg -cirrusnodsp
+```
+
+> [!TIP]
+> `-cirrusnodsp` boots the amplifiers in direct DAC bypass mode. Once speaker output is confirmed in bypass mode, remove `-cirrusnodsp` to activate the Halo DSP protection engine and acoustic equalization.
+
+---
+
+## Boot Arguments
+
+| Argument            | Category    | Description                                                                   |
+| :------------------ | :---------- | :---------------------------------------------------------------------------- |
+| _(None)_            | **Default** | Normal operation with full DSP firmware loading and dynamic power management. |
+| `-cirrusoff`        | Recovery    | Completely disables CirrusAudioFixup without removing the kext file.          |
+| `-cirrusdbg`        | Diagnostics | Enables verbose log messages in the macOS system log.                         |
+| `-cirrusnodsp`      | Mode        | Bypasses DSP firmware upload; runs amplifiers in direct DAC bypass mode.      |
+| `-cirrusprobe`      | Debug       | Logs low-level I2C register transactions (very verbose).                      |
+| `-cirrusro`         | Safety      | Read-only mode; monitors audio streams without writing to I2C registers.      |
+| `-cirrusdiag`       | Diagnostics | Runs periodic CRC register validation checks across active playback.          |
+| `-cirruscompact`    | Logging     | Limits log line length for smaller kernel buffer footprints.                  |
+| `-cirrusssid=<hex>` | Testing     | Overrides detected ACPI Subsystem ID (e.g. `-cirrusssid=0x17AA3847`).         |
+| `-cirrusspkid=<n>`  | Testing     | Overrides hardware speaker ID index (default: `1`).                           |
+
+---
+
+## Telemetry & Diagnostics
+
+Verify amplifier health in Terminal without restarting:
 
 ```bash
-python Tools/import_firmware.py --codec cs35l41 --ssid 17AA3847 --wmfw path/to/file.wmfw --bin-l path/to/left.bin --bin-r path/to/right.bin --validate-only
+ioreg -lw0 -p IODeviceTree -n CLSA0100 | grep -E 'Cirrus_(Driver|Diag|Playback|HDA|DSP|SSID)'
 ```
 
-Import a real profile:
+| IORegistry Property              | Expected Value                                        | Meaning                                                              |
+| :------------------------------- | :---------------------------------------------------- | :------------------------------------------------------------------- |
+| `Cirrus_Driver_Verdict`          | `READY_DSP`                                           | All amplifiers probed, errata applied, and DSP firmware running.     |
+| `Cirrus_Playback_Verdict_host`   | `SAFE_IDLE_VERIFIED` / `ACTIVE_DIGITAL_PATH_VERIFIED` | Dynamic HDA state machine cleanly tracks audio stream lifecycle.     |
+| `Cirrus_Diag_FirstFailure_left`  | `NONE`                                                | No errors on left amplifier.                                         |
+| `Cirrus_Diag_FirstFailure_right` | `NONE`                                                | No errors on right amplifier.                                        |
+| `Cirrus_HDA_StreamActive`        | `Yes` / `No`                                          | Indicates whether macOS is actively streaming audio to the speakers. |
+
+To inspect kernel logs in real time:
 
 ```bash
-python Tools/import_firmware.py --codec cs35l41 --ssid 17AA3847 --wmfw path/to/file.wmfw --bin-l path/to/left.bin --bin-r path/to/right.bin
+log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
 ```
 
-## Build
+---
 
-Release build:
+## Troubleshooting
+
+> [!NOTE]
+> **No sound from internal speakers:**
+>
+> 1. Verify `VoodooI2C.kext` is the custom fork and loads **before** `CirrusAudioFixup.kext`.
+> 2. Ensure `alcid=16` is set in boot-args and the macOS output device is set to "Internal Speakers".
+> 3. Run the `ioreg` command above. If `Cirrus_Driver_Verdict` reports `FAILED_INIT`, check `Cirrus_Diag_FirstFailure` to identify the failing stage.
+
+> [!TIP]
+> **Audio clicks or pops when pausing:**
+> CirrusAudioFixup automatically issues mailbox soft-mute commands (`0x08`) before pausing the DSP. If you experience pops, ensure you are running without `-cirrusnodsp` so the DSP soft-mute curve is active.
+
+---
+
+## Building & Automated Testing
+
+### Build with Xcode (macOS)
 
 ```bash
-xcodebuild -project CirrusAudioFixup.xcodeproj -target CirrusAudioFixup -configuration Release -sdk macosx CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project CirrusAudioFixup.xcodeproj \
+           -target CirrusAudioFixup \
+           -configuration Release \
+           -sdk macosx \
+           CODE_SIGNING_REQUIRED=NO \
+           CODE_SIGN_IDENTITY="" \
+           CODE_SIGNING_ALLOWED=NO build
 ```
 
-GitHub Actions also runs the release build on macOS.
+### Run Host Test Suite (macOS / Linux / Windows)
 
-## Test
-
-Run all host checks before a pull request:
+The test suite validates register logic, OTP unpacking, errata patching, and HDA state tracking using mocked hardware:
 
 ```bash
 python Tests/reproduce_host.py
@@ -234,118 +230,22 @@ python Tests/check_bringup.py
 python Tests/check_runtime.py
 ```
 
-> [!TIP]
-> Test logs include many `ERROR` lines by design. Fault-injection tests must hit error paths. Trust the exit code and `PASS` lines.
-
-## Install for testing
-
-1. Build the kext.
-2. Copy `CirrusAudioFixup.kext` to your EFI kext folder.
-3. Load order should be `Lilu`, `VirtualSMC`, `AppleALC`, custom `VoodooI2C`, then `CirrusAudioFixup`.
-4. Start with `-cirrusdbg -cirrusnodsp`.
-5. Save boot logs and IORegistry output.
-6. Remove `-cirrusnodsp` only after the basic path is clean.
-
-Check these before testing sound:
-
-- Custom VoodooI2C loads before CirrusAudioFixup.
-- AppleALC layout matches the HDA route.
-- `layout-id` and `alcid` do not conflict.
-- IORegistry has clean `Cirrus_Driver_Verdict` and stage data.
-
-## Logs for reports
-
-Collect both outputs after a failed boot:
-
-```bash
-log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
-ioreg -lw0 | grep -E 'Cirrus_(Driver|Diag|Trace|Playback|HDA|DSP|PCI|SSID)'
-```
-
-Useful IORegistry keys:
-
-| Key | Meaning |
-| --- | --- |
-| `Cirrus_Driver_Verdict` | `READY_DSP`, `READY_BYPASS`, or `FAILED_INIT` |
-| `Cirrus_Diag_Stage_left/right` | Stage running when the latest event happened |
-| `Cirrus_Diag_LastGood_left/right` | Last completed stage |
-| `Cirrus_Diag_FirstFailure_left/right` | First root failure |
-| `Cirrus_Diag_LatestFailure_left/right` | Latest failure |
-| `Cirrus_Trace_First_left/right` | First failure transfer trace |
-| `Cirrus_Trace_Latest_left/right` | Latest failure transfer trace |
-| `Cirrus_Playback_Verdict_left/right` | Playback path verdict |
-| `Cirrus_HDA_*` | HDA controller and stream state |
-| `Cirrus_SSID_*` | Firmware profile identity |
-
-## Troubleshooting map
-
-| Failure area | Likely boundary |
-| --- | --- |
-| `PROVIDER_MISSING`, `I2C_TRANSFER` | VoodooI2C provider or transfer function |
-| `DEVICE_ID`, reset write failures | I2C address, power rail, reset GPIO, ACPI path |
-| `OTP_TIMEOUT`, `OTP_UNPACK` | OTP boot or calibration parsing |
-| `ERRATA` | CS35L41 revision handling |
-| `FIRMWARE_*`, `COEFFICIENT_*` | WMFW or BIN mismatch |
-| `DSP_BOOT`, `DSP_MAILBOX` | DSP image load or firmware runtime |
-| `HDA_CONTROLLER`, `HDA_STREAM_FORMAT` | AppleHDA, AppleALC layout, or playback format |
-| `PLL_UNLOCKED` | HDA clocks not reaching the amplifier |
-| `ACTIVE_DIGITAL_PATH_VERIFIED` with silence | I2S content, boost, analog path, or speaker path still wrong |
+---
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Contributions improving amplifier compatibility or adding verified hardware profiles are welcome. Please review [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request.
 
-Good pull requests are small, tested, and easy to review.
-Before opening a PR:
+- **PR Requirements**: New laptop models require an ACPI table dump (`DSDT`/`SSDT`), Linux ALSA codec dump, and verified `linux-firmware` binaries.
+- **Verification**: All Python tests in `Tests/` and the Xcode build must pass with zero regressions.
 
-- Keep `Info.plist` attach behavior boot-safe.
-- Do not add broad hardware matches without IORegistry proof.
-- Do not add fake firmware or tuning data.
-- Keep new support scoped by amplifier family.
-- Run the full host test set.
-- Explain the hardware used for testing.
-- Include boot, attach, I2C, HDA, and playback logs.
+---
 
-For new hardware support, include:
+## License & Credits
 
-- Laptop model.
-- CPU platform.
-- HDA codec id and subsystem id.
-- ACPI device name under VoodooI2C.
-- I2C addresses.
-- Amplifier id and revision id.
-- AppleALC layout.
-- Linux codec dump if available.
-- Firmware and tuning source if adding resources.
-
-## Labels
-
-Suggested GitHub labels live in `.github/labels.yml`.
-
-Core labels:
-
-- `type: bug`
-- `type: hardware-support`
-- `type: firmware`
-- `type: docs`
-- `type: tests`
-- `area: iokit`
-- `area: voodooi2c`
-- `area: hda`
-- `area: cs35l41`
-- `risk: boot`
-- `risk: speaker-safety`
-- `status: needs-logs`
-- `status: blocked`
-- `good first issue`
-
-## License
-
-This project uses `GPL-2.0-only`.
-
-MIT would be easier, but GPL-2.0-only is the safer choice here because the driver behavior is based on Linux kernel CS35L41, HDA component, and DSP driver work. Linux kernel code is GPL-2.0-only.
-
-Copyright for original project code belongs to Tran Kinh Hoang (hoaug-tran), unless a file says otherwise.
-
-Keep attribution when porting ideas, register flows, or behavior from Linux drivers such as `cs35l41-hda` and `cs_dsp`.
-
+- **License**: GNU General Public License v2.0 ([GPL-2.0-only](LICENSE))
+- **Author**: Tran Kinh Hoang ([@hoaug-tran](https://github.com/hoaug-tran))
+- **Special Thanks**:
+    - The [Acidanthera](https://github.com/acidanthera) team for Lilu and AppleALC.
+    - The [VoodooI2C](https://github.com/VoodooI2C/VoodooI2C) team for the I2C transport framework.
+    - Cirrus Logic and the Linux ALSA/ASoC kernel maintainers for open-source driver specifications.

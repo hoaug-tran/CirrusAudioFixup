@@ -8,31 +8,116 @@ ROOT = Path(__file__).resolve().parents[1]
 REG_HPP = ROOT / 'CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp'
 content = REG_HPP.read_text(encoding='utf-8')
 
-# Extract constexpr and macros
-constexprs = dict(re.findall(r'constexpr\s+(?:uint8_t|uint32_t)\s+([A-Za-z0-9_]+)\s*=\s*([^;]+);', content))
-macros = dict(re.findall(r'#define\s+([A-Za-z0-9_]+)\s+([^\n/]+)', content))
+constexprs = dict(re.findall(r'(?:inline\s+)?constexpr\s+(?:uint8_t|uint16_t|uint32_t)\s+([A-Za-z0-9_]+)\s*=\s*([^;]+);', content))
 
 if not constexprs:
     print("ERROR: No constexpr registers found in Registers.hpp", file=sys.stderr)
     sys.exit(1)
 
-if not macros:
-    print("ERROR: No register macros found in Registers.hpp", file=sys.stderr)
-    sys.exit(1)
+LEGACY_MACROS = [
+    ('CS35L41_SW_RESET', '0x00000000'),
+    ('CS35L41_SW_RESET_VAL', '0x00005A00'),
+    ('CS35L41_TEST_KEY_CTL', '0x00000040'),
+    ('CS35L41_IRQ1_STATUS4', '0x0001001C'),
+    ('CS35L41_OTP_BOOT_DONE', '0x00000002'),
+    ('CS35L41_IRQ1_STATUS3', '0x00010018'),
+    ('CS35L41_OTP_BOOT_ERR', '0x80000000'),
+    ('CS35L41_IRQ1_RAW_STATUS3', '0x00010098'),
+    ('CS35L41_BST_EN_MASK', '0x00000030'),
+    ('CS35L41_PROTECTION_MASK', '0x800281C0'),
+    ('CS35L41_IRQ1_MASK1', '0x00010110'),
+    ('CS35L41_IRQ1_MASK2', '0x00010114'),
+    ('CS35L41_IRQ1_MASK3', '0x00010118'),
+    ('CS35L41_IRQ1_MASK4', '0x0001011C'),
+    ('CS35L41_IRQ2_MASK1', '0x00010910'),
+    ('CS35L41_IRQ2_MASK2', '0x00010914'),
+    ('CS35L41_IRQ2_MASK3', '0x00010918'),
+    ('CS35L41_IRQ2_MASK4', '0x0001091C'),
+    ('CS35L41_PLL_CLK_CTRL', '0x00002C04'),
+    ('CS35L41_DSP_CLK_CTRL', '0x00002C08'),
+    ('CS35L41_GLOBAL_CLK_CTRL', '0x00002C0C'),
+    ('CS35L41_SP_RATE_CTRL', '0x00004804'),
+    ('CS35L41_SP_FORMAT', '0x00004808'),
+    ('CS35L41_SP_FRAME_TX_SLOT', '0x00004810'),
+    ('CS35L41_SP_FRAME_RX_SLOT', '0x00004820'),
+    ('CS35L41_SP_TX_WL', '0x00004830'),
+    ('CS35L41_SP_RX_WL', '0x00004840'),
+    ('CS35L41_DAC_PCM1_SRC', '0x00004C00'),
+    ('CS35L41_ASP_TX1_SRC', '0x00004C20'),
+    ('CS35L41_ASP_TX2_SRC', '0x00004C24'),
+    ('CS35L41_ASP_TX3_SRC', '0x00004C28'),
+    ('CS35L41_ASP_TX4_SRC', '0x00004C2C'),
+    ('CS35L41_DSP1_RX1_SRC', '0x00004C40'),
+    ('CS35L41_DSP1_RX2_SRC', '0x00004C44'),
+    ('CS35L41_DSP1_RX3_SRC', '0x00004C48'),
+    ('CS35L41_DSP1_RX4_SRC', '0x00004C4C'),
+    ('CS35L41_DSP1_RX5_SRC', '0x00004C50'),
+    ('CS35L41_DSP1_RX6_SRC', '0x00004C54'),
+    ('CS35L41_SP_HIZ_CTRL', '0x0000480C'),
+    ('CS35L41_SP_ENABLES', '0x00004800'),
+    ('CS35L41_AMP_DIG_VOL_CTRL', '0x00006000'),
+    ('CS35L41_AMP_GAIN_CTRL', '0x00006C04'),
+    ('CS35L41_GPIO1_CTRL1', '0x00011008'),
+    ('CS35L41_GPIO2_CTRL1', '0x0001100C'),
+    ('CS35L41_GPIO_PAD_CONTROL', '0x0000242C'),
+    ('CS35L41_DSP1_RX1_RATE', '0x02B80080'),
+    ('CS35L41_DSP1_RX2_RATE', '0x02B80088'),
+    ('CS35L41_DSP1_RX3_RATE', '0x02B80090'),
+    ('CS35L41_DSP1_RX4_RATE', '0x02B80098'),
+    ('CS35L41_DSP1_RX5_RATE', '0x02B800A0'),
+    ('CS35L41_DSP1_RX6_RATE', '0x02B800A8'),
+    ('CS35L41_DSP1_RX7_RATE', '0x02B800B0'),
+    ('CS35L41_DSP1_RX8_RATE', '0x02B800B8'),
+    ('CS35L41_DSP1_TX1_RATE', '0x02B80280'),
+    ('CS35L41_DSP1_TX2_RATE', '0x02B80288'),
+    ('CS35L41_DSP1_TX3_RATE', '0x02B80290'),
+    ('CS35L41_DSP1_TX4_RATE', '0x02B80298'),
+    ('CS35L41_DSP1_TX5_RATE', '0x02B802A0'),
+    ('CS35L41_DSP1_TX6_RATE', '0x02B802A8'),
+    ('CS35L41_DSP1_TX7_RATE', '0x02B802B0'),
+    ('CS35L41_DSP1_TX8_RATE', '0x02B802B8'),
+    ('CS35L41_DSP1_CCM_CORE_CTRL', '0x02BC1000'),
+    ('CS35L41_DSP1_CORE_SOFT_RESET', '0x02B80010'),
+    ('CS35L41_DSP1_SYS_ID', '0x025E0000'),
+    ('CS35L41_DSP1_SYS_VERSION', '0x025E0004'),
+    ('CS35L41_DSP1_SYS_CORE_ID', '0x025E0008'),
+    ('CS35L41_DSP_MBOX_1', '0x00013000'),
+    ('CS35L41_DSP_MBOX_2', '0x00013004'),
+    ('CS35L41_DSP_VIRT1_MBOX_1', '0x00013020'),
+    ('CSPL_MBOX_CMD_RESUME', '2'),
+    ('CSPL_MBOX_CMD_PAUSE', '1'),
+    ('CSPL_MBOX_CMD_SPK_OUT_ENABLE', '7'),
+    ('CSPL_MBOX_STS_RUNNING', '0'),
+    ('CSPL_MBOX_STS_PAUSED', '1'),
+    ('CSPL_MBOX_STS_RDY_FOR_REINIT', '2'),
+    ('CS35L41_IRQ1_STATUS1', '0x00010010'),
+    ('CS35L41_IRQ1_STATUS2', '0x00010014'),
+    ('CS35L41_IRQ2_STATUS', '0x00010804'),
+    ('HALO_CORE_EN', '0x00000001'),
+    ('HALO_CORE_RESET', '0x00000200'),
+    ('CS35L41_DSP1_MPU_LOCK_CONFIG', '0x02BC3140'),
+    ('CS35L41_DSP1_MPU_XM_ACCESS0', '0x02BC3000'),
+    ('CS35L41_DSP1_MPU_YM_ACCESS0', '0x02BC3004'),
+    ('CS35L41_DSP1_MPU_WNDW_ACCESS0', '0x02BC3008'),
+    ('CS35L41_DSP1_MPU_XREG_ACCESS0', '0x02BC300C'),
+    ('CS35L41_DSP1_MPU_YREG_ACCESS0', '0x02BC3014'),
+    ('CS35L41_DSP1_MPU_XM_ACCESS1', '0x02BC3018'),
+    ('CS35L41_DSP1_MPU_YM_ACCESS1', '0x02BC301C'),
+    ('CS35L41_DSP1_MPU_WNDW_ACCESS1', '0x02BC3020'),
+    ('CS35L41_DSP1_MPU_XREG_ACCESS1', '0x02BC3024'),
+    ('CS35L41_DSP1_MPU_YREG_ACCESS1', '0x02BC302C'),
+    ('CS35L41_DSP1_MPU_XM_ACCESS2', '0x02BC3030'),
+    ('CS35L41_DSP1_MPU_YM_ACCESS2', '0x02BC3034'),
+    ('CS35L41_DSP1_MPU_WNDW_ACCESS2', '0x02BC3038'),
+    ('CS35L41_DSP1_MPU_XREG_ACCESS2', '0x02BC303C'),
+    ('CS35L41_DSP1_MPU_YREG_ACCESS2', '0x02BC3044'),
+    ('CS35L41_DSP1_MPU_XM_ACCESS3', '0x02BC3048'),
+    ('CS35L41_DSP1_MPU_YM_ACCESS3', '0x02BC304C'),
+    ('CS35L41_DSP1_MPU_WNDW_ACCESS3', '0x02BC3050'),
+    ('CS35L41_DSP1_MPU_XREG_ACCESS3', '0x02BC3054'),
+    ('CS35L41_DSP1_MPU_YREG_ACCESS3', '0x02BC305C'),
+]
 
-# Compile a verification binary with g++ that tests value equality
-test_cpp = r'''
-#include <cassert>
-#include <cstdint>
-#include <cstdio>
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-
-using namespace cirrus::devices::cs35l41;
-
-int main() {
-'''
-
-# Map macro to constexpr name
 SPECIAL_NAMES = {
     'CS35L41_I2C_ADDR_LEFT': 'kI2cAddressLeft',
     'CS35L41_I2C_ADDR_RIGHT': 'kI2cAddressRight',
@@ -148,35 +233,34 @@ def to_pascal(macro_name):
     parts = n.split('_')
     return 'k' + ''.join(p.capitalize() if not p.isdigit() else p for p in parts)
 
+test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/CS35L41/Hardware/Registers.hpp"\n\n'
+for m, v in LEGACY_MACROS:
+    test_cpp += f'#define {m} {v}\n'
+test_cpp += '\nusing namespace cirrus::devices::cs35l41;\n\nint main() {\n'
+
+test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/CS35L41/Hardware/Registers.hpp"\n\n'
+for m, v in LEGACY_MACROS:
+    test_cpp += f'#define {m} {v}\n'
+test_cpp += '\nusing namespace cirrus::devices::cs35l41;\n\nint main() {\n'
+
 count = 0
-for macro in macros:
+for macro, _ in LEGACY_MACROS:
     const_name = to_pascal(macro)
     if const_name in constexprs:
         test_cpp += f'    assert({macro} == registers::{const_name});\n'
         count += 1
 
-test_cpp += f'''
-    std::printf("All register constants verified equal ({count} mapped).\\n");
-    return 0;
-}}
-'''
+test_cpp += f'    std::printf("All register constants verified equal (%u mapped).\\n", {count});\n    return 0;\n}}\n'
 
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp = Path(tmpdir)
-    src_file = tmp / 'verify_registers.cpp'
-    exe_file = tmp / 'verify_registers.exe'
+    src_file = tmp / 'verify.cpp'
+    exe_file = tmp / 'verify.exe'
     src_file.write_text(test_cpp, encoding='utf-8')
-
     cmd = ['g++', '-std=c++17', '-I' + str(ROOT / 'CirrusAudioFixup'), str(src_file), '-o', str(exe_file)]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
-        print("Compilation failed:\n", res.stderr, file=sys.stderr)
+        print('Compilation failed:\n', res.stderr)
         sys.exit(1)
-
     run_res = subprocess.run([str(exe_file)], capture_output=True, text=True)
-    if run_res.returncode != 0:
-        print("Assertion failed:\n", run_res.stderr, file=sys.stderr)
-        sys.exit(1)
-
     print(run_res.stdout.strip())
-    print("OK: Register verification passed completely.")

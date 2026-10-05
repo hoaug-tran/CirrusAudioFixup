@@ -75,6 +75,8 @@ struct CS35L41Amp {
     uint8_t address=0x40; const char* name="L";
     bool firmwareValidated=false,playbackFaulted=false;
 };
+using AmplifierState = CS35L41Amp;
+namespace cirrus { namespace devices { namespace cs35l41 { namespace registers { constexpr uint8_t kI2cAddressRight = 0x41; } } } }
 void IOFree(void*,size_t) {}
 class CirrusAudioFixup {
 public:
@@ -87,17 +89,17 @@ public:
     void setProperty(const char* n,OSString* s) { properties[n]=s->value; }
     void setProperty(const char* n,uint64_t v,unsigned) { numbers[n]=v; }
     void removeProperty(const char* n) { numbers.erase(n); properties.erase(n); }
-    bool writeRegister(CS35L41Amp&,uint32_t r,uint32_t v,unsigned) {
+    bool writeRegister(AmplifierState&,uint32_t r,uint32_t v,unsigned) {
         if(++writes==failWrite) return false; memory[r]=v; return true;
     }
-    bool readRegister(CS35L41Amp&,uint32_t r,uint32_t* v,unsigned) {
+    bool readRegister(AmplifierState&,uint32_t r,uint32_t* v,unsigned) {
         if(++reads==failRead) return false; *v=memory[r]; if(reads==corruptRead) *v^=1; return true;
     }
-    void recordDiagnosticFailure(CS35L41Amp&,unsigned) { ++failures; }
-    bool stopDSP(CS35L41Amp&) { stopped=true; return true; }
-    bool bringupDSP(CS35L41Amp&) { booted=true; return true; }
-    bool applyCalibration(CS35L41Amp&,const FirmwareImage*);
-    void boot(CS35L41Amp& amp,FirmwareImage* image);
+    void recordDiagnosticFailure(AmplifierState&,unsigned) { ++failures; }
+    bool stopDSP(AmplifierState&) { stopped=true; return true; }
+    bool bringupDSP(AmplifierState&) { booted=true; return true; }
+    bool applyCalibration(AmplifierState&,const FirmwareImage*);
+    void boot(AmplifierState& amp,FirmwareImage* image);
 };
 '''
 checks = r'''
@@ -140,17 +142,17 @@ int main() {
         if(mode==0) check(d.writes==n,"write fault stops subsequent calibration writes");
     }
     IORegistryEntry::data=nullptr;
-    args={{"cirrus_cal_r0_l",5846}};
+    args={{"-cirruscalr0l",5846}};
     CirrusAudioFixup missingAmbient;
     check(!missingAmbient.applyCalibration(amp,&image) && !missingAmbient.writes,"boot override requires measured ambient");
-    args["cirrus_cal_ambient"]=23;
+    args["-cirruscalambient"]=23;
     CirrusAudioFixup explicitData;
     check(explicitData.applyCalibration(amp,&image) && explicitData.memory[4]==5846,"explicit calibration accepted");
     for(auto invalidR:{0U,65536U,0xFFFFFFFFU}) {
-        args["cirrus_cal_r0_l"]=invalidR; CirrusAudioFixup d;
+        args["-cirruscalr0l"]=invalidR; CirrusAudioFixup d;
         check(!d.applyCalibration(amp,&image) && !d.writes,"invalid R0 rejected");
     }
-    args["cirrus_cal_r0_l"]=5846; args["cirrus_cal_ambient"]=128;
+    args["-cirruscalr0l"]=5846; args["-cirruscalambient"]=128;
     CirrusAudioFixup badAmbient;
     check(!badAmbient.applyCalibration(amp,&image) && !badAmbient.writes,"ambient must fit EFI signed byte");
     args.clear(); IORegistryEntry::data=&data;
@@ -181,7 +183,7 @@ int main() {
         if(mode==1) d.skip=true;
         if(mode==2) CirrusFirmwareParser::missing=true;
         if(mode==3) IORegistryEntry::data=&wrongType;
-        if(mode==4) { IORegistryEntry::data=nullptr; args={{"cirrus_cal_r0_l",5846}}; }
+        if(mode==4) { IORegistryEntry::data=nullptr; args={{"-cirruscalr0l",5846}}; }
         if(mode==5) d.failWrite=d.writes+1;
         if(mode==6) d.failRead=d.reads+1;
         if(mode==7) d.corruptRead=d.reads+1;

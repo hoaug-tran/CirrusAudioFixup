@@ -6,7 +6,6 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
-REGISTERS = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp').read_text(encoding='utf-8')
 
 def function(name):
     start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
@@ -15,12 +14,110 @@ def function(name):
 
 names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringupDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'transferToAddress', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
 functions = '\n'.join(function(name) for name in names)
-sequences = '\n'.join(re.search(r'static const RegisterSequence\s+'+name+r'\[\]\s*=\s*\{.*?\};', SOURCE, re.S).group(0)
-                      for name in ['pll_sequence', 'asp_sequence'])
-constants = '\n'.join(line for line in (HEADER+'\n'+REGISTERS).splitlines() if re.match(r'#define (?:CS35L41_|HALO_|CSPL_)\w+\s+(?:0x|[0-9])',line))
-states_start = HEADER.find('enum class TraceSource') if 'enum class TraceSource' in HEADER else HEADER.index('enum TraceSource')
-states = HEADER[states_start:HEADER.index('struct TraceEntry')]
-amp = HEADER[HEADER.index('struct CS35L41Amp {'):HEADER.index('struct FirmwareImage;')]
+
+amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
+
+LEGACY_CONSTANTS = r'''
+#define CS35L41_SW_RESET 0x00000000
+#define CS35L41_SW_RESET_VAL 0x00005A00
+#define CS35L41_TEST_KEY_CTL 0x00000040
+#define CS35L41_IRQ1_STATUS4 0x0001001C
+#define CS35L41_OTP_BOOT_DONE 0x00000002
+#define CS35L41_IRQ1_STATUS3 0x00010018
+#define CS35L41_OTP_BOOT_ERR 0x80000000
+#define CS35L41_IRQ1_RAW_STATUS3 0x00010098
+#define CS35L41_BST_EN_MASK 0x00000030
+#define CS35L41_PROTECTION_MASK 0x800281C0
+#define CS35L41_IRQ1_MASK1 0x00010110
+#define CS35L41_IRQ1_MASK2 0x00010114
+#define CS35L41_IRQ1_MASK3 0x00010118
+#define CS35L41_IRQ1_MASK4 0x0001011C
+#define CS35L41_IRQ2_MASK1 0x00010910
+#define CS35L41_IRQ2_MASK2 0x00010914
+#define CS35L41_IRQ2_MASK3 0x00010918
+#define CS35L41_IRQ2_MASK4 0x0001091C
+#define CS35L41_PLL_CLK_CTRL 0x00002C04
+#define CS35L41_DSP_CLK_CTRL 0x00002C08
+#define CS35L41_GLOBAL_CLK_CTRL 0x00002C0C
+#define CS35L41_SP_RATE_CTRL 0x00004804
+#define CS35L41_SP_FORMAT 0x00004808
+#define CS35L41_SP_FRAME_TX_SLOT 0x00004810
+#define CS35L41_SP_FRAME_RX_SLOT 0x00004820
+#define CS35L41_SP_TX_WL 0x00004830
+#define CS35L41_SP_RX_WL 0x00004840
+#define CS35L41_DAC_PCM1_SRC 0x00004C00
+#define CS35L41_ASP_TX1_SRC 0x00004C20
+#define CS35L41_ASP_TX2_SRC 0x00004C24
+#define CS35L41_ASP_TX3_SRC 0x00004C28
+#define CS35L41_ASP_TX4_SRC 0x00004C2C
+#define CS35L41_DSP1_RX1_SRC 0x00004C40
+#define CS35L41_DSP1_RX2_SRC 0x00004C44
+#define CS35L41_DSP1_RX3_SRC 0x00004C48
+#define CS35L41_DSP1_RX4_SRC 0x00004C4C
+#define CS35L41_DSP1_RX5_SRC 0x00004C50
+#define CS35L41_DSP1_RX6_SRC 0x00004C54
+#define CS35L41_SP_HIZ_CTRL 0x0000480C
+#define CS35L41_SP_ENABLES 0x00004800
+#define CS35L41_AMP_DIG_VOL_CTRL 0x00006000
+#define CS35L41_AMP_GAIN_CTRL 0x00006C04
+#define CS35L41_GPIO1_CTRL1 0x00011008
+#define CS35L41_GPIO2_CTRL1 0x0001100C
+#define CS35L41_GPIO_PAD_CONTROL 0x0000242C
+#define CS35L41_DSP1_RX1_RATE 0x02B80080
+#define CS35L41_DSP1_RX2_RATE 0x02B80088
+#define CS35L41_DSP1_RX3_RATE 0x02B80090
+#define CS35L41_DSP1_RX4_RATE 0x02B80098
+#define CS35L41_DSP1_RX5_RATE 0x02B800A0
+#define CS35L41_DSP1_RX6_RATE 0x02B800A8
+#define CS35L41_DSP1_RX7_RATE 0x02B800B0
+#define CS35L41_DSP1_RX8_RATE 0x02B800B8
+#define CS35L41_DSP1_TX1_RATE 0x02B80280
+#define CS35L41_DSP1_TX2_RATE 0x02B80288
+#define CS35L41_DSP1_TX3_RATE 0x02B80290
+#define CS35L41_DSP1_TX4_RATE 0x02B80298
+#define CS35L41_DSP1_TX5_RATE 0x02B802A0
+#define CS35L41_DSP1_TX6_RATE 0x02B802A8
+#define CS35L41_DSP1_TX7_RATE 0x02B802B0
+#define CS35L41_DSP1_TX8_RATE 0x02B802B8
+#define CS35L41_DSP1_CCM_CORE_CTRL 0x02BC1000
+#define CS35L41_DSP1_CORE_SOFT_RESET 0x02B80010
+#define CS35L41_DSP1_SYS_ID 0x025E0000
+#define CS35L41_DSP1_SYS_VERSION 0x025E0004
+#define CS35L41_DSP1_SYS_CORE_ID 0x025E0008
+#define CS35L41_DSP_MBOX_1 0x00013000
+#define CS35L41_DSP_MBOX_2 0x00013004
+#define CS35L41_DSP_MBOX_2_REG 0x00013004
+#define CS35L41_DSP_VIRT1_MBOX_1 0x00013020
+#define CSPL_MBOX_CMD_RESUME 2
+#define CSPL_MBOX_CMD_PAUSE 1
+#define CSPL_MBOX_CMD_SPK_OUT_ENABLE 7
+#define CSPL_MBOX_STS_RUNNING 0
+#define CSPL_MBOX_STS_PAUSED 1
+#define CSPL_MBOX_STS_RDY_FOR_REINIT 2
+#define CS35L41_IRQ1_STATUS1 0x00010010
+#define CS35L41_IRQ1_STATUS2 0x00010014
+#define CS35L41_IRQ2_STATUS 0x00010804
+#define HALO_CORE_EN 0x00000001
+#define HALO_CORE_RESET 0x00000200
+#define CS35L41_DSP1_MPU_LOCK_CONFIG 0x02BC3140
+#define CS35L41_DSP1_MPU_XM_ACCESS0 0x02BC3000
+#define CS35L41_DSP1_MPU_YM_ACCESS0 0x02BC3004
+#define CS35L41_DSP1_MPU_WND_ACCESS0 0x02BC3008
+#define CS35L41_DSP1_MPU_XREG_ACCESS0 0x02BC300C
+#define CS35L41_DSP1_MPU_YREG_ACCESS0 0x02BC3010
+#define CS35L41_PWR_CTRL1 0x00002014
+#define CS35L41_PWR_CTRL1_REG 0x00002014
+#define CS35L41_PWR_CTRL2 0x00002018
+#define CS35L41_PWR_CTRL2_REG 0x00002018
+#define CS35L41_PWR_CTRL3 0x0000201C
+#define CS35L41_AMP_OUT_MUTE 0x00002024
+#define CS35L41_DEVID_REG 0x00000000
+#define CS35L41_REVID_REG 0x00000004
+#define CS35L41_FABID_REG 0x00000008
+#define CS35L41_OTPID_REG 0x00000010
+#define CS35L41_PM_STS_REG 0x00002908
+#define CS35L41_DEVICE_ID 0x35A40
+'''
 
 preamble = r'''
 #include <cstdint>
@@ -31,19 +128,18 @@ preamble = r'''
 #include <map>
 #include <vector>
 #include <string>
+#include "Diagnostics/DiagnosticTypes.hpp"
+#include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Devices/CS35L41/CS35L41Device.hpp"
 using UInt8=uint8_t;
 using UInt16=uint16_t;
 using UInt32=uint32_t;
 using IOReturn=int;
-struct RegisterSequence { UInt32 reg,mask,value,delay_us; bool updateBits; };
-constexpr int kIOReturnSuccess=0;
+struct RegisterSequence { UInt32 reg,mask,value,delayUs; bool updateBits; };
 constexpr int kIOReturnNotReady=-1;
 constexpr int kIOReturnBadArgument=-2;
 constexpr bool kOSBooleanTrue=true;
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
-#define CIRRUS_LOG(...) ((void)0)
-#define CIRRUS_ERR(...) ((void)0)
-inline void IODelay(unsigned) {}
 inline void IOSleep(unsigned) {}
 inline uint64_t mach_absolute_time() { return 0; }
 inline void absolutetime_to_nanoseconds(uint64_t n,uint64_t* p) { *p=n; }
@@ -58,17 +154,45 @@ struct Provider {
     unsigned calls=0;
     int callPlatformFunction(const char*,bool,void*,void*,void*,void*) { ++calls; return 0; }
 };
+using namespace cirrus::diagnostics;
+using namespace cirrus::devices::cs35l41;
+bool gCirrusDebug = false;
 '''
+
+preamble += amp + '\nusing CS35L41Amp = AmplifierState;\n'
+
 mock = r'''
+namespace cirrus { namespace platform { namespace hda {
+struct HDAStreamState {
+    bool observed{false};
+    bool streamActive{false};
+    bool converterPrepared{false};
+    bool topologyLogged{false};
+    uint8_t lastDescriptor{0xFF};
+    uint8_t lastStreamTag{0};
+    uint16_t lastFormat{0};
+    uint32_t missCount{0};
+};
+}}}
+
 class CirrusAudioFixup {
 public:
+    size_t mAmpCount{2};
     CS35L41Amp mAmps[2]{};
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
     bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
-    bool mHdaConverterPrepared=true,mHdaTopologyLogged=true,readonly=false;
-    bool mHdaControllerObserved=true,mHdaStreamActive=true;
-    unsigned mHdaLastStreamTag=1,mHdaLastFormat=0,mHdaLastDescriptor=0;
+    cirrus::platform::hda::HDAStreamState mHdaState;
+    bool& mHdaConverterPrepared = mHdaState.converterPrepared;
+    bool& mHdaControllerObserved = mHdaState.observed;
+    bool& mHdaStreamActive = mHdaState.streamActive;
+    bool& mHdaTopologyLogged = mHdaState.topologyLogged;
+    uint8_t& mHdaLastDescriptor = mHdaState.lastDescriptor;
+    uint8_t& mHdaLastStreamTag = mHdaState.lastStreamTag;
+    uint16_t& mHdaLastFormat = mHdaState.lastFormat;
+    uint32_t& mHdaMissCount = mHdaState.missCount;
+
+    bool readonly=false;
     int mLastTransferReturn=0;
     bool bypass=false,pup=true,pdn=true,pll=true,mailbox=true,halo=true;
     unsigned ops=0,failAt=0,unmute=0,unmuteAfterFault=0;
@@ -87,6 +211,9 @@ public:
     std::map<std::string,std::string> properties;
     std::vector<std::pair<uint32_t,uint32_t>> writes;
     CirrusAudioFixup() {
+        mHdaConverterPrepared=true; mHdaTopologyLogged=true;
+        mHdaControllerObserved=true; mHdaStreamActive=true;
+        mHdaLastStreamTag=1;
         auto& a=mAmps[0]; a.name="host"; a.present=true; a.initialized=true;
         a.monitorCount=1; a.firmwareValidated=true; a.dspAlive=true;
         a.haloStateRegister=0x02800398; a.haloHeartbeatRegister=0x0280039C;
@@ -123,6 +250,12 @@ public:
         else regs[r]=v;
         return true;
     }
+    bool pollRegisterBit(CS35L41Amp& a,uint32_t r,uint32_t m,uint32_t exp,uint32_t,TraceSource=TRACE_OTHER) {
+        if(!step()) return false;
+        uint32_t val = 0;
+        if(!readRegister(a, r, &val)) return false;
+        return (val & m) == exp;
+    }
     bool updateRegisterBits(CS35L41Amp& a,uint32_t r,uint32_t mask,uint32_t v,TraceSource s=TRACE_OTHER) {
         uint32_t old=0;
         return readRegister(a,r,&old,s) && writeRegister(a,r,(old&~mask)|(v&mask),s);
@@ -134,7 +267,10 @@ public:
         if(endStreamBeforeUnmute && ++syncCalls>1) { streamEnded=true; mHdaStreamActive=false; }
         return mHdaStreamActive;
     }
-    bool bootArgEnabled(const char* name) { return strcmp(name,"cirrus_readonly")==0 ? readonly : strcmp(name,"cirrus_nodsp")==0 ? bypass : false; }
+    bool bootArgEnabled(const char* name) {
+        return (strcmp(name,"-cirrusro")==0) ? readonly :
+               (strcmp(name,"-cirrusnodsp")==0) ? bypass : false;
+    }
     void setDiagnosticStage(CS35L41Amp&,DriverStage) {}
     template<class... T> void recordDiagnosticFailure(CS35L41Amp&,T...) {}
     void markDiagnosticSuccess(CS35L41Amp&,DriverStage) {}
@@ -155,7 +291,27 @@ public:
         for(auto& a:mAmps) if(a.present && !a.playbackFaulted) a.initialized=true;
     }
     void initializeFirmware(CS35L41Amp&,const char*) {}
+    static const char* failureName(DiagnosticFailure) { return "failure"; }
+    static const char* stageName(DriverStage) { return "stage"; }
 '''
+
+declarations = '\n'.join(function(name).split('{', 1)[0].replace('CirrusAudioFixup::', '') + ';' for name in names)
+
+adapter = r'''
+class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
+    CirrusAudioFixup* mFixup;
+    CS35L41Amp& mAmp;
+public:
+    FixupRegisterIOAdapter(CirrusAudioFixup* f, CS35L41Amp& a) : mFixup(f), mAmp(a) {}
+    bool read(uint32_t reg, uint32_t* val) override { return mFixup->readRegister(mAmp, reg, val); }
+    bool write(uint32_t reg, uint32_t val) override { return mFixup->writeRegister(mAmp, reg, val); }
+    bool updateBits(uint32_t reg, uint32_t mask, uint32_t val) override { return mFixup->updateRegisterBits(mAmp, reg, mask, val); }
+    bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mFixup->pollRegisterBit(mAmp, r, m, e, t); }
+    bool bulkRead(uint32_t reg, uint8_t* buf, size_t len) override { return mFixup->bulkRead(mAmp, reg, buf, len); }
+    bool bulkWrite(uint32_t, const uint8_t*, size_t) override { return true; }
+};
+'''
+
 checks = r'''
 int main() {
     for(unsigned fmt : {0x11U,0x21U,0x31U,0x931U}) assert(CirrusAudioFixup().supportedHdaFormat(fmt));
@@ -267,7 +423,7 @@ int main() {
     assert(power.ops==offOps && timer.cancelled==1);
     power.handlePowerChange(true);
     assert(power.mPowerAvailable && !power.mNeedsReinitialization && power.restores==1);
-    assert(power.ops==offOps); // Mock restoration is synchronous; no playback is started here.
+    assert(power.ops==offOps);
     power.mStopping=true; power.handlePowerChange(false); power.runBackgroundMonitor();
     assert(power.ops==offOps);
     CirrusAudioFixup ro; ro.readonly=true;
@@ -305,7 +461,7 @@ int main() {
     checkNew(stereoShort.startsAfterStreamEnd==0 && stereoShort.unmute==0 &&
              !stereoShort.mAmps[1].playbackFaulted,"second amp cannot start from HDA state invalidated by first amp");
     CirrusAudioFixup clock;
-    clock.failAt=4; // Three clock writes succeeded; status read fails.
+    clock.failAt=4;
     checkNew(!clock.applyPLL(clock.mAmps[0]),"PLL configuration rejects status read failure");
     CirrusAudioFixup noClock;
     noClock.pll=false;
@@ -380,10 +536,10 @@ int main() {
     puts("PASS configuration, external boost invariants, protection and active-state loss checks");
 }
 '''
-declarations = '\n'.join(function(name).split('{',1)[0].replace('CirrusAudioFixup::','')+';' for name in names)
+
 with tempfile.TemporaryDirectory(prefix='cirrus-runtime-check-') as directory:
-    tmp=Path(directory)
-    source=tmp/'runtime.cpp'
-    source.write_text(preamble+constants+'\n'+sequences+'\n'+states+amp+mock+declarations+'\n};\n'+functions+checks,encoding='utf-8')
-    subprocess.run(['g++','-std=c++17','-O0',str(source),'-o',str(tmp/'runtime.exe')],check=True)
-    subprocess.run([str(tmp/'runtime.exe')],check=True)
+    tmp = Path(directory)
+    source = tmp / 'runtime.cpp'
+    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + functions + checks, encoding='utf-8')
+    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'runtime.exe')], check=True)
+    subprocess.run([str(tmp / 'runtime.exe')], check=True)

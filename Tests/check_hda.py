@@ -6,11 +6,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 
-
 def function(name):
     start = re.search(r'bool CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
-
 
 preamble = r'''
 #include <cstdint>
@@ -48,13 +46,33 @@ struct IOPCIDevice:IOService {
     const char* getName() { return "fake-HDEF"; }
     uint16_t configRead16(unsigned r) { return r==0?0x1022:0x15e3; }
 };
+namespace cirrus { namespace platform { namespace hda {
+struct HDAStreamState {
+    bool observed{false};
+    bool streamActive{false};
+    bool converterPrepared{false};
+    bool topologyLogged{false};
+    uint8_t lastDescriptor{0xFF};
+    uint8_t lastStreamTag{0};
+    uint16_t lastFormat{0};
+    uint32_t missCount{0};
+};
+}}}
 class CirrusAudioFixup {
 public:
-    bool mHdaConverterPrepared=false,mHdaControllerObserved=false,mHdaStreamActive=false;
-    bool mPowerAvailable=true,mStopping=false,mHdaTopologyLogged=false,missing=false;
-    uint8_t mHdaLastDescriptor=0xFF,mHdaLastStreamTag=0;
-    uint16_t mHdaLastFormat=0;
-    unsigned mHdaMissCount=0,lookups=0;
+    cirrus::platform::hda::HDAStreamState mHdaState;
+    bool& mHdaConverterPrepared = mHdaState.converterPrepared;
+    bool& mHdaControllerObserved = mHdaState.observed;
+    bool& mHdaStreamActive = mHdaState.streamActive;
+    bool& mHdaTopologyLogged = mHdaState.topologyLogged;
+    uint8_t& mHdaLastDescriptor = mHdaState.lastDescriptor;
+    uint8_t& mHdaLastStreamTag = mHdaState.lastStreamTag;
+    uint16_t& mHdaLastFormat = mHdaState.lastFormat;
+    uint32_t& mHdaMissCount = mHdaState.missCount;
+
+    bool mPowerAvailable=true,mStopping=false,missing=false;
+    unsigned lookups=0;
+    size_t mAmpCount{2};
     int mAmps[2]{};
     IOPCIDevice pci;
     std::map<std::string,std::string> properties;
@@ -75,6 +93,7 @@ public:
 unsigned failures=0;
 void check(bool ok,const char* label) { if(!ok) { ++failures; fprintf(stderr,"FAIL %s\n",label); } }
 '''
+
 checks = r'''
 int main() {
     CirrusAudioFixup normal;
@@ -100,10 +119,10 @@ int main() {
         check(d.pci.releases==1 && d.pci.bar.releases==(mode==0?0U:1U),"failure releases ownership");
     }
     CirrusAudioFixup reset;
-    reset.write32(8,0); // GCAP and descriptor content can survive reset.
+    reset.write32(8,0);
     check(!reset.syncAlc287HdaCodec() && !reset.mHdaControllerObserved,"controller held in reset cannot be active");
     CirrusAudioFixup bidir;
-    bidir.write16(0,0x1108); // one input, one output, one bidirectional
+    bidir.write16(0,0x1108);
     bidir.write32(0x80,0); bidir.stream(2,7);
     check(bidir.syncAlc287HdaCodec() && bidir.mHdaLastDescriptor==2 && bidir.mHdaLastStreamTag==7,"bidirectional output");
     bidir.stream(2,7,false);
@@ -128,10 +147,10 @@ int main() {
     puts("PASS HDA BAR bounds/ownership, controller reset, fixed/bidirectional streams, format, ambiguity and power guard");
 }
 '''
+
 with tempfile.TemporaryDirectory(prefix='cirrus-hda-check-') as directory:
     tmp = Path(directory)
     source = tmp / 'hda.cpp'
-    source.write_text(preamble + function('syncAlc287HdaCodec') + '\n' + function('supportedHdaFormat') + checks,
-                      encoding='utf-8')
+    source.write_text(preamble + function('syncAlc287HdaCodec') + '\n' + function('supportedHdaFormat') + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', str(source), '-o', str(tmp / 'hda.exe')], check=True)
     subprocess.run([str(tmp / 'hda.exe')], check=True)

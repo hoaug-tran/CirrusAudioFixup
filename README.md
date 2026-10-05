@@ -181,11 +181,14 @@ By default, **no boot arguments are required** to run the full initialization an
 
 | Parameter | Value | Description |
 | :--- | :--- | :--- |
-| `cirrus_probe` | `1` | Enables verbose register access logging. |
-| `cirrus_readonly` | `1` | Activates read-only monitoring (safe mode). |
-| `cirrus_phase` | `<phase>` | Restricts driver start to debugging phases (`4A1`, `4B`, `5B`, `5C`). |
-| `cirrus_dump_compact`| `1` | Formats register dumps cleanly to save NVRAM block size. |
-| `cirrus_deepdiag` | `1` | Enables expensive full-register CRC/snapshot scans. Keep this disabled for normal boots. |
+| `-cirrusprobe` | flag | Enables verbose register access logging. |
+| `-cirrusro` | flag | Activates read-only monitoring (safe mode). |
+| `-cirrusphase` | `<phase>` | Restricts driver start to debugging phases (`4A1`, `4B`, `5B`, `5C`). |
+| `-cirruscompact` | flag | Formats register dumps cleanly to save NVRAM block size. |
+| `-cirrusdiag` | flag | Enables expensive full-register CRC/snapshot scans. Keep this disabled for normal boots. |
+| `-cirrusnodsp` | flag | Bypasses DSP firmware load and runs direct hardware mode. |
+| `-cirrusoff` | flag | Completely disables CirrusAudioFixup kext. |
+| `-cirrusdbg` | flag | Enables detailed debug logging in console. |
 
 Normal boot keeps both CS35L41 interrupt banks masked because this kext uses
 polling and does not install Linux's regmap IRQ handlers. GPIO configuration

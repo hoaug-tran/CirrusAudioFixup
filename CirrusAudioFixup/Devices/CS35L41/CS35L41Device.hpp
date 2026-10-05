@@ -152,7 +152,7 @@ public:
     bool unpackOTP(core::RegisterIO& io) {
         const cs35l41_otp_map_element_t* otpMapMatch = nullptr;
         const cs35l41_otp_packed_element_t* otpMap;
-        int bitOffset, wordOffset, i;
+        int bitOffset, wordOffset;
         uint32_t otpVal;
         uint32_t otpIdReg;
         uint32_t otpMem[80];
@@ -160,9 +160,9 @@ public:
         if (!io.read(0x00000010, &otpIdReg))
             return false;
 
-        for (size_t i = 0; i < support::arraySize(cs35l41_otp_map_map); i++) {
-            if (cs35l41_otp_map_map[i].id == otpIdReg) {
-                otpMapMatch = &cs35l41_otp_map_map[i];
+        for (size_t mapIdx = 0; mapIdx < support::arraySize(cs35l41_otp_map_map); mapIdx++) {
+            if (cs35l41_otp_map_map[mapIdx].id == otpIdReg) {
+                otpMapMatch = &cs35l41_otp_map_map[mapIdx];
                 break;
             }
         }
@@ -174,22 +174,26 @@ public:
         if (!io.bulkRead(0x00000400, otpRawBuf, sizeof(otpRawBuf)))
             return false;
 
-        for (int i = 0; i < 80; i++) {
-            otpMem[i] = (otpRawBuf[i * 4] << 24) | (otpRawBuf[i * 4 + 1] << 16) | (otpRawBuf[i * 4 + 2] << 8) | (otpRawBuf[i * 4 + 3]);
+        for (size_t memIdx = 0; memIdx < 80; memIdx++) {
+            otpMem[memIdx] = (otpRawBuf[memIdx * 4] << 24) | (otpRawBuf[memIdx * 4 + 1] << 16) | (otpRawBuf[memIdx * 4 + 2] << 8) | (otpRawBuf[memIdx * 4 + 3]);
         }
 
         otpMap = otpMapMatch->map;
         bitOffset = otpMapMatch->bit_offset;
         wordOffset = otpMapMatch->word_offset;
 
-        for (i = 0; i < otpMapMatch->num_elements; i++) {
-            if (bitOffset + otpMap[i].size - 1 >= 32) {
+        for (size_t elemIdx = 0; elemIdx < otpMapMatch->num_elements; elemIdx++) {
+            if (wordOffset >= 80)
+                return false;
+            if (bitOffset + otpMap[elemIdx].size - 1 >= 32) {
+                if (wordOffset + 1 >= 80)
+                    return false;
                 otpVal = (otpMem[wordOffset] & support::genMask(31, bitOffset)) >> bitOffset;
-                otpVal |= (otpMem[++wordOffset] & support::genMask(bitOffset + otpMap[i].size - 33, 0)) << (32 - bitOffset);
-                bitOffset += otpMap[i].size - 32;
-            } else if (bitOffset + otpMap[i].size - 1 >= 0) {
-                otpVal = (otpMem[wordOffset] & support::genMask(bitOffset + otpMap[i].size - 1, bitOffset)) >> bitOffset;
-                bitOffset += otpMap[i].size;
+                otpVal |= (otpMem[++wordOffset] & support::genMask(bitOffset + otpMap[elemIdx].size - 33, 0)) << (32 - bitOffset);
+                bitOffset += otpMap[elemIdx].size - 32;
+            } else if (bitOffset + otpMap[elemIdx].size - 1 >= 0) {
+                otpVal = (otpMem[wordOffset] & support::genMask(bitOffset + otpMap[elemIdx].size - 1, bitOffset)) >> bitOffset;
+                bitOffset += otpMap[elemIdx].size;
             } else {
                 otpVal = 0;
             }
@@ -199,9 +203,9 @@ public:
                 wordOffset++;
             }
 
-            if (otpMap[i].reg != 0) {
-                if (!io.updateBits(otpMap[i].reg, support::genMask(otpMap[i].shift + otpMap[i].size - 1, otpMap[i].shift),
-                                   otpVal << otpMap[i].shift)) {
+            if (otpMap[elemIdx].reg != 0) {
+                if (!io.updateBits(otpMap[elemIdx].reg, support::genMask(otpMap[elemIdx].shift + otpMap[elemIdx].size - 1, otpMap[elemIdx].shift),
+                                   otpVal << otpMap[elemIdx].shift)) {
                     return false;
                 }
             }
@@ -226,13 +230,18 @@ public:
             break;
         }
 
+        bool success = true;
         if (patch) {
-            for (size_t i = 0; i < count; i++) {
-                io.write(patch[i].reg, patch[i].value);
+            for (size_t idx = 0; idx < count; idx++) {
+                if (!io.write(patch[idx].reg, patch[idx].value)) {
+                    success = false;
+                    break;
+                }
             }
         }
 
-        return lockTestKey(io);
+        bool lockOk = lockTestKey(io);
+        return success && lockOk;
     }
 
     bool setupGPIO(core::RegisterIO& io) {

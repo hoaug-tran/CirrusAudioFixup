@@ -539,6 +539,7 @@ public:
     }
 
     static bool parseWMFWAlgorithmData(const uint8_t* data, size_t size, FirmwareImage* outImage, size_t file_offset, uint8_t fw_version) {
+        (void)file_offset;
         if (size < 4)
             return false;
 

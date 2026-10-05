@@ -130,6 +130,7 @@ constexpr uint32_t kMaskProtectionFault = 0x800281C0;
 constexpr uint32_t kCmdMailboxResume = 2;
 constexpr uint32_t kCmdMailboxPause = 1;
 constexpr uint32_t kCmdMailboxSpeakerOutputEnable = 7;
+constexpr uint32_t kCmdMailboxSpeakerOutputDisable = 8;
 
 constexpr uint32_t kStatusMailboxRunning = 0;
 constexpr uint32_t kStatusMailboxPaused = 1;
@@ -244,6 +245,7 @@ constexpr uint32_t kDspVirtual1Mailbox1 = kRegDspVirtual1Mailbox1;
 constexpr uint32_t kMailboxCommandResume = kCmdMailboxResume;
 constexpr uint32_t kMailboxCommandPause = kCmdMailboxPause;
 constexpr uint32_t kMailboxCommandSpeakerOutputEnable = kCmdMailboxSpeakerOutputEnable;
+constexpr uint32_t kMailboxCommandSpeakerOutputDisable = kCmdMailboxSpeakerOutputDisable;
 
 constexpr uint32_t kMailboxStatusRunning = kStatusMailboxRunning;
 constexpr uint32_t kMailboxStatusPaused = kStatusMailboxPaused;

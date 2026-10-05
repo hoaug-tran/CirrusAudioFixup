@@ -491,25 +491,18 @@ void CirrusAudioFixup::free() {
 }
 
 bool CirrusAudioFixup::bootArgEnabled(const char* name) {
-    UInt32 value = 0;
-    if (PE_parse_boot_argn(name, &value, sizeof(value))) {
-        return value != 0;
-    }
-
-    int strValue[16];
-    if (PE_parse_boot_argn(name, &strValue, sizeof(strValue))) {
-        char* strPtr = reinterpret_cast<char*>(&strValue);
-        if (strPtr[0] == '0' && strPtr[1] == '\0') {
+    char val[16] = {};
+    if (PE_parse_boot_argn(name, val, sizeof(val))) {
+        if (val[0] == '0' && val[1] == '\0') {
             return false;
         }
         return true;
     }
-
     return false;
 }
 
 bool CirrusAudioFixup::bootArgStrEquals(const char* name, const char* expectedVal) {
-    char val[64];
+    char val[64] = {};
     if (PE_parse_boot_argn(name, val, sizeof(val))) {
         return strncmp(val, expectedVal, sizeof(val)) == 0;
     }
@@ -616,6 +609,7 @@ bool CirrusAudioFixup::setupProbeTimer() {
 }
 
 void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phaseArg) {
+    (void)phaseArg;
     CIRRUS_LOG("starting full initialization for amplifier: %s", amp.name);
     amp.firmwareValidated = false;
     amp.dspAlive = false;
@@ -1014,6 +1008,7 @@ void CirrusAudioFixup::scheduleReadOnlyProbe(UInt32 delayMs) {
 }
 
 void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* sender) {
+    (void)sender;
     CirrusAudioFixup* self = OSDynamicCast(CirrusAudioFixup, owner);
     if (self) {
         if (self->mStopping || !self->mPowerAvailable)
@@ -1028,6 +1023,10 @@ void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* send
 }
 
 size_t CirrusAudioFixup::detectAmplifiers() {
+    for (size_t i = 0; i < kMaxAmps; ++i) {
+        mAmps[i].present = false;
+    }
+
     const uint8_t candidateAddresses[kMaxAmps] = {cirrus::devices::cs35l41::registers::kI2cAddressLeft,
                                                   cirrus::devices::cs35l41::registers::kI2cAddressRight, 0x42, 0x43};
     const char* candidateNames[kMaxAmps] = {"left", "right", "top_left", "top_right"};
@@ -1321,6 +1320,10 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
     ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegGpio1Control1, 0x00000001, TRACE_PLAYBACK) && ok;
     ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2, 1, 0, TRACE_PLAYBACK) && ok;
     if (amp.dspAlive) {
+        if (amp.firmwareIdVersion > 0x001C00) {
+            sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxSpeakerOutputDisable,
+                               cirrus::devices::cs35l41::registers::kStatusMailboxRunning);
+        }
         bool paused = sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxPause,
                                          cirrus::devices::cs35l41::registers::kStatusMailboxPaused);
         ok = paused && ok;
@@ -2608,15 +2611,15 @@ void CirrusAudioFixup::runTimeBasedFSMCheck(AmplifierState& amp) {
     uint32_t crcT0 = calculateRegistersCRC32(amp);
     CIRRUS_LOG("t0 checksum for %s: 0x%08X", amp.name, crcT0);
 
-    IOSleep(1000);
+    IOSleep(10);
     uint32_t crcT1 = calculateRegistersCRC32(amp);
     CIRRUS_LOG("t1 checksum for %s: 0x%08X", amp.name, crcT1);
 
-    IOSleep(4000);
+    IOSleep(20);
     uint32_t crcT5 = calculateRegistersCRC32(amp);
     CIRRUS_LOG("t5 checksum for %s: 0x%08X", amp.name, crcT5);
 
-    IOSleep(25000);
+    IOSleep(50);
     uint32_t crcT30 = calculateRegistersCRC32(amp);
     CIRRUS_LOG("t30 checksum for %s: 0x%08X", amp.name, crcT30);
 
@@ -2804,7 +2807,7 @@ bool CirrusAudioFixup::unpackOTP(AmplifierState& amp) {
 void CirrusAudioFixup::snapshotRegisters(AmplifierState& amp, UInt32* snapshot) {
     if (!amp.present)
         return;
-    for (int i = 0; i < sizeof(cs35l41_reg_desc) / sizeof(RegisterDesc); i++) {
+    for (size_t i = 0; i < sizeof(cs35l41_reg_desc) / sizeof(RegisterDesc); i++) {
         UInt32 val = 0;
         if (readRegister(amp, cs35l41_reg_desc[i].addr, &val)) {
             snapshot[i] = val;
@@ -2820,7 +2823,7 @@ void CirrusAudioFixup::compareRegisterSnapshots(AmplifierState& amp, const UInt3
     CIRRUS_LOG("comparing register diffs on %s:", amp.name);
     int diffCount = 0;
 
-    for (int i = 0; i < sizeof(cs35l41_reg_desc) / sizeof(RegisterDesc); i++) {
+    for (size_t i = 0; i < sizeof(cs35l41_reg_desc) / sizeof(RegisterDesc); i++) {
         if (oldSnapshot[i] != newSnapshot[i] && oldSnapshot[i] != 0xFFFFFFFF && newSnapshot[i] != 0xFFFFFFFF) {
             CIRRUS_LOG("Amp %s: [DIFF] %s (0x%08X) changed from 0x%08X to 0x%08X", amp.name, cs35l41_reg_desc[i].name,
                        cs35l41_reg_desc[i].addr, oldSnapshot[i], newSnapshot[i]);
@@ -2956,7 +2959,6 @@ IOService* CirrusAudioFixup::audioController() {
                     if (pci) {
                         const char* name = pci->getName();
                         uint16_t vendor = pci->configRead16(kIOPCIConfigVendorID);
-                        uint16_t device = pci->configRead16(kIOPCIConfigDeviceID);
                         int score = 0;
                         if (name && strcmp(name, "HDEF") == 0)
                             score += 100;
@@ -3000,23 +3002,15 @@ IOService* CirrusAudioFixup::audioController() {
 
     while ((service = OSDynamicCast(IOService, iter->getNextObject()))) {
         uint32_t pciVendor = 0;
-        uint32_t pciDevice = 0;
         IOPCIDevice* pci = OSDynamicCast(IOPCIDevice, service);
         if (pci) {
             pciVendor = pci->configRead16(kIOPCIConfigVendorID);
-            pciDevice = pci->configRead16(kIOPCIConfigDeviceID);
         } else {
             OSData* venData = OSDynamicCast(OSData, service->getProperty("vendor-id"));
             if (venData && venData->getLength() >= 4) {
                 pciVendor = *((uint32_t*)venData->getBytesNoCopy()) & 0xFFFF;
             } else if (venData && venData->getLength() >= 2) {
                 pciVendor = *((uint16_t*)venData->getBytesNoCopy());
-            }
-            OSData* devData = OSDynamicCast(OSData, service->getProperty("device-id"));
-            if (devData && devData->getLength() >= 4) {
-                pciDevice = *((uint32_t*)devData->getBytesNoCopy()) & 0xFFFF;
-            } else if (devData && devData->getLength() >= 2) {
-                pciDevice = *((uint16_t*)devData->getBytesNoCopy());
             }
         }
         if (pciVendor == 0xFFFF || pciVendor == 0xFFFFFFFF || pciVendor == 0) {
@@ -3053,11 +3047,12 @@ IOService* CirrusAudioFixup::audioController() {
         }
     }
 
-    if (bestController) {
-        bestController->retain();
-    }
     iter->release();
-    return bestScore >= 40 ? bestController : nullptr;
+    if (bestScore >= 40 && bestController) {
+        bestController->retain();
+        return bestController;
+    }
+    return nullptr;
 }
 
 IOService* CirrusAudioFixup::getAudioController() {
@@ -3312,7 +3307,7 @@ void CirrusAudioFixup::discoverFirmware(AmplifierState& amp) {
                    subDevice, spkid, amp.name);
         if (!gCirrusDebug) {
             CIRRUS_ERR("To dump full hardware profile, add '-cirrusdbg' to boot-args and reboot");
-            CIRRUS_ERR("Report your hardware profile to: https://github.com/hoaugtr/CirrusAudioFixup/issues");
+            CIRRUS_ERR("Report your hardware profile to: https://github.com/hoaug-tran/CirrusAudioFixup/issues");
         } else {
             IOLog(CIRRUS_LOG_PREFIX "=== CIRRUS AUDIO HARDWARE PROFILE DUMP ===\n");
             IOLog(CIRRUS_LOG_PREFIX "SSID: 0x%08X (Vendor: 0x%04X, Device: 0x%04X)\n", ssid, subVendor, subDevice);
@@ -3806,6 +3801,7 @@ bool CirrusAudioFixup::parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& ou
 }
 
 void CirrusAudioFixup::uploadFirmware(AmplifierState& amp, const char* phaseArg) {
+    (void)phaseArg;
     CIRRUS_LOG("starting firmware upload on %s", amp.name);
 
     if (!amp.wmfwData || amp.wmfwSize == 0) {

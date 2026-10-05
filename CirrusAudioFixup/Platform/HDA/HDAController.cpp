@@ -25,19 +25,15 @@ IOService* HDAController::getAudioController() {
     int bestScore = -1;
 
     while ((service = OSDynamicCast(IOService, iter->getNextObject()))) {
+        int score = 0;
         uint32_t pciVendor = 0;
-        uint32_t pciDevice = 0;
         IOPCIDevice* pci = OSDynamicCast(IOPCIDevice, service);
         if (pci) {
             pciVendor = pci->configRead16(kIOPCIConfigVendorID);
-            pciDevice = pci->configRead16(kIOPCIConfigDeviceID);
         } else {
             OSData* venData = OSDynamicCast(OSData, service->getProperty("vendor-id"));
             if (venData && venData->getLength() >= 2)
                 pciVendor = *((uint16_t*)venData->getBytesNoCopy());
-            OSData* devData = OSDynamicCast(OSData, service->getProperty("device-id"));
-            if (devData && devData->getLength() >= 2)
-                pciDevice = *((uint16_t*)devData->getBytesNoCopy());
         }
         if (pciVendor == 0xFFFF || pciVendor == 0)
             continue;
@@ -69,10 +65,12 @@ IOService* HDAController::getAudioController() {
         }
     }
 
-    if (bestController)
-        bestController->retain();
     iter->release();
-    return bestScore >= 40 ? bestController : nullptr;
+    if (bestScore >= 40 && bestController) {
+        bestController->retain();
+        return bestController;
+    }
+    return nullptr;
 }
 
 bool HDAController::supportedFormat(uint16_t format) {

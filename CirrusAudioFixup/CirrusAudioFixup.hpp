@@ -39,47 +39,47 @@ struct RegisterSequence {
 };
 
 struct AmplifierState {
-    const char* name;
-    uint8_t address;
-    bool present;
-    uint32_t deviceId;
-    uint32_t revisionId;
+    const char* name{nullptr};
+    uint8_t address{0};
+    bool present{false};
+    uint32_t deviceId{0};
+    uint32_t revisionId{0};
 
-    const uint8_t* wmfwData;
-    size_t wmfwSize;
-    const uint8_t* binData;
-    size_t binSize;
-    bool firmwareValidated;
-    uint32_t finalCrc;
+    const uint8_t* wmfwData{nullptr};
+    size_t wmfwSize{0};
+    const uint8_t* binData{nullptr};
+    size_t binSize{0};
+    bool firmwareValidated{false};
+    uint32_t finalCrc{0};
 
-    unsigned int monitorCount;
-    bool initialized;
-    bool dspAlive;
+    unsigned int monitorCount{0};
+    bool initialized{false};
+    bool dspAlive{false};
 
-    uint32_t lastIrq1Status1;
-    uint32_t lastIrq1Status3;
-    uint32_t lastPowerManagementStatus;
-    uint32_t lastMailbox2;
-    uint32_t lastStreamArbitrationError;
-    uint32_t lastClockDetect;
-    uint32_t lastStreamArbitrationControl;
+    uint32_t lastIrq1Status1{0};
+    uint32_t lastIrq1Status3{0};
+    uint32_t lastPowerManagementStatus{0};
+    uint32_t lastMailbox2{0};
+    uint32_t lastStreamArbitrationError{0};
+    uint32_t lastClockDetect{0};
+    uint32_t lastStreamArbitrationControl{0};
 
-    uint32_t lastTimestamp;
-    bool playbackActive;
-    uint32_t playbackStableCount;
+    uint32_t lastTimestamp{0};
+    bool playbackActive{false};
+    uint32_t playbackStableCount{0};
 
     struct InterestingControl {
-        char name[64];
-        uint32_t address;
-    } diagnosticControls[14];
-    uint32_t diagnosticControlCount;
+        char name[64]{};
+        uint32_t address{0};
+    } diagnosticControls[14]{};
+    uint32_t diagnosticControlCount{0};
     uint32_t firmwareIdVersion{0};
     uint32_t monitorLogCountdown{0};
     uint32_t haloStateRegister{0};
     uint32_t haloHeartbeatRegister{0};
     bool playbackFaulted{false};
     uint32_t cleanupAttempts{0};
-    cirrus::diagnostics::DiagnosticState diagnostic;
+    cirrus::diagnostics::DiagnosticState diagnostic{};
 };
 
 struct FirmwareImage;
@@ -146,7 +146,7 @@ private:
     cirrus::diagnostics::TraceEntry mTraceBuffer[kTraceBufferSize];
     uint32_t mTraceHead{0};
     uint32_t mTraceTail{0};
-    cirrus::diagnostics::TraceStats mTraceStats{0};
+    cirrus::diagnostics::TraceStats mTraceStats{};
     IOLock* mTraceLock{nullptr};
 
     void initTraceBuffer();

@@ -112,7 +112,6 @@ OSDeclareDefaultStructors(CirrusAudioFixup)
     IOReturn setPowerState(unsigned long state, IOService* device) override;
 
 private:
-
     void fullDriverFlow();
 
     void runBackgroundMonitor();
@@ -175,6 +174,8 @@ private:
     void probeAmp(AmplifierState& amp);
     size_t detectAmplifiers();
 
+    bool mProbingAmplifiers{false};
+
     bool transferToAddress(uint8_t address, uint8_t* writeBuffer, uint16_t writeLength, uint8_t* readBuffer, uint16_t readLength);
 
 public:
@@ -215,9 +216,9 @@ private:
     void dumpAllRegisters(AmplifierState& amp);
     bool configureHardware(AmplifierState& amp);
 
-    bool syncAlc287HdaCodec();
-    bool synchronizeHdaStream() { return syncAlc287HdaCodec(); }
-    bool synchronizeHdaCodec() { return syncAlc287HdaCodec(); }
+    bool synchronizeHdaStream();
+    bool synchronizeHdaCodec() { return synchronizeHdaStream(); }
+    bool performPlatformHardwareReset();
     static bool supportedHdaFormat(uint16_t format);
 
     void discoverFirmware(AmplifierState& amp);

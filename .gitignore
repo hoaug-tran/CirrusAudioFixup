@@ -16,3 +16,7 @@ __pycache__/
 /MacKernelSDK
 .clangd
 compile_commands.json
+.cache/
+/I2CD.txt
+/log.txt
+/log-other.txt

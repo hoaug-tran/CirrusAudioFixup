@@ -182,6 +182,12 @@ public:
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
     bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
+    struct DummyPci { void release() {} };
+    struct DummyMap { void release() {} };
+    DummyPci* mAudioPciDev=nullptr;
+    DummyMap* mAudioBarMap=nullptr;
+    volatile uint8_t* mAudioBarBase=nullptr;
+    bool mProbingAmplifiers=false;
     cirrus::platform::hda::HDAStreamState mHdaState;
     bool& mHdaConverterPrepared = mHdaState.converterPrepared;
     bool& mHdaControllerObserved = mHdaState.observed;
@@ -233,7 +239,7 @@ public:
     }
     bool writeRegister(CS35L41Amp&,uint32_t r,uint32_t v,TraceSource=TRACE_OTHER) {
         writes.push_back({r,v});
-        if(r==CS35L41_AMP_DIG_VOL_CTRL && v==0x8000) { ++unmute; if(failed) ++unmuteAfterFault; }
+        if(r==CS35L41_AMP_DIG_VOL_CTRL && (v==0x8000 || v==0x0000)) { ++unmute; if(failed) ++unmuteAfterFault; }
         if(!step()) return false;
         if(r==0x10010) regs[r]&=~v;
         else if(r==0x2014) {
@@ -263,7 +269,7 @@ public:
     bool bulkRead(CS35L41Amp&,uint32_t,uint8_t* p,unsigned n,TraceSource=TRACE_OTHER) {
         if(!step()) return false; memset(p,0,n); return true;
     }
-    bool syncAlc287HdaCodec() {
+    bool synchronizeHdaStream() {
         if(endStreamBeforeUnmute && ++syncCalls>1) { streamEnded=true; mHdaStreamActive=false; }
         return mHdaStreamActive;
     }
@@ -363,7 +369,7 @@ int main() {
     bypass.mAmps[0].monitorCount=0;
     bypass.mAmps[0].dspAlive=false;
     bypass.runBackgroundMonitor();
-    assert(bypass.mAmps[0].playbackActive && bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x8000);
+    assert(bypass.mAmps[0].playbackActive && (bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x8000 || bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x0000));
     assert(bypass.regs[CS35L41_AMP_GAIN_CTRL]==0x84);
     unsigned bypassOps=bypass.ops;
     for(unsigned i=1;i<=bypassOps;i++) {

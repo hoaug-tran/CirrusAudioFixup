@@ -13,7 +13,6 @@ constexpr uint32_t kStreamDescriptorBase = 0x80;
 constexpr uint32_t kStreamDescriptorStride = 0x20;
 constexpr uint32_t kStreamControl = 0x00;
 constexpr uint32_t kStreamStatus = 0x03;
-constexpr uint32_t kStreamFormat = 0x12;
 }
 
 class HDAStreamWatcher {

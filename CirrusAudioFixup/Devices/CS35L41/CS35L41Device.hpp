@@ -175,8 +175,7 @@ public:
             return false;
 
         for (int i = 0; i < 80; i++) {
-            otpMem[i] =
-                (otpRawBuf[i * 4] << 24) | (otpRawBuf[i * 4 + 1] << 16) | (otpRawBuf[i * 4 + 2] << 8) | (otpRawBuf[i * 4 + 3]);
+            otpMem[i] = (otpRawBuf[i * 4] << 24) | (otpRawBuf[i * 4 + 1] << 16) | (otpRawBuf[i * 4 + 2] << 8) | (otpRawBuf[i * 4 + 3]);
         }
 
         otpMap = otpMapMatch->map;
@@ -274,10 +273,7 @@ public:
         return io.updateBits(registers::kRegPowerControl2, 0x00000003, 0x00000000);
     }
 
-    bool stopPlayback(core::RegisterIO& io) override {
-
-        return io.updateBits(registers::kRegPowerControl2, 0x00000003, 0x00000003);
-    }
+    bool stopPlayback(core::RegisterIO& io) override { return io.updateBits(registers::kRegPowerControl2, 0x00000003, 0x00000003); }
 
     bool powerDown(core::RegisterIO& io) override {
         stopPlayback(io);

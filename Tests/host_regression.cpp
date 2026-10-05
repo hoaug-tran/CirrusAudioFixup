@@ -10,9 +10,9 @@ void putLE(std::vector<uint8_t>& v, unsigned pos, uint32_t n) {
     for (unsigned i=0;i<4;i++) v[pos+i]=uint8_t(n>>(i*8));
 }
 int main() {
-    assert(firmwareTableSize==1);
-    assert(firmwareTable[0].subsystemVendor==0x17AA && firmwareTable[0].subsystemDevice==0x3847);
-    assert(firmwareTable[0].spkid==1 && firmwareTable[0].bin!=firmwareTable[0].binRight);
+    assert(cs35l41FirmwareCount==1);
+    assert(cs35l41Firmware[0].subsystemVendor==0x17AA && cs35l41Firmware[0].subsystemDevice==0x3847);
+    assert(cs35l41Firmware[0].spkid==1 && cs35l41Firmware[0].bin!=cs35l41Firmware[0].binRight);
     FirmwareImage fw{};
     auto wmfw=cs35l41_dsp1_spk_prot_17aa3847_wmfw;
     auto wmfwSize=sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw);

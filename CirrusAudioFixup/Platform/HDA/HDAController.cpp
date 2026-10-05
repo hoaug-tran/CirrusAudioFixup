@@ -1,5 +1,7 @@
 #include "Platform/HDA/HDAController.hpp"
+
 #include "Support/Logging.hpp"
+
 #include <IOKit/IOService.h>
 #include <IOKit/pci/IOPCIDevice.h>
 
@@ -10,11 +12,13 @@ static uint32_t gMissCount = 0;
 
 IOService* HDAController::getAudioController() {
     OSDictionary* matching = IOService::serviceMatching("IOPCIDevice");
-    if (!matching) return nullptr;
+    if (!matching)
+        return nullptr;
 
     OSIterator* iter = IOService::getMatchingServices(matching);
     matching->release();
-    if (!iter) return nullptr;
+    if (!iter)
+        return nullptr;
 
     IOService* service;
     IOService* bestController = nullptr;
@@ -29,37 +33,46 @@ IOService* HDAController::getAudioController() {
             pciDevice = pci->configRead16(kIOPCIConfigDeviceID);
         } else {
             OSData* venData = OSDynamicCast(OSData, service->getProperty("vendor-id"));
-            if (venData && venData->getLength() >= 2) pciVendor = *((uint16_t*)venData->getBytesNoCopy());
+            if (venData && venData->getLength() >= 2)
+                pciVendor = *((uint16_t*)venData->getBytesNoCopy());
             OSData* devData = OSDynamicCast(OSData, service->getProperty("device-id"));
-            if (devData && devData->getLength() >= 2) pciDevice = *((uint16_t*)devData->getBytesNoCopy());
+            if (devData && devData->getLength() >= 2)
+                pciDevice = *((uint16_t*)devData->getBytesNoCopy());
         }
-        if (pciVendor == 0xFFFF || pciVendor == 0) continue;
-
-        int score = 0;
-        if ((pciVendor & 0xFFFF) == 0x1022 && (pciDevice & 0xFFFF) == 0x15E3) score += 200;
+        if (pciVendor == 0xFFFF || pciVendor == 0)
+            continue;
 
         OSData* classCodeData = OSDynamicCast(OSData, service->getProperty("class-code"));
         if (classCodeData && classCodeData->getLength() >= 3) {
             const uint8_t* bytes = (const uint8_t*)classCodeData->getBytesNoCopy();
-            if (bytes[2] == 0x04 && bytes[1] == 0x03) score += 10;
+            if (bytes[2] == 0x04 && bytes[1] == 0x03)
+                score += 50;
         }
 
         const char* name = service->getName();
         if (name) {
-            if (strcmp(name, "HDEF") == 0) score += 5;
-            else if (strcmp(name, "HDAS") == 0) score += 3;
-            else if (strcmp(name, "HDAU") == 0) score -= 10;
+            if (strcmp(name, "HDEF") == 0 || strcmp(name, "HDAS") == 0 || strcmp(name, "CAVS") == 0 || strcmp(name, "AZAL") == 0 ||
+                strcmp(name, "ALZA") == 0 || strcmp(name, "AUDIO") == 0)
+                score += 30;
+            else if (strcmp(name, "HDAU") == 0 || strcmp(name, "B0D3") == 0)
+                score -= 40;
         }
 
-        if (pciVendor == 0x1022 && pciDevice == 0x15E3 && score >= 10 && score > bestScore) {
+        if (pciVendor == 0x10DE || pciVendor == 0x1002)
+            score -= 50;
+        else if (pciVendor == 0x1022 || pciVendor == 0x8086)
+            score += 30;
+
+        if (score >= 40 && score > bestScore) {
             bestScore = score;
             bestController = service;
         }
     }
 
-    if (bestController) bestController->retain();
+    if (bestController)
+        bestController->retain();
     iter->release();
-    return bestScore >= 10 ? bestController : nullptr;
+    return bestScore >= 40 ? bestController : nullptr;
 }
 
 bool HDAController::supportedFormat(uint16_t format) {
@@ -75,7 +88,8 @@ bool HDAController::supportedFormat(uint16_t format) {
 bool HDAController::syncCodec(HDAStreamState& state) {
     IOService* audioCtrl = getAudioController();
     if (!audioCtrl) {
-        if (gMissCount < 20) gMissCount++;
+        if (gMissCount < 20)
+            gMissCount++;
         state.observed = false;
         return false;
     }
@@ -88,7 +102,8 @@ bool HDAController::syncCodec(HDAStreamState& state) {
 
     IOMemoryMap* map = pciDev->mapDeviceMemoryWithRegister(0x10);
     if (!map || map->getLength() < 0x80) {
-        if (map) map->release();
+        if (map)
+            map->release();
         audioCtrl->release();
         return false;
     }

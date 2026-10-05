@@ -20,13 +20,7 @@ public:
 
     virtual bool probe(RegisterIO& io) = 0;
 
-    enum class InitResult {
-        Success,
-        DeviceNotFound,
-        ResetFailed,
-        BootTimeout,
-        BootError
-    };
+    enum class InitResult { Success, DeviceNotFound, ResetFailed, BootTimeout, BootError };
 
     virtual InitResult initialize(RegisterIO& io) = 0;
 

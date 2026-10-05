@@ -42,9 +42,9 @@ def detect_codec_from_path(file_path):
     for candidate in ["cs35l41", "cs35l45", "cs35l51", "cs35l53", "cs35l56"]:
         if candidate in lower:
             return candidate
-    return "cs35l41"
+    return None
 
-def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec="cs35l41", database_path=None):
+def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=None, firmware_path=None):
     if ssid_str.lower().startswith('0x'):
         ssid_int = int(ssid_str, 16)
     else:
@@ -53,7 +53,12 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
     sub_vendor = (ssid_int >> 16) & 0xFFFF
     sub_device = ssid_int & 0xFFFF
     ssid_hex = f"{ssid_int:08x}"
-    codec_name = codec.lower().strip()
+    codec_name = codec.lower().strip() if codec else detect_codec_from_path(wmfw_path)
+    if not codec_name and firmware_path:
+        codec_name = detect_codec_from_path(firmware_path)
+    if not codec_name:
+        print("ERROR: Could not detect codec from firmware path; pass codec explicitly", file=sys.stderr)
+        return False
 
     with open(wmfw_path, 'rb') as f:
         wmfw_bytes = f.read()
@@ -85,15 +90,16 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
         return False
     print(f"SUCCESS Secondary Coefficient: {bin_r_msg}")
 
-    if database_path is None:
+    if firmware_path is None:
         root_dir = Path(__file__).resolve().parents[1]
         codec_dir = codec_name.upper()
         target_dir = root_dir / 'CirrusAudioFixup' / 'Devices' / codec_dir / 'Resources'
         if not target_dir.exists():
-            target_dir = root_dir / 'CirrusAudioFixup' / 'Devices' / 'CS35L41' / 'Resources'
-        database_path = target_dir / 'FirmwareDatabase.hpp'
+            print(f"ERROR: Resource directory for codec {codec_dir} does not exist: {target_dir}", file=sys.stderr)
+            return False
+        firmware_path = target_dir / "Firmware.hpp"
 
-    with open(database_path, 'r', encoding='utf-8') as f:
+    with open(firmware_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
     wmfw_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_wmfw"
@@ -101,11 +107,12 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
     bin_r_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_spkid{spkid}_r0_bin"
 
     if wmfw_var_name in content:
-        print(f"Notice: {wmfw_var_name} already present in database: {database_path}")
+        print(f"Notice: {wmfw_var_name} already present in resources: {firmware_path}")
 
-    table_marker = "const FirmwareResource firmwareTable[] = {"
+    table_symbol = f"{codec_name}Firmware"
+    table_marker = f"const FirmwareResource {table_symbol}[] = {{"
     if table_marker not in content:
-        print(f"ERROR: Could not find firmwareTable in {database_path}", file=sys.stderr)
+        print(f"ERROR: Could not find {table_symbol} in {firmware_path}", file=sys.stderr)
         return False
 
     split_idx = content.find(table_marker)
@@ -145,21 +152,21 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
 
     updated_content = new_pre_table + post_table
 
-    with open(database_path, 'w', encoding='utf-8') as f:
+    with open(firmware_path, 'w', encoding='utf-8') as f:
         f.write(updated_content)
 
-    print(f"SUCCESS: Integrated Codec {codec_name.upper()} SSID 0x{ssid_hex} (Vendor=0x{sub_vendor:04X}, Device=0x{sub_device:04X}, spkid={spkid}) into {database_path}")
+    print(f"SUCCESS: Integrated Codec {codec_name.upper()} SSID 0x{ssid_hex} (Vendor=0x{sub_vendor:04X}, Device=0x{sub_device:04X}, spkid={spkid}) into {firmware_path}")
     return True
 
 def main():
     parser = argparse.ArgumentParser(description="Smart Amplifier Firmware & Tuning Importer for macOS CirrusAudioFixup")
-    parser.add_argument("--codec", required=False, default=None, help="Target smart amplifier codec family (e.g. cs35l41, cs35l45, cs35l51, cs35l56; default: auto-detect or cs35l41)")
+    parser.add_argument("--codec", required=False, default=None, help="Target smart amplifier codec family (e.g. cs35l41, cs35l45, cs35l51, cs35l56; default: auto-detect from firmware path)")
     parser.add_argument("--ssid", required=True, help="Subsystem ID in hex (e.g. 0x17AA3847 or 17AA3847)")
     parser.add_argument("--wmfw", required=True, help="Path to .wmfw DSP firmware file")
     parser.add_argument("--bin-l", required=True, help="Path to primary channel speaker tuning .bin file")
     parser.add_argument("--bin-r", required=False, help="Path to secondary channel speaker tuning .bin file (optional, defaults to bin-l)")
     parser.add_argument("--spkid", type=int, default=1, help="Speaker hardware identifier (default: 1)")
-    parser.add_argument("--database", required=False, help="Explicit path to FirmwareDatabase.hpp (optional)")
+    parser.add_argument("--firmware", required=False, help="Explicit path to codec firmware header (optional)")
     parser.add_argument("--validate-only", action="store_true", help="Validate firmware and tuning binaries without modifying codebase")
 
     args = parser.parse_args()
@@ -167,6 +174,11 @@ def main():
     codec = args.codec
     if not codec:
         codec = detect_codec_from_path(args.wmfw)
+    if not codec and args.firmware:
+        codec = detect_codec_from_path(args.firmware)
+    if not codec:
+        print("ERROR: Could not detect codec from firmware path; pass --codec explicitly", file=sys.stderr)
+        sys.exit(1)
 
     if args.validate_only:
         with open(args.wmfw, 'rb') as f:
@@ -181,7 +193,7 @@ def main():
                 print(f"Secondary Tuning validation: {br_msg}")
         sys.exit(0 if (w_ok and b_ok) else 1)
 
-    success = import_firmware(args.ssid, args.wmfw, args.bin_l, args.bin_r, args.spkid, codec, args.database)
+    success = import_firmware(args.ssid, args.wmfw, args.bin_l, args.bin_r, args.spkid, codec, args.firmware)
     sys.exit(0 if success else 1)
 
 if __name__ == '__main__':

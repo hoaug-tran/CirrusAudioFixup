@@ -55,7 +55,7 @@ struct Provider {
 class CirrusAudioFixup {
 public:
     Provider provider; Provider* mProvider=&provider;
-    bool mPowerAvailable=true,mStopping=false,mCapturingFailureSnapshot=false;
+    bool mPowerAvailable=true,mStopping=false,mCapturingFailureSnapshot=false,mProbingAmplifiers=false;
     bool nestedSnapshot=false;
     IOReturn mLastTransferReturn=0,diagnosticReturn=0,traceReturn=0;
     void setProperty(const char*,bool) {}

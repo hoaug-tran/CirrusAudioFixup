@@ -39,7 +39,6 @@ struct UploadStats {
 
 class CirrusFirmwareUploadPlanner {
 public:
-
     static bool generatePlan(uint32_t regionIndex, const MappedRegion& region, const UploadPolicy& policy, UploadPlan& outPlan) {
         outPlan.regionType = region.regionType;
         outPlan.regionIndex = regionIndex;

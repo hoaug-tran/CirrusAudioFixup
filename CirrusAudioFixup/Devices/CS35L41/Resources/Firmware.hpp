@@ -3428,12 +3428,9 @@ const uint8_t cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin[] = {
     0x22, 0x3a, 0x20, 0x22, 0x31, 0x2e, 0x30, 0x22, 0x0a, 0x7d, 0x00, 0x00,
 };
 
-const FirmwareResource firmwareTable[] = {
+const FirmwareResource cs35l41Firmware[] = {
     {0x17AA, 0x3847, 1, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid1.bin",
      cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin,
      sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin,
      sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin), false}};
-const size_t firmwareTableSize = sizeof(firmwareTable) / sizeof(firmwareTable[0]);
-
-constexpr const FirmwareResource* kFirmwareTable = firmwareTable;
-constexpr size_t kFirmwareTableSize = sizeof(firmwareTable) / sizeof(firmwareTable[0]);
+const size_t cs35l41FirmwareCount = sizeof(cs35l41Firmware) / sizeof(cs35l41Firmware[0]);

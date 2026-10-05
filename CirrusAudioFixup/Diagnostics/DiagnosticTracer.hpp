@@ -25,14 +25,20 @@ public:
         }
 
         if (isBulk) {
-            if (ret == kIOReturnSuccess) stats.bulkSuccess++;
-            else stats.bulkFail++;
+            if (ret == kIOReturnSuccess)
+                stats.bulkSuccess++;
+            else
+                stats.bulkFail++;
         } else if (isWrite) {
-            if (ret == kIOReturnSuccess) stats.writeSuccess++;
-            else stats.writeFail++;
+            if (ret == kIOReturnSuccess)
+                stats.writeSuccess++;
+            else
+                stats.writeFail++;
         } else {
-            if (ret == kIOReturnSuccess) stats.readSuccess++;
-            else stats.readFail++;
+            if (ret == kIOReturnSuccess)
+                stats.readSuccess++;
+            else
+                stats.readFail++;
         }
 
         uint64_t time = 0;

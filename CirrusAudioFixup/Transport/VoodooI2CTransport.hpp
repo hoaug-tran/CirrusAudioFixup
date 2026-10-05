@@ -112,7 +112,6 @@ private:
             return false;
 
         for (uint32_t retry = 0; retry < kMaxRetries; ++retry) {
-
             return true;
         }
         return false;

@@ -278,7 +278,6 @@ inline HaloMemoryPointer decodePointer(uint32_t value) {
 
 class CirrusFirmwareMapper {
 public:
-
     static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t& regAddress) {
         uint64_t base = 0, stride = 0;
         switch (type) {
@@ -442,7 +441,6 @@ public:
 
 class CirrusFirmwareParser {
 public:
-
     static uint32_t calculateCrc32(const uint8_t* data, size_t length) {
         uint32_t crc = 0xFFFFFFFF;
         for (size_t i = 0; i < length; i++) {

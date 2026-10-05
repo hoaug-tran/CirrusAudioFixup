@@ -5,20 +5,10 @@
 	};
 	objectVersion = 56;
 	objects = {
-
-
 		CAFE00000011  = {
 			isa = PBXBuildFile;
 			fileRef = CAFE00000001 ;
 		};
-		// NOTE: Kernel.framework is NOT in the build phase.
-		// On Xcode 16+ / macOS SDK 15+, kernel symbols are
-		// provided implicitly via -mkernel + -lkmod + -lcc_kext.
-		// Adding Kernel.framework to the link phase causes:
-		//   ld: framework not found Kernel
-
-
-
 		CAFE00000001  = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.cpp;
@@ -44,20 +34,13 @@
 			path = CirrusAudioFixup.kext;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-
-
-
 		CAFE00000031  = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				// Empty — kernel symbols come from -lkmod -lcc_kext via OTHER_LDFLAGS
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-
-
-
 		CAFE00000020  = {
 			isa = PBXGroup;
 			children = (
@@ -85,9 +68,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-
-
-
 		CAFE00000040  = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CAFE00000061;
@@ -104,9 +84,6 @@
 			productReference = CAFE00000005 ;
 			productType = "com.apple.product-type.kernel-extension";
 		};
-
-
-
 		CAFE00000050  = {
 			isa = PBXProject;
 			attributes = {
@@ -134,9 +111,6 @@
 				CAFE00000040 ,
 			);
 		};
-
-
-
 		CAFE00000030  = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -145,11 +119,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-
-
-
-
-
 		CAFE00000070  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -161,8 +130,6 @@
 			};
 			name = Debug;
 		};
-
-
 		CAFE00000071  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -174,35 +141,23 @@
 			};
 			name = Release;
 		};
-
-
 		CAFE00000072  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
-
-				// ── Code signing (off for Hackintosh/CI) ──
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_STYLE = Manual;
-
-				// ── Required kext flags ───────────────────
 				DEAD_CODE_STRIPPING = NO;
 				GCC_ENABLE_CPP_EXCEPTIONS = NO;
 				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-
-				// ── Info.plist ────────────────────────────
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
-
-				// ── Module identity ───────────────────────
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_VERSION = 1;
-
-				// ── Preprocessor (kernel mode headers) ────
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -212,18 +167,10 @@
 					"-DNeXT",
 				);
 				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
-
-				// ── Linker flags (NO Kernel.framework ref) ─
-				// -lkmod    : kext module init/fini symbols
-				// -lcc_kext : C++ runtime for kext
-				// Do NOT add -framework Kernel here —
-				// it causes "framework not found Kernel"
-				// on Xcode 16 / SDK 15.x
 				OTHER_LDFLAGS = (
 					"-lkmod",
 					"-lcc_kext",
 				);
-
 				PRODUCT_BUNDLE_IDENTIFIER = com.hoaugtr.CirrusAudioFixup;
 				PRODUCT_NAME = CirrusAudioFixup;
 				SDKROOT = macosx;
@@ -232,30 +179,23 @@
 			};
 			name = Debug;
 		};
-
-
 		CAFE00000073  = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
-
 				CODE_SIGN_IDENTITY = "";
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGN_STYLE = Manual;
-
 				DEAD_CODE_STRIPPING = NO;
 				GCC_ENABLE_CPP_EXCEPTIONS = NO;
 				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_OPTIMIZATION_LEVEL = s;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
-
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
-
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_VERSION = 1;
-
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",
@@ -264,12 +204,10 @@
 					"-DNeXT",
 				);
 				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
-
 				OTHER_LDFLAGS = (
 					"-lkmod",
 					"-lcc_kext",
 				);
-
 				PRODUCT_BUNDLE_IDENTIFIER = com.hoaugtr.CirrusAudioFixup;
 				PRODUCT_NAME = CirrusAudioFixup;
 				SDKROOT = macosx;
@@ -278,10 +216,6 @@
 			};
 			name = Release;
 		};
-
-
-
-
 		CAFE00000060  = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -300,8 +234,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-
-
 	};
 	rootObject = CAFE00000050 ;
 }

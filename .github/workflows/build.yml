@@ -35,15 +35,14 @@ jobs:
 
       - name: Host firmware, playback, bringup, HDA, transport, calibration and diagnostic regression checks
         run: |
-          echo "Skipping python tests because the codebase was completely refactored."
-          # python3 Tests/check_registers.py
-          # python3 Tests/reproduce_host.py
-          # python3 Tests/check_runtime.py
-          # python3 Tests/check_bringup.py
-          # python3 Tests/check_hda.py
-          # python3 Tests/check_transport.py
-          # python3 Tests/check_calibration.py
-          # python3 Tests/check_diagnostics.py
+          python3 Tests/reproduce_host.py
+          python3 Tests/check_registers.py
+          python3 Tests/check_transport.py
+          python3 Tests/check_diagnostics.py
+          python3 Tests/check_hda.py
+          python3 Tests/check_calibration.py
+          python3 Tests/check_bringup.py
+          python3 Tests/check_runtime.py
 
       - name: List targets
         run: xcodebuild -project CirrusAudioFixup.xcodeproj -list

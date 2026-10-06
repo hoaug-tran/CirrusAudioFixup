@@ -1368,6 +1368,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         return;
     bool hdaStreamActive = synchronizeHdaStream();
     IOSleep(5);
+    bool hasAudio = mHdaState.observed && hdaStreamActive;
     for (size_t i = 0; i < mAmpCount; ++i) {
         AmplifierState& amp = mAmps[i];
         if (!amp.present)
@@ -1375,7 +1376,17 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         if (amp.playbackFaulted) {
             if (amp.playbackActive && amp.cleanupAttempts < 3)
                 stopPlayback(amp);
-            continue;
+            if (!amp.playbackActive && hasAudio && checkProtectionStatus(amp)) {
+                uint32_t pllSts = 0;
+                if (readRegister(amp, 0x00010098, &pllSts, TRACE_DUMP) && (pllSts & 0x00000002) != 0) {
+                    amp.playbackFaulted = false;
+                    amp.cleanupAttempts = 0;
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            }
         }
 
         if (amp.initialized && !amp.playbackActive && mHdaState.observed && !hdaStreamActive) {
@@ -1426,8 +1437,6 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             stopPlayback(amp);
             continue;
         }
-
-        bool hasAudio = mHdaState.observed && hdaStreamActive;
 
         if (amp.playbackActive && hasAudio) {
             const bool dspMode = amp.monitorCount >= 1;

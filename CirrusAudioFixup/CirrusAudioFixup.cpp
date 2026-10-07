@@ -156,7 +156,8 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
                             UInt32 verifyHigh = base[quirk.registerIndex];
                             setProperty("Cirrus_Platform_Reset_VerifyHigh", verifyHigh, 32);
 
-                            verified = ((verifyLow & (1U << quirk.assertClearBit)) == 0) && ((verifyHigh & (1U << quirk.assertClearBit)) != 0);
+                            verified =
+                                ((verifyLow & (1U << quirk.assertClearBit)) == 0) && ((verifyHigh & (1U << quirk.assertClearBit)) != 0);
                             CIRRUS_LOG("platform hardware reset quirk %s %s", quirk.controllerName, verified ? "verified" : "not verified");
                         }
                         map->release();
@@ -1377,13 +1378,12 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             if (amp.playbackActive && amp.cleanupAttempts < 3)
                 stopPlayback(amp);
             if (!amp.playbackActive && hasAudio && checkProtectionStatus(amp)) {
-                uint32_t pllSts = 0;
-                if (readRegister(amp, 0x00010098, &pllSts, TRACE_DUMP) && (pllSts & 0x00000002) != 0) {
-                    amp.playbackFaulted = false;
-                    amp.cleanupAttempts = 0;
-                } else {
+                if (amp.pllRetryCooldown > 0) {
+                    --amp.pllRetryCooldown;
                     continue;
                 }
+                amp.playbackFaulted = false;
+                amp.cleanupAttempts = 0;
             } else {
                 continue;
             }
@@ -1391,6 +1391,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
 
         if (amp.initialized && !amp.playbackActive && mHdaState.observed && !hdaStreamActive) {
             amp.playbackStableCount = 0;
+            amp.pllRetryCooldown = 0;
             continue;
         }
 
@@ -1456,11 +1457,13 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 (pwr2 & (0x3001 | cirrus::devices::cs35l41::registers::kMaskBoostEnable)) != (dspMode ? 0x3001U : 1U) || !dspHealthy) {
                 CIRRUS_ERR("ACTIVE_STATE_LOST amp=%s pwr1=0x%08X pwr2=0x%08X pll=%d mbox=%u core=0x%08X halo=%u", amp.name, pwrCtrl1, pwr2,
                            pllLock, mbox2, core, halo);
-                if (!pllLock)
+                if (!pllLock) {
                     recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2, pllLockSts);
-                else
+                    amp.pllRetryCooldown = 4;
+                } else {
                     recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, cirrus::devices::cs35l41::registers::kPowerControl2,
                                             dspMode ? 0x3001U : 1U, pwr2);
+                }
                 amp.playbackFaulted = true;
                 stopPlayback(amp);
                 continue;
@@ -1660,9 +1663,28 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                     continue;
                 }
                 uint32_t pllSts = 0;
-                if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &pllSts, TRACE_PLAYBACK) || !(pllSts & 2)) {
-                    recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2, pllSts);
-                    abortStart();
+                int pllTimeout = 20;
+                bool pllLocked = false;
+                while (pllTimeout > 0) {
+                    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &pllSts, TRACE_PLAYBACK)) {
+                        sequenceOk = false;
+                        break;
+                    }
+                    if (pllSts & 2) {
+                        pllLocked = true;
+                        break;
+                    }
+                    IODelay(1000);
+                    pllTimeout--;
+                }
+                if (!sequenceOk || !pllLocked) {
+                    if (sequenceOk)
+                        recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2, pllSts);
+                    else
+                        recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT);
+                    amp.playbackFaulted = true;
+                    amp.pllRetryCooldown = 4;
+                    stopPlayback(amp);
                     continue;
                 }
 
@@ -1707,6 +1729,7 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             amp.playbackStableCount++;
             if (amp.playbackStableCount >= 2) {
                 stopPlayback(amp);
+                amp.pllRetryCooldown = 0;
             }
         } else {
             amp.playbackStableCount = 0;
@@ -1738,7 +1761,8 @@ void CirrusAudioFixup::probeAmp(AmplifierState& amp) {
     amp.revisionId = revisionId;
     amp.present = (deviceId == cirrus::devices::cs35l41::registers::kValDeviceId);
     if (!amp.present) {
-        CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver; add -cirrusdbg and report hardware profile", deviceId, amp.name);
+        CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver; add -cirrusdbg and report hardware profile", deviceId,
+                   amp.name);
     }
 
     if (amp.present) {
@@ -2444,7 +2468,8 @@ bool CirrusAudioFixup::initCodec(AmplifierState& amp) {
     amp.present = device.isPresent();
 
     if (!amp.present) {
-        CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver; add -cirrusdbg and report hardware profile", amp.deviceId, amp.name);
+        CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver; add -cirrusdbg and report hardware profile",
+                   amp.deviceId, amp.name);
         recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
                                 cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
         return false;
@@ -2498,7 +2523,8 @@ bool CirrusAudioFixup::initCodec(AmplifierState& amp) {
     amp.revisionId = revIdAfter;
     amp.present = (devIdAfter == cirrus::devices::cs35l41::registers::kValDeviceId);
     if (!amp.present) {
-        CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver after reset; add -cirrusdbg and report hardware profile", devIdAfter, amp.name);
+        CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver after reset; add -cirrusdbg and report hardware profile",
+                   devIdAfter, amp.name);
         recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
                                 cirrus::devices::cs35l41::registers::kValDeviceId, devIdAfter);
         return false;
@@ -3272,7 +3298,6 @@ void CirrusAudioFixup::discoverFirmware(AmplifierState& amp) {
     } else {
         ssid = (subVendor << 16) | subDevice;
     }
-
 
     for (size_t q = 0; q < sizeof(kSsidQuirks) / sizeof(kSsidQuirks[0]); ++q) {
         if (subVendor == kSsidQuirks[q].fromVendor && subDevice == kSsidQuirks[q].fromDevice) {

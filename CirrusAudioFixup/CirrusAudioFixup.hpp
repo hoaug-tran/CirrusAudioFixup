@@ -79,6 +79,7 @@ struct AmplifierState {
     uint32_t haloHeartbeatRegister{0};
     bool playbackFaulted{false};
     uint32_t cleanupAttempts{0};
+    uint32_t pllRetryCooldown{0};
     cirrus::diagnostics::DiagnosticState diagnostic{};
 };
 

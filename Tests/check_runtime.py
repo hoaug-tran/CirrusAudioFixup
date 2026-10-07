@@ -537,7 +537,16 @@ int main() {
     stuck.stuckBoost=true; stuck.runBackgroundMonitor();
     checkNew(stuck.unmute==0 && stuck.mAmps[0].playbackFaulted &&
              stuck.properties["Cirrus_Playback_Verdict_host"]=="CLEANUP_UNVERIFIED","uncleared boost bit blocks unmute and safe-idle verdict");
-    printf("PASS active monitor single-I/O fault sweep (%u positions)\n",activeOps);
+    CirrusAudioFixup headphoneCycle;
+    headphoneCycle.runBackgroundMonitor();
+    assert(headphoneCycle.mAmps[0].playbackActive);
+    headphoneCycle.pll = false;
+    headphoneCycle.runBackgroundMonitor();
+    checkNew(headphoneCycle.mAmps[0].playbackFaulted && !headphoneCycle.mAmps[0].playbackActive, "headphone plug stops playback");
+    for(int tick = 0; tick < 4; ++tick) headphoneCycle.runBackgroundMonitor();
+    headphoneCycle.pll = true;
+    headphoneCycle.runBackgroundMonitor();
+    checkNew(!headphoneCycle.mAmps[0].playbackFaulted && headphoneCycle.mAmps[0].playbackActive, "headphone unplug restores speaker playback");
     if(newFailures) return 1;
     puts("PASS configuration, external boost invariants, protection and active-state loss checks");
 }

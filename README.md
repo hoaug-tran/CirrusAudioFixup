@@ -243,7 +243,7 @@ Contributions improving amplifier compatibility or adding verified hardware prof
 
 ## License & Credits
 
-- **License**: GNU General Public License v2.0 ([GPL-2.0-only](LICENSE))
+- **License**: Non-Commercial Software Distribution License ([LICENSE](LICENSE)) — Free for personal use, modification, and service integration; strictly no selling or monetization of the Software itself.
 - **Author**: Tran Kinh Hoang ([@hoaug-tran](https://github.com/hoaug-tran))
 - **Special Thanks**:
     - The [Acidanthera](https://github.com/acidanthera) team for Lilu and AppleALC.

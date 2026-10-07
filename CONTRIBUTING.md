@@ -93,5 +93,5 @@ xcodebuild -project CirrusAudioFixup.xcodeproj \
 
 ## License & Attribution
 
-- This project is licensed under **GPL-2.0-only**.
+- This project is licensed under the **CirrusAudioFixup Non-Commercial License** ([LICENSE](LICENSE)).
 - When adapting register sequences or driver logic from upstream Linux drivers (such as `cs35l41-hda`, `cs35l41-lib`, or `wm_adsp`), preserve upstream copyright notices and attribution.

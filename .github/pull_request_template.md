@@ -27,14 +27,14 @@
 Paste commands and result.
 
 ```text
-python Tests/reproduce_host.py
-python Tests/check_registers.py
-python Tests/check_transport.py
-python Tests/check_diagnostics.py
-python Tests/check_hda.py
-python Tests/check_calibration.py
-python Tests/check_bringup.py
-python Tests/check_runtime.py
+python3 Tests/reproduce_host.py
+python3 Tests/check_registers.py
+python3 Tests/check_transport.py
+python3 Tests/check_diagnostics.py
+python3 Tests/check_hda.py
+python3 Tests/check_calibration.py
+python3 Tests/check_bringup.py
+python3 Tests/check_runtime.py
 ```
 
 ## Build check

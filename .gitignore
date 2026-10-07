@@ -15,8 +15,7 @@ __pycache__/
 .editorconfig
 /MacKernelSDK
 .clangd
-compile_commands.json
+/compile_commands.json
 .cache/
-/I2CD.txt
-/log.txt
-/log-other.txt
+*.log
+/*.txt

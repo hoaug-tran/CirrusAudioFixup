@@ -66,14 +66,14 @@ Before submitting a pull request, ensure all host-side tests and the release bui
 
 ### 1. Run Host Python Test Suite
 ```bash
-python Tests/reproduce_host.py
-python Tests/check_registers.py
-python Tests/check_transport.py
-python Tests/check_diagnostics.py
-python Tests/check_hda.py
-python Tests/check_calibration.py
-python Tests/check_bringup.py
-python Tests/check_runtime.py
+python3 Tests/reproduce_host.py
+python3 Tests/check_registers.py
+python3 Tests/check_transport.py
+python3 Tests/check_diagnostics.py
+python3 Tests/check_hda.py
+python3 Tests/check_calibration.py
+python3 Tests/check_bringup.py
+python3 Tests/check_runtime.py
 ```
 > [!NOTE]
 > Tests include intentional fault-injection sweeps. Intermittent `ERROR` log messages in the test output are expected; the suite must finish with exit code `0` and print `PASS`.

@@ -6,7 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not report "no sound" without logs. This driver is experimental and audible output is not confirmed.
+        Before submitting an issue, review the [Safe Bring-up Protocol](docs/safe_bringup_protocol.md) and confirm whether the failure occurs in bypass mode (`-cirrusnodsp`) or DSP mode.
+        If possible, run `sudo bash Tools/collect_macos.sh` and attach the generated diagnostic archive to this report.
   - type: checkboxes
     id: safety
     attributes:

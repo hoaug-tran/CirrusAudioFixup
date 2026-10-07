@@ -1,34 +1,29 @@
-name: Build CirrusAudioFixup Kext
+name: CI & CD
 
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build on macOS
+    name: Build and Test
     runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show workspace
+      - name: Show build environment
         run: |
-          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-          echo "PWD=$(pwd)"
-          echo "Root contents"
-          ls -la
-          echo "Xcode project"
-          ls -la CirrusAudioFixup.xcodeproj/ || echo "not found"
+          echo "macOS version: $(sw_vers -productVersion)"
+          echo "Xcode version: $(xcodebuild -version | head -1)"
+          python3 --version
 
-      - name: Xcode version
-        run: xcodebuild -version
-
-      - name: Host firmware, playback, bringup, HDA, transport, calibration and diagnostic regression checks
+      - name: Run host regression test suite
         run: |
           python3 Tests/reproduce_host.py
           python3 Tests/check_registers.py
@@ -39,10 +34,7 @@ jobs:
           python3 Tests/check_bringup.py
           python3 Tests/check_runtime.py
 
-      - name: List targets
-        run: xcodebuild -project CirrusAudioFixup.xcodeproj -list
-
-      - name: Build release kext
+      - name: Build Release kext
         run: |
           xcodebuild \
             -project CirrusAudioFixup.xcodeproj \
@@ -55,36 +47,120 @@ jobs:
             CONFIGURATION_BUILD_DIR="${GITHUB_WORKSPACE}/build/Release" \
             build
 
-      - name: Verify kext
+      - name: Build Debug kext
         run: |
-          echo "Build output"
-          ls -la build/Release/
-          echo "Kext contents"
-          ls -la build/Release/CirrusAudioFixup.kext/Contents/
-          echo "Binary arch"
-          file build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup
-          echo "Min OS version"
-          otool -l build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup \
-            | grep -A3 "LC_VERSION_MIN\|LC_BUILD_VERSION" || true
+          xcodebuild \
+            -project CirrusAudioFixup.xcodeproj \
+            -target CirrusAudioFixup \
+            -configuration Debug \
+            -sdk macosx \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR="${GITHUB_WORKSPACE}/build/Debug" \
+            build
 
-      - name: Package kext
+      - name: Verify build artifacts
         run: |
-          cd build/Release
-          zip -r CirrusAudioFixup.zip CirrusAudioFixup.kext
-          du -sh CirrusAudioFixup.zip
+          echo "--- Release kext ---"
+          file "${GITHUB_WORKSPACE}/build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup"
+          echo "--- Debug kext ---"
+          file "${GITHUB_WORKSPACE}/build/Debug/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup"
 
-      - name: Upload artifact
+      - name: Package kext bundles
+        run: |
+          cd "${GITHUB_WORKSPACE}/build/Release"
+          zip -qry "${GITHUB_WORKSPACE}/CirrusAudioFixup-RELEASE.zip" CirrusAudioFixup.kext
+
+          cd "${GITHUB_WORKSPACE}/build/Debug"
+          zip -qry "${GITHUB_WORKSPACE}/CirrusAudioFixup-DEBUG.zip" CirrusAudioFixup.kext
+
+          cd "${GITHUB_WORKSPACE}"
+          ls -lh CirrusAudioFixup-*.zip
+
+      - name: Upload Release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CirrusAudioFixup-${{ github.sha }}
-          path: build/Release/CirrusAudioFixup.zip
+          name: CirrusAudioFixup-RELEASE-${{ github.sha }}
+          path: CirrusAudioFixup-RELEASE.zip
           retention-days: 30
           if-no-files-found: error
 
-      - name: Build summary
+      - name: Upload Debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CirrusAudioFixup-DEBUG-${{ github.sha }}
+          path: CirrusAudioFixup-DEBUG.zip
+          retention-days: 30
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: build
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CirrusAudioFixup-RELEASE-${{ github.sha }}
+          path: dist
+
+      - name: Download Debug artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CirrusAudioFixup-DEBUG-${{ github.sha }}
+          path: dist
+
+      - name: Parse changelog
+        id: changelog
         run: |
-          echo "Build successful"
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "macOS: $(sw_vers -productVersion)"
-          echo "Xcode: $(xcodebuild -version | head -1)"
+          python3 -c "
+          import re, sys, os
+
+          with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          match = re.search(r'##\s*\[([^\]]+)\](?:\s*-\s*[^\n]+)?\n(.*?)(?=\n##\s*\[|\Z)', content, re.DOTALL)
+          if not match:
+              sys.exit('Error: Could not extract latest version block from CHANGELOG.md')
+
+          version = match.group(1).strip()
+          notes = match.group(2).strip()
+
+          with open('RELEASE_NOTES.md', 'w', encoding='utf-8') as out:
+              out.write(notes + '\n')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh:
+              gh.write(f'version={version}\n')
+              gh.write(f'tag=v{version}\n')
+          "
+
+      - name: Prepare versioned release assets
+        run: |
+          VERSION="${{ steps.changelog.outputs.version }}"
+          cp dist/CirrusAudioFixup-RELEASE.zip "CirrusAudioFixup-${VERSION}-RELEASE.zip"
+          cp dist/CirrusAudioFixup-DEBUG.zip "CirrusAudioFixup-${VERSION}-DEBUG.zip"
+          ls -la CirrusAudioFixup-*.zip
+          cat RELEASE_NOTES.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.changelog.outputs.tag }}
+          name: CirrusAudioFixup ${{ steps.changelog.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            CirrusAudioFixup-${{ steps.changelog.outputs.version }}-RELEASE.zip
+            CirrusAudioFixup-${{ steps.changelog.outputs.version }}-DEBUG.zip
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

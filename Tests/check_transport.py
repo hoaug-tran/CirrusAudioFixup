@@ -35,6 +35,8 @@ void IOFreeData(void* p,size_t) { ++frees; free(p); }
 void writeBE32(UInt8* p,UInt32 v) { for(unsigned i=0;i<4;++i) p[i]=v>>(24-8*i); }
 UInt32 readBE32(const UInt8* p) { return UInt32(p[0])<<24 | UInt32(p[1])<<16 | UInt32(p[2])<<8 | p[3]; }
 struct CS35L41Amp { UInt8 address=0x40; };
+using AmplifierState = CS35L41Amp;
+namespace cirrus { namespace devices { namespace cs35l41 { namespace registers { constexpr uint8_t kI2cAddressRight = 0x41; } } } }
 '''
 mock = r'''
 struct Provider {
@@ -53,7 +55,7 @@ struct Provider {
 class CirrusAudioFixup {
 public:
     Provider provider; Provider* mProvider=&provider;
-    bool mPowerAvailable=true,mStopping=false,mCapturingFailureSnapshot=false;
+    bool mPowerAvailable=true,mStopping=false,mCapturingFailureSnapshot=false,mProbingAmplifiers=false;
     bool nestedSnapshot=false;
     IOReturn mLastTransferReturn=0,diagnosticReturn=0,traceReturn=0;
     void setProperty(const char*,bool) {}

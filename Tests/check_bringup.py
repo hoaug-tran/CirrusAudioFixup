@@ -6,19 +6,14 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
-REGISTERS = (ROOT / 'CirrusAudioFixup/Codecs/CS35L41/Registers.hpp').read_text(encoding='utf-8')
-
 
 def function(name):
     start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
-
 names = ['fullDriverFlow', 'initCodec', 'handlePowerChange', 'publishDriverVerdict']
-constants = '\n'.join(line for line in (HEADER + '\n' + REGISTERS).splitlines()
-                      if re.match(r'#define (?:CS35L41_|HALO_|CSPL_)\w+\s+(?:0x|[0-9])', line))
-states = HEADER[HEADER.index('enum TraceSource'):HEADER.index('struct TraceEntry')]
-amp = HEADER[HEADER.index('struct CS35L41Amp {'):HEADER.index('struct FirmwareImage;')]
+amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
+
 preamble = r'''
 #include <cstdint>
 #include <cstddef>
@@ -26,27 +21,54 @@ preamble = r'''
 #include <cstring>
 #include <string>
 #include <map>
+#include "Diagnostics/DiagnosticTypes.hpp"
+#include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Devices/CS35L41/CS35L41Device.hpp"
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t;
 using IOReturn=int;
-constexpr int kIOReturnSuccess=0;
-#define CIRRUS_LOG(...) ((void)0)
-#define CIRRUS_ERR(...) ((void)0)
-void IODelay(unsigned) {}
 struct Timer { void cancelTimeout() {} void setTimeoutMS(unsigned) {} };
 struct OSString {
     std::string value;
     static OSString* withCString(const char* s) { return new OSString{s}; }
     void release() { delete this; }
 };
+using namespace cirrus::diagnostics;
+using namespace cirrus::devices::cs35l41;
+bool gCirrusDebug = false;
 '''
+
+preamble += amp + '\nusing CS35L41Amp = AmplifierState;\n'
+
 mock = r'''
+namespace cirrus { namespace platform { namespace hda {
+struct HDAStreamState {
+    bool observed{false};
+    bool streamActive{false};
+    bool converterPrepared{false};
+    bool topologyLogged{false};
+    uint8_t lastDescriptor{0xFF};
+    uint8_t lastStreamTag{0};
+    uint16_t lastFormat{0};
+    uint32_t missCount{0};
+};
+}}}
+
 class CirrusAudioFixup {
 public:
+    size_t mAmpCount{2};
     CS35L41Amp mAmps[2]{};
     Timer* mProbeTimer=nullptr;
     bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
-    bool mHdaStreamActive=false,mHdaControllerObserved=false,mHdaConverterPrepared=false,mHdaTopologyLogged=false;
-    unsigned mHdaLastDescriptor=0,mHdaLastStreamTag=0,mHdaLastFormat=0;
+    cirrus::platform::hda::HDAStreamState mHdaState;
+    bool& mHdaConverterPrepared = mHdaState.converterPrepared;
+    bool& mHdaControllerObserved = mHdaState.observed;
+    bool& mHdaStreamActive = mHdaState.streamActive;
+    bool& mHdaTopologyLogged = mHdaState.topologyLogged;
+    uint8_t& mHdaLastDescriptor = mHdaState.lastDescriptor;
+    uint8_t& mHdaLastStreamTag = mHdaState.lastStreamTag;
+    uint16_t& mHdaLastFormat = mHdaState.lastFormat;
+    uint32_t& mHdaMissCount = mHdaState.missCount;
+
     int mLastTransferReturn=-1;
     bool bypass=false,readonly=false,otpError=false,otpReadError=false,identityReadError=false;
     bool cleanupError=false,haltError=false;
@@ -59,6 +81,9 @@ public:
         mAmps[0].name="L"; mAmps[0].address=0;
         mAmps[1].name="R"; mAmps[1].address=1;
     }
+    static const char* failureName(DiagnosticFailure) { return "failure"; }
+    static const char* stageName(DriverStage) { return "stage"; }
+
     bool fail(CS35L41Amp& a,const char* stage) { return a.address==0 && failStage==stage; }
     bool transfer(CS35L41Amp& a) {
         if(++io!=failIO) return true;
@@ -67,15 +92,15 @@ public:
     }
     bool readRegister(CS35L41Amp& a,uint32_t r,uint32_t* v,TraceSource=TRACE_OTHER) {
         if(!transfer(a)) return false;
-        if(a.address==0 && ((identityReadError && r==CS35L41_DEVID_REG) ||
-                            (otpReadError && r==0x10018))) return false;
-        *v = r==CS35L41_DEVID_REG ? CS35L41_DEVICE_ID : r==CS35L41_REVID_REG ? 0xB2 :
-             r==0x10018 && otpError && a.address==0 ? 0x80000000U : 0;
+        if(a.address==0 && ((identityReadError && r==registers::kRegDeviceId) ||
+                            (otpReadError && r==registers::kRegIrq1Status3))) return false;
+        *v = r==registers::kRegDeviceId ? registers::kValDeviceId : r==registers::kRegRevisionId ? 0xB2 :
+             r==registers::kRegIrq1Status3 && otpError && a.address==0 ? 0x80000000U : 0;
         return true;
     }
     bool writeRegister(CS35L41Amp& a,uint32_t r,uint32_t,TraceSource=TRACE_OTHER) {
         if(!transfer(a)) return false;
-        if(r==CS35L41_SW_RESET) ++resets[a.address];
+        if(r==registers::kRegSoftwareReset) ++resets[a.address];
         return true;
     }
     bool pollRegisterBit(CS35L41Amp& a,uint32_t,uint32_t,uint32_t,uint32_t,TraceSource=TRACE_OTHER) {
@@ -83,7 +108,8 @@ public:
     }
     uint32_t calculateRegistersCRC32(CS35L41Amp&) { return 0; }
     bool bootArgEnabled(const char* s) {
-        return strcmp(s,"cirrus_nodsp")==0 ? bypass : strcmp(s,"cirrus_readonly")==0 ? readonly : false;
+        return (strcmp(s,"-cirrusnodsp")==0) ? bypass :
+               (strcmp(s,"-cirrusro")==0) ? readonly : false;
     }
     void setProperty(const char* p,OSString* s) { properties[p]=s->value; }
     void setProperty(const char*,uint64_t,unsigned) {}
@@ -130,7 +156,26 @@ public:
         ++halts[a.address]; a.dspAlive=false; a.monitorCount=0;
         return !haltError;
     }
+    void publishDriverVerdict();
+    void handlePowerChange(bool powered);
+    bool initCodec(CS35L41Amp&);
+    void fullDriverFlow();
+};
+
+class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
+    CirrusAudioFixup* mFixup;
+    CS35L41Amp& mAmp;
+public:
+    FixupRegisterIOAdapter(CirrusAudioFixup* f, CS35L41Amp& a) : mFixup(f), mAmp(a) {}
+    bool read(uint32_t reg, uint32_t* val) override { return mFixup->readRegister(mAmp, reg, val); }
+    bool write(uint32_t reg, uint32_t val) override { return mFixup->writeRegister(mAmp, reg, val); }
+    bool updateBits(uint32_t, uint32_t, uint32_t) override { return true; }
+    bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mFixup->pollRegisterBit(mAmp, r, m, e, t); }
+    bool bulkRead(uint32_t, uint8_t*, size_t) override { return true; }
+    bool bulkWrite(uint32_t, const uint8_t*, size_t) override { return true; }
+};
 '''
+
 checks = r'''
 unsigned failures=0;
 void check(bool ok,const std::string& label) { if(!ok) { ++failures; printf("FAIL %s\n",label.c_str()); } }
@@ -157,7 +202,6 @@ int main() {
         CirrusAudioFixup d;
         d.failStage=stage;
         auto& a=d.mAmps[0];
-        // A prior successful boot must never satisfy this boot's readiness gate.
         a.initialized=a.firmwareValidated=a.dspAlive=true; a.monitorCount=1;
         a.haloStateRegister=0xDEAD; a.diagnosticControlCount=1;
         d.fullDriverFlow();
@@ -205,11 +249,10 @@ int main() {
     puts("PASS OTP error/read failure, stale identity, 11 boot-stage faults, explicit bypass, cleanup faults and actual boot/wake orchestration");
 }
 '''
-declarations = '\n'.join(function(name).split('{', 1)[0].replace('CirrusAudioFixup::', '') + ';' for name in names)
+
 with tempfile.TemporaryDirectory(prefix='cirrus-bringup-check-') as directory:
     tmp = Path(directory)
     source = tmp / 'bringup.cpp'
-    source.write_text(preamble + constants + '\n' + states + amp + mock + declarations + '\n};\n' +
-                      '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', str(source), '-o', str(tmp / 'bringup.exe')], check=True)
+    source.write_text(preamble + mock + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
+    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'bringup.exe')], check=True)
     subprocess.run([str(tmp / 'bringup.exe')], check=True)

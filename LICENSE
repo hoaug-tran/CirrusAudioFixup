@@ -1,0 +1,21 @@
+CirrusAudioFixup License (Non-Commercial Software Distribution)
+Copyright (c) 2026 Tran Kinh Hoang (hoaug-tran)
+
+1. PERMISSIONS & GRANT OF RIGHTS
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, copy, modify, merge, publish, and redistribute copies of the Software, subject to the conditions stated below.
+
+2. ALLOWED USES
+- Personal & Educational Use: You may use, install, build, and modify the Software for personal, academic, and research purposes.
+- Modification & Forking: You may create derivative works, fork, patch, or build the Software for personal use and free distribution.
+- Free Redistribution: You may redistribute verbatim or modified copies of the Software at no cost.
+- Service & Installation Use: You may use the Software as a supporting component when providing general services (such as system setup, maintenance, or paid Hackintosh installation services), provided that no fee or price is charged for the Software itself.
+
+3. RESTRICTIONS (DO NOT MONETIZE THE SOFTWARE ITSELF)
+- No Selling of the Software: You may NOT sell, rent, lease, sublicense, or charge fees for the Software, its source code, compiled binaries (kexts), or derivative works as a standalone product or component.
+- No Paid Bundles or Paywalls: You may NOT include the Software in paid EFI packs, monetized installers, premium download paywalls, or commercial products where the Software or derivative work is sold or monetized.
+
+4. ATTRIBUTION
+All copies or substantial portions of the Software must retain the above copyright notice, this permission notice, and explicit credit to the original author in source distributions and documentation.
+
+5. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

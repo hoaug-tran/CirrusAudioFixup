@@ -4,10 +4,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
-header = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
+header = (ROOT / 'CirrusAudioFixup/Diagnostics/DiagnosticTypes.hpp').read_text(encoding='utf-8')
 start = source.index('void CirrusAudioFixup::recordDiagnosticFailure(')
 function = source[start:source.index('\n}', start) + 2]
-states = header[header.index('enum DriverStage'):header.index('struct TraceEntry')]
+states = header[header.index('enum class DriverStage'):header.index('struct TraceEntry')]
+
 preamble = r'''
 #include <cstdint>
 #include <cstdio>
@@ -22,9 +23,14 @@ struct OSString {
     static OSString* withCString(const char* s) { return new OSString{s}; }
     void release() { delete this; }
 };
+namespace cirrus { namespace diagnostics {
 '''
+
 mock = r'''
+}}
+using namespace cirrus::diagnostics;
 struct CS35L41Amp { const char* name="left"; DiagnosticState diagnostic; };
+using AmplifierState = CS35L41Amp;
 class CirrusAudioFixup {
 public:
     unsigned logs=0,publications=0,snapshots=0,dumps=0;
@@ -37,9 +43,10 @@ public:
     void publishStatistics() { ++publications; }
     void captureFailureSnapshot(CS35L41Amp&,DiagnosticFailure) { ++snapshots; }
     void dumpTraceBuffer(const char*,const char*) { ++dumps; }
-    void recordDiagnosticFailure(CS35L41Amp&,DiagnosticFailure,UInt32,UInt32,UInt32,IOReturn,bool);
+    void recordDiagnosticFailure(AmplifierState&,DiagnosticFailure,UInt32,UInt32,UInt32,IOReturn,bool);
 };
 '''
+
 checks = r'''
 int main() {
     unsigned failures=0;
@@ -70,10 +77,10 @@ int main() {
     return failures?1:0;
 }
 '''
+
 with tempfile.TemporaryDirectory(prefix='cirrus-diagnostics-') as directory:
     tmp = Path(directory)
     cpp = tmp / 'check.cpp'
-    exe = tmp / 'check.exe'
     cpp.write_text(preamble + states + mock + function + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', str(cpp), '-o', str(exe)], check=True)
-    subprocess.run([str(exe)], check=True)
+    subprocess.run(['g++', '-std=c++17', '-O0', str(cpp), '-o', str(tmp / 'check.exe')], check=True)
+    subprocess.run([str(tmp / 'check.exe')], check=True)

@@ -1,0 +1,45 @@
+- name: type: bug
+  color: d73a4a
+  description: Something is broken
+- name: type: hardware-support
+  color: 5319e7
+  description: New laptop, HDA codec, or amplifier profile
+- name: type: firmware
+  color: 0052cc
+  description: Firmware, tuning, WMFW, or BIN resources
+- name: type: docs
+  color: 0075ca
+  description: Documentation only
+- name: type: tests
+  color: 0e8a16
+  description: Tests or CI only
+- name: area: iokit
+  color: fbca04
+  description: IOKit attach, lifecycle, power, or registry
+- name: area: voodooi2c
+  color: fbca04
+  description: VoodooI2C provider or transfer path
+- name: area: hda
+  color: fbca04
+  description: HDA controller, stream, AppleALC, or route
+- name: area: cs35l41
+  color: fbca04
+  description: CS35L41 registers, OTP, errata, ASP, PLL, or GPIO
+- name: area: build
+  color: cfd3d7
+  description: Xcode project, CI, or packaging
+- name: risk: boot
+  color: b60205
+  description: Could affect boot or attach behavior
+- name: risk: speaker-safety
+  color: b60205
+  description: Could affect amplifier power or speaker protection
+- name: status: needs-logs
+  color: d876e3
+  description: Needs logs or IORegistry evidence
+- name: status: blocked
+  color: 000000
+  description: Blocked by missing data or dependency
+- name: good first issue
+  color: 7057ff
+  description: Small scoped task for new contributors

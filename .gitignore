@@ -1,14 +1,21 @@
-# Xcode build artifacts
 build/
 DerivedData/
 *.xcuserstate
 *.xcworkspace
 xcuserdata/
-
-# macOS
 .DS_Store
 *.dSYM/
-
-# Windows
 Thumbs.db
 desktop.ini
+*.exe
+__pycache__/
+*.pyc
+.vscode/
+.clang-format
+.editorconfig
+/MacKernelSDK
+.clangd
+/compile_commands.json
+.cache/
+*.log
+/*.txt

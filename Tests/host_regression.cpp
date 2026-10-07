@@ -10,9 +10,9 @@ void putLE(std::vector<uint8_t>& v, unsigned pos, uint32_t n) {
     for (unsigned i=0;i<4;i++) v[pos+i]=uint8_t(n>>(i*8));
 }
 int main() {
-    assert(firmwareTableSize==1);
-    assert(firmwareTable[0].subsystemVendor==0x17AA && firmwareTable[0].subsystemDevice==0x3847);
-    assert(firmwareTable[0].spkid==1 && firmwareTable[0].bin!=firmwareTable[0].binRight);
+    assert(cs35l41FirmwareCount==1);
+    assert(cs35l41Firmware[0].subsystemVendor==0x17AA && cs35l41Firmware[0].subsystemDevice==0x3847);
+    assert(cs35l41Firmware[0].spkid==1 && cs35l41Firmware[0].bin!=cs35l41Firmware[0].binRight);
     FirmwareImage fw{};
     auto wmfw=cs35l41_dsp1_spk_prot_17aa3847_wmfw;
     auto wmfwSize=sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw);
@@ -100,7 +100,7 @@ int main() {
         if(mode==3) bus.failRead=4;
         if(mode==4) bus.corruptRead=4;
         if(mode==5) { bus.failWrite=2; bus.failWriteEnd=100; }
-        bool success=CirrusFirmwareRealUploader::upload(amp,&bus,plan);
+        bool success=CirrusFirmwareRealUploader::upload(amp.name,bus,plan);
         assert(success==(mode==0));
         if(mode==1) assert(bus.writes==0);
     }
@@ -108,16 +108,16 @@ int main() {
     UploadPlan plan_pm{};
     assert(CirrusFirmwareUploadPlanner::generatePlan(0,r_pm,{252,true,true},plan_pm));
     CirrusAudioFixup bus_pm;
-    assert(CirrusFirmwareRealUploader::upload(amp,&bus_pm,plan_pm));
+    assert(CirrusFirmwareRealUploader::upload(amp.name,bus_pm,plan_pm));
     assert(bus_pm.reads==0 && bus_pm.writes==2);
     for(unsigned i=0;i<504;i++) assert(bus_pm.memory[r_pm.dspRegister+i]==0xAB);
     MappedImage mapped{}; UploadSession session{}; CirrusAudioFixup bus;
     mapped.regionCount=33;
     for(unsigned i=0;i<33;i++) mapped.regions[i]=r;
-    assert(!CirrusFirmwareScheduler::run(amp,&bus,mapped,session));
+    assert(!CirrusFirmwareScheduler::run(amp.name,bus,mapped,session));
     assert(!session.complete && bus.reads==0 && bus.writes==0);
     mapped.regionCount=32;
-    assert(CirrusFirmwareScheduler::run(amp,&bus,mapped,session));
+    assert(CirrusFirmwareScheduler::run(amp.name,bus,mapped,session));
     assert(session.complete && session.passCount==32);
     r.dspRegister=0xFFFFFFFC;
     assert(!CirrusFirmwareUploadPlanner::generatePlan(0,r,{252,true,true},plan));

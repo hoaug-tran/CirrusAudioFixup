@@ -1,5 +1,3 @@
-# CirrusAudioFixup
-
 <div align="center">
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](#building-from-source-and-host-testing)
@@ -10,7 +8,7 @@
 
 **Open-source macOS kernel extension enabling Cirrus Logic CS35L41 smart amplifiers over I2C on modern laptops.**
 
-[Quick start](#quick-start-prebuilt-kext-bundle) • [Hardware status](#current-hardware-support-status) • [How it works](#how-it-works) • [Safety protocol](#4-phase-progressive-bring-up-protocol) • [Boot arguments](#boot-arguments-reference) • [Documentation hub](#documentation-hub) • [Diagnostics](#telemetry-and-diagnostics) • [Troubleshooting](#troubleshooting-guide)
+[Quick start](#quick-start-prebuilt-kext-bundle) • [Hardware status](#current-hardware-support-status) • [Safety guide](docs/safe_bringup_protocol.md) • [How it works](#how-it-works) • [Installation](#installation-and-configuration-guide) • [Boot arguments](#boot-arguments-reference) • [Documentation hub](#documentation-hub) • [Troubleshooting](#troubleshooting-guide)
 
 </div>
 
@@ -18,7 +16,7 @@
 
 > [!CAUTION]
 > **Hardware and speaker safety notice:**  
-> This driver directly configures amplifier output stages, external boost power converters, and DSP acoustic protection algorithms. Incorrect register configurations, mismatched firmware profiles, or forced voltage settings can cause thermal runaway or permanently damage internal speaker voice coils. Always follow the [progressive bring-up protocol](#4-phase-progressive-bring-up-protocol).
+> This driver directly configures amplifier output stages, external boost power converters, and DSP acoustic protection algorithms. Incorrect register configurations, mismatched firmware profiles, or forced voltage settings can cause thermal runaway or permanently damage internal speaker voice coils. Always follow the [Safe Bring-up Protocol](docs/safe_bringup_protocol.md).
 
 > [!IMPORTANT]
 > **Free and non-commercial software:**  
@@ -118,11 +116,15 @@ To maintain complete transparency regarding hardware functionality on reference 
 
 ## Quick start: prebuilt kext bundle
 
-For end users who do not wish to compile multiple dependencies from source, the entire audio pipeline requires three coordinated kernel extensions:
+To get your internal speakers running immediately without compiling separate repositories or relying on external CI artifacts, a verified, all-in-one prebuilt bundle is included directly in this repository:
 
-1. **`CirrusAudioFixup.kext`**: Download the latest release from this repository's [Releases page](../../releases). Both `RELEASE` and `DEBUG` archives are provided.
-2. **`VoodooI2C.kext` (Custom transport fork)**: Prebuilt with the `VoodooI2CTransferToAddress` export. Download from [hoaug-tran/VoodooI2C Actions](https://github.com/hoaug-tran/VoodooI2C/actions).
-3. **`AppleALC.kext` (Layout 16 fork)**: Prebuilt with Realtek ALC287 layout-id 16. Available in the reference [Lenovo Legion 7 Hackintosh EFI](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh).
+> [!TIP]
+> **All-in-One Prebuilt Bundle:**  
+> Download **[`docs/Kexts.zip`](docs/Kexts.zip)**.  
+> This archive contains the complete, verified trio ready to drop directly into your `EFI/OC/Kexts/`:
+> 1. **`AppleALC.kext`**: Prebuilt with Realtek ALC287 layout-id 16.
+> 2. **`VoodooI2C.kext`**: Custom transport fork exposing `VoodooI2CTransferToAddress` (including required satellite kexts).
+> 3. **`CirrusAudioFixup.kext`**: The smart amplifier driver.
 
 ---
 
@@ -243,13 +245,17 @@ CirrusAudioFixup was developed by reverse-engineering and adapting the official 
 
 ### 1. Required kexts
 
-Download and copy the following kernel extensions into your `EFI/OC/Kexts/` folder:
+You can deploy the complete stack using either option:
 
-1. `Lilu.kext` (v1.6.8 or newer)
-2. `VirtualSMC.kext`
-3. `AppleALC.kext` (v1.9.0 or newer with layout 16)
-4. `VoodooI2C.kext` (from [hoaug-tran/VoodooI2C](https://github.com/hoaug-tran/VoodooI2C/actions))
-5. `CirrusAudioFixup.kext`
+- **Option A (All-in-One Prebuilt Bundle — Recommended)**:  
+  Extract **[`docs/Kexts.zip`](docs/Kexts.zip)** into your `EFI/OC/Kexts/`. It contains tested, verified builds of `AppleALC.kext` (Layout 16), `VoodooI2C.kext` (custom fork with `VoodooI2CTransferToAddress`), and `CirrusAudioFixup.kext`.
+
+- **Option B (Individual Components)**:
+  1. `Lilu.kext` (v1.6.8 or newer)
+  2. `VirtualSMC.kext`
+  3. `AppleALC.kext` (v1.9.0 or newer with layout 16)
+  4. `VoodooI2C.kext` (custom fork from [hoaug-tran/VoodooI2C](https://github.com/hoaug-tran/VoodooI2C))
+  5. `CirrusAudioFixup.kext` (from [Releases](../../releases))
 
 > [!WARNING]
 > Do not use `VoodooI2CHID.kext` or other satellite kexts for the audio amplifier. CirrusAudioFixup attaches directly to `VoodooI2CDeviceNub` on device `CLSA0100`.
@@ -285,6 +291,10 @@ Configure layout 16 using **either** of the following methods:
 ---
 
 ## 4-Phase progressive bring-up protocol
+
+> [!IMPORTANT]
+> **Complete safety reference:**  
+> A detailed step-by-step walkthrough with GUI Hackintool steps and diagnostics is available in the dedicated [Safe Bring-up Protocol Guide](docs/safe_bringup_protocol.md).
 
 To eliminate any risk of damaging amplifier hardware or speaker voice coils, always follow this four-phase sequence:
 
@@ -454,6 +464,7 @@ This generates a timestamped diagnostic archive in `/tmp/cirrus-evidence.XXXXXX`
 For advanced users and contributors, specialized technical documentation and reference materials are available:
 
 - [Safe Bring-up and Diagnostics Protocol](docs/safe_bringup_protocol.md): Comprehensive 4-phase bring-up walkthrough, Hackintool logging, and emergency read-only mode.
+- [All-in-One Prebuilt Bundle (Kexts.zip)](docs/Kexts.zip): Complete archive containing `AppleALC.kext` (Layout 16), `VoodooI2C.kext` (custom transport fork), and `CirrusAudioFixup.kext`.
 - [Lenovo Legion 7 Reference EFI](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh): Complete working OpenCore EFI configuration with verified audio topologies.
 - [Historical Bug Tracking (#2)](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh/issues/2): Original issue report, codec dumps, and forensic debugging notes.
 

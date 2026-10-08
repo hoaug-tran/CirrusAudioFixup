@@ -154,6 +154,23 @@ struct Provider {
     unsigned calls=0;
     int callPlatformFunction(const char*,bool,void*,void*,void*,void*) { ++calls; return 0; }
 };
+using IOService=Provider;
+namespace cirrus::transport {
+class VoodooI2CTransport {
+    IOService* provider;
+    UInt8 address;
+    IOReturn result{kIOReturnNotReady};
+public:
+    VoodooI2CTransport(IOService* p, UInt8 a) : provider(p), address(a) {}
+    bool transfer(UInt8* writeBuffer, UInt16 writeLength, UInt8* readBuffer, UInt16 readLength) {
+        if (!provider) { result=kIOReturnNotReady; return false; }
+        VoodooI2CAddressedTransfer request{address,writeBuffer,writeLength,readBuffer,readLength};
+        result=provider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS,false,&request,nullptr,nullptr,nullptr);
+        return result==0;
+    }
+    IOReturn lastReturn() const { return result; }
+};
+}
 using namespace cirrus::diagnostics;
 using namespace cirrus::devices::cs35l41;
 bool gCirrusDebug = false;

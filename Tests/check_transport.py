@@ -6,13 +6,16 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
+TRANSPORT_HEADER = (ROOT / 'CirrusAudioFixup/Transport/VoodooI2CTransport.hpp').read_text(encoding='utf-8')
 
 def function(name):
     start = re.search(r'bool CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
 names = ['transferToAddress', 'bulkRead', 'bulkWrite', 'readRegister', 'writeRegister', 'updateRegisterBits']
-abi = HEADER[HEADER.index('struct VoodooI2CAddressedTransfer {'):HEADER.index('struct RegisterSequence {')]
+abi_start = TRANSPORT_HEADER.index('struct VoodooI2CAddressedTransfer {')
+abi_end = TRANSPORT_HEADER.index('\n};', abi_start) + 4
+abi = TRANSPORT_HEADER[abi_start:abi_end]
 preamble = r'''
 #include <cstdint>
 #include <cstddef>
@@ -52,6 +55,20 @@ struct Provider {
         return result;
     }
 };
+namespace cirrus { namespace transport {
+class VoodooI2CTransport {
+public:
+    VoodooI2CTransport(Provider* provider,UInt8 address):mProvider(provider),mAddress(address) {}
+    bool transfer(UInt8* writeBuffer,UInt16 writeLength,UInt8* readBuffer,UInt16 readLength) {
+        VoodooI2CAddressedTransfer request{mAddress,writeBuffer,writeLength,readBuffer,readLength};
+        mLastReturn=mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS,true,&request,nullptr,nullptr,nullptr);
+        return mLastReturn==kIOReturnSuccess;
+    }
+    IOReturn lastReturn() const { return mLastReturn; }
+private:
+    Provider* mProvider; UInt8 mAddress; IOReturn mLastReturn{kIOReturnSuccess};
+};
+}}
 class CirrusAudioFixup {
 public:
     Provider provider; Provider* mProvider=&provider;
@@ -125,3 +142,63 @@ with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
     source.write_text(preamble+abi+mock+declarations+'\n};\n'+'\n'.join(function(n) for n in names)+checks,encoding='utf-8')
     subprocess.run(['g++','-std=c++17','-O0',str(source),'-o',str(tmp/'transport.exe')],check=True)
     subprocess.run([str(tmp/'transport.exe')],check=True)
+
+    iokit = tmp / 'IOKit'
+    iokit.mkdir()
+    (iokit / 'IOLib.h').write_text(r'''
+#pragma once
+#include <cstddef>
+#include <cstdint>
+using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IOReturn=int;
+constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2;
+inline void IODelay(unsigned) {}
+''', encoding='utf-8')
+    (iokit / 'IOService.h').write_text(r'''
+#pragma once
+#include "IOLib.h"
+class IOService {
+public:
+    virtual ~IOService()=default;
+    virtual IOReturn callPlatformFunction(const char*,bool,void*,void*,void*,void*)=0;
+};
+''', encoding='utf-8')
+    direct = tmp / 'direct_transport.cpp'
+    direct.write_text(r'''
+#include <cassert>
+#include <cstring>
+#include <vector>
+#include "Transport/VoodooI2CTransport.hpp"
+bool gCirrusDebug=false;
+struct Provider final : IOService {
+    IOReturn result=0; unsigned calls=0; uint8_t address=0; std::vector<uint8_t> bytes;
+    IOReturn callPlatformFunction(const char* name,bool wait,void* ptr,void*,void*,void*) override {
+        assert(std::strcmp(name,VOODOO_I2C_TRANSFER_TO_ADDRESS)==0 && wait);
+        auto& request=*static_cast<VoodooI2CAddressedTransfer*>(ptr);
+        ++calls; address=request.address;
+        if(request.writeBuffer) bytes.assign(request.writeBuffer,request.writeBuffer+request.writeLength);
+        if(result==0 && request.readBuffer)
+            for(unsigned i=0;i<request.readLength;++i) request.readBuffer[i]=uint8_t(0x11*(i+1));
+        return result;
+    }
+};
+int main() {
+    Provider provider;
+    cirrus::transport::VoodooI2CTransport bus(&provider,0x41);
+    uint32_t value=0;
+    assert(bus.read(0x02800398,&value) && value==0x11223344);
+    assert(provider.address==0x41 && provider.bytes==std::vector<uint8_t>({2,0x80,3,0x98}));
+    assert(bus.write(0x2018,0x12345678));
+    assert(provider.bytes==std::vector<uint8_t>({0,0,0x20,0x18,0x12,0x34,0x56,0x78}));
+    provider.result=-77;
+    assert(!bus.write(0x2018,0) && bus.lastReturn()==-77);
+    cirrus::transport::VoodooI2CTransport missing(nullptr,0x40);
+    assert(!missing.read(0,&value) && missing.lastReturn()==kIOReturnNotReady);
+    cirrus::transport::VoodooI2CTransport invalid(&provider,0x80);
+    assert(!invalid.read(0,&value) && invalid.lastReturn()==kIOReturnBadArgument);
+}
+''', encoding='utf-8')
+    subprocess.run([
+        'g++','-std=c++17','-O0','-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
+        str(direct),'-o',str(tmp/'direct_transport.exe')
+    ],check=True)
+    subprocess.run([str(tmp/'direct_transport.exe')],check=True)

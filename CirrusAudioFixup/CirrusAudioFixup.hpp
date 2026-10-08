@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/DeviceRegistry.hpp"
 #include "Core/RegisterIO.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"
 #include "Devices/CS35L41/Hardware/OTPMap.hpp"
@@ -7,8 +8,10 @@
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/WMFW/FirmwareUploader.hpp"
 #include "Platform/HDA/HDAController.hpp"
+#include "Platform/PlatformProfile.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
+#include "Transport/VoodooI2CTransport.hpp"
 
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOLib.h>
@@ -19,16 +22,6 @@
 #include <libkern/c++/OSCollectionIterator.h>
 
 #include <os/log.h>
-
-#define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
-
-struct VoodooI2CAddressedTransfer {
-    uint8_t address;
-    uint8_t* writeBuffer;
-    uint16_t writeLength;
-    uint8_t* readBuffer;
-    uint16_t readLength;
-};
 
 struct RegisterSequence {
     uint32_t reg;
@@ -41,6 +34,7 @@ struct RegisterSequence {
 struct AmplifierState {
     const char* name{nullptr};
     uint8_t address{0};
+    cirrus::core::CodecModel model{cirrus::core::CodecModel::Unknown};
     bool present{false};
     uint32_t deviceId{0};
     uint32_t revisionId{0};
@@ -137,11 +131,9 @@ private:
     bool mCapturingFailureSnapshot{false};
 
     static constexpr size_t kMaxAmps = 4;
-    size_t mAmpCount{2};
-    AmplifierState mAmps[kMaxAmps]{{"left", cirrus::devices::cs35l41::registers::kI2cAddressLeft},
-                                   {"right", cirrus::devices::cs35l41::registers::kI2cAddressRight},
-                                   {"top_left", 0x42},
-                                   {"top_right", 0x43}};
+    size_t mAmpCount{0};
+    AmplifierState mAmps[kMaxAmps]{};
+    const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
 
     static const size_t kTraceBufferSize = 1024;
     cirrus::diagnostics::TraceEntry mTraceBuffer[kTraceBufferSize];
@@ -169,6 +161,7 @@ private:
     bool bootArgStrEquals(const char* name, const char* expectedVal);
     void logProviderInfo(IOService* provider);
     void dumpProviderProperties(IOService* provider);
+    void resolvePlatformProfile();
     bool setupProbeTimer();
     void scheduleReadOnlyProbe(uint32_t delayMs);
     void runReadOnlyProbe();

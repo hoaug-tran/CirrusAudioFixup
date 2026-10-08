@@ -7,16 +7,31 @@
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
 
+#ifndef VOODOO_I2C_TRANSFER_TO_ADDRESS
+#define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
+#endif
+
+struct VoodooI2CAddressedTransfer {
+    uint8_t address;
+    uint8_t* writeBuffer;
+    uint16_t writeLength;
+    uint8_t* readBuffer;
+    uint16_t readLength;
+};
+
 namespace cirrus::transport {
 
 class VoodooI2CTransport final : public core::RegisterIO {
 public:
     static constexpr size_t kMaxChunkSize = 252;
-    static constexpr uint32_t kMaxRetries = 3;
-
     explicit VoodooI2CTransport(IOService* provider, uint8_t slaveAddress) : mProvider(provider), mSlaveAddress(slaveAddress) {}
 
     uint8_t slaveAddress() const { return mSlaveAddress; }
+    IOReturn lastReturn() const { return mLastReturn; }
+
+    bool transfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
+        return dispatchTransfer(writeBuf, writeLen, readBuf, readLen);
+    }
 
     bool read(uint32_t reg, uint32_t* value) override {
         if (!value)
@@ -108,17 +123,29 @@ private:
     }
 
     bool dispatchTransfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
-        if (!mProvider)
+        if (mSlaveAddress > 0x7F || (writeLen && !writeBuf) || (readLen && !readBuf) || (!writeLen && !readLen)) {
+            mLastReturn = kIOReturnBadArgument;
             return false;
-
-        for (uint32_t retry = 0; retry < kMaxRetries; ++retry) {
-            return true;
         }
-        return false;
+        if (!mProvider) {
+            mLastReturn = kIOReturnNotReady;
+            return false;
+        }
+
+        VoodooI2CAddressedTransfer request{};
+        request.address = mSlaveAddress;
+        request.writeBuffer = writeBuf;
+        request.writeLength = writeLen;
+        request.readBuffer = readBuf;
+        request.readLength = readLen;
+
+        mLastReturn = mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS, true, &request, nullptr, nullptr, nullptr);
+        return mLastReturn == kIOReturnSuccess;
     }
 
     IOService* mProvider{nullptr};
     uint8_t mSlaveAddress{0};
+    IOReturn mLastReturn{kIOReturnSuccess};
 };
 
-}
+} // namespace cirrus::transport

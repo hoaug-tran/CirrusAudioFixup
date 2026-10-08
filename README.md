@@ -342,6 +342,7 @@ CirrusAudioFixup provides a comprehensive set of boot arguments to aid in testin
 | `-cirrusdbg` | Logging | Enables verbose driver logging to `os_log` and kernel console (`IOLog`). |
 | `-cirrusnodsp` | Mode | Direct DAC bypass mode: skips DSP firmware loading, configuring hardware for plain analog amplification. |
 | `-cirrusprobe` | Debug | Logs low-level I2C register transactions for bring-up analysis (high verbosity). |
+| `-cirruslegacyprobe` | Compatibility | Restores the historical fixed-address probe (`0x40`/`0x41`) only for diagnosing platforms without a recognized profile. The default is fail-closed discovery; do not use this as a permanent configuration. |
 | `-cirrusro` | Safety | Read-only mode: attaches to services and monitors audio streams, but performs zero write operations on I2C registers. |
 | `-cirrusdelay=<ms>` | Timing | Overrides probe startup delay in milliseconds (default: `100` in read-only mode, `15` in standard mode). |
 | `-cirrusdiag` | Diagnostics | Enables periodic CRC32 register consistency checks during active playback. |
@@ -577,6 +578,7 @@ python3 Tests/check_hda.py
 python3 Tests/check_calibration.py
 python3 Tests/check_bringup.py
 python3 Tests/check_runtime.py
+python3 Tests/check_architecture.py
 ```
 
 > [!NOTE]

@@ -33,6 +33,7 @@ jobs:
           python3 Tests/check_calibration.py
           python3 Tests/check_bringup.py
           python3 Tests/check_runtime.py
+          python3 Tests/check_architecture.py
 
       - name: Build Release kext
         run: |

@@ -74,6 +74,7 @@ python3 Tests/check_hda.py
 python3 Tests/check_calibration.py
 python3 Tests/check_bringup.py
 python3 Tests/check_runtime.py
+python3 Tests/check_architecture.py
 ```
 > [!NOTE]
 > Tests include intentional fault-injection sweeps. Intermittent `ERROR` log messages in the test output are expected; the suite must finish with exit code `0` and print `PASS`.

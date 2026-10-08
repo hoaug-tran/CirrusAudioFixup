@@ -100,34 +100,22 @@ IOService* CirrusAudioFixup::probe(IOService* provider, SInt32* score) {
 }
 
 bool CirrusAudioFixup::performPlatformHardwareReset() {
-    struct PlatformResetQuirk {
-        const char* controllerName;
-        uint32_t registerIndex;
-        uint32_t assertClearBit;
-        uint32_t outputEnableBit;
-        uint32_t minMemoryLength;
-        uint32_t settleMs;
-    };
-
-    static const PlatformResetQuirk resetQuirks[] = {
-        {"AMDI0030", 6, 22, 23, 0x400, 5},
-    };
-
-    for (size_t i = 0; i < sizeof(resetQuirks) / sizeof(resetQuirks[0]); ++i) {
-        const PlatformResetQuirk& quirk = resetQuirks[i];
+    const cirrus::platform::ResetControllerQuirk* quirkPtr = mPlatformProfile ? mPlatformProfile->resetQuirk : nullptr;
+    if (quirkPtr) {
+        const cirrus::platform::ResetControllerQuirk& quirk = *quirkPtr;
         OSDictionary* dict = IOService::nameMatching(quirk.controllerName);
         if (!dict)
-            continue;
+            return true;
 
         OSIterator* iter = IOService::getMatchingServices(dict);
         dict->release();
         if (!iter)
-            continue;
+            return true;
 
         IOService* controller = OSDynamicCast(IOService, iter->getNextObject());
         if (!controller) {
             iter->release();
-            continue;
+            return true;
         }
 
         bool verified = false;
@@ -171,8 +159,32 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
         return verified;
     }
 
-    CIRRUS_LOG("No platform hardware reset quirk matched; continuing with ACPI and I2C reset");
+    CIRRUS_LOG("No platform hardware reset quirk configured for profile %s; continuing with ACPI and I2C reset",
+               mPlatformProfile ? mPlatformProfile->name : "unknown");
     return true;
+}
+
+void CirrusAudioFixup::resolvePlatformProfile() {
+    const char* acpiHid = nullptr;
+    if (mProvider) {
+        OSString* ioName = OSDynamicCast(OSString, mProvider->getProperty("IOName"));
+        if (ioName)
+            acpiHid = ioName->getCStringNoCopy();
+        if (!acpiHid)
+            acpiHid = mProvider->getName();
+    }
+
+    mPlatformProfile = cirrus::platform::findPlatformProfile(acpiHid);
+    if (!mPlatformProfile) {
+        mPlatformProfile = &cirrus::platform::defaultPlatformProfile();
+        CIRRUS_LOG("No exact platform profile for ACPI HID %s; using conservative profile %s", acpiHid ? acpiHid : "unknown",
+                   mPlatformProfile->name);
+    }
+
+    setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
+    setProperty("Cirrus_Platform_ACPI_HID", acpiHid ? acpiHid : "unknown");
+    CIRRUS_LOG("platform profile selected: %s (hid=%s, endpoints=%lu)", mPlatformProfile->name, acpiHid ? acpiHid : "unknown",
+               mPlatformProfile->endpointCount);
 }
 
 bool CirrusAudioFixup::start(IOService* provider) {
@@ -199,6 +211,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
     mProvider = provider;
     logProviderInfo(provider);
     dumpProviderProperties(provider);
+    resolvePlatformProfile();
 
     bool hardwareResetVerified = performPlatformHardwareReset();
     if (!hardwareResetVerified) {
@@ -1028,14 +1041,17 @@ size_t CirrusAudioFixup::detectAmplifiers() {
         mAmps[i].present = false;
     }
 
-    const uint8_t candidateAddresses[kMaxAmps] = {cirrus::devices::cs35l41::registers::kI2cAddressLeft,
-                                                  cirrus::devices::cs35l41::registers::kI2cAddressRight, 0x42, 0x43};
-    const char* candidateNames[kMaxAmps] = {"left", "right", "top_left", "top_right"};
+    const cirrus::platform::PlatformProfile& profile = mPlatformProfile ? *mPlatformProfile : cirrus::platform::defaultPlatformProfile();
+    bool explicitLegacyProbe = bootArgEnabled("-cirruslegacyprobe");
+    size_t candidateCount = profile.allowAutomaticInitialization || explicitLegacyProbe
+                                ? (profile.endpointCount < kMaxAmps ? profile.endpointCount : kMaxAmps)
+                                : 0;
 
     size_t detected = 0;
     mProbingAmplifiers = true;
-    for (size_t i = 0; i < kMaxAmps; ++i) {
-        uint8_t addr = candidateAddresses[i];
+    for (size_t i = 0; i < candidateCount; ++i) {
+        const cirrus::platform::AmplifierEndpoint& endpoint = profile.endpoints[i];
+        uint8_t addr = endpoint.address;
         uint8_t writeBuf[4] = {0x00, 0x00, 0x00, 0x00};
         uint8_t readBuf[4] = {0};
 
@@ -1046,32 +1062,40 @@ size_t CirrusAudioFixup::detectAmplifiers() {
                     (static_cast<uint32_t>(readBuf[2]) << 8) | static_cast<uint32_t>(readBuf[3]);
         }
 
-        if (devId == cirrus::devices::cs35l41::registers::kValDeviceId || devId == 0x00035A40) {
-            mAmps[detected].name = candidateNames[i];
+        const cirrus::core::DeviceDescriptor* descriptor = cirrus::core::findDeviceById(devId);
+        if (descriptor && descriptor->model == profile.amplifierModel) {
+            mAmps[detected].name = endpoint.name;
             mAmps[detected].address = addr;
+            mAmps[detected].model = descriptor->model;
             mAmps[detected].present = true;
             mAmps[detected].deviceId = devId;
             detected++;
-            CIRRUS_LOG("detected amplifier %s at address 0x%02X (DEVID=0x%08X)", candidateNames[i], addr, devId);
+            CIRRUS_LOG("detected %s amplifier %s at address 0x%02X (DEVID=0x%08X)", descriptor->name, endpoint.name, addr, devId);
+        } else if (ok && devId != 0) {
+            CIRRUS_ERR("unsupported amplifier at address 0x%02X (DEVID=0x%08X, profile=%s)", addr, devId, profile.name);
         }
     }
     mProbingAmplifiers = false;
 
-    if (detected == 0) {
-        mAmps[0].name = "left";
-        mAmps[0].address = cirrus::devices::cs35l41::registers::kI2cAddressLeft;
-        mAmps[0].present = true;
-
-        mAmps[1].name = "right";
-        mAmps[1].address = cirrus::devices::cs35l41::registers::kI2cAddressRight;
-        mAmps[1].present = true;
-
-        detected = 2;
+    if (detected == 0 && explicitLegacyProbe) {
+        size_t fallbackCount = candidateCount < 2 ? candidateCount : 2;
+        for (size_t i = 0; i < fallbackCount; ++i) {
+            mAmps[i].name = profile.endpoints[i].name;
+            mAmps[i].address = profile.endpoints[i].address;
+            mAmps[i].model = profile.amplifierModel;
+            mAmps[i].present = true;
+        }
+        detected = fallbackCount;
+        setProperty("Cirrus_Discovery_Fallback", kOSBooleanTrue);
+        CIRRUS_LOG("legacy amplifier fallback explicitly enabled for %lu endpoint(s)", detected);
+    } else {
+        setProperty("Cirrus_Discovery_Fallback", kOSBooleanFalse);
     }
 
     mAmpCount = detected;
     setProperty("Cirrus_Detected_Amplifiers", (uint64_t)mAmpCount, 32);
-    CIRRUS_LOG("dynamic amplifier detection complete: %lu speaker(s) active", mAmpCount);
+    setProperty("Cirrus_Amp_Discovery", mAmpCount ? "DETECTED" : "NONE");
+    CIRRUS_LOG("dynamic amplifier detection complete: %lu speaker(s) active (profile=%s)", mAmpCount, profile.name);
     return mAmpCount;
 }
 
@@ -1835,18 +1859,13 @@ bool CirrusAudioFixup::transferToAddress(UInt8 address, UInt8* writeBuffer, UInt
         return false;
     }
 
-    VoodooI2CAddressedTransfer request{};
-    request.address = address;
-    request.writeBuffer = writeBuffer;
-    request.writeLength = writeLength;
-    request.readBuffer = readBuffer;
-    request.readLength = readLength;
-
     setProperty("CirrusTransferCalled", kOSBooleanTrue);
-    IOReturn ret = mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS, true, &request, nullptr, nullptr, nullptr);
+    cirrus::transport::VoodooI2CTransport transport(mProvider, address);
+    bool success = transport.transfer(writeBuffer, writeLength, readBuffer, readLength);
+    IOReturn ret = transport.lastReturn();
     mLastTransferReturn = ret;
     setProperty("CirrusTransferRet", (uint64_t)ret, 32);
-    if (ret != kIOReturnSuccess) {
+    if (!success) {
         if (!mProbingAmplifiers)
             CIRRUS_ERR("transfer address=0x%02X write=%u read=%u ret=0x%08X", address, writeLength, readLength, ret);
         return false;

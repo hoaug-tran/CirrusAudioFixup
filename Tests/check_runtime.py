@@ -129,6 +129,7 @@ preamble = r'''
 #include <vector>
 #include <string>
 #include "Diagnostics/DiagnosticTypes.hpp"
+#include "Platform/HDA/HDAStreamWatcher.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"
 using UInt8=uint8_t;
@@ -199,6 +200,8 @@ public:
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
     bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
+    bool mDebugPhaseHalted=false;
+    void clearHdaCache() {}
     struct DummyPci { void release() {} };
     struct DummyMap { void release() {} };
     DummyPci* mAudioPciDev=nullptr;
@@ -295,7 +298,10 @@ public:
                (strcmp(name,"-cirrusnodsp")==0) ? bypass : false;
     }
     void setDiagnosticStage(CS35L41Amp&,DriverStage) {}
-    template<class... T> void recordDiagnosticFailure(CS35L41Amp&,T...) {}
+    template<class... T> void recordDiagnosticFailure(CS35L41Amp& a,DiagnosticFailure f,T...) {
+        if(a.diagnostic.firstFailure==DIAG_OK) a.diagnostic.firstFailure=f;
+        a.diagnostic.latestFailure=f;
+    }
     void markDiagnosticSuccess(CS35L41Amp&,DriverStage) {}
     void snapshotDiagnostics(CS35L41Amp&,const char*) {}
     void setProperty(const char* p,OSString* v) { properties[p]=v->value; }
@@ -492,6 +498,7 @@ int main() {
     for(unsigned slot=0;slot<2;++slot) {
         CirrusAudioFixup d;
         d.mAmps[0].name=slot?"right":"left";
+        d.mAmps[0].channel=slot?cirrus::core::AudioChannel::Right:cirrus::core::AudioChannel::Left;
         d.regs[CS35L41_SP_FRAME_RX_SLOT]=0xABCDEF00;
         checkNew(d.applyASP(d.mAmps[0]),"ASP channel setup");
         checkNew(d.regs[CS35L41_SP_FRAME_RX_SLOT]==(0xABCDEF00U|slot),"ASP slot selection preserves other fields");
@@ -565,6 +572,18 @@ int main() {
     headphoneCycle.runBackgroundMonitor();
     checkNew(!headphoneCycle.mAmps[0].playbackFaulted && headphoneCycle.mAmps[0].playbackActive, "headphone unplug restores speaker playback");
     if(newFailures) return 1;
+    CirrusAudioFixup latchedIo;
+    latchedIo.runBackgroundMonitor(); latchedIo.failAt=latchedIo.ops+1; latchedIo.runBackgroundMonitor();
+    latchedIo.failAt=0;
+    unsigned afterFault=latchedIo.ops;
+    for(unsigned i=0;i<20;++i) latchedIo.runBackgroundMonitor();
+    assert(latchedIo.mAmps[0].playbackFaulted && latchedIo.ops==afterFault && latchedIo.unmute==1);
+    CirrusAudioFixup boundedPll;
+    boundedPll.runBackgroundMonitor(); boundedPll.pll=false; boundedPll.runBackgroundMonitor();
+    for(unsigned i=0;i<30;++i) boundedPll.runBackgroundMonitor();
+    assert(boundedPll.mAmps[0].playbackFaulted && boundedPll.mAmps[0].pllRecoveryAttempts==3);
+    CirrusAudioFixup halted; halted.mDebugPhaseHalted=true; halted.runBackgroundMonitor();
+    assert(halted.ops==0 && halted.unmute==0);
     puts("PASS configuration, external boost invariants, protection and active-state loss checks");
 }
 '''

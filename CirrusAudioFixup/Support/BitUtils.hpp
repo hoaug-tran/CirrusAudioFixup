@@ -1,3 +1,11 @@
+//
+// BitUtils.hpp
+// Small bitfield and array helpers used by register code.
+// Mask callers must supply bit indices within a 32-bit word. These helpers
+// do not validate hardware register definitions.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include <stddef.h>

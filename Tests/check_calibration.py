@@ -79,7 +79,8 @@ struct CS35L41Amp {
 };
 using AmplifierState = CS35L41Amp;
 namespace cirrus { namespace devices { namespace cs35l41 { namespace registers { constexpr uint8_t kI2cAddressRight = 0x41; } } } }
-void IOFree(void*,size_t) {}
+unsigned freedImages=0;
+void IOFree(void*,size_t) { ++freedImages; }
 class CirrusAudioFixup {
 public:
     bool skip=false,booted=false,stopped=false;
@@ -100,6 +101,8 @@ public:
     void recordDiagnosticFailure(AmplifierState&,unsigned) { ++failures; }
     bool stopDSP(AmplifierState&) { stopped=true; return true; }
     bool bringupDSP(AmplifierState&) { booted=true; return true; }
+    bool phaseHalted=false;
+    bool stopAfterDebugStage(const char*) { return phaseHalted; }
     bool applyCalibration(AmplifierState&,const FirmwareImage*);
     void boot(AmplifierState& amp,FirmwareImage* image);
 };
@@ -164,6 +167,10 @@ int main() {
     CirrusFirmwareParser::missing=false;
     CirrusAudioFixup normal; normal.boot(amp,&image);
     check(normal.booted && amp.firmwareValidated,"valid calibration permits boot");
+    unsigned beforePhase=freedImages;
+    CirrusAudioFixup phase; phase.phaseHalted=true; phase.boot(amp,&image);
+    check(amp.firmwareValidated && !phase.booted,"firmware phase validates but never boots DSP");
+    check(freedImages==beforePhase+1,"firmware debug halt releases the parsed image");
     IORegistryEntry::legacyOnly=true;
     CirrusAudioFixup legacy;
     check(legacy.applyCalibration(amp,&image),"unqualified EFI property fallback accepted");

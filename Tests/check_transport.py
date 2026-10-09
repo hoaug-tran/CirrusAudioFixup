@@ -152,6 +152,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IOReturn=int;
 constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2;
 inline void IODelay(unsigned) {}
+inline void IOSleep(unsigned) {}
 ''', encoding='utf-8')
     (iokit / 'IOService.h').write_text(r'''
 #pragma once
@@ -191,6 +192,9 @@ int main() {
     assert(provider.bytes==std::vector<uint8_t>({0,0,0x20,0x18,0x12,0x34,0x56,0x78}));
     provider.result=-77;
     assert(!bus.write(0x2018,0) && bus.lastReturn()==-77);
+    unsigned beforePoll=provider.calls;
+    assert(!bus.pollBit(0x10010,1,1,100) && bus.lastReturn()==-77);
+    assert(provider.calls==beforePoll+1);
     cirrus::transport::VoodooI2CTransport missing(nullptr,0x40);
     assert(!missing.read(0,&value) && missing.lastReturn()==kIOReturnNotReady);
     cirrus::transport::VoodooI2CTransport invalid(&provider,0x80);

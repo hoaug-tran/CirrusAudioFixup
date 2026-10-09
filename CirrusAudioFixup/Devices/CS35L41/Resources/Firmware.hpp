@@ -1,3 +1,11 @@
+//
+// Firmware.hpp
+// Embedded firmware and speaker-tuning resource bytes.
+// These arrays include legacy resources as well as the selected images.
+// Import matching binaries; do not edit bytes or substitute another speaker's tuning.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include <IOKit/IOLib.h>

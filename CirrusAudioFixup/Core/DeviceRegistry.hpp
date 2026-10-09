@@ -1,3 +1,11 @@
+//
+// DeviceRegistry.hpp
+// Silicon identities accepted by this driver.
+// An enum value is not hardware support. Add an entry only after its device
+// backend and power, DSP and speaker-tuning paths have been implemented.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/Types.hpp"
@@ -34,4 +42,5 @@ inline bool supportsDevice(CodecModel model) {
     return false;
 }
 
-} // namespace cirrus::core
+// End of the shared device registry.
+}

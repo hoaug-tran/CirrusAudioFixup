@@ -1,3 +1,11 @@
+//
+// PlatformProfile.hpp
+// Board-specific amplifier endpoints and reset wiring.
+// GPIO register offsets belong to a board profile, not a CPU family. Do not
+// reuse the Legion reset quirk on another machine without checking its wiring.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/Types.hpp"
@@ -33,11 +41,10 @@ struct PlatformProfile {
     bool allowAutomaticInitialization;
 };
 
-static constexpr AmplifierEndpoint kCs35l41FourChannelEndpoints[] = {
+// Only endpoints with verified routing and per-speaker tuning may initialize.
+static constexpr AmplifierEndpoint kCs35l41StereoEndpoints[] = {
     {"left", 0x40, core::AudioChannel::Left},
     {"right", 0x41, core::AudioChannel::Right},
-    {"top_left", 0x42, core::AudioChannel::LeftTweeter},
-    {"top_right", 0x43, core::AudioChannel::RightTweeter},
 };
 
 static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
@@ -45,19 +52,16 @@ static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
 };
 
 static constexpr PlatformProfile kPlatformProfiles[] = {
-    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::CodecModel::CS35L41, kCs35l41FourChannelEndpoints,
-     sizeof(kCs35l41FourChannelEndpoints) / sizeof(kCs35l41FourChannelEndpoints[0]), &kAmdAmdi0030Reset, true},
-    {"lenovo-clsa0101-cs35l41", "CLSA0101", core::CodecModel::CS35L41, kCs35l41FourChannelEndpoints,
-     sizeof(kCs35l41FourChannelEndpoints) / sizeof(kCs35l41FourChannelEndpoints[0]), nullptr, false},
-    {"generic-csc3551-cs35l41", "CSC3551", core::CodecModel::CS35L41, kCs35l41FourChannelEndpoints,
-     sizeof(kCs35l41FourChannelEndpoints) / sizeof(kCs35l41FourChannelEndpoints[0]), nullptr, false},
+    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true},
+    {"lenovo-clsa0101-cs35l41", "CLSA0101", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
+    {"generic-csc3551-cs35l41", "CSC3551", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
 };
 
 static constexpr PlatformProfile kSafeUnknownPlatform = {"unrecognized-fail-closed",
                                                          nullptr,
                                                          core::CodecModel::CS35L41,
-                                                         kCs35l41FourChannelEndpoints,
-                                                         sizeof(kCs35l41FourChannelEndpoints) / sizeof(kCs35l41FourChannelEndpoints[0]),
+                                                         kCs35l41StereoEndpoints,
+                                                         2,
                                                          nullptr,
                                                          false};
 
@@ -75,4 +79,5 @@ inline const PlatformProfile& defaultPlatformProfile() {
     return kSafeUnknownPlatform;
 }
 
-} // namespace cirrus::platform
+// End of the board profile definitions.
+}

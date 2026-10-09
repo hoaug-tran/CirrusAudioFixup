@@ -11,7 +11,7 @@ def function(name):
     start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
-names = ['fullDriverFlow', 'initCodec', 'handlePowerChange', 'publishDriverVerdict']
+names = ['fullDriverFlow', 'initializeCS35L41', 'initCodec', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
 amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
 
 preamble = r'''
@@ -59,6 +59,11 @@ public:
     CS35L41Amp mAmps[2]{};
     Timer* mProbeTimer=nullptr;
     bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
+    bool mDebugPhaseHalted=false;
+    void clearHdaCache() {}
+    std::string phase;
+    bool bootArgStrEquals(const char*,const char* s) { return phase==s; }
+    bool stopAfterDebugStage(const char*);
     cirrus::platform::hda::HDAStreamState mHdaState;
     bool& mHdaConverterPrepared = mHdaState.converterPrepared;
     bool& mHdaControllerObserved = mHdaState.observed;
@@ -80,11 +85,14 @@ public:
     CirrusAudioFixup() {
         mAmps[0].name="L"; mAmps[0].address=0;
         mAmps[1].name="R"; mAmps[1].address=1;
+        for(auto& a:mAmps) a.model=cirrus::core::CodecModel::CS35L41;
+        mAmps[1].channel=cirrus::core::AudioChannel::Right;
     }
     static const char* failureName(DiagnosticFailure) { return "failure"; }
     static const char* stageName(DriverStage) { return "stage"; }
 
-    bool fail(CS35L41Amp& a,const char* stage) { return a.address==0 && failStage==stage; }
+    unsigned faultAddress=0;
+    bool fail(CS35L41Amp& a,const char* stage) { return a.address==faultAddress && failStage==stage; }
     bool transfer(CS35L41Amp& a) {
         if(++io!=failIO) return true;
         recordDiagnosticFailure(a,DIAG_I2C_TRANSFER);
@@ -112,6 +120,7 @@ public:
                (strcmp(s,"-cirrusro")==0) ? readonly : false;
     }
     void setProperty(const char* p,OSString* s) { properties[p]=s->value; }
+    void setProperty(const char* p,const char* s) { properties[p]=s; }
     void setProperty(const char*,uint64_t,unsigned) {}
     void setDiagnosticStage(CS35L41Amp& a,DriverStage s) { a.diagnostic.stage=s; }
     void markDiagnosticSuccess(CS35L41Amp& a,DriverStage s) { a.diagnostic.lastGoodStage=s; }
@@ -135,6 +144,9 @@ public:
         a.firmwareValidated=a.dspAlive=!fail(a,"upload");
         a.monitorCount=a.dspAlive?1:0;
         a.haloStateRegister=0x02800398; a.haloHeartbeatRegister=0x0280039C;
+        if(a.firmwareValidated && phase=="firmware") {
+            a.dspAlive=false; a.monitorCount=0; stopAfterDebugStage("firmware");
+        }
     }
     bool powerUpAmplifier(CS35L41Amp& a) {
         bool ok=!fail(a,"idle-prepare");
@@ -160,6 +172,7 @@ public:
     void handlePowerChange(bool powered);
     bool initCodec(CS35L41Amp&);
     void fullDriverFlow();
+    void initializeCS35L41(AmplifierState&);
 };
 
 class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
@@ -180,6 +193,26 @@ checks = r'''
 unsigned failures=0;
 void check(bool ok,const std::string& label) { if(!ok) { ++failures; printf("FAIL %s\n",label.c_str()); } }
 int main() {
+    for(const char* stage : {"probe","otp","errata","clock","asp","gpio","platform","firmware","dsp"}) {
+        CirrusAudioFixup d; d.phase=stage; d.fullDriverFlow();
+        check(d.mDebugPhaseHalted && !d.mAmps[0].initialized && !d.mAmps[1].initialized,"phase never publishes readiness");
+        check(d.properties["Cirrus_Driver_Verdict"]=="DEBUG_PHASE_HALTED","phase verdict");
+        check(d.uploads==((std::string(stage)=="dsp" || std::string(stage)=="firmware")?2U:0U),"phase cannot upload past requested stage");
+        if(std::string(stage)=="probe") check(d.io==0,"probe phase never resets silicon");
+    }
+    CirrusAudioFixup phaseFailure; phaseFailure.phase="firmware";
+    phaseFailure.failStage="upload"; phaseFailure.faultAddress=1;
+    phaseFailure.fullDriverFlow();
+    check(phaseFailure.mDebugPhaseHalted && phaseFailure.mAmps[1].playbackFaulted,
+          "first amp debug halt cannot conceal second amp upload failure");
+    check(phaseFailure.stops[1]>0 && phaseFailure.halts[1]>0,
+          "failed second amp still receives synchronous cleanup");
+    check(phaseFailure.properties["Cirrus_Driver_Verdict"]=="FAULT_LATCHED",
+          "fault takes precedence over debug phase verdict");
+    CirrusAudioFixup ro; ro.readonly=true; ro.fullDriverFlow();
+    check(ro.io==0 && ro.uploads==0,"readonly flow never writes hardware");
+    CirrusAudioFixup unknown; unknown.mAmps[0].model=cirrus::core::CodecModel::CS35L56; unknown.fullDriverFlow();
+    check(unknown.resets[0]==0 && unknown.mAmps[0].playbackFaulted,"unsupported backend rejected before reset");
     CirrusAudioFixup codec;
     check(codec.initCodec(codec.mAmps[0]),"normal OTP boot");
     for(unsigned i=1;i<=codec.io;++i) {

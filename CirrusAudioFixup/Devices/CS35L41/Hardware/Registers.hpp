@@ -1,3 +1,11 @@
+//
+// Registers.hpp
+// CS35L41 register addresses, bitfields and diagnostic descriptions.
+// Values apply to this silicon family. Keep their source and revision in
+// review when changing them; a similarly named chip can use different bits.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include <stddef.h>

@@ -1,3 +1,11 @@
+//
+// CirrusAudioFixup.hpp
+// IOService lifecycle, per-amplifier state and diagnostic ownership.
+// The workloop serializes playback, sleep and stop. Firmware pointers borrow
+// immutable resource data; cached IOKit objects carry explicit retain/release.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/DeviceRegistry.hpp"
@@ -8,6 +16,7 @@
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/WMFW/FirmwareUploader.hpp"
 #include "Platform/HDA/HDAController.hpp"
+#include "Platform/HDA/HDAStreamWatcher.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
@@ -17,6 +26,7 @@
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
 #include <IOKit/IOTimerEventSource.h>
+#include <IOKit/pci/IOPCIDevice.h>
 #include <IOKit/pwr_mgt/IOPM.h>
 #include <IOKit/pwr_mgt/IOPMpowerState.h>
 #include <libkern/c++/OSCollectionIterator.h>
@@ -32,13 +42,17 @@ struct RegisterSequence {
 };
 
 struct AmplifierState {
+    // Identity and channel come from the silicon probe and board endpoint.
+    // Do not infer routing or tuning from a display name or slave address.
     const char* name{nullptr};
     uint8_t address{0};
     cirrus::core::CodecModel model{cirrus::core::CodecModel::Unknown};
+    cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
     bool present{false};
     uint32_t deviceId{0};
     uint32_t revisionId{0};
 
+    // Borrowed views into embedded resources; these pointers are never freed.
     const uint8_t* wmfwData{nullptr};
     size_t wmfwSize{0};
     const uint8_t* binData{nullptr};
@@ -71,9 +85,13 @@ struct AmplifierState {
     uint32_t monitorLogCountdown{0};
     uint32_t haloStateRegister{0};
     uint32_t haloHeartbeatRegister{0};
+    // Faults survive normal polling. Only the isolated PLL recovery path may
+    // clear this flag; first-failure evidence remains available afterwards.
     bool playbackFaulted{false};
     uint32_t cleanupAttempts{0};
     uint32_t pllRetryCooldown{0};
+    uint32_t pllRecoveryAttempts{0};
+    bool pllRecoveryPending{false};
     cirrus::diagnostics::DiagnosticState diagnostic{};
 };
 
@@ -97,9 +115,10 @@ struct FirmwareResource {
 class CirrusAudioFixup : public IOService {
     friend class FixupRegisterIOAdapter;
 
-OSDeclareDefaultStructors(CirrusAudioFixup)
+    OSDeclareDefaultStructors(CirrusAudioFixup)
 
-    public : bool init(OSDictionary* properties = nullptr) override;
+public:
+    bool init(OSDictionary* properties = nullptr) override;
     IOService* probe(IOService* provider, SInt32* score) override;
     bool start(IOService* provider) override;
     void stop(IOService* provider) override;
@@ -108,9 +127,12 @@ OSDeclareDefaultStructors(CirrusAudioFixup)
 
 private:
     void fullDriverFlow();
+    void initializeCS35L41(AmplifierState& amp);
 
     void runBackgroundMonitor();
 
+    // The provider is borrowed for the attached service lifetime. The workloop
+    // and its event sources are owned and removed before stop clears it.
     IOService* mProvider{nullptr};
     IOWorkLoop* mWorkLoop{nullptr};
     IOTimerEventSource* mProbeTimer{nullptr};
@@ -120,16 +142,26 @@ private:
     bool mPowerAvailable{true};
     bool mStopping{false};
     bool mNeedsReinitialization{false};
+    bool mDebugPhaseHalted{false};
+    bool stopAfterDebugStage(const char* stage);
 
     bool setupPowerManagement(IOService* provider);
     void handlePowerChange(bool powered);
     static IOReturn lifecycleAction(OSObject* owner, void* operation, void*, void*, void*);
 
     cirrus::platform::hda::HDAStreamState mHdaState;
+    // Owned references, valid only while the lifecycle allows HDA access.
+    IOPCIDevice* mHdaPci{nullptr};
+    IOMemoryMap* mHdaMap{nullptr};
+    // Points to a status string literal; no allocation or release is needed.
+    const char* mHdaStatus{nullptr};
+    void clearHdaCache();
 
     IOReturn mLastTransferReturn{kIOReturnSuccess};
     bool mCapturingFailureSnapshot{false};
 
+    // Storage capacity is not supported topology. Current profiles permit
+    // only the two channels with matching routing and speaker tuning.
     static constexpr size_t kMaxAmps = 4;
     size_t mAmpCount{0};
     AmplifierState mAmps[kMaxAmps]{};
@@ -140,6 +172,7 @@ private:
     uint32_t mTraceHead{0};
     uint32_t mTraceTail{0};
     cirrus::diagnostics::TraceStats mTraceStats{};
+    // Protects the flight recorder, not the hardware lifecycle.
     IOLock* mTraceLock{nullptr};
 
     void initTraceBuffer();

@@ -1,3 +1,11 @@
+//
+// Types.hpp
+// Identifiers shared by platform profiles and device code.
+// Sample rates, channels and codec names describe possible hardware. Their
+// presence here does not mean the current backend can drive every value.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include <stddef.h>

@@ -1,3 +1,11 @@
+//
+// AudioDevice.hpp
+// Common register-level device operations.
+// This interface does not yet own the complete driver lifecycle. CS35L41 DSP
+// upload, mailbox sequencing and playback verification remain in the service.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/RegisterIO.hpp"

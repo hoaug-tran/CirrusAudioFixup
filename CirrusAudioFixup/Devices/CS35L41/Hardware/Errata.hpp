@@ -1,3 +1,11 @@
+//
+// Errata.hpp
+// Revision-specific CS35L41 register patches.
+// Patch order matters. Apply a sequence only to its matching revision and
+// restore the protected-register lock even when a write fails.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include <stddef.h>

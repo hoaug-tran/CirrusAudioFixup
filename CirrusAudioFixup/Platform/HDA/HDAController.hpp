@@ -1,7 +1,14 @@
+//
+// HDAController.hpp
+// State observed by the service's HDA stream scanner.
+// RUN, tag and format checks describe controller activity. They do not prove
+// that PCM reaches the speaker pin or that the speakers produce sound.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
-#include <IOKit/IOService.h>
-#include <IOKit/pci/IOPCIDevice.h>
+#include <stdint.h>
 
 namespace cirrus::platform::hda {
 
@@ -16,21 +23,6 @@ struct HDAStreamState {
     uint32_t missCount{0};
 };
 
-class HDAController final {
-public:
-    static HDAController& getInstance() {
-        static HDAController instance;
-        return instance;
-    }
-
-    bool syncCodec(HDAStreamState& state);
-
-    static bool supportedFormat(uint16_t format);
-
-private:
-    HDAController() = default;
-
-    IOService* getAudioController();
-};
-
+// Hardware access is owned by CirrusAudioFixup's serialized lifecycle.
+// End of the HDA observation state.
 }

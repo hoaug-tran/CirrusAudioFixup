@@ -25,7 +25,7 @@ int main() {
     const auto* lenovo = platform::findPlatformProfile("CLSA0100");
     assert(lenovo);
     assert(lenovo->amplifierModel == core::CodecModel::CS35L41);
-    assert(lenovo->endpointCount == 4);
+    assert(lenovo->endpointCount == 2);
     assert(lenovo->endpoints[0].address == 0x40);
     assert(lenovo->endpoints[1].address == 0x41);
     assert(lenovo->resetQuirk);
@@ -67,6 +67,14 @@ start_start = SOURCE.index("bool CirrusAudioFixup::start(")
 start_end = SOURCE.index("\n}", start_start)
 start = SOURCE[start_start:start_end]
 assert start.index("resolvePlatformProfile();") < start.index("performPlatformHardwareReset();")
+assert start.index('PE_parse_boot_argn("-cirrusphase"') < start.index("performPlatformHardwareReset();")
 assert start.index("performPlatformHardwareReset();") < start.index("detectAmplifiers();")
+
+reset_start = SOURCE.index("bool CirrusAudioFixup::performPlatformHardwareReset()")
+reset_end = SOURCE.index("\n}", reset_start)
+reset = SOURCE[reset_start:reset_end]
+assert reset.index('bootArgEnabled("-cirrusro")') < reset.index("IOService::nameMatching")
+assert reset.index('bootArgStrEquals("-cirrusphase", "probe")') < reset.index("IOService::nameMatching")
+assert 'return true;' in reset[:reset.index("const cirrus::platform::ResetControllerQuirk")]
 
 print("PASS device registry, platform profiles, fail-closed discovery and reset ordering")

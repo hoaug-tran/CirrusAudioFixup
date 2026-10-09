@@ -1,3 +1,11 @@
+//
+// WMFWParser.hpp
+// WMFW and coefficient parsing, memory mapping and control lookup.
+// Validate bounds before reading a field. Parsed views borrow their input
+// buffer; keep that buffer alive until upload and control lookup complete.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include <IOKit/IOLib.h>

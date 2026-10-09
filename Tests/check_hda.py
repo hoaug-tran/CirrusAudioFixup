@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 
 def function(name):
-    start = re.search(r'bool CirrusAudioFixup::' + name + r'\(', SOURCE).start()
+    start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
 preamble = r'''
@@ -17,6 +17,7 @@ preamble = r'''
 #include <string>
 #include <map>
 #include <cstring>
+#include "Platform/HDA/HDAStreamWatcher.hpp"
 using UInt32=uint32_t;
 constexpr int kIOReturnSuccess=0,kIOReturnNotFound=-1;
 constexpr int STAGE_HDA_DETECT=0,DIAG_HDA_CONTROLLER=1,DIAG_HDA_STREAM_FORMAT=2;
@@ -24,6 +25,7 @@ constexpr int kIOPCIConfigVendorID=0,kIOPCIConfigDeviceID=2;
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
 #define OSDynamicCast(T,p) dynamic_cast<T*>(p)
+#define OSSafeReleaseNULL(p) do { if(p) { p->release(); p=nullptr; } } while(0)
 struct OSString {
     std::string value;
     static OSString* withCString(const char* s) { return new OSString{s}; }
@@ -42,7 +44,10 @@ struct IOService { virtual ~IOService()=default; unsigned releases=0; void relea
 struct IOPCIDevice:IOService {
     IOMemoryMap bar;
     bool noMap=false;
-    IOMemoryMap* mapDeviceMemoryWithRegister(unsigned) { return noMap?nullptr:&bar; }
+    bool inactive=false;
+    bool isInactive() { return inactive; }
+    unsigned maps=0;
+    IOMemoryMap* mapDeviceMemoryWithRegister(unsigned) { ++maps; return noMap?nullptr:&bar; }
     const char* getName() { return "fake-HDEF"; }
     uint16_t configRead16(unsigned r) { return r==0?0x1022:0x15e3; }
 };
@@ -75,6 +80,10 @@ public:
     size_t mAmpCount{2};
     int mAmps[2]{};
     IOPCIDevice pci;
+    IOPCIDevice* mHdaPci=nullptr;
+    IOMemoryMap* mHdaMap=nullptr;
+    const char* mHdaStatus=nullptr;
+    void clearHdaCache();
     std::map<std::string,std::string> properties;
     void write16(unsigned offset,uint16_t v) { memcpy(pci.bar.bytes+offset,&v,2); }
     void write32(unsigned offset,uint32_t v) { memcpy(pci.bar.bytes+offset,&v,4); }
@@ -100,7 +109,9 @@ int main() {
     check(normal.synchronizeHdaStream() && normal.mHdaLastDescriptor==0 && normal.mHdaLastStreamTag==1,"fixed output stream");
     normal.write32(0x80,0);
     check(!normal.synchronizeHdaStream() && normal.mHdaLastStreamTag==0,"RUN cleared invalidates stream");
-    check(normal.pci.releases==2 && normal.pci.bar.releases==2,"balanced PCI and BAR references");
+    check(normal.lookups==1 && normal.pci.maps==1 && normal.pci.releases==0,"steady polls reuse controller and BAR");
+    normal.clearHdaCache();
+    check(normal.pci.releases==1 && normal.pci.bar.releases==1,"cache invalidation releases both references");
     normal.missing=true;
     check(!normal.synchronizeHdaStream() && normal.properties["Cirrus_HDA_Status"]=="MISSING",
           "controller disappearance replaces previous stream status immediately");
@@ -143,6 +154,10 @@ int main() {
     check(!streamReset.synchronizeHdaStream(),"stream held in reset cannot trigger playback");
     CirrusAudioFixup asleep; asleep.mPowerAvailable=false;
     check(!asleep.synchronizeHdaStream() && asleep.lookups==0,"no PCI access while suspended");
+    CirrusAudioFixup detached;
+    detached.synchronizeHdaStream(); detached.pci.inactive=true; detached.missing=true;
+    check(!detached.synchronizeHdaStream() && detached.pci.releases==1 && detached.pci.bar.releases==1,
+          "termination invalidates cache before MMIO");
     if(failures) return 1;
     puts("PASS HDA BAR bounds/ownership, controller reset, fixed/bidirectional streams, format, ambiguity and power guard");
 }
@@ -151,6 +166,6 @@ int main() {
 with tempfile.TemporaryDirectory(prefix='cirrus-hda-check-') as directory:
     tmp = Path(directory)
     source = tmp / 'hda.cpp'
-    source.write_text(preamble + function('synchronizeHdaStream') + '\n' + function('supportedHdaFormat') + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', str(source), '-o', str(tmp / 'hda.exe')], check=True)
+    source.write_text(preamble + function('clearHdaCache') + function('synchronizeHdaStream') + '\n' + function('supportedHdaFormat') + checks, encoding='utf-8')
+    subprocess.run(['g++', '-std=c++17', '-O0', '-I', str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'hda.exe')], check=True)
     subprocess.run([str(tmp / 'hda.exe')], check=True)

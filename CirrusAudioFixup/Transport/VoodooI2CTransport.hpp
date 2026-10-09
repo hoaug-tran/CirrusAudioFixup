@@ -1,3 +1,11 @@
+//
+// VoodooI2CTransport.hpp
+// Addressed I2C transfers through the custom VoodooI2C provider.
+// The request layout is a shared ABI. Register reads send an address prefix
+// and then read data; read-only mode still needs that combined transaction.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/RegisterIO.hpp"
@@ -12,6 +20,8 @@
 #endif
 
 struct VoodooI2CAddressedTransfer {
+    // Layout must match the provider's callPlatformFunction implementation.
+    // Buffers are borrowed for the synchronous call and must remain valid.
     uint8_t address;
     uint8_t* writeBuffer;
     uint16_t writeLength;
@@ -34,6 +44,8 @@ public:
     }
 
     bool read(uint32_t reg, uint32_t* value) override {
+        // The address prefix and data read belong to one combined transfer.
+        // Separate calls may let the provider insert a STOP between them.
         if (!value)
             return false;
         uint8_t regBuf[4];
@@ -81,6 +93,8 @@ public:
     }
 
     bool bulkWrite(uint32_t reg, const uint8_t* data, size_t length) override {
+        // Each packet includes a four-byte register prefix. Leave room for it
+        // within the provider limit and advance by bytes, not register words.
         if (!data || length == 0)
             return false;
         size_t offset = 0;
@@ -100,11 +114,15 @@ public:
     }
 
     bool pollBit(uint32_t reg, uint32_t mask, uint32_t targetVal, uint32_t timeoutMs) override {
+        // This synchronous adapter is used from a sleepable driver thread.
+        // Yield between reads; a bus failure is terminal for this attempt.
         for (uint32_t elapsed = 0; elapsed < timeoutMs; ++elapsed) {
             uint32_t val = 0;
-            if (read(reg, &val) && ((val & mask) == targetVal))
+            if (!read(reg, &val))
+                return false;
+            if ((val & mask) == targetVal)
                 return true;
-            IODelay(1000);
+            IOSleep(1);
         }
         return false;
     }
@@ -143,9 +161,11 @@ private:
         return mLastReturn == kIOReturnSuccess;
     }
 
+    // Borrowed from the service; this short-lived adapter never retains it.
     IOService* mProvider{nullptr};
     uint8_t mSlaveAddress{0};
     IOReturn mLastReturn{kIOReturnSuccess};
 };
 
-} // namespace cirrus::transport
+// End of the addressed I2C transport.
+}

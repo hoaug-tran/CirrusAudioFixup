@@ -1,3 +1,11 @@
+//
+// UploadPlan.hpp
+// Namespaced upload-plan data declarations.
+// The production uploader currently declares its own plan types. This header
+// is not the active upload path; keep that distinction when consolidating them.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Firmware/WMFW/WMFWFormat.hpp"

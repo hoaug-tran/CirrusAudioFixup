@@ -1,3 +1,11 @@
+//
+// CS35L41Device.hpp
+// CS35L41 identification, reset and register configuration.
+// Keep silicon-specific sequences here. The IOService owns board policy,
+// firmware selection and the verified playback and power-down sequences.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/AudioDevice.hpp"
@@ -150,6 +158,8 @@ public:
     }
 
     bool unpackOTP(core::RegisterIO& io) {
+        // OTP fields form a packed bitstream, not an array of trim values.
+        // A field may consume two words; validate both indices before reading.
         const cs35l41_otp_map_element_t* otpMapMatch = nullptr;
         const cs35l41_otp_packed_element_t* otpMap;
         int bitOffset, wordOffset;
@@ -214,6 +224,8 @@ public:
     }
 
     bool applyErrata(core::RegisterIO& io) {
+        // Keep the protected-register window bounded to the patch sequence.
+        // Relocking is required even if the first patch write fails.
         if (!unlockTestKey(io))
             return false;
 
@@ -267,6 +279,9 @@ public:
     }
 
     bool bootDsp(core::RegisterIO& io, const uint8_t* wmfw, size_t wmfwSize, const uint8_t* bin, size_t binSize) override {
+        // The service owns parsing, verification and Halo boot today.
+        // This interface method is deliberately unimplemented; do not treat
+        // the lightweight register helper as a complete DSP backend.
         (void)io;
         (void)wmfw;
         (void)wmfwSize;
@@ -276,6 +291,8 @@ public:
     }
 
     bool startPlayback(core::RegisterIO& io) override {
+        // Low-level helper only. The service's verified power/PLL/mailbox flow
+        // is the production entry point for enabling speaker output.
         if (!mInitialized)
             return false;
 

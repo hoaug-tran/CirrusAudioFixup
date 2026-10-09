@@ -1,10 +1,14 @@
+//
+// HDAStreamWatcher.hpp
+// HDA stream-format decoding and the playback format gate.
+// The gate accepts the clock and slot timing used by the current CS35L41
+// profile. Decoding another rate does not make that rate safe for playback.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
-#include "Support/BitUtils.hpp"
-#include "Support/Logging.hpp"
-
-#include <IOKit/IOLib.h>
-#include <IOKit/pci/IOPCIDevice.h>
+#include <stdint.h>
 
 namespace cirrus::platform::hda {
 
@@ -18,16 +22,15 @@ constexpr uint32_t kStreamStatus = 0x03;
 class HDAStreamWatcher {
 public:
     static bool isFormatSupported(uint16_t format) {
-        if (!format)
-            return false;
-
-        if (format & 0x8000)
-            return false;
-        uint8_t bits = (format >> 4) & 0x07;
-
-        if (bits > 4)
-            return false;
-        return true;
+        // Bit 15 selects non-PCM; bit 7 is reserved. Channels are encoded as
+        // count minus one. Compare the rate ratio exactly to avoid rounding
+        // an unsupported format into the fixed 48 kHz clock profile.
+        const uint32_t baseRate = (format & 0x4000) ? 44100 : 48000;
+        const uint32_t multiplier = ((format >> 11) & 7) + 1;
+        const uint32_t divisor = ((format >> 8) & 7) + 1;
+        const uint32_t sampleSize = (format >> 4) & 7;
+        return !(format & 0x8080) && multiplier <= 4 && baseRate * multiplier == 48000 * divisor &&
+               (format & 15) == 1 && sampleSize >= 1 && sampleSize <= 3;
     }
 
     static uint32_t decodeSampleRate(uint16_t format) {

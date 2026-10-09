@@ -1,3 +1,11 @@
+//
+// OTPMap.hpp
+// Packed CS35L41 OTP fields and their destination trim registers.
+// Map selection follows the OTP ID. Some fields cross a 32-bit boundary;
+// retain their original widths and offsets when updating these tables.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Devices/CS35L41/Hardware/Errata.hpp"

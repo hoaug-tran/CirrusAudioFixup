@@ -1,4 +1,14 @@
+//
+// Logging.hpp
+// Kernel logging and the host-test logging shim.
+// Routine logging is optional; failures remain visible in both builds.
+// Keep register sweeps behind explicit diagnostic options.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
+
+#include "Support/BuildConfig.hpp"
 
 #if defined(__APPLE__) && (defined(KERNEL) || defined(_KERNEL) || defined(__KERNEL__))
 #include <IOKit/IOLib.h>
@@ -13,6 +23,8 @@
 
 extern bool gCirrusDebug;
 
+// Keep failures visible in either build. Routine messages follow the runtime
+// verbosity flag, so Release can still provide useful evidence with -cirrusdbg.
 #define CIRRUS_LOG_PREFIX "CirrusAudioFixup: "
 
 #ifndef CIRRUS_LOG

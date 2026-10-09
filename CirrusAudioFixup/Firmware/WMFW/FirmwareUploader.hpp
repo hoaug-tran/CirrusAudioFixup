@@ -1,3 +1,11 @@
+//
+// FirmwareUploader.hpp
+// Bounded firmware upload plans and transfer verification.
+// Validate the entire region and transaction limits before writing DSP memory.
+// A successful transfer alone does not establish a running DSP or safe playback.
+// See LICENSE for distribution terms.
+//
+
 #pragma once
 
 #include "Core/RegisterIO.hpp"

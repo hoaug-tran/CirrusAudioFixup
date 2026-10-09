@@ -1,112 +1,97 @@
-# Safe Bring-up and Diagnostics Protocol
+# Bring-up and diagnostic checks
 
-Smart digital amplifiers like the Cirrus Logic CS35L41 feature integrated boost converters that step internal voltages up to 11V–17V. Driving mismatched firmware profiles or invalid register sequences can cause thermal runaway or permanently damage speaker voice coils.
+Use this guide before testing a new board profile, firmware image or macOS build. The driver controls boost and speaker output stages. Register checks reduce the risk of a bad sequence; they cannot guarantee speaker safety.
 
-To ensure absolute hardware safety, CirrusAudioFixup is designed around a **4-phase progressive bring-up protocol**.
+Keep a known-good EFI that disables CirrusAudioFixup and can boot independently. Use low volume during playback checks. Stop if a speaker distorts, heats unexpectedly, or the driver reports a retained fault. Do not force another laptop's SSID or calibration to get past an error.
 
----
+## 1. Inspect without initialization
 
-## 4-Phase Progressive Bring-up Protocol
+Use these boot arguments for the first diagnostic boot:
 
-```mermaid
-flowchart TD
-    Phase1["Phase 1: Zero-Risk Bring-up\nboot-args: alcid=16 -cirrusdbg -cirrusnodsp"] --> Inspect["Inspect Boot Logs\nHackintool (Logs -> Boot) OR Terminal"]
-    Inspect --> Check{"Any ERROR or\nFAILED_INIT?"}
-    Check -- Yes --> Phase3["Phase 3: Emergency Read-Only Mode\nboot-args: add -cirrusro\nCapture Diagnostics Safely"]
-    Check -- No --> SoundCheck{"Speakers output sound\nin bypass mode?"}
-    SoundCheck -- Yes --> Phase4["Phase 4: Full DSP Activation\nRemove -cirrusnodsp\nEnjoy Protected Audio"]
-    SoundCheck -- No --> CheckWiring["Verify AppleALC layout 16 &\nCustom VoodooI2C installation"]
-```
-
----
-
-### Phase 1: Zero-risk bring-up (DAC bypass mode)
-
-Never boot with full DSP firmware on an untested configuration. Always start with direct DAC bypass mode:
-
-Add to your OpenCore `boot-args`:
 ```text
-alcid=16 -cirrusdbg -cirrusnodsp
+-cirrusro -cirrusdbg -cirrusdumptrace
 ```
 
-- `alcid=16`: Routes the digital audio stream from the Realtek ALC287 codec to the CS35L41 I2S lines.
-- `-cirrusdbg`: Enables verbose driver lifecycle logging to the system log.
-- `-cirrusnodsp`: Bypasses WMFW bytecode upload and Halo DSP activation. The amplifiers operate in direct DAC bypass mode at safe line voltages. If anything is wrong with bus addressing or firmware parsing, **your amplifier hardware is protected from harm**.
+Read-only mode skips board GPIO reset, amplifier initialization and register writes. It reads device identity and registers through I2C combined transfers; those reads still transmit an address prefix. It does not monitor HDA playback or initialize the DSP.
 
----
+Inspect the actual driver service:
 
-### Phase 2: Inspecting boot logs
-
-After booting into macOS, verify whether the driver initialized the hardware cleanly before playing audio.
-
-#### Method A: Using Hackintool (GUI)
-1. Open **Hackintool**.
-2. Navigate to the **Logs** tab.
-3. Click the **System Log** sub-tab.
-4. Click the **Boot** icon at the bottom of the window to load logs from the current boot.
-5. In the search filter box, type: `CirrusAudioFixup`.
-6. Review the output for initialization stages.
-
-#### Method B: Using Terminal (CLI)
-Run:
 ```bash
-log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
+ioreg -lw0 -p IOService -r -c CirrusAudioFixup
+sudo bash Tools/collect_macos.sh
 ```
 
-#### Method C: Checking IORegistry verdict
-Run:
+Check the provider and ACPI HID, detected amplifier count, silicon/revision and both channels' first/latest failures. Keep the collector output before rebooting. Zero detected amplifiers is a discovery problem, not permission to force initialization.
+
+The shipped personality matches `CLSA0100` only. A staged `CSC3551` profile does not make that device attach automatically.
+
+## 2. Check initialization boundaries
+
+Remove `-cirrusro` and select one phase at a time:
+
+```text
+-cirrusdbg -cirrusphase=otp
+```
+
+Valid names are `probe`, `otp`, `errata`, `clock`, `asp`, `gpio`, `platform`, `firmware` and `dsp`.
+
+- `probe` discovers silicon without board GPIO reset or chip initialization.
+- Later phases allow the preceding register operations. Verify the board profile before using them.
+- `firmware` uploads and validates firmware, tuning and available calibration, then stops before DSP boot.
+- `dsp` runs DSP boot checks and halts the core before returning.
+- All phase modes disable playback. Unknown phase names reject startup before reset.
+
+A completed phase reports `DEBUG_PHASE_HALTED`. A channel fault takes precedence and reports `FAULT_LATCHED`. Check both channels: one successful phase must not hide a failed transfer on the other amplifier.
+
+A PLL may not lock while the HDA route is idle because BCLK is absent. This does not justify skipping the later playback lock check.
+
+## 3. Validate the audio route and matching DSP profile
+
+For the reference ALC287 layout, use `alcid=16` and the required custom VoodooI2C build. Other boards need their own verified route and speaker tuning.
+
+Remove the phase argument only after checking the selected firmware and left/right coefficient resources. Keep `-cirrusdbg` while testing:
+
+```text
+alcid=16 -cirrusdbg
+```
+
+Before playback, inspect:
+
 ```bash
-ioreg -lw0 -p IODeviceTree -n CLSA0100 | grep -E 'Cirrus_(Driver|Diag|Playback|Detected)'
+ioreg -lw0 -p IOService -r -c CirrusAudioFixup
+sudo /usr/bin/log show --last 1h --style syslog --info --debug --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
 ```
 
-Expected healthy output in bypass mode:
-```text
-"Cirrus_Driver_Verdict" = "READY_BYPASS_EXPLICIT"
-"Cirrus_Detected_Amplifiers" = 2
-"Cirrus_Diag_FirstFailure_left" = "NONE"
-"Cirrus_Diag_FirstFailure_right" = "NONE"
-```
+`READY_DSP` means the driver's initialization and DSP checks passed. It does not certify measured speaker calibration or a correct acoustic profile. Inspect `Cirrus_Calibration_Status_left/right` separately. Missing measurements are reported; never fill them with guessed values.
 
----
+On Tahoe, first establish a working host audio stack. AppleALC upstream notes that AppleHDA was removed from macOS 26 DP2. The kext's PCI scanner cannot replace the missing codec driver or CoreAudio device. See the [compatibility section](../README.md#macos-compatibility).
 
-### Phase 3: Emergency fallback on failure (Read-only mode)
+### Controlled bypass testing
 
-If the log displays any `ERROR`, `FAILED_INIT`, or bus transfer timeouts:
+`-cirrusnodsp` is an optional diagnostic mode for a board whose reset, boost and routing have already been verified. It skips DSP firmware and tuning, so DSP acoustic protection is absent.
 
-> [!CAUTION]
-> Do not attempt playback if initialization failed. Switch to read-only mode immediately.
+Use a short, low-volume test only when it is needed to isolate the DSP path. A successful bypass test does not prove that a firmware image is wrong, and does not establish long-term speaker safety. Do not make bypass the default first step for an unknown board.
 
-Add `-cirrusro` to your OpenCore `boot-args`:
-```text
-alcid=16 -cirrusdbg -cirrusnodsp -cirrusro
-```
+## 4. Exercise playback and power transitions
 
-- In Read-Only mode (`-cirrusro`), CirrusAudioFixup attaches to the device tree and monitors system audio streams, but **performs zero write operations to any I2C registers**.
-- This guarantees absolute safety while you run [Tools/collect_macos.sh](file:///Users/hoaug/Documents/CirrusAudioFixup/Tools/collect_macos.sh) or inspect kernel diagnostics to diagnose the failure.
+Begin with quiet stereo playback and verify left and right independently. Test repeated start/stop, headphone insertion/removal, idle and sleep/wake.
 
----
+Also test the first microphone activation after idle and after wake, with playback stopped and with quiet playback running. Do not repeat a loud pop to collect more samples. Preserve the pre/post snapshots and timestamps described in [diagnostics.md](diagnostics.md); a pop is not automatically a layout-id fault.
 
-### Phase 4: Full DSP activation
+`ACTIVE_REGISTERS_VERIFIED_ROUTE_UNCONFIRMED` means the active register checks passed. Listen and verify the downstream route separately. `CLEANUP_UNVERIFIED` means the expected idle state was not established; stop the test and preserve the logs.
 
-Once:
-1. Boot logs show `READY_BYPASS_EXPLICIT` with zero errors.
-2. You have tested speaker playback and confirmed clean audio output in DAC bypass mode.
+I/O, initialization, DSP and protection faults remain latched. Only an isolated PLL failure may receive bounded automatic retries. Repeated faults need investigation, not repeated forced reboots.
 
-You can now safely activate the Halo DSP acoustic protection engine:
+Record the exact commit, build configuration, macOS build, CPU/platform, codec layout, I2C provider build and firmware/tuning IDs. Both Debug and Release need this validation; their safety checks are the same.
 
-1. Open your `config.plist`.
-2. Remove `-cirrusnodsp` from `boot-args`.
-3. Keep or remove `-cirrusdbg` as desired.
-4. Reboot your system.
+## If a test fails
 
-Upon reboot, run:
+Do not continue playback. Collect evidence before restarting:
+
 ```bash
-ioreg -lw0 -p IODeviceTree -n CLSA0100 | grep Cirrus_Driver_Verdict
+sudo bash Tools/collect_macos.sh
 ```
 
-You should see:
-```text
-"Cirrus_Driver_Verdict" = "READY_DSP"
-```
+Then boot the fallback EFI, use `-cirrusoff`, or return to `-cirrusro -cirrusdbg` for inspection. Read-only mode avoids initialization writes by this driver; it cannot control another kext's writes or undo a power state left by earlier software.
 
-The Halo DSP core is now running Cirrus Sound Protection Lite (CSPL) firmware with per-speaker acoustic equalization and dynamic excursion limiting.
+Use the first failure to identify the starting point. Keep later failures too: an unsuccessful power-down or DSP halt can matter as much as the original error.

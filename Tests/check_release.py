@@ -2,8 +2,16 @@ from pathlib import Path
 import importlib.util
 import subprocess
 import sys
+import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
+# Apple's -verify_arch consumes every remaining argument as an architecture.
+# The input path must precede that operation, including paths containing spaces.
+workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+lipo_commands = [shlex.split(line.strip()) for line in workflow.splitlines()
+                 if line.strip().startswith("lipo ")]
+assert lipo_commands == [["lipo", "${BUNDLE}/Contents/MacOS/CirrusAudioFixup",
+                          "-verify_arch", "x86_64"]], "lipo input must precede -verify_arch"
 spec = importlib.util.spec_from_file_location("release_metadata", ROOT / "Tools/release_metadata.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -24,3 +32,4 @@ for text, plist, tag in [
         raise AssertionError("Invalid release identity accepted")
 subprocess.run([sys.executable, str(ROOT / "Tools/release_metadata.py")], check=True)
 print("PASS tag/version mismatch and pending release rejection")
+print("PASS CI lipo verification argument order")

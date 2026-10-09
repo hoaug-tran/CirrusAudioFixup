@@ -78,7 +78,7 @@ jobs:
             BUNDLE="${GITHUB_WORKSPACE}/build/${MODE}/CirrusAudioFixup.kext"
             plutil -lint "${BUNDLE}/Contents/Info.plist"
             python3 Tools/release_metadata.py --bundle "$BUNDLE"
-            lipo -verify_arch x86_64 "${BUNDLE}/Contents/MacOS/CirrusAudioFixup"
+            lipo "${BUNDLE}/Contents/MacOS/CirrusAudioFixup" -verify_arch x86_64
             SYMBOLS="${BUNDLE}.dSYM/Contents/Resources/DWARF/CirrusAudioFixup"
             test -f "$SYMBOLS"
             BINARY_UUID="$(dwarfdump --uuid "${BUNDLE}/Contents/MacOS/CirrusAudioFixup" | awk '{print $2}')"

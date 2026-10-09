@@ -124,8 +124,10 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/CirrusAudioFixup";
+				KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
+				KERNEL_FRAMEWORK_HEADERS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
 				ARCHS = x86_64;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -135,8 +137,10 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/CirrusAudioFixup";
+				KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
+				KERNEL_FRAMEWORK_HEADERS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
 				ARCHS = x86_64;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -153,6 +157,14 @@
 				GCC_ENABLE_CPP_EXCEPTIONS = NO;
 				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/MacKernelSDK/Library/x86_64",
+				);
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				COPY_PHASE_STRIP = NO;
+				STRIP_INSTALLED_PRODUCT = NO;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -174,7 +186,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.hoaugtr.CirrusAudioFixup;
 				PRODUCT_NAME = CirrusAudioFixup;
 				SDKROOT = macosx;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				WRAPPER_EXTENSION = kext;
 			};
 			name = Debug;
@@ -191,6 +203,14 @@
 				GCC_ENABLE_CPP_EXCEPTIONS = NO;
 				GCC_ENABLE_CPP_RTTI = NO;
 				GCC_OPTIMIZATION_LEVEL = s;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/MacKernelSDK/Library/x86_64",
+				);
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				COPY_PHASE_STRIP = NO;
+				STRIP_INSTALLED_PRODUCT = NO;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -211,7 +231,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.hoaugtr.CirrusAudioFixup;
 				PRODUCT_NAME = CirrusAudioFixup;
 				SDKROOT = macosx;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				WRAPPER_EXTENSION = kext;
 			};
 			name = Release;

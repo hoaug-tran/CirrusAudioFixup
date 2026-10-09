@@ -17,6 +17,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Checkout pinned kernel SDK
+        uses: actions/checkout@v4
+        with:
+          repository: acidanthera/MacKernelSDK
+          ref: 7af1933c27aefcbdf4809ee44478829aad30f9c1
+          path: MacKernelSDK
+
       - name: Show build environment
         run: |
           echo "macOS version: $(sw_vers -productVersion)"
@@ -34,6 +41,9 @@ jobs:
           python3 Tests/check_bringup.py
           python3 Tests/check_runtime.py
           python3 Tests/check_architecture.py
+          python3 Tests/check_release.py
+          python3 Tests/check_build_policy.py
+          python3 Tests/check_tools.py
 
       - name: Build Release kext
         run: |
@@ -63,6 +73,21 @@ jobs:
 
       - name: Verify build artifacts
         run: |
+          python3 Tools/release_metadata.py
+          for MODE in Release Debug; do
+            BUNDLE="${GITHUB_WORKSPACE}/build/${MODE}/CirrusAudioFixup.kext"
+            plutil -lint "${BUNDLE}/Contents/Info.plist"
+            python3 Tools/release_metadata.py --bundle "$BUNDLE"
+            lipo -verify_arch x86_64 "${BUNDLE}/Contents/MacOS/CirrusAudioFixup"
+            SYMBOLS="${BUNDLE}.dSYM/Contents/Resources/DWARF/CirrusAudioFixup"
+            test -f "$SYMBOLS"
+            BINARY_UUID="$(dwarfdump --uuid "${BUNDLE}/Contents/MacOS/CirrusAudioFixup" | awk '{print $2}')"
+            SYMBOL_UUID="$(dwarfdump --uuid "$SYMBOLS" | awk '{print $2}')"
+            test -n "$BINARY_UUID"
+            test "$BINARY_UUID" = "$SYMBOL_UUID"
+            /usr/libexec/PlistBuddy -c "Add :CirrusBuildCommit string ${GITHUB_SHA}" "${BUNDLE}/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Add :CirrusBuildConfiguration string ${MODE}" "${BUNDLE}/Contents/Info.plist"
+          done
           echo "--- Release kext ---"
           file "${GITHUB_WORKSPACE}/build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup"
           echo "--- Debug kext ---"
@@ -77,6 +102,7 @@ jobs:
           zip -qry "${GITHUB_WORKSPACE}/CirrusAudioFixup-DEBUG.zip" CirrusAudioFixup.kext
 
           cd "${GITHUB_WORKSPACE}"
+          zip -qry CirrusAudioFixup-SYMBOLS.zip build/Release/*.dSYM build/Debug/*.dSYM
           ls -lh CirrusAudioFixup-*.zip
 
       - name: Upload Release artifact
@@ -95,10 +121,18 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Upload matching debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: CirrusAudioFixup-SYMBOLS-${{ github.sha }}
+          path: CirrusAudioFixup-SYMBOLS.zip
+          retention-days: 30
+          if-no-files-found: error
+
   release:
     name: Publish Release
     needs: build
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     permissions:
       contents: write
@@ -119,49 +153,36 @@ jobs:
           name: CirrusAudioFixup-DEBUG-${{ github.sha }}
           path: dist
 
-      - name: Parse changelog
+      - name: Validate release identity
         id: changelog
-        run: |
-          python3 -c "
-          import re, sys, os
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 Tools/release_metadata.py --tag "$RELEASE_TAG" --output-dir dist
 
-          with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
-              content = f.read()
-
-          match = re.search(r'##\s*\[([^\]]+)\](?:\s*-\s*[^\n]+)?\n(.*?)(?=\n##\s*\[|\Z)', content, re.DOTALL)
-          if not match:
-              sys.exit('Error: Could not extract latest version block from CHANGELOG.md')
-
-          version = match.group(1).strip()
-          notes = match.group(2).strip()
-
-          with open('RELEASE_NOTES.md', 'w', encoding='utf-8') as out:
-              out.write(notes + '\n')
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh:
-              gh.write(f'version={version}\n')
-              gh.write(f'tag=v{version}\n')
-          "
+      - name: Download matching debug symbols
+        uses: actions/download-artifact@v4
+        with:
+          name: CirrusAudioFixup-SYMBOLS-${{ github.sha }}
+          path: dist
 
       - name: Prepare versioned release assets
         run: |
           VERSION="${{ steps.changelog.outputs.version }}"
           cp dist/CirrusAudioFixup-RELEASE.zip "CirrusAudioFixup-${VERSION}-RELEASE.zip"
           cp dist/CirrusAudioFixup-DEBUG.zip "CirrusAudioFixup-${VERSION}-DEBUG.zip"
+          cp dist/CirrusAudioFixup-SYMBOLS.zip "CirrusAudioFixup-${VERSION}-SYMBOLS.zip"
+          shasum -a 256 CirrusAudioFixup-${VERSION}-RELEASE.zip CirrusAudioFixup-${VERSION}-DEBUG.zip CirrusAudioFixup-${VERSION}-SYMBOLS.zip > SHA256SUMS
           ls -la CirrusAudioFixup-*.zip
-          cat RELEASE_NOTES.md
+          cat dist/RELEASE_NOTES.md
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.changelog.outputs.tag }}
-          name: CirrusAudioFixup ${{ steps.changelog.outputs.tag }}
-          body_path: RELEASE_NOTES.md
-          files: |
-            CirrusAudioFixup-${{ steps.changelog.outputs.version }}-RELEASE.zip
-            CirrusAudioFixup-${{ steps.changelog.outputs.version }}-DEBUG.zip
-          draft: false
-          prerelease: false
-          make_latest: true
+      - name: Publish a new version (never overwrite an existing release)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.changelog.outputs.version }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag \
+            --title "CirrusAudioFixup $RELEASE_TAG" --notes-file dist/RELEASE_NOTES.md \
+            "CirrusAudioFixup-${RELEASE_VERSION}-RELEASE.zip" \
+            "CirrusAudioFixup-${RELEASE_VERSION}-DEBUG.zip" \
+            "CirrusAudioFixup-${RELEASE_VERSION}-SYMBOLS.zip" SHA256SUMS dist/BUILD_METADATA.json

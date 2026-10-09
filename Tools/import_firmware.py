@@ -66,7 +66,9 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
     with open(bin_l_path, 'rb') as f:
         bin_l_bytes = f.read()
 
-    if bin_r_path and os.path.exists(bin_r_path):
+    # An explicitly supplied right-channel file must exist. Only omission permits
+    # intentional reuse of left-channel tuning; a typo must not change the profile.
+    if bin_r_path:
         with open(bin_r_path, 'rb') as f:
             bin_r_bytes = f.read()
     else:
@@ -187,11 +189,12 @@ def main():
         with open(args.bin_l, 'rb') as f:
             b_ok, b_msg = validate_bin(f.read())
             print(f"Primary Tuning validation: {b_msg}")
+        br_ok = True
         if args.bin_r:
             with open(args.bin_r, 'rb') as f:
                 br_ok, br_msg = validate_bin(f.read())
                 print(f"Secondary Tuning validation: {br_msg}")
-        sys.exit(0 if (w_ok and b_ok) else 1)
+        sys.exit(0 if (w_ok and b_ok and br_ok) else 1)
 
     success = import_firmware(args.ssid, args.wmfw, args.bin_l, args.bin_r, args.spkid, codec, args.firmware)
     sys.exit(0 if success else 1)

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -u
+set -o pipefail
 
 if [ "$(uname -s)" != "Darwin" ]; then
     printf '%s\n' 'Run this collector on the affected macOS installation.' >&2
@@ -8,9 +9,8 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
-    if [ -t 0 ]; then
-        sudo -v
-    fi
+    printf '%s\n' 'Run with sudo bash Tools/collect_macos.sh so every capture has the same privileges.' >&2
+    exit 1
 fi
 
 output=$(mktemp -d "${TMPDIR:-/tmp}/cirrus-evidence.XXXXXX") || exit 1
@@ -23,13 +23,19 @@ capture() {
         printf '$'
         printf ' %q' "$@"
         printf '\n\n'
-        "$@"
-    } >"$output/$name.txt" 2>&1
+    } >"$output/$name.txt"
+
+    local header_size
+    header_size=$(wc -c <"$output/$name.txt")
+    "$@" >>"$output/$name.txt" 2>&1
 
     local result=$?
     printf '%-30s exit=%s\n' "$name" "$result" >>"$output/status.txt"
+    if [ "$(wc -c <"$output/$name.txt")" -eq "$header_size" ]; then
+        printf '%-30s empty output\n' "$name" >>"$output/status.txt"
+    fi
 
-    return 0
+    return "$result"
 }
 
 capture_shell() {
@@ -39,13 +45,19 @@ capture_shell() {
 
     {
         printf '$ %s\n\n' "$command"
-        /bin/bash -c "$command"
-    } >"$output/$name.txt" 2>&1
+    } >"$output/$name.txt"
+
+    local header_size
+    header_size=$(wc -c <"$output/$name.txt")
+    /bin/bash -o pipefail -c "$command" >>"$output/$name.txt" 2>&1
 
     local result=$?
     printf '%-30s exit=%s\n' "$name" "$result" >>"$output/status.txt"
+    if [ "$(wc -c <"$output/$name.txt")" -eq "$header_size" ]; then
+        printf '%-30s empty output\n' "$name" >>"$output/status.txt"
+    fi
 
-    return 0
+    return "$result"
 }
 
 capture system /usr/bin/sw_vers
@@ -58,16 +70,11 @@ capture amplifier-calibration \
     '02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData'
 
 capture loaded-kexts /usr/bin/kmutil showloaded
-capture loaded-kexts-all /usr/bin/kmutil showloaded --show all
-capture loaded-kexts-aux /usr/bin/kmutil showloaded --collection aux --show all
-capture loaded-kexts-boot /usr/bin/kmutil showloaded --collection boot --show all
-capture loaded-kexts-system /usr/bin/kmutil showloaded --collection sys --show all
-capture loaded-kexts-codeless /usr/bin/kmutil showloaded --collection codeless --show all
-
-capture_shell kext-audio-filter '
-/usr/bin/kmutil showloaded --show all 2>&1 |
-/usr/bin/grep -Ei "Cirrus|CS35|AppleALC|Lilu|WhateverGreen|Voodoo|Audio"
-'
+# Keep the unfiltered result. Legacy kextstat is a secondary observation, not
+# proof that all OpenCore-injected extensions are absent when it returns empty.
+if [ -x /usr/sbin/kextstat ]; then
+    capture loaded-kexts-legacy /usr/sbin/kextstat
+fi
 
 capture audio /usr/sbin/system_profiler SPAudioDataType
 capture pci /usr/sbin/system_profiler SPPCIDataType
@@ -76,10 +83,9 @@ capture acpi /usr/sbin/ioreg -lw0 -p IOACPIPlane
 capture power-plane /usr/sbin/ioreg -lw0 -p IOPower
 
 capture cirrus-fixup-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c CirrusAudioFixup
-capture cs35l41-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c CS35L41
 capture voodoo-i2c-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c VoodooI2CDeviceNub
-capture apple-alc-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c AppleALC
 capture hda-controller-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c AppleHDAController
+capture hda-driver-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c AppleHDA
 
 capture_shell ioreg-cirrus '
 /usr/sbin/ioreg -lw0 |
@@ -88,29 +94,26 @@ capture_shell ioreg-cirrus '
 
 capture sysctl-msgbuf /usr/sbin/sysctl -n kern.msgbuf
 
-if [ "$(id -u)" -eq 0 ]; then
-    capture dmesg /sbin/dmesg
-else
-    capture dmesg sudo /sbin/dmesg
-fi
+capture dmesg /sbin/dmesg
 
-if [ "$(id -u)" -eq 0 ]; then
-    capture_shell kernel-log '
-/usr/bin/log show --last boot --style syslog --info --debug --predicate '\''process == "kernel"'\''
-'
-    capture_shell cirrus-audio-log '
-/usr/bin/log show --last boot --style syslog --info --debug --predicate '\''process == "kernel"'\'' |
-/usr/bin/grep -Ei "Cirrus|CS35|CSC3551|AppleALC|Lilu|Voodoo|SPKR"
-'
-else
-    capture_shell kernel-log '
-sudo /usr/bin/log show --last boot --style syslog --info --debug --predicate '\''process == "kernel"'\''
-'
-    capture_shell cirrus-audio-log '
-sudo /usr/bin/log show --last boot --style syslog --info --debug --predicate '\''process == "kernel"'\'' |
-/usr/bin/grep -Ei "Cirrus|CS35|CSC3551|AppleALC|Lilu|Voodoo|SPKR"
-'
+printf '%s\n' \
+    'Optional queries may be unavailable; inspect each exit code and raw output.' \
+    'ioreg may exit 0 without a matching service. That is not a health verdict.' \
+    'kmutil shows extension load state; it does not prove an audio route works.' \
+    'Unified logs and kernel buffers may not retain early boot messages.' \
+    'AppleALC is checked in loaded-kexts.txt, not as an AppleALC IOService class.' \
+    >"$output/README.txt"
+
+kernel_log="$output/kernel-log.txt"
+if ! capture kernel-log /usr/bin/log show --last boot --style syslog --info --debug \
+    --predicate 'process == "kernel"'; then
+    # Preserve the failed since-boot query and try a bounded interval separately.
+    capture kernel-log-fallback /usr/bin/log show --last 1h --style syslog --info --debug \
+        --predicate 'process == "kernel"'
+    kernel_log="$output/kernel-log-fallback.txt"
 fi
+capture cirrus-audio-log /usr/bin/grep -Ei \
+    'Cirrus|CS35|CSC3551|AppleALC|Lilu|Voodoo|SPKR' "$kernel_log"
 
 if [ "$#" -gt 0 ]; then
     kext="$1"

@@ -565,12 +565,40 @@ int main() {
     headphoneCycle.runBackgroundMonitor();
     assert(headphoneCycle.mAmps[0].playbackActive);
     headphoneCycle.pll = false;
+    headphoneCycle.pup = false;
     headphoneCycle.runBackgroundMonitor();
     checkNew(headphoneCycle.mAmps[0].playbackFaulted && !headphoneCycle.mAmps[0].playbackActive, "headphone plug stops playback");
-    for(int tick = 0; tick < 4; ++tick) headphoneCycle.runBackgroundMonitor();
+    for(int tick = 0; tick < 250; ++tick) headphoneCycle.runBackgroundMonitor();
+    checkNew(headphoneCycle.unmute == 1 && !headphoneCycle.mAmps[0].playbackActive &&
+             headphoneCycle.mAmps[0].pllRecoveryPending && headphoneCycle.mAmps[0].pllRecoveryAttempts == 0,
+             "headphone clock absence stays muted without exhausting recovery");
+    headphoneCycle.pup = true;
     headphoneCycle.pll = true;
-    headphoneCycle.runBackgroundMonitor();
+    for(int tick = 0; tick < 25; ++tick) headphoneCycle.runBackgroundMonitor();
     checkNew(!headphoneCycle.mAmps[0].playbackFaulted && headphoneCycle.mAmps[0].playbackActive, "headphone unplug restores speaker playback");
+    CirrusAudioFixup recoveryPowerFault;
+    recoveryPowerFault.runBackgroundMonitor();
+    recoveryPowerFault.pll = false;
+    recoveryPowerFault.runBackgroundMonitor();
+    recoveryPowerFault.pll = true;
+    recoveryPowerFault.pup = false;
+    for(int tick = 0; tick < 30; ++tick) recoveryPowerFault.runBackgroundMonitor();
+    checkNew(recoveryPowerFault.mAmps[0].playbackFaulted &&
+             recoveryPowerFault.mAmps[0].diagnostic.latestFailure == DIAG_POWER_UP_TIMEOUT &&
+             recoveryPowerFault.unmute == 1, "power timeout with clock present remains latched");
+    CirrusAudioFixup recoveryProtectionFault;
+    recoveryProtectionFault.runBackgroundMonitor();
+    recoveryProtectionFault.pll = false;
+    recoveryProtectionFault.pup = false;
+    recoveryProtectionFault.runBackgroundMonitor();
+    for(int tick = 0; tick < 10; ++tick) recoveryProtectionFault.runBackgroundMonitor();
+    recoveryProtectionFault.regs[0x10010] |= 0x80000000;
+    for(int tick = 0; tick < 30; ++tick) recoveryProtectionFault.runBackgroundMonitor();
+    recoveryProtectionFault.pll = true;
+    recoveryProtectionFault.pup = true;
+    for(int tick = 0; tick < 30; ++tick) recoveryProtectionFault.runBackgroundMonitor();
+    checkNew(recoveryProtectionFault.mAmps[0].playbackFaulted && recoveryProtectionFault.unmute == 1,
+             "protection fault during clock wait prevents recovery");
     if(newFailures) return 1;
     CirrusAudioFixup latchedIo;
     latchedIo.runBackgroundMonitor(); latchedIo.failAt=latchedIo.ops+1; latchedIo.runBackgroundMonitor();

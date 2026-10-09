@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Keep verified, muted PLL-loss recovery available when a headphone transition causes power-up completion to time out with the speaker clock still absent; retain I/O, protection, cleanup and clock-present power-up faults.
+- Preserve specific playback-start failure diagnostics instead of overwriting them with a generic invariant failure.
+
+### Validation
+- Host regressions cover prolonged headphone clock absence, speaker recovery after clock return, and retained protection/clock-present power-up fault latches.
+- Target macOS build and physical headphone insertion/removal validation remain required.
+
 ## [1.0.1] - 2026-10-10
 
 ### Fixed

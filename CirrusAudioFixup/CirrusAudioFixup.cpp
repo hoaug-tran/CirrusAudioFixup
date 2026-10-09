@@ -1699,7 +1699,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 };
                 auto abortStart = [&]() {
                     amp.playbackFaulted = true;
-                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT);
+                    if (amp.diagnostic.latestFailure == DIAG_OK || amp.diagnostic.latestFailure == DIAG_PLL_UNLOCKED)
+                        recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT);
                     stopPlayback(amp);
                 };
                 setDiagnosticStage(amp, STAGE_PLAYBACK_OPEN);
@@ -1801,7 +1802,21 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 }
 
                 if (!sequenceOk || !pupDone) {
+                    uint32_t retryPllStatus = 0;
+                    bool clockWait = sequenceOk && amp.pllRecoveryAttempts > 0 &&
+                                     amp.diagnostic.latestFailure == DIAG_POWER_UP_TIMEOUT &&
+                                     readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3,
+                                                  &retryPllStatus, TRACE_PLAYBACK) &&
+                                     !(retryPllStatus & 2) && checkProtectionStatus(amp);
                     abortStart();
+                    if (clockWait && !amp.playbackActive && amp.diagnostic.latestFailure == DIAG_POWER_UP_TIMEOUT) {
+                        --amp.pllRecoveryAttempts;
+                        amp.pllRecoveryPending = true;
+                        amp.pllRetryCooldown = 20;
+                        recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED,
+                                                cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2, retryPllStatus);
+                        CIRRUS_LOG("Playback recovery waiting for speaker clock on %s; output disabled", amp.name);
+                    }
                     continue;
                 }
                 if (dspMode) {

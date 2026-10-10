@@ -14,6 +14,7 @@ __pycache__/
 .clang-format
 .editorconfig
 /MacKernelSDK
+/Lilu
 .clangd
 /compile_commands.json
 .cache/

@@ -24,6 +24,13 @@ jobs:
           ref: 7af1933c27aefcbdf4809ee44478829aad30f9c1
           path: MacKernelSDK
 
+      - name: Checkout pinned Lilu headers
+        uses: actions/checkout@v4
+        with:
+          repository: acidanthera/Lilu
+          ref: e4748cc081bf060302c7d3c44a643ce1d11b7e1d
+          path: Lilu
+
       - name: Show build environment
         run: |
           echo "macOS version: $(sw_vers -productVersion)"
@@ -40,10 +47,13 @@ jobs:
           python3 Tests/check_calibration.py
           python3 Tests/check_bringup.py
           python3 Tests/check_runtime.py
+          python3 Tests/check_audio_events.py
           python3 Tests/check_architecture.py
           python3 Tests/check_release.py
           python3 Tests/check_build_policy.py
           python3 Tests/check_tools.py
+          python3 Tests/check_tuning.py
+          python3 Tests/check_windows_payloads.py
 
       - name: Build Release kext
         run: |

@@ -24,7 +24,8 @@ constexpr uint32_t kRegPowerControl3 = 0x0000201C;
 constexpr uint32_t kRegAmpOutputMute = 0x00002024;
 constexpr uint32_t kRegPowerManagementStatus = 0x00002908;
 
-constexpr uint32_t kRegSoftwareReset = 0x00000000;
+// Linux include/sound/cs35l41.h: CS35L41_SFT_RESET is distinct from DEVID.
+constexpr uint32_t kRegSoftwareReset = 0x00000020;
 constexpr uint32_t kRegTestKeyControl = 0x00000040;
 
 constexpr uint32_t kRegIrq1Status1 = 0x00010010;
@@ -69,6 +70,15 @@ constexpr uint32_t kRegSerialPortEnables = 0x00004800;
 
 constexpr uint32_t kRegAmplifierDigitalVolumeControl = 0x00006000;
 constexpr uint32_t kRegAmplifierGainControl = 0x00006C04;
+
+// Linux HDA mute/unmute policy keeps the PCM high-pass enabled at unity gain.
+// Clearing the volume word to zero also clears that filter; it is not an
+// equivalent representation of the upstream unmuted state.
+constexpr uint32_t kPlaybackDigitalVolume = 0x00008000;
+// Linux HDA defaults: PCM code 17 (17.5 dB), PDM code 19 (19.5 dB).
+// A board-specific tuning gain can differ; these defaults do not certify it.
+constexpr uint32_t kPlaybackDspGain = (17U << 5) | 19U;
+constexpr uint32_t kPlaybackBypassGain = (4U << 5) | 4U;
 
 constexpr uint32_t kRegGpio1Control1 = 0x00011008;
 constexpr uint32_t kRegGpio2Control1 = 0x0001100C;
@@ -126,7 +136,7 @@ constexpr uint32_t kRegDsp1MpuXregAccess3 = 0x02BC3054;
 constexpr uint32_t kRegDsp1MpuYregAccess3 = 0x02BC305C;
 
 constexpr uint32_t kValDeviceId = 0x00035A40;
-constexpr uint32_t kValSoftwareReset = 0x00005A00;
+constexpr uint32_t kValSoftwareReset = 0x5A000000;
 constexpr uint32_t kValHaloCoreEnable = 0x00000001;
 constexpr uint32_t kValHaloCoreReset = 0x00000200;
 

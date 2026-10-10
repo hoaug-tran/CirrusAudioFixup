@@ -13,10 +13,13 @@
 #include "Devices/CS35L41/CS35L41Device.hpp"
 #include "Devices/CS35L41/Hardware/OTPMap.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Devices/CS35L41/Playback.hpp"
+#include "Devices/CS35L41/Resources/Tuning.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/WMFW/FirmwareUploader.hpp"
 #include "Platform/HDA/HDAController.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
+#include "Platform/HDA/AudioEvents.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
@@ -42,6 +45,9 @@ struct RegisterSequence {
 };
 
 struct AmplifierState {
+    cirrus::devices::cs35l41::PlaybackTransition playbackTransition{};
+    cirrus::devices::cs35l41::ShutdownTransition shutdownTransition{};
+    bool clockWaitAfterCleanup{false};
     // Identity and channel come from the silicon probe and board endpoint.
     // Do not infer routing or tuning from a display name or slave address.
     const char* name{nullptr};
@@ -58,6 +64,9 @@ struct AmplifierState {
     const uint8_t* binData{nullptr};
     size_t binSize{0};
     bool firmwareValidated{false};
+    // Reset by resource discovery on every cold start and wake. This is the
+    // board/channel tuning gain, independent of the host volume slider.
+    uint32_t tuningPcmGain{17};
     uint32_t finalCrc{0};
 
     unsigned int monitorCount{0};
@@ -110,6 +119,14 @@ struct FirmwareResource {
     const uint8_t* binRight;
     size_t binRightSize;
     bool isDummy;
+    // Optional companions belong to the same board/speaker entry as its BIN.
+    // Absence on one channel uses the Linux default, never the other channel.
+    const uint8_t* tuningLeft{nullptr};
+    size_t tuningLeftSize{0};
+    const uint8_t* tuningRight{nullptr};
+    size_t tuningRightSize{0};
+    const char* tuningLeftName{nullptr};
+    const char* tuningRightName{nullptr};
 };
 
 class CirrusAudioFixup : public IOService {
@@ -130,6 +147,14 @@ private:
     void initializeCS35L41(AmplifierState& amp);
 
     void runBackgroundMonitor();
+    bool setupAudioEvents();
+    void teardownAudioEvents();
+    static void audioEventReceived(OSObject* owner, const cirrus::platform::hda::AudioEventState& state);
+    cirrus::platform::hda::AudioEventSource* mAudioEvents{nullptr};
+    cirrus::platform::hda::AudioEventState mAudioState{};
+    // Preparation is retried only within a bounded transition window. A new
+    // output/engine event starts a new window; headphone idle never arms it.
+    uint32_t mAudioPrepareRetries{0};
 
     // The provider is borrowed for the attached service lifetime. The workloop
     // and its event sources are owned and removed before stop clears it.
@@ -258,6 +283,7 @@ private:
     bool loadOtpCalibration(AmplifierState& amp) { return unpackOTP(amp); }
 
     bool stopPlayback(AmplifierState& amp);
+    bool stopRuntimePlayback(AmplifierState& amp);
     bool checkProtectionStatus(AmplifierState& amp);
     bool verifyDSPAlive(AmplifierState& amp);
 

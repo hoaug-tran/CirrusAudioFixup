@@ -5,6 +5,16 @@
 	};
 	objectVersion = 56;
 	objects = {
+		CAFE00000012 = {
+			isa = PBXBuildFile;
+			fileRef = CAFE00000004;
+		};
+		CAFE00000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = Platform/HDA/AudioEvents.cpp;
+			sourceTree = "<group>";
+		};
 		CAFE00000011  = {
 			isa = PBXBuildFile;
 			fileRef = CAFE00000001 ;
@@ -55,6 +65,7 @@
 				CAFE00000001 ,
 				CAFE00000002 ,
 				CAFE00000003 ,
+				CAFE00000004 ,
 			);
 			name = CirrusAudioFixup;
 			path = CirrusAudioFixup;
@@ -116,6 +127,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CAFE00000011 ,
+				CAFE00000012 ,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -124,6 +136,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/CirrusAudioFixup";
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/Lilu/Lilu";
 				KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
 				KERNEL_FRAMEWORK_HEADERS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
 				ARCHS = x86_64;
@@ -137,6 +150,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/CirrusAudioFixup";
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/Lilu/Lilu";
 				KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
 				KERNEL_FRAMEWORK_HEADERS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
 				ARCHS = x86_64;
@@ -169,6 +183,8 @@
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
+				MODULE_START = CirrusAudioFixup_start;
+				MODULE_STOP = CirrusAudioFixup_stop;
 				MODULE_VERSION = 1;
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
@@ -215,6 +231,8 @@
 				INFOPLIST_FILE = CirrusAudioFixup/Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
+				MODULE_START = CirrusAudioFixup_start;
+				MODULE_STOP = CirrusAudioFixup_stop;
 				MODULE_VERSION = 1;
 				OTHER_CFLAGS = (
 					"-DKERNEL",

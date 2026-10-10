@@ -84,6 +84,8 @@ public:
     IOMemoryMap* mHdaMap=nullptr;
     const char* mHdaStatus=nullptr;
     void clearHdaCache();
+    unsigned eventTeardowns=0;
+    void teardownAudioEvents() { ++eventTeardowns; }
     std::map<std::string,std::string> properties;
     void write16(unsigned offset,uint16_t v) { memcpy(pci.bar.bytes+offset,&v,2); }
     void write32(unsigned offset,uint32_t v) { memcpy(pci.bar.bytes+offset,&v,4); }
@@ -158,6 +160,7 @@ int main() {
     detached.synchronizeHdaStream(); detached.pci.inactive=true; detached.missing=true;
     check(!detached.synchronizeHdaStream() && detached.pci.releases==1 && detached.pci.bar.releases==1,
           "termination invalidates cache before MMIO");
+    check(detached.eventTeardowns>0, "controller termination detaches its audio event source");
     if(failures) return 1;
     puts("PASS HDA BAR bounds/ownership, controller reset, fixed/bidirectional streams, format, ambiguity and power guard");
 }

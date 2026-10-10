@@ -114,6 +114,7 @@ OSData efi(unsigned count=2) {
     OSData d; d.bytes.resize(48);
     cs35l41_amp_efi_data* p=(cs35l41_amp_efi_data*)d.bytes.data();
     p->size=48; p->count=count;
+    p->data[0].calTime[0]=1; p->data[1].calTime[0]=1;
     p->data[0].calAmbient=23; p->data[0].calStatus=1; p->data[0].calR=5846;
     p->data[1].calAmbient=25; p->data[1].calStatus=1; p->data[1].calR=5933;
     return d;
@@ -130,6 +131,58 @@ int main() {
               d.memory[8]==1 && d.memory[12]==d.memory[4]+1,"EFI channel/ambient/checksum match Linux");
     }
     amp.address=0x40;
+    auto targeted=data;
+    auto* targets=(cs35l41_amp_efi_data*)targeted.bytes.data();
+    targets->data[0].calTarget[0]=0x55667788; targets->data[0].calTarget[1]=0x11223344;
+    targets->data[1].calTarget[0]=0xDDEEFF00; targets->data[1].calTarget[1]=0x99AABBCC;
+    IORegistryEntry::data=&targeted;
+    CirrusAudioFixup reordered;
+    reordered.memory[0x17044]=0x99AABBCC; reordered.memory[0x17040]=0xDDEEFF00;
+    check(reordered.applyCalibration(amp,&image) && reordered.memory[4]==5933,
+          "silicon UID takes precedence over channel index");
+    CirrusAudioFixup mismatched;
+    mismatched.memory[0x17044]=0x12345678; mismatched.memory[0x17040]=1;
+    check(mismatched.applyCalibration(amp,&image) && mismatched.writes==0,
+          "unmatched nonzero target is never applied to another speaker");
+    CirrusAudioFixup zeroUid;
+    check(zeroUid.applyCalibration(amp,&image) && zeroUid.memory[4]==5846,
+          "zero silicon UID permits Linux index fallback");
+    targets->data[1].calTime[0]=0;
+    CirrusAudioFixup emptyTarget;
+    emptyTarget.memory[0x17044]=0x99AABBCC; emptyTarget.memory[0x17040]=0xDDEEFF00;
+    check(emptyTarget.applyCalibration(amp,&image) && emptyTarget.writes==0,
+          "UID match cannot revive an unused timestamp slot");
+    targets->data[1].calTime[0]=1;
+    for(unsigned n=1;n<=2;++n) {
+        CirrusAudioFixup d; d.failRead=n;
+        check(!d.applyCalibration(amp,&image) && d.writes==0,
+              "UID read failure blocks calibration writes");
+        check(d.properties["Cirrus_Calibration_Status_L"]=="UID_READ_FAILED",
+              "UID transport failure is not reported as missing calibration");
+    }
+    targets->data[0].calTarget[0]=targets->data[0].calTarget[1]=0;
+    CirrusAudioFixup wildcard;
+    wildcard.memory[0x17044]=0x12345678; wildcard.memory[0x17040]=1;
+    check(wildcard.applyCalibration(amp,&image) && wildcard.memory[4]==5846,
+          "wildcard entry permits index fallback");
+    auto singleton=targeted;
+    auto* single=(cs35l41_amp_efi_data*)singleton.bytes.data();
+    single->count=1; single->data[0]=targets->data[1];
+    IORegistryEntry::data=&singleton;
+    amp.address=0x41;
+    CirrusAudioFixup outsideIndex;
+    outsideIndex.memory[0x17044]=0x99AABBCC; outsideIndex.memory[0x17040]=0xDDEEFF00;
+    check(outsideIndex.applyCalibration(amp,&image) && outsideIndex.memory[4]==5933,
+          "UID lookup works even when channel index exceeds entry count");
+    amp.address=0x40;
+    auto emptySlot=data;
+    ((cs35l41_amp_efi_data*)emptySlot.bytes.data())->data[0].calTime[0]=0;
+    IORegistryEntry::data=&emptySlot;
+    CirrusAudioFixup unused;
+    check(unused.applyCalibration(amp,&image) && unused.writes==0,
+          "unused EFI slot leaves firmware defaults untouched");
+    check(unused.properties["Cirrus_Calibration_Status_L"]=="NOT_AVAILABLE",
+          "unused EFI slot is not reported as applied calibration");
     for(unsigned n=0;n<48;++n) {
         auto shortData=data; shortData.bytes.resize(n); IORegistryEntry::data=&shortData;
         CirrusAudioFixup d;
@@ -210,7 +263,7 @@ int main() {
     }
     check(borrowedReads==0,"EFI data retained throughout parsing");
     check(outstandingRefs==0 && data.refs==1 && wrongType.refs==1,"property references balanced across all paths");
-    printf("%s calibration: EFI bounds, ownership, L/R values, 12 I/O faults, boot gate, repeated state transitions\n",failures?"FAIL":"PASS");
+    printf("%s calibration: EFI bounds, UID priority/wildcards/mismatch, UID read faults, ownership, L/R values, 12 I/O faults, boot gate, repeated state transitions\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }
 '''

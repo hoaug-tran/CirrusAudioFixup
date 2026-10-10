@@ -24,6 +24,7 @@ preamble = r'''
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"
+#include "Devices/CS35L41/Playback.hpp"
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t;
 using IOReturn=int;
 struct Timer { void cancelTimeout() {} void setTimeoutMS(unsigned) {} };

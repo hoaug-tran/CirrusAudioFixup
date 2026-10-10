@@ -32,6 +32,48 @@ with tempfile.TemporaryDirectory(prefix="cirrus-tools-") as directory:
     header.write_text("unchanged", encoding="utf-8")
     run(["--bin-r", str(missing), "--firmware", str(header)], False)
     assert header.read_text(encoding="utf-8") == "unchanged"
+    gain_left = tmp / "left.bincfg"
+    gain_right = tmp / "right.bincfg"
+    def gain_data(code):
+        return struct.pack('<8I', 0x109A4A35, 1, 32, 1, 0, 0, 16, code)
+    gain_left.write_bytes(gain_data(14))
+    gain_right.write_bytes(gain_data(16))
+    run(["--bincfg-l", str(gain_left), "--bincfg-r", str(gain_right), "--validate-only"], True)
+    run(["--bincfg-r", str(missing), "--validate-only"], False)
+    gain_right.write_bytes(gain_data(21))
+    run(["--bincfg-r", str(gain_right), "--validate-only"], False)
+    gain_right.write_bytes(gain_data(16))
+    header.write_text('const FirmwareResource cs35l41Firmware[] = {\n};\n', encoding='utf-8')
+    run(["--bincfg-l", str(gain_left), "--bincfg-r", str(gain_right), "--firmware", str(header)], True)
+    imported = header.read_text(encoding='utf-8')
+    assert 'SHA256:' in imported and 'l0_bincfg' in imported and 'r0_bincfg' in imported
+    def compile_profile(expected_right):
+        declarations = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
+        resource = declarations[declarations.index('struct FirmwareResource {'):declarations.index('class CirrusAudioFixup :')]
+        cpp = tmp / 'profile.cpp'
+        cpp.write_text('#include <cassert>\n#include <cstdint>\n#include <cstddef>\n'
+                       '#include "Devices/CS35L41/Resources/Tuning.hpp"\n' + resource + imported + f'''
+int main() {{
+    const auto& resource=cs35l41Firmware[0];
+    cirrus::devices::cs35l41::tuning::Parameters left, right;
+    assert(cirrus::devices::cs35l41::tuning::parse(resource.tuningLeft,resource.tuningLeftSize,left));
+    assert(cirrus::devices::cs35l41::tuning::parse(resource.tuningRight,resource.tuningRightSize,right));
+    assert(left.pcmGain==14 && left.overridden);
+    assert(right.pcmGain=={expected_right});
+    assert(right.overridden=={str(expected_right != 17).lower()});
+}}
+''', encoding='utf-8')
+        exe = tmp / 'profile.exe'
+        subprocess.run(['g++','-std=c++17','-I',str(ROOT / 'CirrusAudioFixup'),str(cpp),'-o',str(exe)],check=True)
+        subprocess.run([str(exe)],check=True)
+    compile_profile(16)
+    run(["--bincfg-l", str(gain_left), "--firmware", str(header)], False)
+    assert header.read_text(encoding='utf-8') == imported
+    header.write_text('const FirmwareResource cs35l41Firmware[] = {\n};\n', encoding='utf-8')
+    run(["--bincfg-l", str(gain_left), "--firmware", str(header)], True)
+    imported = header.read_text(encoding='utf-8')
+    assert 'l0_bincfg), nullptr, 0,' in imported and 'r0_bincfg' not in imported
+    compile_profile(17)
 
 collector = ROOT / "Tools/collect_macos.sh"
 source = collector.read_text(encoding="utf-8")
@@ -44,6 +86,15 @@ if sys.platform == "win32":
     bash = str(git_bash) if git_bash.exists() else None
 assert bash, "Bash is required for collector syntax validation"
 subprocess.run([bash, "-n", collector.as_posix()], check=True)
+builder = ROOT / "Tools/build_macos.sh"
+subprocess.run([bash, "-n", builder.as_posix()], check=True)
+build_source = builder.read_text(encoding="utf-8")
+assert 'lipo "$binary" -verify_arch x86_64' in build_source
+assert '"$binary_uuid" == "$symbols_uuid"' in build_source
+assert "kextload" not in build_source and "kmutil" not in build_source
+if sys.platform != "darwin":
+    denied = subprocess.run([bash, builder.as_posix()], capture_output=True, text=True)
+    assert denied.returncode != 0 and "no bootable artifact produced" in denied.stderr
 # Exercise the actual capture helpers in isolation. macOS system commands are
 # deliberately not invoked by this host regression.
 helpers = source[source.index("capture() {"):source.index("capture system ")]

@@ -15,8 +15,8 @@ if not constexprs:
     sys.exit(1)
 
 LEGACY_MACROS = [
-    ('CS35L41_SW_RESET', '0x00000000'),
-    ('CS35L41_SW_RESET_VAL', '0x00005A00'),
+    ('CS35L41_SW_RESET', '0x00000020'),
+    ('CS35L41_SW_RESET_VAL', '0x5A000000'),
     ('CS35L41_TEST_KEY_CTL', '0x00000040'),
     ('CS35L41_IRQ1_STATUS4', '0x0001001C'),
     ('CS35L41_OTP_BOOT_DONE', '0x00000002'),
@@ -250,7 +250,18 @@ for macro, _ in LEGACY_MACROS:
         test_cpp += f'    assert({macro} == registers::{const_name});\n'
         count += 1
 
-test_cpp += f'    std::printf("All register constants verified equal (%u mapped).\\n", {count});\n    return 0;\n}}\n'
+# Independent policy expectations from Linux v6.12 include/sound/cs35l41.h
+# and sound/pci/hda/cs35l41_hda.{c,h}. Legacy alias equality alone cannot
+# detect a wrong value copied into both sides of this test.
+test_cpp += '''
+    static_assert(registers::kRegSoftwareReset == 0x20);
+    static_assert(registers::kValSoftwareReset == 0x5A000000);
+    static_assert(registers::kRegSoftwareReset != registers::kRegDeviceId);
+    static_assert(registers::kPlaybackDigitalVolume == 0x8000);
+    static_assert(registers::kPlaybackDspGain == 0x233);
+    static_assert(registers::kPlaybackBypassGain == 0x84);
+'''
+test_cpp += f'    std::printf("PASS legacy register aliases (%u mapped) and independent Linux reset/volume/gain policy.\\n", {count});\n    return 0;\n}}\n'
 
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp = Path(tmpdir)
@@ -264,3 +275,6 @@ with tempfile.TemporaryDirectory() as tmpdir:
         sys.exit(1)
     run_res = subprocess.run([str(exe_file)], capture_output=True, text=True)
     print(run_res.stdout.strip())
+    if run_res.returncode != 0:
+        print(run_res.stderr, file=sys.stderr)
+        sys.exit(run_res.returncode)

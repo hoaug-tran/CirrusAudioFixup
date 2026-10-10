@@ -54,10 +54,15 @@ documented_flags = set(re.findall(r'^\| `(-cirrus[a-z0-9]+)(?:=[^`]*)?`', readme
 assert source_flags == documented_flags, f"Boot-argument reference differs: {source_flags ^ documented_flags}"
 assert 'os_log' not in readme and '100% Working' not in readme
 
-for name in ("stopPlayback", "runBackgroundMonitor", "pollRegisterBit", "sendMailboxCommand"):
+for name in ("stopPlayback", "pollRegisterBit", "sendMailboxCommand"):
     match = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', driver)
     function = driver[match.start():driver.index('\n}', match.start())]
     assert "IODelay(1000)" not in function and "IOSleep(1)" in function, name
+
+monitor_start = driver.index('void CirrusAudioFixup::runBackgroundMonitor()')
+monitor = driver[monitor_start:driver.index('\n}', monitor_start)]
+assert 'IOSleep(' not in monitor and 'IODelay(' not in monitor
+assert 'Playback::advance' in monitor and 'Playback::commit' in monitor
 
 for file in (ROOT / "CirrusAudioFixup").rglob("*"):
     if file.suffix not in (".hpp", ".cpp"):

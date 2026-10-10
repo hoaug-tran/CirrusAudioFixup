@@ -3,10 +3,15 @@
 ## [Unreleased]
 
 ### Fixed
+- Advance runtime PUP/PDN, PLL and mailbox waits through timer-driven phases with monotonic deadlines; retain synchronous PM quiesce and initialization.
+- Require both speaker endpoints to prepare before unmute, cancel stale transitions, and roll back the whole pair after a failed commit.
+- Reject unsupported amplifier models before CS35L41 runtime register access.
+- Record mailbox acknowledgement read failures with their stage and original I/O result.
 - Keep verified, muted PLL-loss recovery available when a headphone transition causes power-up completion to time out with the speaker clock still absent; retain I/O, protection, cleanup and clock-present power-up faults.
 - Preserve specific playback-start failure diagnostics instead of overwriting them with a generic invariant failure.
 
 ### Validation
+- Reject virtual-bank-only mailbox acknowledgements and both CSPL error sentinels in runtime regressions.
 - Host regressions cover prolonged headphone clock absence, speaker recovery after clock return, and retained protection/clock-present power-up fault latches.
 - Target macOS build and physical headphone insertion/removal validation remain required.
 

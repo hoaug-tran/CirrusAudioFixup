@@ -69,7 +69,7 @@ Keep the OS, layout, firmware and volume unchanged during a comparison. On a kno
 3. Record the time with `date '+%Y-%m-%d %H:%M:%S %z'`, then open Sound input settings (System Preferences on older macOS, System Settings on newer releases). Note the first pop and whether immediate reopening repeats it. Stop the stream with Ctrl-C and collect a second report.
 4. If the pop is quiet and testing is safe, compare after idle and after sleep/wake, then stopped versus quiet playback. Stop if the pop is loud or repeats unexpectedly.
 
-Compare `Cirrus_HDA_Status`, stream metadata, both playback verdicts and first/latest failures. A new output activation or PLL/power fault would justify investigating the driver transition. A pop with no recorded driver transition still needs host-codec evidence; a 50 ms observer can miss a short event. Do not change multiple layouts, gains and firmware images at once. Do not unload a running kernel driver to create an A/B test.
+Compare `Cirrus_Audio_Event_Mode`, `Cirrus_HDA_Status`, stream metadata, both playback verdicts and first/latest failures. `IOAUDIO_FAMILY_EVENTS` identifies a recognized built-in output selector. Headphone and stopped-engine states do not schedule periodic amplifier monitoring in this mode. `HDA_TIMER_FALLBACK` and `IOAUDIO_HOOKS_WAITING_FOR_OUTPUT` still use stream observation and may miss short changes. A new output activation or PLL/power fault would justify investigating the driver transition. Do not change multiple layouts, gains and firmware images at once. Do not unload a running kernel driver to create an A/B test.
 
 ## Louder sound, EQ and DSP bypass
 

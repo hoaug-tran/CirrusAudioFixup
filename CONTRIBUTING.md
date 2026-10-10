@@ -85,17 +85,20 @@ python3 Tests/check_hda.py
 python3 Tests/check_calibration.py
 python3 Tests/check_bringup.py
 python3 Tests/check_runtime.py
+python3 Tests/check_audio_events.py
 python3 Tests/check_architecture.py
 python3 Tests/check_release.py
 python3 Tests/check_build_policy.py
 python3 Tests/check_tools.py
+python3 Tests/check_tuning.py
+python3 Tests/check_windows_payloads.py
 ```
 > [!NOTE]
 > Tests include intentional fault-injection sweeps. Intermittent `ERROR` log messages in the test output are expected; the suite must finish with exit code `0` and print `PASS`.
 
 ### 2. Build on macOS
 
-Prepare the pinned MacKernelSDK checkout using the [build instructions](README.md#building-and-testing). Do not replace a modified SDK checkout without review.
+Prepare the pinned MacKernelSDK and Lilu checkouts using the [build instructions](README.md#building-and-testing). Do not replace modified dependency checkouts without review.
 
 ```bash
 xcodebuild -project CirrusAudioFixup.xcodeproj \

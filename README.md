@@ -127,7 +127,7 @@ For a new build, use the artifacts for the exact commit you intend to test, or a
 
 | Component | Role |
 | :--- | :--- |
-| Lilu + AppleALC | Codec patching for a compatible AppleHDA stack |
+| Lilu 1.7.2 or newer + AppleALC | Lilu is a direct link dependency for audio event hooks; AppleALC patches the codec in a compatible AppleHDA stack |
 | Custom VoodooI2C | Addressed amplifier transfers through `VoodooI2CTransferToAddress` |
 | CirrusAudioFixup | CS35L41 initialization and playback power control |
 | VirtualSMC | Part of the wider Hackintosh setup, not a direct driver link dependency |
@@ -147,7 +147,7 @@ Prepare the existing OpenCore audio stack:
 4. Make sure the amplifier nub appears in the IOService plane with `IOName=CLSA0100`. Do not assume every laptop places it under the same ACPI path.
 5. Configure the reference ALC287 route with `alcid=16`, or the equivalent four-byte `layout-id` value `10 00 00 00`. Other codecs and boards need their own route.
 
-CirrusAudioFixup has no direct Lilu link dependency. Lilu is needed by AppleALC. The custom I2C provider is accessed through a platform function, not a linked `VoodooI2CTransferToAddress` symbol.
+CirrusAudioFixup directly depends on Lilu for its IOAudioFamily event hooks. AppleALC also requires Lilu. The custom I2C provider is accessed through a platform function, not a linked `VoodooI2CTransferToAddress` symbol.
 
 Begin with `-cirrusro -cirrusdbg` when checking a new installation. Confirm the provider, silicon identity and resource selection before allowing initialization or playback. See the [bring-up guide](docs/safe_bringup_protocol.md) for stage-by-stage checks.
 
@@ -189,11 +189,25 @@ During startup, the service selects a board profile, validates the requested deb
 
 Initialization dispatches by model. The CS35L41 path resets the chip, waits for OTP boot, applies trim and errata, configures clocks and ASP, selects channel tuning, uploads firmware and checks the DSP. It finishes in verified muted idle. No other model is routed through that sequence.
 
-A timer observes HDA output stream descriptors at a nominal 50 ms interval. It checks controller state, stream tag and format; multiple running output streams are treated as ambiguous. The retained PCI service and BAR mapping are reused until suspend, removal, invalid topology or teardown.
+HDA stream checks validate controller state, stream tag and format; multiple running output streams are treated as ambiguous. IOAudioFamily events control recognized output transitions. The compatibility timer uses 100 ms for a running stream and 50 ms otherwise. The retained PCI service and BAR mapping are reused until suspend, removal, invalid topology or teardown.
+
+Runtime preparation and cleanup advance through a CS35L41 state machine.
+Pending acknowledgements use a 1 ms timer and monotonic deadlines, without
+sleeping inside the monitor. Both endpoints must be prepared before output
+is unmuted; a failed commit rolls back the pair. Recognized headphone idle
+stops the timer after bounded cleanup. I2C calls remain synchronous, and PM
+quiesce and firmware initialization still use their synchronous paths.
+See the [runtime transition design](docs/runtime_transition_design.md).
 
 Playback requires more than HDA RUN. The monitor verifies PLL, DSP/mailbox, power acknowledgements and output registers before marking a channel active. Stream loss, read failures and protection faults trigger cleanup. Most faults remain latched. An isolated PLL failure can retry after a cooldown, at most three times before a successful start resets the retry count.
 
 Sleep and stop share the workloop gate with the timer. Suspend attempts mute, power-down and DSP halt, then releases the HDA cache. Wake repeats software-reset initialization and firmware staging. It does not repeat the board GPIO reset performed by `start()`.
+
+Output switching uses IOAudioFamily events when both hooks and the built-in output selector are available. The driver observes completed selector updates and engine state changes. It keeps the original handlers and schedules amplifier work on its own workloop.
+
+Selecting headphones or stopping the engine mutes the speakers and stops the periodic timer. Selecting internal speakers starts preparation without the previous recovery cooldown. Stream readiness has up to 40 short retry intervals; hardware operations have their own bounded waits. Active speaker playback retains periodic protection checks.
+
+`Cirrus_Audio_Event_Mode` reports `IOAUDIO_FAMILY_EVENTS`, `IOAUDIO_HOOKS_WAITING_FOR_OUTPUT`, or `HDA_TIMER_FALLBACK`. The current event binding recognizes `ispk` and `hdpn` on one built-in engine. Other selector identities or unavailable hooks retain the HDA timer fallback. Event hooks and audible switching latency still need target-machine validation.
 
 Register and heartbeat checks do not measure the PCM signal, speaker excursion or audible output. A successful verdict must still be checked against the actual route and speakers.
 
@@ -326,6 +340,8 @@ Clone the same SDK revision used by CI once, before building:
 ```bash
 git clone https://github.com/acidanthera/MacKernelSDK.git MacKernelSDK
 git -C MacKernelSDK checkout --detach 7af1933c27aefcbdf4809ee44478829aad30f9c1
+git clone https://github.com/acidanthera/Lilu.git Lilu
+git -C Lilu checkout --detach e4748cc081bf060302c7d3c44a643ce1d11b7e1d
 ```
 
 If an SDK checkout already exists, inspect its state before changing its revision. The project uses its kernel headers and x86_64 libkmod rather than the SDK bundled with Xcode.
@@ -348,8 +364,11 @@ python3 Tests/check_transport.py
 python3 Tests/check_diagnostics.py
 python3 Tests/check_hda.py
 python3 Tests/check_calibration.py
+python3 Tests/check_tuning.py
+python3 Tests/check_windows_payloads.py
 python3 Tests/check_bringup.py
 python3 Tests/check_runtime.py
+python3 Tests/check_audio_events.py
 python3 Tests/check_architecture.py
 python3 Tests/check_release.py
 python3 Tests/check_build_policy.py
@@ -371,6 +390,9 @@ The completed source fixes and remaining validation work are listed in [audit_st
 | [Bring-up and diagnostic checks](docs/safe_bringup_protocol.md) | Read-only inspection, staged initialization, playback checks and fallback |
 | [Diagnostic collection and audio feedback](docs/diagnostics.md) | Command results, microphone-pop evidence and loudness/DSP comparisons |
 | [Audit status](docs/audit_status.md) | Addressed findings, verification boundaries and remaining work |
+| [Linux parity audit](docs/linux_parity_audit.md) | Firmware, gain, lifecycle differences and remaining parity gaps |
+| [Windows reference audit](docs/windows_driver_audit.md) | OEM payload identity, registry settings and disassembly evidence |
+| [Runtime transition design](docs/runtime_transition_design.md) | Start/stop phases, stereo barrier, deadlines and completion boundaries |
 | [Contributing](CONTRIBUTING.md) | Hardware evidence, code conventions, tests and release requirements |
 | [Changelog](CHANGELOG.md) | Source changes by version |
 | [Historical prebuilt bundle](docs/Kexts.zip) | Archived components; not the current source build |
@@ -414,6 +436,10 @@ For CS35L41, add a board profile and matching personality only after checking th
 
 The import utility uses `--bin-l` and `--bin-r`. Validate first:
 
+Firmware and tuning are compiled into the kext executable. Runtime does not read
+firmware from the EFI partition or macOS filesystem and does not require a helper.
+This packaging choice does not remove the Lilu, I2C-provider or host-audio dependencies.
+
 ```bash
 python3 Tools/import_firmware.py --codec cs35l41 --ssid 0x103C89B5 \
   --wmfw path/to/cs35l41-dsp1-spk-prot-103c89b5.wmfw \
@@ -423,13 +449,35 @@ python3 Tools/import_firmware.py --codec cs35l41 --ssid 0x103C89B5 \
 
 Replace the example SSID and every `path/to/...` argument with your actual resource identity and files. This checks basic container headers and alignment, not complete block parsing, DSP identity, board compatibility or runtime validation. Invalid right-channel input must fail just like invalid left-channel input. Omitting `--bin-r` deliberately reuses left-channel tuning; do that only when the source profile specifies identical tuning. Review the import utility before using its write mode and keep a recoverable source commit.
 
+If the matching Linux profile provides companion gain parameters, add
+`--bincfg-l path/to/left.bincfg --bincfg-r path/to/right.bincfg` to that command.
+These paths are build-time inputs, not installation paths. The CS35L41 parser
+checks the signature, version, sizes, entry count and gain range before import.
+Each channel's omitted companion uses the Linux default PCM gain code 17.
+Unlike BIN reuse, a missing right BINCFG never inherits the left gain override.
+Remove `--validate-only` to import a new profile after reviewing its identity.
+Existing board/speaker entries and resource symbols reject import without changes;
+replace an existing profile explicitly in source after reviewing its resources.
+Generated arrays carry SHA-256 comments for byte identity, not proof of authenticity.
+
 For another amplifier model, implement its identity, register access, reset/trim, clocks, power, DSP and playback lifecycle before adding it to the supported registry. Add its own dispatch case; never send a new chip through `initializeCS35L41()`. The monitor and firmware selection are still CS35L41-specific and also need separate backend handling before another model can be enabled.
 
 ---
 
 ## Sources and license
 
+The [volume, EQ and calibration audit](docs/acoustic_parity_audit.md) separates
+embedded DSP tuning from host volume and Nahimic effects. It records OEM payload
+comparisons, calibration validation and the limits of acoustic parity claims.
+
+The [Windows reference audit](docs/windows_driver_audit.md) records byte-identical
+OEM firmware and Veco left/right coefficients for the `17AA3847 / spkid1` profile.
+The OEM configured gain is also 17.5 dB. These checks establish resource identity,
+not matching Windows effects, volume curves or measured acoustic output.
+
 Register definitions and sequencing draw on the Linux CS35L41 HDA/ASoC drivers. This is a macOS port with board-specific behavior, not a claim of bit-for-bit parity with every upstream path. Firmware and tuning resources are embedded in [Firmware.hpp](CirrusAudioFixup/Devices/CS35L41/Resources/Firmware.hpp); preserve their provenance and applicable licenses when replacing them.
+
+See the [CS35L41 parity audit](docs/linux_parity_audit.md) for corrected reset/unmute values and remaining differences. DSP playback uses Linux's default PCM gain of 17.5 dB unless its selected channel has an embedded `.bincfg` override. Digital amplifier volume stays at 0 dB. The existing reference resource has no companion gain override. The Windows OEM effects chain is not reproduced or verified here. A matching volume-slider position does not establish equal loudness or EQ.
 
 See [LICENSE](LICENSE) for the non-commercial distribution terms. Paid system-setup services are permitted under the license when no fee is charged for this software itself; selling the software or paid EFI bundles is not.
 

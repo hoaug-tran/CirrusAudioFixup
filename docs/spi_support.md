@@ -1,6 +1,6 @@
 # CS35L41 and Intel LPSS SPI development
 
-Branch: `codex/cs35l41-spi-support`. Tracking: [HP hardware issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
+Branch: `feat/cs35l41-spi-support`. Tracking: [HP hardware issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
 
 The branch implements a CS35L41 SPI register adapter and a native Intel LPSS
 PIO controller base for PCI 8086:7AAA. The existing shipping IOService path

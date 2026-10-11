@@ -72,6 +72,20 @@ active-high CS, DMA/IRQ acceleration or arbitrary Intel SPI generations.
 An IOLock serializes frames; the enclosing driver must also serialize complete
 register read-modify-write operations. Bind/shutdown cannot race client calls.
 
+## ACPI endpoint decoding
+
+`Transport/ACPISPIResources.hpp` decodes the raw `_CRS` ResourceTemplate into
+owned controller source paths, source indexes, native chip selects, maximum
+clock and CPOL/CPHA modes. It validates descriptor bounds, EndTag/checksum,
+SPI revisions and source strings. Four-wire, eight-bit, active-low consumer
+connections are supported; slave mode, vendor framing, dependent alternatives
+and unsupported formats are rejected. Failure leaves output unchanged.
+This parser does not execute AML, resolve paths to PCI providers, authorize
+exclusive bus ownership or infer missing reset/power resources.
+
+Layout references: [ACPICA AML descriptors](https://github.com/acpica/acpica/blob/master/source/include/amlresrc.h)
+and [serial resource conversion](https://github.com/acpica/acpica/blob/master/source/components/resources/rsserial.c).
+
 ## CS35L41 register implementation
 
 `Transport/CS35L41SPITransport.hpp` implements `core::RegisterIO`:
@@ -141,6 +155,8 @@ instead says 103C8CA4; that discrepancy remains unresolved.
 
 Maintained regressions:
 
+- `check_acpi_spi.py`: bounded ACPI parsing, truncation, revisions, checksum,
+  multi-endpoint and malformed-buffer sanitizer checks.
 - `check_spi_transport.py`: production CS35L41 framing, limits and errors.
 - `check_intel_spi.py`: production PIO register engine and complete CS35L41
   read/write/firmware-chunk path through a FIFO model. Existing silicon probe,

@@ -299,6 +299,12 @@
 			path = "CS35L41SPITransport.hpp";
 			sourceTree = "<group>";
 		};
+		CAFE51000000000000000008 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "ACPISPIResources.hpp";
+			sourceTree = "<group>";
+		};
 		CAFE51000000000000000003 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
@@ -333,6 +339,7 @@
 				79E10805A559FC3E5503866B,
 				CAFE51000000000000000001,
 				CAFE51000000000000000002,
+				CAFE51000000000000000008,
 				CAFE51000000000000000006,
 			);
 			path = "Transport";

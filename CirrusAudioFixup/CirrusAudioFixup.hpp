@@ -25,6 +25,7 @@
 #include "Support/Logging.hpp"
 #include "Transport/VoodooI2CTransport.hpp"
 #include "Transport/CS35L41SPITransport.hpp"
+#include "Transport/ACPISPIResources.hpp"
 
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOInterruptEventSource.h>

@@ -23,17 +23,28 @@ public:
     }
     const BackendDefinition* backend(size_t i) const {return i<mCount?mSlots[i].definition:nullptr;}
     IOReturn bind(const BackendRegistry& registry,const BackendContext* contexts,size_t count) {
-        if(bound() || !contexts || !count || count>kCapacity)return kIOReturnBadArgument;
-        const auto& board=contexts[0].board;
-        if(board.count!=count || !board.permits(contexts[0].actualBoard))return kIOReturnNotPermitted;
+        if(!contexts)return kIOReturnBadArgument;
+        return bindContexts(registry,count,[&](size_t i)->const BackendContext&{return contexts[i];});
+    }
+    IOReturn bind(const BackendRegistry& registry,const BackendContext* const* contexts,size_t count) {
+        if(!contexts || count>kCapacity)return kIOReturnBadArgument;
+        for(size_t i=0;i<count;++i)if(!contexts[i])return kIOReturnBadArgument;
+        return bindContexts(registry,count,[&](size_t i)->const BackendContext&{return *contexts[i];});
+    }
+private:
+    template<class ContextAt>
+    IOReturn bindContexts(const BackendRegistry& registry,size_t count,ContextAt contextAt) {
+        if(bound() || !count || count>kCapacity)return kIOReturnBadArgument;
+        const auto& board=contextAt(0).board;
+        if(board.count!=count || !board.permits(contextAt(0).actualBoard))return kIOReturnNotPermitted;
         // Validate the complete topology before calling any factory. Contexts
         // may arrive in any order but cover each manifest binding exactly once.
         for(size_t i=0;i<count;++i) {
-            const auto& c=contexts[i];
+            const auto& c=contextAt(i);
             if(&c.board!=&board || !board.permits(c.actualBoard) || c.bindingIndex>=count ||
                !c.endpoint.sameDevice(board.amplifiers[c.bindingIndex].endpoint))return kIOReturnNotPermitted;
             for(size_t j=0;j<i;++j)
-                if(c.bindingIndex==contexts[j].bindingIndex || &c.io==&contexts[j].io || c.endpoint.sameDevice(contexts[j].endpoint))return kIOReturnBadArgument;
+                if(c.bindingIndex==contextAt(j).bindingIndex || &c.io==&contextAt(j).io || c.endpoint.sameDevice(contextAt(j).endpoint))return kIOReturnBadArgument;
         }
         mGroup=new core::AmplifierGroup;
         if(!mGroup)return kIOReturnNoMemory;
@@ -41,7 +52,7 @@ public:
         for(size_t i=0;i<count;++i) {
             auto& slot=mSlots[i];
             ++mCount; // Own partial slot state from this point onward.
-            slot.context=new BackendContext(contexts[i]);
+            slot.context=new BackendContext(contextAt(i));
             if(!slot.context){releaseUninitialized();return kIOReturnNoMemory;}
             slot.hooks=registry.create(*slot.context,slot.definition);
             if(!slot.hooks){releaseUninitialized();return kIOReturnNotPermitted;}
@@ -52,6 +63,7 @@ public:
         if(!mGroup->configure(members,count)){releaseUninitialized();return kIOReturnBadArgument;}
         return kIOReturnSuccess;
     }
+public:
     IOReturn bringUp(){return mGroup?mGroup->bringUp():kIOReturnNotReady;}
     IOReturn startPlayback(){return mGroup?mGroup->startPlayback():kIOReturnNotReady;}
     IOReturn stopPlayback(){return mGroup?mGroup->stopPlayback():kIOReturnNotReady;}

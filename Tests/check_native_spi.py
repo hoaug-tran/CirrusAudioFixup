@@ -47,15 +47,16 @@ constexpr int kIORegistryIterateRecursively=1;
 struct IORegistryIterator:OSIterator {using OSIterator::OSIterator;static IORegistryIterator* iterateOver(IORegistryEntry*,const IORegistryPlane*,int){return iteratorFailure?nullptr:new IORegistryIterator(nodes);}};
 struct IOService:IORegistryEntry {static void* serviceMatching(const char*){return nullptr;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
 struct IOACPIPlatformDevice:IOService {
- OSData crs;unsigned status=3,power=0;bool rejectCRS=false;bool amd=false,hasPSC=true;
+ OSData crs;OSString hid;unsigned status=3,power=0;bool rejectCRS=false;bool amd=false,hasPSC=true;
  int evaluateInteger(const char*,uint32_t* out){*out=power;return hasPSC?0:kIOReturnNotFound;}
  unsigned getDeviceStatus(){return status;}
- int evaluateObject(const char*,OSObject** out){if(rejectCRS)return kIOReturnNotFound;crs.retain();*out=&crs;return 0;}
+ int evaluateObject(const char* method,OSObject** out){if(!strcmp(method,"_HID")){if(hid.value.empty())return kIOReturnNotFound;hid.retain();*out=&hid;return 0;}if(rejectCRS)return kIOReturnNotFound;crs.retain();*out=&crs;return 0;}
 };
 struct IOPCIDevice:IOService {IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
 inline unsigned liveControllers=0,suspends=0,resumes=0;
 inline bool resumeFailure=false;
 inline uint32_t probeIDs[4]{};
+inline unsigned writeTransfers=0;inline std::vector<std::vector<uint8_t>> writes;
 ''')
  for name,kind in (('Intel/IntelLPSSSPIController.hpp','intel'),('AMD/AMDACPIController.hpp','amd')):
   cls='IntelLPSSSPIController' if kind=='intel' else 'AMDACPIController'
@@ -72,7 +73,7 @@ public:
  IOReturn bind({typ}* p,IOService*){{active={valid};return active?0:kIOReturnUnsupported;}}
  size_t maxTransferBytes() const override {{return 262;}}
  IOReturn exchange(const SPIEndpoint&,const uint8_t*,uint8_t*,size_t) override {{return kIOReturnUnsupported;}}
- IOReturn command(const SPIEndpoint& ep,const uint8_t*,size_t,uint8_t* rx,size_t n) override {{if(!active)return kIOReturnNotReady;for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[ep.chipSelect]>>(24-8*i)):0;return 0;}}
+ IOReturn command(const SPIEndpoint& ep,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n) override {{if(!active)return kIOReturnNotReady;if(!n){{++writeTransfers;writes.emplace_back(tx,tx+tn);}}for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[ep.chipSelect]>>(24-8*i)):0;return 0;}}
  void suspend(){{++suspends;active=false;}}
  IOReturn resume(){{++resumes;active=!resumeFailure;return active?0:kIOReturnNotReady;}}
 }};
@@ -82,6 +83,7 @@ public:
 #include <cstring>
 #include <cassert>
 #include "Transport/NativeSPIHost.hpp"
+#include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Core/DeviceRegistry.hpp"
 #include "Transport/CS35L41SPITransport.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
@@ -119,6 +121,25 @@ std::vector<uint8_t> descriptor(const char* source,unsigned cs){
 void resources(IOACPIPlatformDevice& amp,std::initializer_list<std::pair<const char*,unsigned>> endpoints){
  amp.crs.bytes.clear();for(auto e:endpoints){auto d=descriptor(e.first,e.second);amp.crs.bytes.insert(amp.crs.bytes.end(),d.begin(),d.end());}amp.crs.bytes.push_back(0x79);amp.crs.bytes.push_back(0);
 }
+
+unsigned backendsCreated=0,backendsDestroyed=0;
+int failStage=0;bool rejectFactory=false;
+bool access(uint32_t reg){return reg<=0x20;}
+struct SPIHooks:cirrus::core::AmplifierLifecycleHooks {
+ const cirrus::platform::BackendContext& context;
+ SPIHooks(const cirrus::platform::BackendContext& c):context(c){++backendsCreated;}
+ ~SPIHooks(){++backendsDestroyed;}
+ IOReturn identify() override {uint32_t value=0;return context.io.read(0,&value)&&value==context.board.amplifiers[context.bindingIndex].siliconId?0:kIOReturnNotFound;}
+ IOReturn authorizeBoard() override {return context.board.permits(context.actualBoard)?0:kIOReturnNotPermitted;}
+ IOReturn initialize() override {return context.io.write(4,1)?0:kIOReturnNotReady;}
+ IOReturn loadFirmware() override {if(failStage==2)return kIOReturnNotReady;return context.io.bulkWrite(8,context.firmware.program,context.firmware.programBytes)?0:kIOReturnNotReady;}
+ IOReturn verifyReady() override {return 0;}
+ IOReturn startPlayback() override {if(failStage==3)return kIOReturnNotReady;return context.io.write(4,2)?0:kIOReturnNotReady;}
+ IOReturn stopPlayback() override {return context.io.write(4,0)?0:kIOReturnNotReady;}
+ IOReturn safeShutdown() override {if(failStage==4)return kIOReturnNotReady;return context.io.write(4,0)?0:kIOReturnNotReady;}
+};
+cirrus::core::AmplifierLifecycleHooks* createSPI(const cirrus::platform::BackendContext& c){return rejectFactory?nullptr:new SPIHooks(c);}
+void destroySPI(cirrus::core::AmplifierLifecycleHooks* h){delete h;}
 int main(){
  char path[256]{};
  assert(canonicalACPIPath("IOACPIPlane:/_SB/PCI0@0/SPI1@100000",path,sizeof(path))&&!strcmp(path,"\\_SB.PCI0.SPI1"));
@@ -177,6 +198,12 @@ int main(){
  gated.flags["-cirrusro"]=true;assert(gated.setupNativeSPI(&amp)&&!gated.mPlatformAuthorized);
  assert(gated.strings["Cirrus_SPI_Status"]=="BOUND_READ_ONLY");
  assert(!gated.mNativeSPI.registers(0)->write(0,1));gated.teardownNativeSPI();assert(!liveControllers);
+
+ amp.crs.bytes.clear();
+ for(size_t i=0;i<ACPISPIResources::kMaxEndpoints;++i){auto d=descriptor("SPI0",i);amp.crs.bytes.insert(amp.crs.bytes.end(),d.begin(),d.end());}
+ amp.crs.bytes.push_back(0x79);amp.crs.bytes.push_back(0);
+ assert(host.bind(&amp,&owner,format)==0&&host.count()==ACPISPIResources::kMaxEndpoints&&liveControllers==1);host.shutdown();
+ assert(!liveControllers&&a.refs==1);
  // Actual shipping discovery must preserve resource identity after a failed probe.
  CirrusAudioFixup service;format={};format.paddingBytes=2;format.readFlag=0x80;
  resources(amp,{{"SPI0",1},{"SPI0",0},{"SPI1",2}});
@@ -189,10 +216,73 @@ int main(){
  assert(service.mAmps[1].endpointIndex==2&&!strcmp(service.mAmps[1].name,"spi2"));
  assert(service.numbers["Cirrus_SPI_0_DeviceID"]==0xdead&&service.numbers["Cirrus_SPI_Resource_Count"]==3);
  service.teardownNativeSPI();assert(!service.mAmps[0].registerIO&&!liveControllers&&!iteratorLive);
+ // Full production native-controller -> register-map -> backend -> group path.
+ using namespace cirrus::platform;
+ resources(amp,{{"SPI1",2},{"SPI0",0}});amp.hid.value="TESTAMP";
+ probeIDs[0]=0x1111;probeIDs[2]=0x2222;
+ auto f1=format;f1.maxRegister=0x20;f1.readable=access;f1.writable=access;
+ auto f2=f1;f2.addressBytes=2;f2.paddingBytes=1;f2.addressEndian=cirrus::core::RegisterEndian::Little;
+ BackendDefinition d1{"test-spi-1","TESTAMP",0x1111,2,{},f1,createSPI,destroySPI};
+ BackendDefinition d2{"test-spi-2","TESTAMP",0x2222,2,{},f2,createSPI,destroySPI};
+ BackendRegistry registry;assert(registry.add(d1)&&registry.add(d2));
+ AmplifierBinding bindings[2]{{{cirrus::core::BusTransportType::SPI,"\\_SB.SPI0",0,false,0,1000000,0},0x1111,0,1,"tune-a","TESTAMP"},
+                            {{cirrus::core::BusTransportType::SPI,"\\_SB.SPI1",0,false,2,1000000,0},0x2222,1,2,"tune-b","TESTAMP"}};
+ BoardConfiguration board{{0x1234,0x5678,nullptr},bindings,2,true,true,true};
+ const uint8_t program[]{1,2,3,4};
+ cirrus::firmware::FirmwareBundle firmware[2]{{{0x1111,0x1234,0x5678,1,0,"tune-a"},cirrus::firmware::FirmwareFormat::Vendor,program,4},
+                                           {{0x2222,0x1234,0x5678,2,1,"tune-b"},cirrus::firmware::FirmwareFormat::Vendor,program,4}};
+ NativeSPIAmplifierRuntime playback;
+ unsigned before=writeTransfers;
+ assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==0);
+ assert(writeTransfers==before&&liveControllers==2&&amp.hid.refs==2);
+ assert(playback.startPlayback()==kIOReturnNotReady);
+ assert(playback.bringUp()==0&&writeTransfers==before+4);
+ // Distinct formats, despite reversed ACPI resource/manifest order.
+ assert(writes[writes.size()-4].size()==7&&writes[writes.size()-2].size()==10);
+ assert(playback.runtime().backend(0)==&d2&&playback.runtime().backend(1)==&d1);
+ assert(playback.startPlayback()==0&&playback.runtime().stage()==cirrus::core::AmplifierStage::Playing);
+ assert(playback.suspend()==0);before=writeTransfers;
+ assert(playback.startPlayback()==kIOReturnNotReady&&writeTransfers==before);
+ resumeFailure=true;assert(playback.resume()==kIOReturnNotReady&&writeTransfers==before);
+ resumeFailure=false;assert(playback.resume()==0&&writeTransfers>before&&playback.runtime().stage()==cirrus::core::AmplifierStage::Playing);
+ before=writeTransfers;assert(playback.notifyPowerLost()==0&&writeTransfers==before);
+ assert(playback.resume()==0&&playback.runtime().stage()==cirrus::core::AmplifierStage::Ready);
+ assert(playback.startPlayback()==0);
+ assert(playback.unbind()==0&&!liveControllers&&amp.hid.refs==1&&backendsCreated==backendsDestroyed);
+ before=writeTransfers;board.powerVerified=false;
+ assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)!=0&&writeTransfers==before&&!liveControllers);board.powerVerified=true;
+ firmware[1].target.speakerId=3;
+ assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)!=0&&writeTransfers==before&&!liveControllers&&backendsCreated==backendsDestroyed);firmware[1].target.speakerId=2;
+ rejectFactory=true;assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)!=0&&!liveControllers&&writeTransfers==before);rejectFactory=false;
+ probeIDs[2]=0xdead;
+ assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==0);
+ assert(playback.bringUp()==kIOReturnNotFound&&writeTransfers==before);playback.unbind();probeIDs[2]=0x2222;
+ failStage=2;assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==0);
+ assert(playback.bringUp()==kIOReturnNotReady&&playback.runtime().stage()==cirrus::core::AmplifierStage::Faulted);
+ playback.unbind();failStage=0;assert(!liveControllers&&backendsCreated==backendsDestroyed&&amp.hid.refs==1);
+
+ failStage=3;assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==0&&playback.bringUp()==0);
+ assert(playback.startPlayback()==kIOReturnNotReady&&playback.runtime().stage()==cirrus::core::AmplifierStage::Faulted);
+ playback.unbind();failStage=0;
+ assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==0&&playback.bringUp()==0&&playback.startPlayback()==0);
+ auto previousSuspends=suspends;failStage=4;
+ assert(playback.suspend()==kIOReturnNotReady&&suspends==previousSuspends&&liveControllers==2);
+ assert(playback.runtime().status(0)->cleanupResult==kIOReturnNotReady);
+ assert(playback.unbind()==kIOReturnNotReady&&!liveControllers&&playback.runtime().releasedStatus(0)->cleanupResult==kIOReturnNotReady);failStage=0;
+ before=writeTransfers;bindings[1].endpoint.spiClockHz=500000;
+ assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==kIOReturnNotPermitted&&!liveControllers&&writeTransfers==before);bindings[1].endpoint.spiClockHz=1000000;
+ amp.hid.value.clear();assert(playback.bind(&amp,&owner,registry,board,board.identity,firmware,2)==kIOReturnNotFound&&!liveControllers);amp.hid.value="TESTAMP";
+ {NativeSPIAmplifierRuntime scoped;assert(scoped.bind(&amp,&owner,registry,board,board.identity,firmware,2)==0&&scoped.bringUp()==0&&scoped.startPlayback()==0);}
+ assert(!liveControllers&&backendsCreated==backendsDestroyed&&amp.hid.refs==1);
+ // Topology failure must preserve discovery-only ports atomically.
+ assert(host.bind(&amp,&owner,format)==0);bindings[1].endpoint.spiMode=1;
+ assert(host.configureAuthorized(registry,board,board.identity,"TESTAMP")==kIOReturnNotPermitted);
+ assert(!host.registers(0)->write(4,1)&&!host.registers(1)->write(4,1));bindings[1].endpoint.spiMode=0;host.shutdown();
+
 
 }
 ''')
  for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
   subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
-print('PASS native SPI host: ACPI lookup, multi-controller ownership, read-only ports, partial rollback and PM faults; hardware untested')
+print('PASS native SPI host: ACPI lookup, multi-controller ownership, authorized per-backend SPI formats, firmware/playback lifecycle, rollback and PM faults; hardware untested')

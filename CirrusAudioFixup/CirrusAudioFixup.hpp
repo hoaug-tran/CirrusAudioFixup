@@ -15,6 +15,7 @@
 #include "Platform/BoardConfiguration.hpp"
 #include "Platform/BackendRegistry.hpp"
 #include "Platform/AmplifierRuntime.hpp"
+#include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include "Transport/VoodooI2CController.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"

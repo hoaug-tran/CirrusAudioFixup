@@ -14,7 +14,7 @@ struct ACPISPIResource {
 };
 
 struct ACPISPIResources {
-    static constexpr size_t kMaxEndpoints = 4;
+    static constexpr size_t kMaxEndpoints = 16;
     ACPISPIResource endpoints[kMaxEndpoints]{};
     size_t count{0};
 };

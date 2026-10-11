@@ -55,8 +55,10 @@ int main() {
     assert(parseACPISPIResources(bad.data(),bad.size(),out)==ACPISPIResult::Malformed);
     std::vector<uint8_t> empty={0x79,0};
     assert(parseACPISPIResources(empty.data(),empty.size(),out)==ACPISPIResult::NoSPI && out.count==0);
-    bad.clear(); for(int i=0;i<5;++i) { auto r=resource(i); bad.insert(bad.end(),r.begin(),r.end()); } end(bad);
+    bad.clear(); for(size_t i=0;i<=ACPISPIResources::kMaxEndpoints;++i) { auto r=resource(i); bad.insert(bad.end(),r.begin(),r.end()); } end(bad);
     assert(parseACPISPIResources(bad.data(),bad.size(),out)==ACPISPIResult::TooManyEndpoints);
+    bad.clear();for(size_t i=0;i<ACPISPIResources::kMaxEndpoints;++i){auto r=resource(i);bad.insert(bad.end(),r.begin(),r.end());}end(bad);
+    assert(parseACPISPIResources(bad.data(),bad.size(),out)==ACPISPIResult::Success && out.count==ACPISPIResources::kMaxEndpoints);
     d=resource(); end(d); uint8_t sum=0; for(auto b:d) sum=uint8_t(sum+b); d.back()=uint8_t(0-sum);
     assert(parseACPISPIResources(d.data(),d.size(),out)==ACPISPIResult::Success);
     d.back()^=0x80;

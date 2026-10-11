@@ -5,6 +5,7 @@
 #include "Transport/ACPIPath.hpp"
 #include "Core/RegisterMap.hpp"
 #include "Core/Endpoint.hpp"
+#include "Platform/BackendRegistry.hpp"
 #include "Transport/SPIRegisterBus.hpp"
 #include "Transport/Intel/IntelLPSSSPIController.hpp"
 #include "Transport/AMD/AMDACPIController.hpp"
@@ -85,6 +86,35 @@ public:
         }
         return kIOReturnSuccess;
     }
+    // Call before lending register ports to clients. Replaces the read-only
+    // discovery maps only after every endpoint has a verified board/backend.
+    IOReturn configureAuthorized(const platform::BackendRegistry& registry,
+                                 const platform::BoardConfiguration& board,
+                                 const platform::BoardIdentity& actual,const char* deviceHid) {
+        if(!bound() || mAuthorized || !deviceHid || !board.permits(actual) || board.count!=mCount)
+            return kIOReturnNotPermitted;
+        core::RegisterMap* prepared[ACPISPIResources::kMaxEndpoints]{};
+        IOReturn result=kIOReturnSuccess;
+        for(size_t i=0;i<mCount;++i) {
+            const auto e=endpoint(i);
+            const platform::AmplifierBinding* binding=nullptr;
+            for(size_t j=0;j<board.count;++j)
+                if(e.sameDevice(board.amplifiers[j].endpoint))binding=&board.amplifiers[j];
+            const char* expected=binding?(binding->acpiHid?binding->acpiHid:actual.acpiHid):nullptr;
+            if(!binding || !expected || strcmp(expected,deviceHid) || e.spiMode!=binding->endpoint.spiMode ||
+               e.spiClockHz>binding->endpoint.spiClockHz) {result=kIOReturnNotPermitted;break;}
+            const auto* definition=registry.find(deviceHid,binding->siliconId,core::BusTransportType::SPI);
+            if(!definition){result=kIOReturnUnsupported;break;}
+            prepared[i]=new core::RegisterMap(*mPorts[i],*definition->format(core::BusTransportType::SPI),true);
+            if(!prepared[i]){result=kIOReturnNoMemory;break;}
+        }
+        if(result!=kIOReturnSuccess) {
+            for(auto* map:prepared)delete map;
+            return result;
+        }
+        for(size_t i=0;i<mCount;++i){delete mRegisters[i];mRegisters[i]=prepared[i];}
+        mAuthorized=true;return kIOReturnSuccess;
+    }
     void suspend(){for(size_t i=0;i<mControllers;++i){if(mIntel[i])mIntel[i]->suspend();if(mAMD[i])mAMD[i]->suspend();}}
     IOReturn resume(){
         for(size_t i=0;i<mControllers;++i) {
@@ -103,7 +133,7 @@ public:
             delete mIntel[i];mIntel[i]=nullptr;delete mAMD[i];mAMD[i]=nullptr;
             mBus[i]=nullptr;OSSafeReleaseNULL(mTargets[i]);
         }
-        mCount=mControllers=0;mResources={};
+        mCount=mControllers=0;mResources={};mAuthorized=false;
         memset(mPaths,0,sizeof(mPaths));memset(mSlots,0,sizeof(mSlots));
     }
 private:
@@ -163,13 +193,14 @@ private:
     }
     ACPISPIResources mResources{};
     size_t mCount{0},mControllers{0};
-    IOACPIPlatformDevice* mTargets[4]{};
-    intel::IntelLPSSSPIController* mIntel[4]{};
-    amd::AMDACPIController* mAMD[4]{};
-    SPIController* mBus[4]{};
-    core::RegisterMap* mRegisters[4]{};
-    SPIRegisterBus* mPorts[4]{};
-    size_t mSlots[4]{};
-    char mPaths[4][256]{};
+    bool mAuthorized{false};
+    IOACPIPlatformDevice* mTargets[ACPISPIResources::kMaxEndpoints]{};
+    intel::IntelLPSSSPIController* mIntel[ACPISPIResources::kMaxEndpoints]{};
+    amd::AMDACPIController* mAMD[ACPISPIResources::kMaxEndpoints]{};
+    SPIController* mBus[ACPISPIResources::kMaxEndpoints]{};
+    core::RegisterMap* mRegisters[ACPISPIResources::kMaxEndpoints]{};
+    SPIRegisterBus* mPorts[ACPISPIResources::kMaxEndpoints]{};
+    size_t mSlots[ACPISPIResources::kMaxEndpoints]{};
+    char mPaths[ACPISPIResources::kMaxEndpoints][256]{};
 };
 }

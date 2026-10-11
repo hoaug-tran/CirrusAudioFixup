@@ -104,11 +104,47 @@ Foundation development is independent of machine enablement. The reported
 board integrations. Neither supplies a universal register map, power sequence or
 tuning profile. Native Intel PCI discovery also accepts an exact canonical
 `acpi-path` when no `acpi-device` pointer is published, rejecting ambiguous matches.
-The generic runtime has 16 slots; the existing native SPI owner separately caps
-its ACPI resource set at four endpoints. These capacities do not imply support
+The generic runtime and native SPI owner both support up to 16 endpoints. These capacities do not imply support
 for unknown controller layouts or unimplemented amplifier backends.
 
 Host regressions cover mixed buses, models and HIDs, temporary context lifetime,
 duplicate endpoint/port rejection, factory rollback, deferred firmware, group
 failure cleanup, destructor cleanup and retained shutdown evidence under
 ASan/UBSan. Hardware playback validation remains a separate integration step.
+
+
+### Native SPI backend execution
+
+`Platform/NativeSPIAmplifierRuntime.hpp` joins the native controller owner to the
+registered amplifier runtime. It reads the provider HID, resolves all ACPI SPI
+resources and validates the entire verified board topology before replacing
+read-only discovery maps with backend-specific writable maps. Resource order
+need not match manifest order. Every endpoint uses its own silicon format and
+access policy; unknown backends, mismatched mode/clock, firmware identities and
+unverified board resources prevent successful binding. No amplifier writes occur
+in bind or factories.
+
+Bring-up executes the registered backend's read-only identity/authorization,
+initialization, firmware and readiness hooks. Group playback, failure cleanup and
+shutdown use those same ports. Suspend shuts down amplifiers before suspending
+controllers; failed cleanup leaves controllers accessible for diagnostics. Resume
+restores all controllers before any amplifier transaction or playback restart.
+A failed controller resume leaves the amplifier runtime suspended for an explicit
+owner retry. Backends are destroyed before their borrowed maps/controllers.
+
+The host test drives this production path through Intel and AMD controller
+fixtures, reversed resource ordering, different silicon formats, firmware writes,
+playback, wake failure/retry, unknown IDs, rejected firmware/factories, shutdown
+failure and destructor cleanup. Both ordinary and ASan/UBSan executions run.
+These fixtures are not registered hardware support. The shipping CS35L41 service
+still uses its existing bring-up/playback path and read-only native SPI personality;
+a verified SPI board and a registered production silicon backend are required to
+switch that service to this executor. GPIO/reset/regulator/IRQ/clock providers and
+firmware parsing/calibration remain concrete backend/board responsibilities.
+
+
+`notifyPowerLost()` is available only after the owner confirms physical amplifier
+reset/power removal. It clears lifecycle hardware state, quiesces controllers and
+requires full identity/authorization/firmware bring-up on the next successful
+resume. Playback remains stopped. This is not a substitute for a GPIO/regulator
+reset and does not erase recorded failure evidence.

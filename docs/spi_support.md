@@ -1,6 +1,6 @@
 # CS35L41 and Intel LPSS SPI development
 
-Branch: `feat/cs35l41-spi-support`. Tracking: [HP hardware issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
+Branch: `feat/cs35l41-spi-support`. Board integrations: [ASUS issue #2](https://github.com/hoaug-tran/CirrusAudioFixup/issues/2), [HP issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
 
 The transport layer is independent of CPU and board. Native backends currently
 implement Intel LPSS SPT/BXT/CNL PCI controller families and AMD AMDI0061/
@@ -224,8 +224,8 @@ output. No HP load/playback result has been obtained yet.
 Add `-cirrusspi -cirrusro -cirrusdbg` to test the ACPI `CSC3551` personality.
 `NativeSPIHost` reads `_CRS`, resolves absolute/relative/parent AML paths against
 IOACPIPlane, associates Intel PCI devices by their `acpi-device`, and binds the
-existing Intel/AMD native owners. It supports up to four resource endpoints and
-four unique controllers, reuses shared controllers, rejects duplicate controller
+existing Intel/AMD native owners. It supports up to 16 resource endpoints and
+16 unique controllers, reuses shared controllers, rejects duplicate controller
 plus chip-select bindings, and rolls back all owned resources after partial failure.
 
 Register format is supplied by the silicon caller. The host uses generic
@@ -248,3 +248,21 @@ including relative paths, multi-controller ownership, duplicate aliases, missing
 resources, partial rollback and PM failures, normally and with ASan/UBSan.
 `check_transport.py` also exercises the production IOService register dispatch,
 verifying that native accesses bypass I2C frames, preserve errors and honor sleep/stop.
+
+
+## Registered SPI amplifier executor
+
+`NativeSPIAmplifierRuntime` connects native Intel/AMD controller ownership to
+`BackendRegistry` and `AmplifierRuntime`. Up to 16 resolved ACPI endpoints may use
+different silicon register formats. A verified manifest plus actual provider HID,
+exact endpoint/mode/clock matching and firmware identity precede binding; backend
+identity and authorization precede initialization. Bind does not write amplifier
+registers. The executor supports firmware, grouped playback, shutdown-before-
+controller-suspend, controller-resume-before-bring-up and explicit confirmed
+power-loss recovery. Failure evidence survives backend teardown.
+
+This is callable production base code, exercised with controller/backend fixtures;
+it is not yet the shipping CS35L41 service's selected playback executor. That
+service's SPI personality remains read-only. No ASUS/HP tuning or production
+silicon backend is fabricated by these tests. Controller families and GPIO CS
+outside the implementation table remain unsupported.

@@ -90,7 +90,7 @@ public:
     // discovery maps only after every endpoint has a verified board/backend.
     IOReturn configureAuthorized(const platform::BackendRegistry& registry,
                                  const platform::BoardConfiguration& board,
-                                 const platform::BoardIdentity& actual,const char* deviceHid) {
+                                 const platform::BoardIdentity& actual,const char* deviceHid,bool allowWrites=true) {
         if(!bound() || mAuthorized || !deviceHid || !board.permits(actual) || board.count!=mCount)
             return kIOReturnNotPermitted;
         core::RegisterMap* prepared[ACPISPIResources::kMaxEndpoints]{};
@@ -105,7 +105,7 @@ public:
                e.spiClockHz>binding->endpoint.spiClockHz) {result=kIOReturnNotPermitted;break;}
             const auto* definition=registry.find(deviceHid,binding->siliconId,core::BusTransportType::SPI);
             if(!definition){result=kIOReturnUnsupported;break;}
-            prepared[i]=new core::RegisterMap(*mPorts[i],*definition->format(core::BusTransportType::SPI),true);
+            prepared[i]=new core::RegisterMap(*mPorts[i],*definition->format(core::BusTransportType::SPI),allowWrites);
             if(!prepared[i]){result=kIOReturnNoMemory;break;}
         }
         if(result!=kIOReturnSuccess) {

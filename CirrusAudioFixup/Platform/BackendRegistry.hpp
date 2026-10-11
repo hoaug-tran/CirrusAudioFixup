@@ -17,6 +17,7 @@ struct BackendContext {
     size_t bindingIndex;
     const firmware::FirmwareBundle& firmware;
     const char* actualDeviceHid{nullptr};
+    void* platformContext{nullptr};
 };
 struct BackendDefinition {
     const char* name;
@@ -27,6 +28,8 @@ struct BackendDefinition {
     core::RegisterMapConfig spiFormat;
     core::AmplifierLifecycleHooks* (*create)(const BackendContext&);
     void (*destroy)(core::AmplifierLifecycleHooks*);
+    bool supportsDeferredFirmware{false};
+    uint32_t identityRegister{0},identityMask{0xffffffffU};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if(bus==core::BusTransportType::I2C && (transportMask&1))return &i2cFormat;
         if(bus==core::BusTransportType::SPI && (transportMask&2))return &spiFormat;
@@ -39,7 +42,7 @@ public:
     bool add(const BackendDefinition& definition) {
         if(mCount==kCapacity || !definition.name || !*definition.name || !definition.acpiHid ||
             !*definition.acpiHid || !definition.siliconId || !definition.transportMask ||
-            (definition.transportMask&~3U) || !definition.create || !definition.destroy ||
+            (definition.transportMask&~3U) || !definition.identityMask || !definition.create || !definition.destroy ||
             ((definition.transportMask&1) && (!core::RegisterMap::isValidConfig(definition.i2cFormat) || !definition.i2cFormat.readable || !definition.i2cFormat.writable)) ||
             ((definition.transportMask&2) && (!core::RegisterMap::isValidConfig(definition.spiFormat) || !definition.spiFormat.readable || !definition.spiFormat.writable)))return false;
         for(size_t i=0;i<mCount;++i) {
@@ -72,7 +75,7 @@ public:
         if(binding.acpiHid && (!context.actualDeviceHid || strcmp(deviceHid,context.actualDeviceHid)))return nullptr;
         if(context.actualDeviceHid && strcmp(deviceHid,context.actualDeviceHid))return nullptr;
         const auto* definition=find(deviceHid,binding.siliconId,context.endpoint.transport);
-        if(!definition)return nullptr;
+        if(!definition || (context.firmware.format==firmware::FirmwareFormat::Deferred && !definition->supportsDeferredFirmware))return nullptr;
         auto* instance=definition->create(context);
         if(instance)selected=definition;
         return instance;

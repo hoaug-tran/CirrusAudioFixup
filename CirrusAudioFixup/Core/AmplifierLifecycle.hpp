@@ -9,9 +9,29 @@ namespace cirrus::core {
 enum class AmplifierStage { Detached, Identify, Authorize, Initialize, Firmware, Verify,
                             Ready, Start, Playing, Stop, Shutdown, Suspended, Faulted, Waiting, DebugHalted };
 enum class BringUpDisposition { Continue, Wait, DebugHalt };
+struct PlaybackContext {
+    bool hasAudio{false},eventRoute{false},routePermitsPlayback{false},streamActive{false};
+    uint32_t generation{0};uint8_t streamTag{0};uint16_t streamFormat{0};uint64_t nowMs{0};
+};
+enum class ObservedPlayback { Unmanaged, Idle, Active };
 class AmplifierLifecycleHooks {
 public:
     virtual ~AmplifierLifecycleHooks()=default;
+    // Optional asynchronous preparation/health hooks. Silicon owns the register
+    // protocol; the runtime owns the all-member commit barrier.
+    virtual bool managesPlaybackTransitions() const {return false;}
+    virtual IOReturn runtimeTick(const PlaybackContext&){return kIOReturnSuccess;}
+    virtual bool playbackNeedsPreparation() const {return observedPlayback()==ObservedPlayback::Idle;}
+    virtual bool playbackStartCancelled() const {return false;}
+    virtual bool playbackPrepared() const {return true;}
+    virtual bool playbackPending() const {return false;}
+    virtual bool playbackFaulted() const {return false;}
+    virtual bool validatePlayback(const PlaybackContext&){return true;}
+    virtual IOReturn cancelPlayback(){return stopPlayback();}
+    virtual ObservedPlayback observedPlayback() const {return ObservedPlayback::Unmanaged;}
+    virtual void captureDiagnostics(){}
+    virtual IOReturn configureInterrupt(bool){return kIOReturnUnsupported;}
+    virtual IOReturn handleInterrupt(){return kIOReturnUnsupported;}
     virtual BringUpDisposition disposition() const {return BringUpDisposition::Continue;}
     virtual IOReturn identify()=0; // Read-only and reject unknown silicon.
     virtual IOReturn authorizeBoard()=0; // Exact wiring/resource/tuning validation.
@@ -90,6 +110,18 @@ public:
         mHardwareTouched=false;mResumePlayback=false;mStatus.stage=AmplifierStage::Detached;
         return kIOReturnSuccess;
     }
+    // Runtime/health failures need the same evidence and bounded cleanup as
+    // lifecycle operation failures. Never retry an already faulted shutdown.
+    IOReturn reportRuntimeFailure(IOReturn result) {
+        if(result==kIOReturnSuccess || mStatus.stage==AmplifierStage::Faulted)return result;
+        return fail(result,mStatus.stage);
+    }
+    void refreshPlaybackState() {
+        if(mStatus.stage!=AmplifierStage::Ready && mStatus.stage!=AmplifierStage::Playing)return;
+        auto observed=mHooks.observedPlayback();
+        if(observed==ObservedPlayback::Idle)mStatus.stage=AmplifierStage::Ready;
+        if(observed==ObservedPlayback::Active)mStatus.stage=AmplifierStage::Playing;
+    }
     // Explicit owner notification after confirmed power removal / reset.
     // Avoid touching inaccessible hardware; preserve first-failure evidence.
     void powerLost() {mHardwareTouched=false;mResumePlayback=false;mStatus.stage=AmplifierStage::Detached;}
@@ -106,17 +138,19 @@ private:
                 return kIOReturnNotReady;
             }
         }
-        if(ret!=kIOReturnSuccess) {
-            if(!mStatus.failures) {mStatus.firstFailure=ret;mStatus.firstFailureStage=stage;}
-            mStatus.latestFailure=ret;++mStatus.failures;
-            // Do not retry failed shutdown or blindly rerun failed power writes.
-            if(mHardwareTouched && stage!=AmplifierStage::Shutdown) {
-                mStatus.cleanupResult=mHooks.safeShutdown();
-                if(mStatus.cleanupResult==kIOReturnSuccess)mHardwareTouched=false;
-            } else if(stage==AmplifierStage::Shutdown)mStatus.cleanupResult=ret;
-            mStatus.stage=AmplifierStage::Faulted;
+        if(stage==AmplifierStage::Start && ret==kIOReturnNotReady && mHooks.playbackStartCancelled()) {
+            mStatus.stage=AmplifierStage::Ready;return ret;
         }
-        return ret;
+        return ret==kIOReturnSuccess?ret:fail(ret,stage);
+    }
+    IOReturn fail(IOReturn ret,AmplifierStage stage) {
+        if(!mStatus.failures){mStatus.firstFailure=ret;mStatus.firstFailureStage=stage;}
+        mStatus.latestFailure=ret;++mStatus.failures;
+        if(mHardwareTouched && stage!=AmplifierStage::Shutdown) {
+            mStatus.cleanupResult=mHooks.safeShutdown();
+            if(mStatus.cleanupResult==kIOReturnSuccess)mHardwareTouched=false;
+        } else if(stage==AmplifierStage::Shutdown)mStatus.cleanupResult=ret;
+        mStatus.stage=AmplifierStage::Faulted;return ret;
     }
     AmplifierLifecycleHooks& mHooks;
     AmplifierLifecycleStatus mStatus{};

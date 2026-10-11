@@ -20,7 +20,7 @@ public:
     bool bulkWrite(uint32_t reg,const uint8_t* data,size_t bytes) override {return mMap.bulkWrite(reg,data,bytes);}
     bool pollBit(uint32_t reg,uint32_t mask,uint32_t value,uint32_t attempts) override {return mMap.pollBit(reg,mask,value,attempts);}
 public:
-    static core::RegisterMapConfig config() {
+    static constexpr core::RegisterMapConfig config() {
         core::RegisterMapConfig c{}; c.paddingBytes=2; c.maxRegister=0x7ffffffc; c.readFlag=0x80; return c;
     }
 private:

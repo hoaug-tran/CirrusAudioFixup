@@ -8,13 +8,13 @@ namespace cirrus::core {
 class AmplifierGroup {
 public:
     static constexpr size_t kCapacity=16;
-    bool configure(AmplifierLifecycle* const* members,size_t count) {
+    bool configure(AmplifierLifecycle* const* members,size_t count,bool resumePlaybackAutomatically=true) {
         if(mCount || !members || !count || count>kCapacity)return false;
         for(size_t i=0;i<count;++i) {
             if(!members[i] || members[i]->status().stage!=AmplifierStage::Detached)return false;
             for(size_t j=0;j<i;++j)if(members[i]==members[j])return false;
         }
-        for(size_t i=0;i<count;++i)mMembers[i]=members[i];mCount=count;return true;
+        for(size_t i=0;i<count;++i)mMembers[i]=members[i];mCount=count;mResumeAutomatically=resumePlaybackAutomatically;return true;
     }
     AmplifierStage stage() const {return mStage;}
     IOReturn firstFailure() const {return mFirstFailure;}
@@ -30,7 +30,10 @@ public:
         if(mStage!=AmplifierStage::Ready)return kIOReturnNotReady;
         for(size_t i=0;i<mCount;++i) {
             IOReturn ret=mMembers[i]->startPlayback();
-            if(ret!=kIOReturnSuccess)return fail(ret,mCount);
+            if(ret!=kIOReturnSuccess) {
+                if(mMembers[i]->status().stage==AmplifierStage::Ready){refreshPlaybackState();return ret;}
+                return fail(ret,mCount);
+            }
         }
         mStage=AmplifierStage::Playing;return kIOReturnSuccess;
     }
@@ -45,7 +48,7 @@ public:
     }
     IOReturn suspend() {
         if(mStage!=AmplifierStage::Ready && mStage!=AmplifierStage::Playing)return kIOReturnNotReady;
-        mResumePlayback=mStage==AmplifierStage::Playing;
+        mResumePlayback=mResumeAutomatically && mStage==AmplifierStage::Playing;
         IOReturn result=stopPlayback();if(result!=kIOReturnSuccess)return result;
         for(size_t i=mCount;i>0;--i) {
             IOReturn ret=mMembers[i-1]->suspend();if(result==kIOReturnSuccess)result=ret;
@@ -60,6 +63,13 @@ public:
         }
         mStage=AmplifierStage::Ready;
         return mResumePlayback ? startPlayback() : kIOReturnSuccess;
+    }
+    IOReturn failRuntime(IOReturn failure){return fail(failure,mCount);}
+    void refreshPlaybackState() {
+        if(mStage!=AmplifierStage::Ready && mStage!=AmplifierStage::Playing)return;
+        bool active=false;
+        for(size_t i=0;i<mCount;++i){mMembers[i]->refreshPlaybackState();active|=mMembers[i]->status().stage==AmplifierStage::Playing;}
+        mStage=active?AmplifierStage::Playing:AmplifierStage::Ready;
     }
     IOReturn detach() {
         IOReturn result=kIOReturnSuccess;
@@ -93,6 +103,6 @@ private:
     size_t mCount{0};
     AmplifierStage mStage{AmplifierStage::Detached};
     IOReturn mFirstFailure{kIOReturnSuccess};
-    bool mResumePlayback{false};
+    bool mResumePlayback{false},mResumeAutomatically{true};
 };
 }

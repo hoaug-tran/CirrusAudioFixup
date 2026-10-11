@@ -46,7 +46,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-build-policy-") as directory:
 driver = (ROOT / "CirrusAudioFixup/CirrusAudioFixup.cpp").read_text(encoding="utf-8")
 assert driver.count('kDefaultVerboseLogging || bootArgEnabled("-cirrusdbg")') == 2
 assert 'setProperty("Cirrus_Build_Configuration"' in driver
-assert 'switch (amp.model)' in driver and 'initializeCS35L41(amp);' in driver
+assert 'mAmplifierRuntime.bringUp()' in driver and 'cs35l41::createServiceBackend' in driver
+assert 'switch (amp.model)' not in driver
 
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
 source_flags = set(re.findall(r'"(-cirrus[a-z0-9]+)"', driver))
@@ -62,6 +63,8 @@ for name in ("stopPlayback", "pollRegisterBit", "sendMailboxCommand"):
 monitor_start = driver.index('void CirrusAudioFixup::runBackgroundMonitor()')
 monitor = driver[monitor_start:driver.index('\n}', monitor_start)]
 assert 'IOSleep(' not in monitor and 'IODelay(' not in monitor
-assert 'Playback::advance' in monitor and 'Playback::commit' in monitor
+assert 'mAmplifierRuntime.runtimeTick' in monitor and 'mAmplifierRuntime.startPlayback' in monitor
+assert 'Playback::advance' not in monitor and 'Playback::commit' not in monitor
+assert 'Playback::advance' in driver and 'Playback::commit' in driver
 
 print("PASS build policy: deployment/SDK, logging, symbols, dispatch, sleeping polls, boot-arg docs")

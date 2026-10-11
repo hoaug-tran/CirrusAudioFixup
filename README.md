@@ -8,11 +8,11 @@
 [![Platform](https://img.shields.io/badge/subsystem-AppleACPI_%2F_VoodooI2C_%2F_HDA-orange?style=flat-square)](#how-it-works)
 [![License](https://img.shields.io/badge/license-Non--Commercial-lightgrey?style=flat-square)](LICENSE)
 
-**Open-source macOS kernel extension for Cirrus Logic CS35L41 smart speaker amplifiers over I2C.**
+**Open-source macOS kernel extension with an extensible amplifier runtime over I2C and SPI. The implemented silicon backend is CS35L41.**
 
-SPI development adds a CS35L41 register adapter, profiled Intel LPSS SPT/BXT/CNL controllers and AMD AMDI0061/AMDI0062 command controllers. The opt-in ACPI SPI personality now supports native read-only discovery and service suspend/resume; verified SPI board initialization and physical validation remain pending; see [SPI development status](docs/spi_support.md).
+Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered backends for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; ASUS/HP profiles and physical SPI playback validation remain pending. See [SPI development status](docs/spi_support.md).
 
-The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service migration remains pending.
+The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon backends are registered in `Devices/BackendCatalog.hpp`.
 
 Reference platform: **Lenovo Legion 7 16ACHg6 · Realtek ALC287 · AMD**
 
@@ -80,12 +80,12 @@ The implemented backend is CS35L41. The current personality matches a `VoodooI2C
 | --- | --- |
 | Lenovo Legion 7 16ACHg6, SSID `17AA:3847` | Reference stereo profile, AMD `AMDI0030` reset quirk, embedded firmware and left/right tuning |
 | Lenovo Legion 5 Pro 16ACH6H, SSID `17AA:382B` | Explicit translation to the `17AA:3847` resource; validate speaker and boost equivalence on the actual machine |
-| `CLSA0101` / `CSC3551` | Staged profiles with automatic initialization disabled; no shipped matching personality |
+| `CLSA0101` / `CSC3551` | Staged profiles with automatic initialization disabled; `CSC3551` has opt-in ACPI SPI discovery |
 | Other Intel or AMD boards | Porting required: provider, reset wiring, audio route, boost circuit and tuning must be verified |
 | CS35L45 / CS35L51 / CS35L56 / other amplifier models | No implemented backend; unknown models are rejected before initialization |
 | Realtek ALC codecs | Managed by AppleALC and the host audio stack, not by this kext |
 
-Current profiles permit two endpoints: left `0x40` and right `0x41`. Four state slots are reserved in the service, but four-channel playback is not supported. The channel field selects ASP slots and speaker tuning.
+The reference profiles specify two endpoints: left `0x40` and right `0x41`. The service and runtime can own up to 16 endpoints; this capacity does not enable additional CS35L41 audio channels. Each backend and verified board must define its channel routing and tuning.
 
 The HDA gate accepts 48 kHz stereo PCM with 16-, 20- or 24-bit samples. The amplifier uses fixed ASP slot timing. A 44.1 kHz *hardware stream* is rejected; CoreAudio may resample a 44.1 kHz source before it reaches HDA.
 
@@ -251,7 +251,7 @@ Flags with a value of `0` are treated as disabled. Debug builds enable routine l
 | `-cirrusro` | Skip GPIO reset, initialization and register writes; collect a one-shot register snapshot. Reads still send an I2C register-address prefix |
 | `-cirrusnodsp` | Skip firmware and coefficient upload; use the explicit DAC bypass path without DSP acoustic protection |
 | `-cirrusphase=<name>` | Stop after a selected initialization stage; playback stays disabled |
-| `-cirrusspi` | Opt-in native ACPI SPI discovery; currently requires `-cirrusro` and never authorizes speaker initialization |
+| `-cirrusspi` | Opt-in native ACPI SPI ownership; unknown boards remain read-only. Writes require a verified profile and registered backend; `-cirrusro` forces read-only operation |
 | `-cirruslegacyprobe` | Permit read-only fixed-address discovery outside automatic profile policy; never invent endpoints or authorize initialization |
 | `-cirrusprobe` | Record the flag in `CirrusBootArgParsed`; currently does not enable a separate transaction-log mode |
 | `-cirrusdelay=<ms>` | Set the read-only snapshot delay, default 100 ms. Does not replace the normal 15 ms startup wait |
@@ -456,7 +456,7 @@ Existing board/speaker entries and resource symbols reject import without change
 replace an existing profile explicitly in source after reviewing its resources.
 Generated arrays carry SHA-256 comments for byte identity, not proof of authenticity.
 
-For another amplifier model, implement its identity, register access, reset/trim, clocks, power, DSP and playback lifecycle before adding it to the supported registry. Add its own dispatch case; never send a new chip through `initializeCS35L41()`. The monitor and firmware selection are still CS35L41-specific and also need separate backend handling before another model can be enabled.
+For another amplifier model, implement `AmplifierLifecycleHooks`, silicon identity/access rules and bus formats, then register its factory in `Devices/BackendCatalog.hpp`. Add its silicon descriptor and matching IOService personality where needed, plus a verified board manifest and exact firmware/tuning bindings. Common bring-up, playback coordination and PM dispatch do not need a new model switch. Reset/trim, clocks, power, DSP parsing, IRQ handling and fault recovery remain backend responsibilities. See [the backend contract](docs/extensible_driver.md).
 
 ---
 

@@ -77,6 +77,7 @@ public:
     struct Amp { bool present=false; const char* name=nullptr; uint8_t address=0; uint32_t deviceId=0;
         cirrus::core::CodecModel model=cirrus::core::CodecModel::CS35L41;
         cirrus::core::AudioChannel channel=cirrus::core::AudioChannel::Left; };
+    size_t detectConfiguredI2CAmplifiers(){return 0;}
     static constexpr size_t kMaxAmps=2;
     Amp mAmps[2]; size_t mAmpCount=0;
     bool mPlatformAuthorized=false,mProbingAmplifiers=false,legacy=false;

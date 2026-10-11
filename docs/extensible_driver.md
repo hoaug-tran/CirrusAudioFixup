@@ -44,11 +44,32 @@ Identify and authorization failures perform no hardware shutdown writes. Once in
 
 `AmplifierGroup` coordinates up to 16 borrowed lifecycles. Startup failure rolls back previously prepared members; playback failure stops/shuts down healthy peers. Suspend stops all playback before powering down members. Resume reinitializes every member before restarting group playback. Original group failure and individual cleanup failures remain available. Fault recovery requires owner-confirmed power removal/reset.
 
-## Current integration boundary
+## Shipping service integration
 
-The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, and CS35L41 bring-up now uses the common lifecycle coordinator. An owned generic runtime implements registry selection, persistent lifecycle and group ownership; the shipping IOService has not yet switched its CS35L41 playback path to that runtime. No new amplifier is registered by a placeholder definition. An opt-in read-only SPI personality now performs ACPI discovery and native controller binding. SPI board authorization and complete controller power-parent coordination remain pending. Existing Lenovo authorization remains in place.
+The IOService owns a persistent `AmplifierRuntime`, selects definitions from
+`Devices/BackendCatalog.hpp` and dispatches bring-up, firmware, grouped playback,
+interrupt handling, diagnostics and suspend/resume through backend hooks.
+`Devices/CS35L41/ServiceBackend.hpp` declares the implemented production factory;
+its concrete backend delegates the existing CS35L41 silicon sequences to owner
+helpers. CS35L41 register/firmware logic remains specific to that backend.
+There is no common model-switch dispatch and no placeholder AMP support.
 
-This foundation reduces duplicated transport work for new backends. It does not claim that every future amplifier/controller is supported or that all service code has already become generic.
+I2C uses an owned VoodooI2C controller adapter and one backend-formatted
+`RegisterMap` per amplifier. SPI borrows maps from the native Intel/AMD host.
+Verified manifests match actual subsystem/HID and endpoint identity before
+writable binding. `-cirrusro` preserves read-only maps, including on verified
+boards. Legacy Lenovo authorization continues to gate its existing reset and
+firmware selection. No shipped writable ASUS/HP profile is inferred.
+
+A profile can supply exact immutable `firmwareBundles`. A backend may explicitly
+opt into `FirmwareFormat::Deferred` for its existing identity-aware discovery
+and parser. Deferred describes a selection plan, not verified program bytes or
+permission to bypass DSP checks. Firmware identity waits and debug stops retain
+muted peers and prevent group playback without recording a hardware failure.
+
+The shipping service discovers one provider topology per instance. The generic
+runtime accepts mixed buses/models/HIDs when its owner supplies distinct ports;
+aggregation of independent SPI and I2C provider services is not implemented.
 
 ## Source comparison and validation
 
@@ -56,29 +77,22 @@ Linux [regmap configuration](https://github.com/torvalds/linux/blob/v6.12/includ
 
 `Tests/check_extensible_core.py` exercises production core/manifest/registry code normally and under ASan/UBSan. `check_transport.py` exercises the actual Voodoo adapter and shared register map. SPI framing, Intel/AMD engines and native owners retain their regression suites. Maintained suite: `python3 Tests/run.py --audit`; compile Debug/Release with the repository build checks. Host checks do not validate physical hardware.
 
-### Runtime migration: CS35L41 bring-up
+### Playback and power transitions
 
-The shipping `initializeCS35L41` now executes its hardware, firmware and idle
-verification callbacks through `AmplifierLifecycle`. Existing silicon checks,
-board gates, phase diagnostics and DSP-bypass behavior remain in the owner.
-The synchronous callback adapter borrows stack callbacks and does not create a
-persistent backend. Initialization failures use one shared shutdown callback.
-Waiting for firmware identity and intentional debug stops leave initialization
-incomplete without recording a hardware failure or running failure cleanup.
-A subsequent owner retry still performs the existing reset/initialization flow.
+Asynchronous backends implement preparation, pending-transition, observed-state,
+validation and cancellation hooks. The common monitor prepares every member
+before committing group playback, checks route generation after commit and
+cancels participants if the host route changes. CS35L41 also rechecks the host
+stream before each member commit. A stale route is a cancelled start, not a
+silicon failure. Synchronous backends use lifecycle start/stop; the runtime stops
+them when audio disappears.
 
-This is the first runtime migration step. Playback, interrupts, sleep/wake and
-transport/controller ownership still use the existing service implementation.
-`BackendRegistry` and `AmplifierGroup` are not yet used for shipping runtime
-selection. Native SPI controllers now have opt-in read-only ACPI discovery/resource binding
-and service suspend/resume hooks. Physical validation, controller publication/PM
-coordination and board data remain necessary before SPI playback can be enabled.
-
-Deferred bring-up propagates through `AmplifierGroup` as Waiting/DebugHalted,
-including on wake. Prepared peers remain muted; later members and group playback
-are blocked. This does not record a hardware failure or trigger failure cleanup.
-The owner must explicitly detach/reset before retrying the group.
-
+The shipping runtime disables automatic playback replay on wake. It shuts down
+amplifiers before controllers suspend, restores controllers before cold amplifier
+bring-up and waits for a fresh valid HDA route before playback. Backend IRQ
+configuration is optional; unsupported wiring/hooks retain polling. GPIO/reset,
+regulator and other platform resources use owner-provided `platformContext`;
+the owner must keep these borrowed resources alive through backend teardown.
 
 ### Owned runtime and mixed amplifier boards
 
@@ -136,11 +150,12 @@ The host test drives this production path through Intel and AMD controller
 fixtures, reversed resource ordering, different silicon formats, firmware writes,
 playback, wake failure/retry, unknown IDs, rejected firmware/factories, shutdown
 failure and destructor cleanup. Both ordinary and ASan/UBSan executions run.
-These fixtures are not registered hardware support. The shipping CS35L41 service
-still uses its existing bring-up/playback path and read-only native SPI personality;
-a verified SPI board and a registered production silicon backend are required to
-switch that service to this executor. GPIO/reset/regulator/IRQ/clock providers and
-firmware parsing/calibration remain concrete backend/board responsibilities.
+These fixtures are not registered hardware support. The shipping service uses
+its owned `AmplifierRuntime` with native SPI ports and the production CS35L41
+factory; the standalone executor is also available to other owners. GPIO/reset/
+regulator/IRQ/clock providers and firmware parsing/calibration remain concrete
+backend/board responsibilities. Optional platform contexts follow manifest order,
+even when ACPI resource order differs.
 
 
 `notifyPowerLost()` is available only after the owner confirms physical amplifier

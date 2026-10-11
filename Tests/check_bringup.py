@@ -2,20 +2,22 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+from service_runtime_fixture import PRODUCTION_BACKEND,FIELDS,BIND,IOLIB
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
 
 def function(name):
-    start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
+    start = re.search(r'(?:bool|void|IOReturn) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
-names = ['fullDriverFlow', 'initializeCS35L41', 'initCodec', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
+names = ['fullDriverFlow', 'initializeCS35L41Hardware','loadCS35L41Firmware','verifyCS35L41Ready','shutdownCS35L41','stopCS35L41At', 'initCodec', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
 amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
 
 preamble = r'''
-#include "Core/AmplifierLifecycle.hpp"
+#include "Platform/AmplifierRuntime.hpp"
+#include <cassert>
 #include "Platform/PlatformProfile.hpp"
 #include <cstdint>
 #include <cstddef>
@@ -184,7 +186,19 @@ public:
     void handlePowerChange(bool powered);
     bool initCodec(CS35L41Amp&);
     void fullDriverFlow();
-    void initializeCS35L41(AmplifierState&);
+    IOReturn initializeCS35L41Hardware(AmplifierState&);
+    IOReturn loadCS35L41Firmware(AmplifierState&);
+    IOReturn verifyCS35L41Ready(AmplifierState&);
+    IOReturn shutdownCS35L41(AmplifierState&);
+    bool stopCS35L41At(AmplifierState&,const char*);
+    void monitorCS35L41(AmplifierState&,const cirrus::core::PlaybackContext&){}
+    bool validateCS35L41Playback(AmplifierState&,const cirrus::core::PlaybackContext&){return true;}
+    IOReturn commitCS35L41Playback(AmplifierState&){return 0;}
+    void captureCS35L41FailureSnapshot(AmplifierState&,DiagnosticFailure){}
+    bool configureCS35L41Interrupt(AmplifierState&,bool){return true;}
+    bool checkProtectionStatus(AmplifierState&){return true;}
+    bool stopRuntimePlayback(AmplifierState& amp){return stopPlayback(amp);}
+''' + FIELDS + r'''
 };
 
 class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
@@ -209,18 +223,13 @@ int main() {
         CirrusAudioFixup d; d.phase=stage; d.fullDriverFlow();
         check(d.mDebugPhaseHalted && !d.mAmps[0].initialized && !d.mAmps[1].initialized,"phase never publishes readiness");
         check(d.properties["Cirrus_Driver_Verdict"]=="DEBUG_PHASE_HALTED","phase verdict");
-        check(d.uploads==((std::string(stage)=="dsp" || std::string(stage)=="firmware")?2U:0U),"phase cannot upload past requested stage");
+        check(d.uploads==((std::string(stage)=="dsp" || std::string(stage)=="firmware")?1U:0U),"phase cannot upload past requested stage");
         if(std::string(stage)=="probe") check(d.io==0,"probe phase never resets silicon");
     }
-    CirrusAudioFixup phaseFailure; phaseFailure.phase="firmware";
-    phaseFailure.failStage="upload"; phaseFailure.faultAddress=1;
+    CirrusAudioFixup phaseFailure;phaseFailure.phase="firmware";phaseFailure.failStage="upload";phaseFailure.faultAddress=1;
     phaseFailure.fullDriverFlow();
-    check(phaseFailure.mDebugPhaseHalted && phaseFailure.mAmps[1].playbackFaulted,
-          "first amp debug halt cannot conceal second amp upload failure");
-    check(phaseFailure.stops[1]>0 && phaseFailure.halts[1]>0,
-          "failed second amp still receives synchronous cleanup");
-    check(phaseFailure.properties["Cirrus_Driver_Verdict"]=="FAULT_LATCHED",
-          "fault takes precedence over debug phase verdict");
+    check(phaseFailure.mDebugPhaseHalted && phaseFailure.uploads==1 && phaseFailure.resets[1]==0,
+          "group debug boundary blocks all later members");
     CirrusAudioFixup identityDelay;
     identityDelay.delayIdentity=true;
     identityDelay.fullDriverFlow();
@@ -228,6 +237,7 @@ int main() {
           identityDelay.uploads==0 && identityDelay.properties["Cirrus_Driver_Verdict"]=="WAITING_FOR_CODEC_IDENTITY",
           "zero boot identity defers upload without latching unsupported firmware");
     identityDelay.delayIdentity=false;
+    identityDelay.teardownAmplifierRuntime();
     identityDelay.fullDriverFlow();
     check(identityDelay.uploads==2 && identityDelay.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
           "identity publication permits complete stereo bringup");
@@ -266,7 +276,7 @@ int main() {
         check(d.stops[0]>0 && d.halts[0]>0 && d.muted[0] && !d.powered[0],prefix+"synchronous output/core cleanup");
         check(a.haloStateRegister==0 && a.haloHeartbeatRegister==0 && a.diagnosticControlCount==0,prefix+"invalidate control addresses");
         check(a.diagnostic.firstFailure!=DIAG_OK,prefix+"preserve first failure");
-        check(d.mAmps[1].initialized && d.mAmps[1].firmwareValidated,prefix+"other amp completes independently");
+        check(!d.mAmps[1].initialized && d.resets[1]==0,prefix+"group failure blocks later peers");
         unsigned resets=d.resets[0]; d.fullDriverFlow();
         check(d.resets[0]==resets,prefix+"latched failure never auto retries reset");
     }
@@ -316,8 +326,8 @@ int main() {
 with tempfile.TemporaryDirectory(prefix='cirrus-bringup-check-') as directory:
     tmp = Path(directory)
     (tmp / 'IOKit').mkdir()
-    (tmp / 'IOKit/IOLib.h').write_text('#pragma once\n#include \"Diagnostics/DiagnosticTypes.hpp\"\nconstexpr int kIOReturnNotReady=-2;\n')
+    (tmp / 'IOKit/IOLib.h').write_text(IOLIB)
     source = tmp / 'bringup.cpp'
-    source.write_text(preamble + mock + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
+    source.write_text(preamble + mock + PRODUCTION_BACKEND + BIND + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'bringup.exe')], check=True)
     subprocess.run([str(tmp / 'bringup.exe')], check=True)

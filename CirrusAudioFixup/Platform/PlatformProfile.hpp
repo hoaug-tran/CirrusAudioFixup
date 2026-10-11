@@ -9,6 +9,8 @@
 #pragma once
 
 #include "Core/Types.hpp"
+#include "Platform/BoardConfiguration.hpp"
+#include "Firmware/FirmwareBundle.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -31,6 +33,13 @@ struct ResetControllerQuirk {
     uint32_t settleMs;
 };
 
+struct InterruptWiring {
+    const char* name;
+    uint32_t providerIndex;
+    bool acpiNative;
+    uint32_t gpioPin,gpioIRQ;
+};
+static constexpr InterruptWiring kLegionProtectionIRQ={"GPIO84_PROTECTION_WITH_POLLING_BACKUP",0,false,84,3};
 struct PlatformProfile {
     const char* name;
     const char* acpiHid;
@@ -39,6 +48,10 @@ struct PlatformProfile {
     size_t endpointCount;
     const ResetControllerQuirk* resetQuirk;
     bool allowAutomaticInitialization;
+    const BoardConfiguration* boardConfiguration{nullptr};
+    const firmware::FirmwareBundle* firmwareBundles{nullptr};
+    size_t firmwareBundleCount{0};
+    const InterruptWiring* interruptWiring{nullptr};
 };
 
 // Only endpoints with verified routing and per-speaker tuning may initialize.
@@ -52,7 +65,7 @@ static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
 };
 
 static constexpr PlatformProfile kPlatformProfiles[] = {
-    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true},
+    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true,nullptr,nullptr,0,&kLegionProtectionIRQ},
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
     {"generic-csc3551-cs35l41", "CSC3551", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
 };
@@ -65,19 +78,30 @@ static constexpr PlatformProfile kSafeUnknownPlatform = {"unrecognized-fail-clos
                                                          nullptr,
                                                          false};
 
-inline const PlatformProfile* findPlatformProfile(const char* acpiHid) {
-    if (!acpiHid)
-        return nullptr;
-    for (size_t i = 0; i < sizeof(kPlatformProfiles) / sizeof(kPlatformProfiles[0]); ++i) {
-        if (strcmp(kPlatformProfiles[i].acpiHid, acpiHid) == 0)
-            return &kPlatformProfiles[i];
+inline const PlatformProfile* findPlatformProfileIn(const PlatformProfile* profiles,size_t count,const char* acpiHid,uint32_t subsystemId) {
+    if(!profiles || !acpiHid)return nullptr;
+    const PlatformProfile* fallback=nullptr;
+    for(size_t i=0;i<count;++i) {
+        const auto& profile=profiles[i];
+        if(!profile.acpiHid || strcmp(profile.acpiHid,acpiHid))continue;
+        if(profile.boardConfiguration) {
+            BoardIdentity actual{uint16_t(subsystemId>>16),uint16_t(subsystemId),acpiHid};
+            if(profile.boardConfiguration->permits(actual))return &profile;
+        } else if(!fallback)fallback=&profile;
     }
-    return nullptr;
+    return fallback;
+}
+inline const PlatformProfile* findPlatformProfile(const char* acpiHid,uint32_t subsystemId=0) {
+    return findPlatformProfileIn(kPlatformProfiles,sizeof(kPlatformProfiles)/sizeof(kPlatformProfiles[0]),acpiHid,subsystemId);
 }
 
 // PCI subsystem identity is available before the codec publishes its SSID.
 // This allowlist authorizes reference reset wiring, not generic CS35L41 support.
 inline bool permitsHardwareInitialization(const PlatformProfile& profile, uint32_t pciSubsystemId) {
+    if(profile.boardConfiguration) {
+        BoardIdentity actual{uint16_t(pciSubsystemId>>16),uint16_t(pciSubsystemId),profile.acpiHid};
+        return profile.allowAutomaticInitialization && profile.boardConfiguration->permits(actual);
+    }
     return profile.allowAutomaticInitialization && profile.acpiHid &&
            strcmp(profile.acpiHid, "CLSA0100") == 0 &&
            (pciSubsystemId == 0x17AA382B || pciSubsystemId == 0x17AA3847);

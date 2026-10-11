@@ -42,10 +42,20 @@ public:
     bool read(uint32_t reg,uint32_t* value) override {
         Guard guard(mLock); return readUnlocked(reg,value);
     }
-    bool readForDiagnostic(uint32_t reg,uint32_t* value) {
+    bool readForDiagnostic(uint32_t reg,uint32_t* value) override {
         Guard guard(mLock);
         if (mConfig.precious && mConfig.precious(reg)) return fail(kIOReturnNotPermitted);
         return readUnlocked(reg,value);
+    }
+    bool bulkReadForDiagnostic(uint32_t reg,uint8_t* data,size_t bytes) override {
+        Guard guard(mLock);
+        if(!validConfig() || !bytes || bytes%mConfig.valueBytes || reg%mConfig.stride || reg>mConfig.maxRegister)
+            return fail(kIOReturnBadArgument);
+        size_t count=bytes/mConfig.valueBytes;
+        if(count-1>size_t((mConfig.maxRegister-reg)/mConfig.stride))return fail(kIOReturnBadArgument);
+        if(mConfig.precious)for(size_t i=0;i<count;++i)
+            if(mConfig.precious(reg+uint32_t(i)*mConfig.stride))return fail(kIOReturnNotPermitted);
+        return transfer(reg,nullptr,data,bytes);
     }
     bool write(uint32_t reg,uint32_t value) override {
         Guard guard(mLock); return writeUnlocked(reg,value);

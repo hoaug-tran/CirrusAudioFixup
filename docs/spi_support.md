@@ -9,12 +9,13 @@ SPI IDs in Linux v6.12 intel-lpss-pci.c, with family-specific clock and CS
 behavior; 7AAA is one entry, not a special gate. This is not support for every
 SPI controller ever used on Intel/AMD systems.
 
-The existing I2C personality dispatches through VoodooI2C. An opt-in ACPI SPI
-personality now resolves `_CRS` sources and binds native controllers for read-only
-discovery. Verified board wiring, controller power-parent coordination and amplifier
-board authorization are not connected to these backends yet. Installing the
-branch alone does not make SPI internal speakers work. A CPU vendor is not a
-controller identity or a board tuning profile.
+The I2C personality uses VoodooI2C through backend-formatted register maps.
+The opt-in ACPI SPI personality resolves `_CRS` sources and binds native
+controllers. Both buses use the shipping registered amplifier runtime for
+bring-up, firmware, group playback and PM. Unknown boards remain read-only;
+writable operation requires exact verified board and firmware bindings.
+No writable ASUS/HP profile is shipped, and physical SPI playback is untested.
+A CPU vendor does not identify a controller or supply board tuning.
 
 | Backend | Source support | Limits / remaining work |
 | --- | --- | --- |
@@ -24,8 +25,8 @@ controller identity or a board tuning profile.
 | AMD AMDI0061/0062 | ACPI/MMIO owner + command FIFO | Mode 0, 64-byte frames, 0.8–100 MHz; hardware untested |
 | Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/backends |
 | Other controllers, external GPIO CS | Not implemented | Need documented register backend and ownership/power behavior |
-| ACPI SPI IOService discovery | Implemented, opt-in read-only | Requires `-cirrusspi -cirrusro`; real hardware untested |
-| SPI amp playback | Not enabled | Needs verified board profiles, firmware and controller power-parent coordination |
+| ACPI SPI IOService discovery | Implemented, opt-in | `-cirrusspi`; use `-cirrusro` for forced read-only discovery; hardware untested |
+| SPI amplifier lifecycle/playback | Connected to shipping backend runtime | Writable board profiles, firmware, power resources and physical validation required; no ASUS/HP enablement shipped |
 
 ## Research and base selection
 
@@ -174,10 +175,10 @@ Identity reads, applicable silicon trim/errata, DSP memory transfers, mailbox
 and playback sequences can be reused behind a SPI adapter when validated for
 the exact silicon and board. The byte framing changes inside the adapter.
 
-This does not establish identical HP and Lenovo boards. The current service
-still owns I2C endpoint addresses, reference GPIO reset, ASP channel routing,
-firmware selection and subsystem gating. Those need a verified HP profile and
-transport discovery before enabling automatic full-driver flow. Upstream
+This does not establish identical HP and Lenovo boards. The service now owns
+typed endpoints and registered backends; GPIO reset, ASP routing, firmware and
+subsystem authorization still require verified board data. HP needs its own
+profile and physical validation before automatic full-driver flow. Upstream
 103C89C6 uses internal boost (1 uH, 4500 mA, 24 uF), two amps and Right/Left
 index order, correcting an ACPI boost-type error. The supplied codec dump
 instead says 103C8CA4; that discrepancy remains unresolved.
@@ -230,9 +231,10 @@ plus chip-select bindings, and rolls back all owned resources after partial fail
 
 Register format is supplied by the silicon caller. The host uses generic
 `SPIRegisterBus` and `RegisterMap`, so adding a new amplifier does not require
-changing the controller owner. Native ports are read-only in the current runtime;
-there is no boot argument that overrides board authorization or enables SPI writes.
-Discovered endpoints remain unassigned to speaker channels. Published properties
+changing the controller owner. Discovery begins with read-only maps. Verified
+board binding selects each backend format and authorizes writes unless
+`-cirrusro` is set; no boot argument bypasses board verification. Speaker channels
+come from verified endpoint bindings, never ACPI resource order. Published properties
 include bind return, canonical controller path, chip-select, clock, mode and count.
 
 Service suspend stops clients before suspending controllers; resume checks every
@@ -261,8 +263,11 @@ registers. The executor supports firmware, grouped playback, shutdown-before-
 controller-suspend, controller-resume-before-bring-up and explicit confirmed
 power-loss recovery. Failure evidence survives backend teardown.
 
-This is callable production base code, exercised with controller/backend fixtures;
-it is not yet the shipping CS35L41 service's selected playback executor. That
-service's SPI personality remains read-only. No ASUS/HP tuning or production
-silicon backend is fabricated by these tests. Controller families and GPIO CS
-outside the implementation table remain unsupported.
+The shipping IOService now binds its production CS35L41 backend through the
+owned `AmplifierRuntime` using native SPI ports. Its existing firmware parser,
+calibration and power sequences execute through those ports. The standalone
+executor remains available for other owners. Tests exercise actual service
+binding on both buses, registry dispatch, reversed channel ordering, read-only
+maps, group commit/cancellation, PM and failure cleanup. No ASUS/HP tuning
+profile is fabricated. Controller families and GPIO CS outside the implementation
+table remain unsupported; host tests do not establish physical playback.

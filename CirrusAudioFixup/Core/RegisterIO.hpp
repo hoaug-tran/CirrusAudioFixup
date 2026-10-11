@@ -23,6 +23,9 @@ public:
 
     virtual bool read(uint32_t reg, uint32_t* value) = 0;
 
+    // Backends with precious/clear-on-read registers override diagnostic reads.
+    virtual bool readForDiagnostic(uint32_t reg,uint32_t* value){return read(reg,value);}
+    virtual bool bulkReadForDiagnostic(uint32_t reg,uint8_t* data,size_t length){return bulkRead(reg,data,length);}
     virtual bool write(uint32_t reg, uint32_t value) = 0;
 
     virtual bool updateBits(uint32_t reg, uint32_t mask, uint32_t value) = 0;

@@ -7,7 +7,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-core-') as directory:
     (p/'IOKit/IOLib.h').write_text('''#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
-kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnNoMemory=-5;
+kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnNoMemory=-5,kIOReturnUnsupported=-6;
 inline unsigned sleeps=0;inline void IOSleep(unsigned){++sleeps;}
 ''')
     (p/'test.cpp').write_text(r'''
@@ -40,6 +40,7 @@ struct Bus: RegisterBus {
 bool accessible(uint32_t){return true;}
 bool deny(uint32_t r){return r!=4;}
 bool precious(uint32_t r){return r==0;}
+bool preciousMiddle(uint32_t r){return r==4;}
 struct I2C: cirrus::transport::I2CController {
  unsigned calls=0;size_t maxWriteBytes()const override{return 8;}size_t maxReadBytes()const override{return 12;}
  IOReturn transfer(const cirrus::transport::I2CEndpoint& ep,const uint8_t*,size_t,uint8_t*,size_t) override {
@@ -61,12 +62,13 @@ Hooks instance;unsigned destroyed=0;
 AmplifierLifecycleHooks* factory(const cirrus::platform::BackendContext&){return &instance;}
 void destroy(AmplifierLifecycleHooks* hooks){assert(hooks==&instance);++destroyed;}
 unsigned heapCreated=0,heapDestroyed=0,heapCleanup=0;
-int failFactory=-1,failFirmware=-1;bool waitFirmware=false;
+int failFactory=-1,failFirmware=-1,failTick=-1;bool waitFirmware=false;
 struct HeapHooks:Hooks {
  const cirrus::platform::BackendContext* metadata;
  IOReturn identify() override {assert(metadata->actualDeviceHid&&metadata->bindingIndex<2);return Hooks::identify();}
  HeapHooks(const cirrus::platform::BackendContext& context):metadata(&context){++heapCreated;if(int(context.bindingIndex)==failFirmware)failure=4;if(waitFirmware&&context.bindingIndex==1)pause=BringUpDisposition::Wait;}
  ~HeapHooks() override {++heapDestroyed;}
+ IOReturn runtimeTick(const PlaybackContext&) override {return int(metadata->bindingIndex)==failTick?-300:0;}
  IOReturn safeShutdown() override {++heapCleanup;return Hooks::safeShutdown();}
 };
 AmplifierLifecycleHooks* heapFactory(const cirrus::platform::BackendContext& context){return int(context.bindingIndex)==failFactory?nullptr:new HeapHooks(context);}
@@ -89,6 +91,12 @@ int main(){
  c.readable=deny;RegisterMap limited(bus,c,true);assert(!limited.bulkRead(0,bytes,4)&&bus.calls==n);
  c.readable=nullptr;c.precious=precious;RegisterMap diag(bus,c,true);uint32_t value=0;
  assert(!diag.readForDiagnostic(0,&value)&&bus.calls==n);assert(diag.read(0,&value));
+ // Diagnostic bulk validates every register before issuing any chunk.
+ RegisterMapConfig diagnosticConfig=c;diagnosticConfig.precious=preciousMiddle;
+ RegisterMap diagnosticBulk(bus,diagnosticConfig,true);n=bus.calls;
+ RegisterIO& diagnosticPort=diagnosticBulk;
+ assert(!diagnosticPort.bulkReadForDiagnostic(0,bytes,6)&&bus.calls==n);
+ assert(diagnosticPort.bulkReadForDiagnostic(8,bytes,4)&&bus.calls==n+1);
  c.noIncrementReadable=precious;RegisterMap fifo(bus,c);bus.frames.clear();
  assert(fifo.noIncrementRead(0,bytes,12)&&bus.frames.size()==2&&bus.frames[0][0]==0&&bus.frames[1][0]==0);
  n=bus.calls;assert(!fifo.noIncrementRead(8,bytes,4)&&bus.calls==n);
@@ -217,6 +225,33 @@ int main(){
  assert(runtime.bringUp()==0&&runtime.startPlayback()==0&&runtime.suspend()==0&&runtime.resume()==0);
  assert(runtime.stage()==AmplifierStage::Playing&&runtime.unbind()==0&&heapCreated==heapDestroyed);
  assert(runtime.releasedStatus(0)->stage==AmplifierStage::Detached);
+ // Synchronous future backends stop when the shared audio route disappears.
+ assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==0&&runtime.startPlayback()==0);
+ PlaybackContext silent{};
+ assert(runtime.runtimeTick(0,silent)==0);runtime.refreshPlaybackState();
+ assert(runtime.status(0)->stage==AmplifierStage::Ready&&runtime.stage()==AmplifierStage::Playing);
+ assert(runtime.runtimeTick(1,silent)==0);runtime.refreshPlaybackState();
+ assert(runtime.stage()==AmplifierStage::Ready&&runtime.unbind()==0);
+ // Health errors retain their original cause, shut down peers and block retries.
+ assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==0&&runtime.startPlayback()==0);
+ failTick=0;assert(runtime.runtimeTick(0,silent)==-300&&runtime.stage()==AmplifierStage::Faulted);
+ assert(runtime.status(0)->firstFailure==-300&&runtime.status(0)->cleanupResult==0);
+ assert(runtime.status(1)->stage==AmplifierStage::Detached);
+ unsigned afterFaultCleanup=heapCleanup;
+ assert(runtime.runtimeTick(1,silent)==kIOReturnNotReady&&heapCleanup==afterFaultCleanup);
+ assert(runtime.unbind()==kIOReturnNotReady&&heapCleanup==afterFaultCleanup);failTick=-1;
+ // Shipping service waits for a fresh host route after wake.
+ AmplifierRuntime freshRoute(false);
+ assert(freshRoute.bind(multiRegistry,contexts,2)==0&&freshRoute.bringUp()==0&&freshRoute.startPlayback()==0);
+ assert(freshRoute.suspend()==0&&freshRoute.resume()==0&&freshRoute.stage()==AmplifierStage::Ready);
+ assert(freshRoute.unbind()==0);
+ // Deferred plans need an explicit backend contract, never a silent no-DSP fallback.
+ lf.format=cirrus::firmware::FirmwareFormat::Deferred;
+ unsigned beforeDeferred=heapCreated;
+ assert(runtime.bind(multiRegistry,contexts,2)==kIOReturnNotPermitted&&heapCreated==beforeDeferred);
+ spiAmp.supportsDeferredFirmware=true;
+ assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==0&&runtime.unbind()==0);
+ spiAmp.supportsDeferredFirmware=false;lf.format=cirrus::firmware::FirmwareFormat::None;
  failFactory=1;unsigned cleanupsBefore=heapCleanup;
  assert(runtime.bind(multiRegistry,contexts,2)==kIOReturnNotPermitted&&!runtime.bound());
  assert(heapCreated==heapDestroyed&&heapCleanup==cleanupsBefore);failFactory=-1;

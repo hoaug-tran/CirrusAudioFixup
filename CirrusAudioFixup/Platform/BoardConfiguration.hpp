@@ -16,6 +16,7 @@ struct AmplifierBinding {
     const char* tuningResource{nullptr};
     // Optional per-device HID for mixed-silicon boards; board HID is the legacy default.
     const char* acpiHid{nullptr};
+    uint8_t interruptGpio{0}; // Zero: no configured amplifier GPIO interrupt.
 };
 struct BoardConfiguration {
     BoardIdentity identity{};

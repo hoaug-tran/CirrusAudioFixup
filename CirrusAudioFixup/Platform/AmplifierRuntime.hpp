@@ -9,7 +9,7 @@ namespace cirrus::platform {
 class AmplifierRuntime {
 public:
     static constexpr size_t kCapacity=core::AmplifierGroup::kCapacity;
-    AmplifierRuntime()=default;
+    explicit AmplifierRuntime(bool resumePlaybackAutomatically=true):mResumeAutomatically(resumePlaybackAutomatically){}
     ~AmplifierRuntime(){unbind();}
     AmplifierRuntime(const AmplifierRuntime&)=delete;
     AmplifierRuntime& operator=(const AmplifierRuntime&)=delete;
@@ -60,10 +60,34 @@ private:
             if(!slot.lifecycle){releaseUninitialized();return kIOReturnNoMemory;}
             members[i]=slot.lifecycle;
         }
-        if(!mGroup->configure(members,count)){releaseUninitialized();return kIOReturnBadArgument;}
+        if(!mGroup->configure(members,count,mResumeAutomatically)){releaseUninitialized();return kIOReturnBadArgument;}
         return kIOReturnSuccess;
     }
 public:
+    IOReturn runtimeTick(size_t i,const core::PlaybackContext& context) {
+        if(i>=mCount)return kIOReturnBadArgument;
+        if(stage()!=core::AmplifierStage::Ready && stage()!=core::AmplifierStage::Playing)return kIOReturnNotReady;
+        auto& slot=mSlots[i];IOReturn result=slot.hooks->runtimeTick(context);
+        if(result==kIOReturnSuccess && !slot.hooks->managesPlaybackTransitions() && !context.hasAudio &&
+           slot.lifecycle->status().stage==core::AmplifierStage::Playing)result=slot.lifecycle->stopPlayback();
+        return result==kIOReturnSuccess?result:mGroup->failRuntime(slot.lifecycle->reportRuntimeFailure(result));
+    }
+    bool playbackNeedsPreparation(size_t i) const {return i<mCount && mSlots[i].hooks->playbackNeedsPreparation();}
+    bool playbackPrepared(size_t i) const {return i<mCount && mSlots[i].hooks->playbackPrepared();}
+    bool playbackPending(size_t i) const {return i<mCount && mSlots[i].hooks->playbackPending();}
+    bool playbackFaulted(size_t i) const {return i<mCount && mSlots[i].hooks->playbackFaulted();}
+    bool validatePlayback(size_t i,const core::PlaybackContext& context){return i<mCount && mSlots[i].hooks->validatePlayback(context);}
+    IOReturn cancelPlayback(size_t i) {
+        if(i>=mCount)return kIOReturnBadArgument;
+        auto& slot=mSlots[i];auto current=slot.lifecycle->status().stage;
+        if(current!=core::AmplifierStage::Ready && current!=core::AmplifierStage::Playing)return kIOReturnNotReady;
+        IOReturn result=slot.hooks->managesPlaybackTransitions()?slot.hooks->cancelPlayback():slot.lifecycle->stopPlayback();
+        return result==kIOReturnSuccess?result:mGroup->failRuntime(slot.lifecycle->reportRuntimeFailure(result));
+    }
+    void captureDiagnostics(size_t i){if(i<mCount)mSlots[i].hooks->captureDiagnostics();}
+    IOReturn configureInterrupt(size_t i,bool enabled){return i<mCount?mSlots[i].hooks->configureInterrupt(enabled):kIOReturnBadArgument;}
+    IOReturn handleInterrupt(size_t i){return i<mCount?mSlots[i].hooks->handleInterrupt():kIOReturnBadArgument;}
+    void refreshPlaybackState(){if(mGroup)mGroup->refreshPlaybackState();}
     IOReturn bringUp(){return mGroup?mGroup->bringUp():kIOReturnNotReady;}
     IOReturn startPlayback(){return mGroup?mGroup->startPlayback():kIOReturnNotReady;}
     IOReturn stopPlayback(){return mGroup?mGroup->stopPlayback():kIOReturnNotReady;}
@@ -105,6 +129,7 @@ private:
     Slot mSlots[kCapacity]{};
     size_t mCount{0},mReleasedCount{0};
     core::AmplifierLifecycleStatus mReleased[kCapacity]{};
+    bool mResumeAutomatically{true};
     IOReturn mReleaseResult{kIOReturnSuccess};
 };
 }

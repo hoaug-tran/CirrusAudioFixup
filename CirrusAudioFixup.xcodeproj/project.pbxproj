@@ -5,6 +5,8 @@
 	};
 	objectVersion = 56;
 	objects = {
+		5471378CA53C475A884BD29A = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "ServiceBackend.hpp";sourceTree = "<group>";};
+		884B6D453F48442FA6D0B874 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "BackendCatalog.hpp";sourceTree = "<group>";};
 		B71011000000000000000001 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
@@ -157,6 +159,7 @@
 		5F18E3977620B1AFB2AEDD59 = {
 			isa = PBXGroup;
 			children = (
+                5471378CA53C475A884BD29A,
 				90842EAEFC1528FA929AB2B2,
 				DBD8EDACAC2E17BAD75D5AC6,
 				51BA20FB9CD5C512B4FAB8A2,
@@ -168,6 +171,7 @@
 		B7025D93A1607FD444228958 = {
 			isa = PBXGroup;
 			children = (
+                884B6D453F48442FA6D0B874,
 				5F18E3977620B1AFB2AEDD59,
 			);
 			path = "Devices";

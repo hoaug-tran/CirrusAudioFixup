@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Core/DeviceRegistry.hpp"
+#include "Devices/BackendCatalog.hpp"
 #include "Core/RegisterIO.hpp"
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/AmplifierGroup.hpp"
@@ -57,6 +58,8 @@ struct RegisterSequence {
 };
 
 struct AmplifierState {
+    cirrus::core::BringUpDisposition bringUpDisposition{cirrus::core::BringUpDisposition::Continue};
+    char endpointLabel[16]{};
     cirrus::devices::cs35l41::PlaybackTransition playbackTransition{};
     cirrus::devices::cs35l41::ShutdownTransition shutdownTransition{};
     bool clockWaitAfterCleanup{false};
@@ -101,6 +104,7 @@ struct AmplifierState {
 
     uint32_t lastTimestamp{0};
     bool playbackActive{false};
+    bool playbackStartCancelled{false};
     uint32_t playbackStableCount{0};
 
     struct InterestingControl {
@@ -162,7 +166,23 @@ public:
 
 private:
     void fullDriverFlow();
-    void initializeCS35L41(AmplifierState& amp);
+    IOReturn initializeCS35L41Hardware(AmplifierState& amp);
+    IOReturn loadCS35L41Firmware(AmplifierState& amp);
+    IOReturn verifyCS35L41Ready(AmplifierState& amp);
+    IOReturn shutdownCS35L41(AmplifierState& amp);
+    bool stopCS35L41At(AmplifierState& amp,const char* phase);
+    class CS35L41ServiceBackend;
+    struct BackendOwner {CirrusAudioFixup* owner;AmplifierState* amp;};
+    friend cirrus::core::AmplifierLifecycleHooks* cirrus::devices::cs35l41::createServiceBackend(const cirrus::platform::BackendContext&);
+    friend void cirrus::devices::cs35l41::destroyServiceBackend(cirrus::core::AmplifierLifecycleHooks*);
+    IOReturn commitCS35L41Playback(AmplifierState& amp);
+    bool configureCS35L41Interrupt(AmplifierState& amp,bool enabled);
+    bool validateCS35L41Playback(AmplifierState& amp,const cirrus::core::PlaybackContext&);
+    void monitorCS35L41(AmplifierState& amp,const cirrus::core::PlaybackContext&);
+    char mRuntimeControllerPath[256]{};
+    bool bindAmplifierRuntime();
+    void teardownAmplifierRuntime();
+    bool registerAmplifierBackends();
 
     void runBackgroundMonitor();
     bool retryFirmwareIdentity();
@@ -181,6 +201,7 @@ private:
     cirrus::transport::NativeSPIHost mNativeSPI;
     bool setupNativeSPI(IOService* provider);
     size_t detectNativeSPIAmplifiers();
+    size_t detectConfiguredI2CAmplifiers();
     void teardownNativeSPI();
     void suspendNativeTransport() {
         mNativeSPI.suspend();
@@ -229,11 +250,25 @@ private:
 
     // Storage capacity is not supported topology. Current profiles permit
     // only the two channels with matching routing and speaker tuning.
-    static constexpr size_t kMaxAmps = 4;
+    static constexpr size_t kMaxAmps = cirrus::platform::AmplifierRuntime::kCapacity;
     size_t mAmpCount{0};
     AmplifierState mAmps[kMaxAmps]{};
     const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
+    size_t expectedAmplifierCount() const {
+        return mPlatformProfile?(mPlatformProfile->boardConfiguration?mPlatformProfile->boardConfiguration->count:mPlatformProfile->endpointCount):0;
+    }
     bool mPlatformAuthorized{false};
+    uint32_t mPlatformSubsystemId{0};
+    cirrus::platform::BackendRegistry mBackendRegistry;
+    cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
+    cirrus::core::RegisterIO* mRuntimePorts[kMaxAmps]{};
+    cirrus::transport::VoodooI2CController* mI2CController{nullptr};
+    cirrus::transport::I2CRegisterBus* mI2CBuses[kMaxAmps]{};
+    cirrus::core::RegisterMap* mI2CMaps[kMaxAmps]{};
+    BackendOwner mBackendOwners[kMaxAmps]{};
+    cirrus::platform::AmplifierBinding mRuntimeBindings[kMaxAmps]{};
+    cirrus::firmware::FirmwareBundle mRuntimeFirmware[kMaxAmps]{};
+    cirrus::platform::BoardConfiguration mRuntimeBoard{};
 
     static const size_t kTraceBufferSize = 1024;
     cirrus::diagnostics::TraceEntry mTraceBuffer[kTraceBufferSize];
@@ -254,6 +289,7 @@ private:
                                  uint32_t expected = 0, uint32_t actual = 0, IOReturn ioReturn = kIOReturnSuccess,
                                  bool captureSnapshot = true);
     void captureFailureSnapshot(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure);
+    void captureCS35L41FailureSnapshot(AmplifierState& amp,cirrus::diagnostics::DiagnosticFailure failure);
     void publishDriverVerdict();
     static const char* stageName(cirrus::diagnostics::DriverStage stage);
     static const char* failureName(cirrus::diagnostics::DiagnosticFailure failure);

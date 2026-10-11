@@ -15,7 +15,8 @@ public:
     bool bound() const {return mRuntime.bound();}
     IOReturn bind(IOACPIPlatformDevice* device,IOService* owner,const BackendRegistry& registry,
                   const BoardConfiguration& board,const BoardIdentity& actual,
-                  const firmware::FirmwareBundle* firmware,size_t count) {
+                  const firmware::FirmwareBundle* firmware,size_t count,
+                  void* const* platformContexts=nullptr) {
         if(mHost.bound() || !device || !owner || !firmware || count!=board.count ||
            count>transport::ACPISPIResources::kMaxEndpoints || !board.permits(actual))return kIOReturnBadArgument;
         OSObject* object=nullptr;
@@ -34,7 +35,7 @@ public:
             size_t binding=0;
             while(binding<count && !endpoint.sameDevice(board.amplifiers[binding].endpoint))++binding;
             if(binding==count){result=kIOReturnNotPermitted;break;}
-            contexts[i]=new BackendContext{*mHost.registers(i),endpoint,board,actual,binding,firmware[binding],hid};
+            contexts[i]=new BackendContext{*mHost.registers(i),endpoint,board,actual,binding,firmware[binding],hid,platformContexts?platformContexts[binding]:nullptr};
             if(!contexts[i]){result=kIOReturnNoMemory;break;}
         }
         if(result==kIOReturnSuccess)result=mRuntime.bind(registry,contexts,count);

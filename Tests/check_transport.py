@@ -18,6 +18,7 @@ abi_end = TRANSPORT_HEADER.index('\n};', abi_start) + 4
 abi = TRANSPORT_HEADER[abi_start:abi_end]
 preamble = r'''
 #include "Core/RegisterIO.hpp"
+#include "Core/Endpoint.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -26,7 +27,7 @@ preamble = r'''
 #include <vector>
 #include <string>
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IOReturn=int;
-enum TraceSource { TRACE_OTHER };
+enum TraceSource { TRACE_OTHER,TRACE_DUMP };
 constexpr int kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2,kIOReturnNoMemory=-3;
 constexpr bool kOSBooleanTrue=true;
 constexpr unsigned CS35L41_I2C_ADDR_RIGHT=0x41,DIAG_I2C_TRANSFER=2,DIAG_SPI_TRANSFER=31;
@@ -38,7 +39,7 @@ void* IOMallocData(size_t n) { if(failAllocation) return nullptr; ++allocations;
 void IOFreeData(void* p,size_t) { ++frees; free(p); }
 void writeBE32(UInt8* p,UInt32 v) { for(unsigned i=0;i<4;++i) p[i]=v>>(24-8*i); }
 UInt32 readBE32(const UInt8* p) { return UInt32(p[0])<<24 | UInt32(p[1])<<16 | UInt32(p[2])<<8 | p[3]; }
-struct CS35L41Amp { UInt8 address=0x40; cirrus::core::RegisterIO* registerIO=nullptr; uint8_t endpointIndex=0; };
+struct CS35L41Amp { cirrus::core::BusEndpoint endpoint{};UInt8 address=0x40; cirrus::core::RegisterIO* registerIO=nullptr; uint8_t endpointIndex=0; };
 using AmplifierState = CS35L41Amp;
 namespace cirrus { namespace devices { namespace cs35l41 { namespace registers { constexpr uint8_t kI2cAddressRight = 0x41; } } } }
 '''
@@ -92,7 +93,7 @@ public:
 '''
 checks = r'''
 struct NativeRegisters:cirrus::core::RegisterIO {
-    unsigned calls=0;int error=0;uint32_t result=0xabcddcba;
+    unsigned calls=0,diagnosticCalls=0;int error=0;uint32_t result=0xabcddcba;
     int32_t lastError() const override {return error;}
     bool read(uint32_t,uint32_t* v) override {++calls;if(error)return false;*v=result;return true;}
     bool write(uint32_t,uint32_t) override {++calls;return !error;}
@@ -100,6 +101,8 @@ struct NativeRegisters:cirrus::core::RegisterIO {
     bool bulkRead(uint32_t,uint8_t* v,size_t n) override {++calls;if(error)return false;memset(v,0x55,n);return true;}
     bool bulkWrite(uint32_t,const uint8_t*,size_t) override {++calls;return !error;}
     bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t) override {++calls;return !error;}
+    bool readForDiagnostic(uint32_t,uint32_t*) override {++diagnosticCalls;error=-66;return false;}
+    bool bulkReadForDiagnostic(uint32_t,uint8_t*,size_t) override {++diagnosticCalls;error=-66;return false;}
 };
 unsigned failures=0;
 void check(bool ok,const char* label) { if(!ok) { ++failures; fprintf(stderr,"FAIL %s\n",label); } }
@@ -144,11 +147,14 @@ int main() {
     d.mPowerAvailable=false;
     auto count=d.provider.calls;
     check(!d.readRegister(left,0,&value,TRACE_OTHER) && d.provider.calls==count && d.mLastTransferReturn==kIOReturnNotReady,"suspend blocks provider");
-    CirrusAudioFixup native;NativeRegisters port;CS35L41Amp spi;spi.address=0xff;spi.endpointIndex=2;spi.registerIO=&port;
+    CirrusAudioFixup native;NativeRegisters port;CS35L41Amp spi;spi.address=0xff;spi.endpointIndex=2;spi.registerIO=&port;spi.endpoint.transport=cirrus::core::BusTransportType::SPI;
     check(native.readRegister(spi,0,&value,TRACE_OTHER)&&value==port.result&&native.provider.calls==0,"typed native register read avoids I2C ABI");
     unsigned before=allocations;
     check(native.bulkWrite(spi,0,payload.data(),252,TRACE_OTHER)&&allocations==before&&native.provider.calls==0,"native upload never allocates an I2C frame");
     check(native.bulkRead(spi,0,payload.data(),252,TRACE_OTHER)&&payload[0]==0x55,"native bulk read");
+    unsigned ordinaryCalls=port.calls;
+    check(!native.readRegister(spi,0,&value,TRACE_DUMP)&&port.diagnosticCalls==1&&port.calls==ordinaryCalls&&native.mLastTransferReturn==-66,"diagnostic scalar honors register policy");
+    check(!native.bulkRead(spi,0,payload.data(),4,TRACE_DUMP)&&port.diagnosticCalls==2&&port.calls==ordinaryCalls&&native.mLastTransferReturn==-66,"diagnostic bulk honors register policy");
     port.error=-99;value=0x1234;
     check(!native.readRegister(spi,0,&value,TRACE_OTHER)&&value==0x1234&&native.mLastTransferReturn==-99,"native error and unchanged output preserved");
     native.mPowerAvailable=false;unsigned nativeCalls=port.calls;

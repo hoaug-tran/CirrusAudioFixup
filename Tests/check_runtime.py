@@ -2,19 +2,20 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+from service_runtime_fixture import PRODUCTION_BACKEND,FIELDS,BIND,IOLIB
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
 
 def function(name):
-    start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
+    start = re.search(r'(?:bool|void|IOReturn) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     end = SOURCE.index('\n}', start) + 2
     return SOURCE[start:end]
 
 names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringupDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'transferToAddress', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
-names.extend(['snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryFirmwareIdentity'])
-functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()')
+names.extend(['configureCS35L41Interrupt','monitorCS35L41','validateCS35L41Playback','commitCS35L41Playback','snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryFirmwareIdentity'])
+functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierRuntime.bound() && bindAmplifierRuntime())mAmplifierRuntime.bringUp();')
 
 amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
 
@@ -132,6 +133,7 @@ preamble = r'''
 #include <string>
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
+#include "Platform/AmplifierRuntime.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Devices/CS35L41/Resources/Tuning.hpp"
 #include "Devices/CS35L41/Playback.hpp"
@@ -141,8 +143,6 @@ using UInt16=uint16_t;
 using UInt32=uint32_t;
 using IOReturn=int;
 struct RegisterSequence { UInt32 reg,mask,value,delayUs; bool updateBits; };
-constexpr int kIOReturnNotReady=-1;
-constexpr int kIOReturnBadArgument=-2;
 constexpr bool kOSBooleanTrue=true;
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 static unsigned hostSleepCount = 0;
@@ -218,6 +218,7 @@ struct IOInterruptEventSource {
 #define OSDynamicCast(type, object) reinterpret_cast<type*>(object)
 class CirrusAudioFixup {
 public:
+''' + FIELDS + r'''
     void suspendNativeTransport() {}
     bool resumeNativeTransport() {return true;}
 public:
@@ -376,18 +377,19 @@ public:
     void discoverFirmware(CS35L41Amp& a) {
         a.firmwareIdentityPending=!identityAvailable;
     }
-    void initializeCS35L41(CS35L41Amp& a) { ++identityInitializations; a.initialized=true; }
-    void fullDriverFlow() {
-        assert(mPowerAvailable && mNeedsReinitialization);
-        ++restores;
-        for(auto& a:mAmps) if(a.present && !a.playbackFaulted) a.initialized=true;
-    }
+    void captureCS35L41FailureSnapshot(AmplifierState&,DiagnosticFailure){}
+    IOReturn initializeCS35L41Hardware(CS35L41Amp& a){if(!a.firmwareIdentityPending)++identityInitializations;a.initialized=false;return 0;}
+    IOReturn loadCS35L41Firmware(CS35L41Amp&){return 0;}
+    IOReturn verifyCS35L41Ready(CS35L41Amp& a){a.initialized=true;return 0;}
+    IOReturn shutdownCS35L41(CS35L41Amp& a){bool stopped=stopPlayback(a);bool halted=stopDSP(a);a.initialized=false;a.firmwareValidated=false;return stopped&&halted?0:kIOReturnNotReady;}
+    void fullDriverFlow(){if(mNeedsReinitialization)++restores;if(bindAmplifierRuntime())mAmplifierRuntime.bringUp();}
     void initializeFirmware(CS35L41Amp&,const char*) {}
     static const char* failureName(DiagnosticFailure) { return "failure"; }
     static const char* stageName(DriverStage) { return "stage"; }
     // Existing lifecycle tests drive the production callback until a pending
     // start completes. Dedicated step tests below inspect each callback.
     void runBackgroundMonitor() {
+        if(!mAmplifierRuntime.bound() && bindAmplifierRuntime())mAmplifierRuntime.bringUp();
         runMonitorStep();
         for(unsigned tick=0; tick<150; ++tick) {
             bool pending=false;
@@ -409,7 +411,7 @@ class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
     CS35L41Amp& mAmp;
 public:
     FixupRegisterIOAdapter(CirrusAudioFixup* f, CS35L41Amp& a,TraceSource=TRACE_OTHER) : mFixup(f), mAmp(a) {}
-    bool read(uint32_t reg, uint32_t* val) override { return mFixup->readRegister(mAmp, reg, val); }
+    bool read(uint32_t reg,uint32_t* val) override {if(reg==0){*val=0x35a40;return true;}return mFixup->readRegister(mAmp,reg,val);}
     bool write(uint32_t reg, uint32_t val) override { return mFixup->writeRegister(mAmp, reg, val); }
     bool updateBits(uint32_t reg, uint32_t mask, uint32_t val) override { return mFixup->updateRegisterBits(mAmp, reg, mask, val); }
     bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mFixup->pollRegisterBit(mAmp, r, m, e, t); }
@@ -779,7 +781,7 @@ int main() {
     power.runBackgroundMonitor(); power.handlePowerChange(false);
     assert(power.ops==offOps && timer.cancelled==1);
     power.handlePowerChange(true);
-    assert(power.mPowerAvailable && !power.mNeedsReinitialization && power.restores==1);
+    assert(power.mPowerAvailable && !power.mNeedsReinitialization && power.restores==0 && power.mAmplifierRuntime.stage()==cirrus::core::AmplifierStage::Ready);
     assert(power.ops==offOps);
     power.mStopping=true; power.handlePowerChange(false); power.runBackgroundMonitor();
     assert(power.ops==offOps);
@@ -812,7 +814,7 @@ int main() {
     unsigned newFailures=0;
     auto checkNew=[&](bool ok,const char* name) { if(!ok) { fprintf(stderr,"FAIL %s\n",name); ++newFailures; } };
     CirrusAudioFixup stereoShort;
-    stereoShort.mAmps[1]=stereoShort.mAmps[0]; stereoShort.mAmps[1].name="right";
+    stereoShort.mAmps[1]=stereoShort.mAmps[0]; stereoShort.mAmps[1].name="right";stereoShort.mAmps[1].address=0x41;stereoShort.mAmps[1].channel=cirrus::core::AudioChannel::Right;
     stereoShort.endStreamBeforeUnmute=true;
     stereoShort.runBackgroundMonitor();
     checkNew(stereoShort.startsAfterStreamEnd==0 && stereoShort.unmute==0 &&
@@ -970,6 +972,7 @@ int main() {
     CirrusAudioFixup irqDriver;
     IOInterruptEventSource irqSource;
     irqDriver.mAmpInterrupt=&irqSource;
+    assert(irqDriver.bindAmplifierRuntime() && irqDriver.mAmplifierRuntime.bringUp()==0);
     checkNew(irqDriver.configureAmplifierInterrupt(),"healthy reference amps configure protection IRQ");
     checkNew(irqDriver.regs[0x10110]==0x7FFD7E3F && irqDriver.regs[0x242C]==0x02000000,
              "IRQ setup matches Linux mask and GPIO2 open drain");
@@ -979,6 +982,7 @@ int main() {
     checkNew(!irqSource.enabled && irqDriver.mAmps[0].playbackFaulted,
              "protection IRQ latches fault and disables level delivery");
     CirrusAudioFixup irqSetupFault;
+    assert(irqSetupFault.bindAmplifierRuntime() && irqSetupFault.mAmplifierRuntime.bringUp()==0);
     irqSetupFault.failAt=2;
     checkNew(!irqSetupFault.configureAmplifierInterrupt() && irqSetupFault.regs[0x10110]==0xFFFFFFFF,
              "partial IRQ setup restores polling masks");
@@ -1006,9 +1010,10 @@ int main() {
     partialStereo.mProbeTimer=&stereoTimer;
     partialStereo.mAudioState={true,true,true,true,1};
     partialStereo.mAudioPrepareRetries=40;
-    partialStereo.runBackgroundMonitor();
     partialStereo.mAmps[1]=partialStereo.mAmps[0];
-    partialStereo.mAmps[1].name="right";
+    partialStereo.mAmps[1].name="right";partialStereo.mAmps[1].address=0x41;
+    partialStereo.mAmps[1].channel=cirrus::core::AudioChannel::Right;
+    partialStereo.runBackgroundMonitor();
     partialStereo.mAmps[1].playbackActive=false;
     partialStereo.mAmps[1].playbackFaulted=true;
     partialStereo.mAmps[1].pllRecoveryPending=true;
@@ -1111,7 +1116,9 @@ int main() {
 
 with tempfile.TemporaryDirectory(prefix='cirrus-runtime-check-') as directory:
     tmp = Path(directory)
+    (tmp / 'IOKit').mkdir()
+    (tmp / 'IOKit/IOLib.h').write_text(IOLIB.replace('inline void IOSleep(unsigned){}','inline void IOSleep(unsigned);'))
     source = tmp / 'runtime.cpp'
-    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + functions + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'runtime.exe')], check=True)
+    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + PRODUCTION_BACKEND + BIND + functions + checks, encoding='utf-8')
+    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'runtime.exe')], check=True)
     subprocess.run([str(tmp / 'runtime.exe')], check=True)

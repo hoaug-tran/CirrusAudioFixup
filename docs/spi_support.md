@@ -9,8 +9,9 @@ SPI IDs in Linux v6.12 intel-lpss-pci.c, with family-specific clock and CS
 behavior; 7AAA is one entry, not a special gate. This is not support for every
 SPI controller ever used on Intel/AMD systems.
 
-The existing shipping IOService path still dispatches through VoodooI2C.
-PCI/ACPI discovery, endpoint wiring, parent power notifications and amplifier
+The existing I2C personality dispatches through VoodooI2C. An opt-in ACPI SPI
+personality now resolves `_CRS` sources and binds native controllers for read-only
+discovery. Verified board wiring, controller power-parent coordination and amplifier
 board authorization are not connected to these backends yet. Installing the
 branch alone does not make SPI internal speakers work. A CPU vendor is not a
 controller identity or a board tuning profile.
@@ -23,7 +24,8 @@ controller identity or a board tuning profile.
 | AMD AMDI0061/0062 | ACPI/MMIO owner + command FIFO | Mode 0, 64-byte frames, 0.8–100 MHz; hardware untested |
 | Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/backends |
 | Other controllers, external GPIO CS | Not implemented | Need documented register backend and ownership/power behavior |
-| Automatic SPI IOService / amp playback | Not implemented | Needs runtime discovery, power integration and verified board profiles |
+| ACPI SPI IOService discovery | Implemented, opt-in read-only | Requires `-cirrusspi -cirrusro`; real hardware untested |
+| SPI amp playback | Not enabled | Needs verified board profiles, firmware and controller power-parent coordination |
 
 ## Research and base selection
 
@@ -187,8 +189,9 @@ instead says 103C8CA4; that discrepancy remains unresolved.
 2. Resolve controller ownership and ACPI native CS/clock/mode and power resources;
    confirm whether an additional GPIO CS is required. Do not steal a controller
    used by another SPI peripheral.
-3. Add the actual IOService discovery/parent-PM path and transport selection;
-   migrate endpoint/diagnostic identity away from I2C-only addresses.
+3. Validate the new ACPI SPI personality on macOS, including controller publication
+   ordering and controller/amp power-parent coordination; runtime discovery now
+   carries typed endpoints and separate native register ports.
 4. Validate read-only chip ID/revision on HP, then reset/boost/firmware/tuning.
 5. Exercise codec → ASP → amplifier playback, both channels, jack switching,
    cold boot, quiet idle and sleep/wake before advertising machine support.
@@ -215,3 +218,33 @@ Each SPI suite runs normally and with ASan/UBSan. They are included in
 sources into the kext. These checks do not validate electrical signals, real
 Intel FIFO timing, physical PCI sleep transitions, firmware tuning or acoustic
 output. No HP load/playback result has been obtained yet.
+
+## Native SPI runtime capture
+
+Add `-cirrusspi -cirrusro -cirrusdbg` to test the ACPI `CSC3551` personality.
+`NativeSPIHost` reads `_CRS`, resolves absolute/relative/parent AML paths against
+IOACPIPlane, associates Intel PCI devices by their `acpi-device`, and binds the
+existing Intel/AMD native owners. It supports up to four resource endpoints and
+four unique controllers, reuses shared controllers, rejects duplicate controller
+plus chip-select bindings, and rolls back all owned resources after partial failure.
+
+Register format is supplied by the silicon caller. The host uses generic
+`SPIRegisterBus` and `RegisterMap`, so adding a new amplifier does not require
+changing the controller owner. Native ports are read-only in the current runtime;
+there is no boot argument that overrides board authorization or enables SPI writes.
+Discovered endpoints remain unassigned to speaker channels. Published properties
+include bind return, canonical controller path, chip-select, clock, mode and count.
+
+Service suspend stops clients before suspending controllers; resume checks every
+controller and suspends the group again on any failure. It does not force AML D0
+or claim to coordinate every external controller power parent. Native AMD attachment
+requires a working `_PSC` reporting D0; absence is rejected by this runtime owner
+rather than inheriting the lower-level backend's owner-supplied D0 assumption. Stop removes event
+sources before releasing register maps and controllers. PCI exclusivity and D0
+checks remain mandatory. No native driver match is made on CPU vendor alone.
+
+`check_native_spi.py` executes the production host with IOKit/controller mocks,
+including relative paths, multi-controller ownership, duplicate aliases, missing
+resources, partial rollback and PM failures, normally and with ASan/UBSan.
+`check_transport.py` also exercises the production IOService register dispatch,
+verifying that native accesses bypass I2C frames, preserve errors and honor sleep/stop.

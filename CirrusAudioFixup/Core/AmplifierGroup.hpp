@@ -22,7 +22,7 @@ public:
         if(!mCount || mStage!=AmplifierStage::Detached)return kIOReturnNotReady;
         for(size_t i=0;i<mCount;++i) {
             IOReturn ret=mMembers[i]->bringUp();
-            if(ret!=kIOReturnSuccess)return fail(ret,i);
+            if(ret!=kIOReturnSuccess)return deferred(i) ? ret : fail(ret,i);
         }
         mStage=AmplifierStage::Ready;return kIOReturnSuccess;
     }
@@ -56,7 +56,7 @@ public:
     IOReturn resume() {
         if(mStage!=AmplifierStage::Suspended)return kIOReturnNotReady;
         for(size_t i=0;i<mCount;++i) {
-            IOReturn ret=mMembers[i]->resume();if(ret!=kIOReturnSuccess)return fail(ret,i);
+            IOReturn ret=mMembers[i]->resume();if(ret!=kIOReturnSuccess)return deferred(i) ? ret : fail(ret,i);
         }
         mStage=AmplifierStage::Ready;
         return mResumePlayback ? startPlayback() : kIOReturnSuccess;
@@ -74,6 +74,13 @@ public:
         mResumePlayback=false;mStage=AmplifierStage::Detached;
     }
 private:
+    bool deferred(size_t index) {
+        const auto stage=mMembers[index]->status().stage;
+        if(stage!=AmplifierStage::Waiting && stage!=AmplifierStage::DebugHalted)return false;
+        // Prepared peers remain muted. No later member or playback is started.
+        // Owner detaches/resets before retry; do not invent a failure/cleanup.
+        mStage=stage;return true;
+    }
     IOReturn fail(IOReturn result,size_t rollbackCount) {
         if(mFirstFailure==kIOReturnSuccess)mFirstFailure=result;
         for(size_t i=rollbackCount;i>0;--i) {

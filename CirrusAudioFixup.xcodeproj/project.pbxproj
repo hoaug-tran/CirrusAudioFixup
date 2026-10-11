@@ -5,6 +5,24 @@
 	};
 	objectVersion = 56;
 	objects = {
+		CA98C65691C0F2C60B20D60F = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = "check_native_spi.py";
+			sourceTree = "<group>";
+		};
+		1FB54EE34BAE0041B4906A8F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "NativeSPIHost.hpp";
+			sourceTree = "<group>";
+		};
+		906368FCA2EB8FE548BD7705 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "ACPIPath.hpp";
+			sourceTree = "<group>";
+		};
 		D71011000000000000000001 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.script.python;
@@ -413,6 +431,8 @@
 		D1C35C0E3D90A9BEF84D6F6D = {
 			isa = PBXGroup;
 			children = (
+                1FB54EE34BAE0041B4906A8F,
+                906368FCA2EB8FE548BD7705,
                 8CF69CE796ABB36A1A3D630F,
                 21C3366F896C719BA60E6170,
                 29F371FB87977DF261FF1260,
@@ -578,6 +598,7 @@
 		CC9C8F7C5041835F9AAE8AA0 = {
 			isa = PBXGroup;
 			children = (
+                CA98C65691C0F2C60B20D60F,
 				4F3CF04B7A8D1D42693303F8,
 				DB63CD957C9FBFABF0C6701E,
 				DA2623CD1F28541C7B7EB77E,

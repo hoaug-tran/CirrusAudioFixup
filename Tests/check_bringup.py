@@ -58,6 +58,8 @@ struct HDAStreamState {
 
 class CirrusAudioFixup {
 public:
+    void suspendNativeTransport() {}
+    bool resumeNativeTransport() { return true; }
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     size_t mAmpCount{2};

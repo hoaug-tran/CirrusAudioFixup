@@ -17,6 +17,7 @@ abi_start = TRANSPORT_HEADER.index('struct VoodooI2CAddressedTransfer {')
 abi_end = TRANSPORT_HEADER.index('\n};', abi_start) + 4
 abi = TRANSPORT_HEADER[abi_start:abi_end]
 preamble = r'''
+#include "Core/RegisterIO.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -28,7 +29,7 @@ using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IORetur
 enum TraceSource { TRACE_OTHER };
 constexpr int kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2,kIOReturnNoMemory=-3;
 constexpr bool kOSBooleanTrue=true;
-constexpr unsigned CS35L41_I2C_ADDR_RIGHT=0x41,DIAG_I2C_TRANSFER=2;
+constexpr unsigned CS35L41_I2C_ADDR_RIGHT=0x41,DIAG_I2C_TRANSFER=2,DIAG_SPI_TRANSFER=31;
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
 #define CIRRUS_ERR(...) ((void)0)
 #define CIRRUS_LOG(...) ((void)0)
@@ -37,7 +38,7 @@ void* IOMallocData(size_t n) { if(failAllocation) return nullptr; ++allocations;
 void IOFreeData(void* p,size_t) { ++frees; free(p); }
 void writeBE32(UInt8* p,UInt32 v) { for(unsigned i=0;i<4;++i) p[i]=v>>(24-8*i); }
 UInt32 readBE32(const UInt8* p) { return UInt32(p[0])<<24 | UInt32(p[1])<<16 | UInt32(p[2])<<8 | p[3]; }
-struct CS35L41Amp { UInt8 address=0x40; };
+struct CS35L41Amp { UInt8 address=0x40; cirrus::core::RegisterIO* registerIO=nullptr; uint8_t endpointIndex=0; };
 using AmplifierState = CS35L41Amp;
 namespace cirrus { namespace devices { namespace cs35l41 { namespace registers { constexpr uint8_t kI2cAddressRight = 0x41; } } } }
 '''
@@ -71,6 +72,8 @@ private:
 }}
 class CirrusAudioFixup {
 public:
+    bool nativeBusReady() const {return mProvider && mPowerAvailable && !mStopping;}
+public:
     Provider provider; Provider* mProvider=&provider;
     bool mPowerAvailable=true,mStopping=false,mCapturingFailureSnapshot=false,mProbingAmplifiers=false;
     bool nestedSnapshot=false;
@@ -88,6 +91,16 @@ public:
     }
 '''
 checks = r'''
+struct NativeRegisters:cirrus::core::RegisterIO {
+    unsigned calls=0;int error=0;uint32_t result=0xabcddcba;
+    int32_t lastError() const override {return error;}
+    bool read(uint32_t,uint32_t* v) override {++calls;if(error)return false;*v=result;return true;}
+    bool write(uint32_t,uint32_t) override {++calls;return !error;}
+    bool updateBits(uint32_t,uint32_t,uint32_t) override {++calls;return !error;}
+    bool bulkRead(uint32_t,uint8_t* v,size_t n) override {++calls;if(error)return false;memset(v,0x55,n);return true;}
+    bool bulkWrite(uint32_t,const uint8_t*,size_t) override {++calls;return !error;}
+    bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t) override {++calls;return !error;}
+};
 unsigned failures=0;
 void check(bool ok,const char* label) { if(!ok) { ++failures; fprintf(stderr,"FAIL %s\n",label); } }
 int main() {
@@ -131,6 +144,17 @@ int main() {
     d.mPowerAvailable=false;
     auto count=d.provider.calls;
     check(!d.readRegister(left,0,&value,TRACE_OTHER) && d.provider.calls==count && d.mLastTransferReturn==kIOReturnNotReady,"suspend blocks provider");
+    CirrusAudioFixup native;NativeRegisters port;CS35L41Amp spi;spi.address=0xff;spi.endpointIndex=2;spi.registerIO=&port;
+    check(native.readRegister(spi,0,&value,TRACE_OTHER)&&value==port.result&&native.provider.calls==0,"typed native register read avoids I2C ABI");
+    unsigned before=allocations;
+    check(native.bulkWrite(spi,0,payload.data(),252,TRACE_OTHER)&&allocations==before&&native.provider.calls==0,"native upload never allocates an I2C frame");
+    check(native.bulkRead(spi,0,payload.data(),252,TRACE_OTHER)&&payload[0]==0x55,"native bulk read");
+    port.error=-99;value=0x1234;
+    check(!native.readRegister(spi,0,&value,TRACE_OTHER)&&value==0x1234&&native.mLastTransferReturn==-99,"native error and unchanged output preserved");
+    native.mPowerAvailable=false;unsigned nativeCalls=port.calls;
+    check(!native.bulkRead(spi,0,payload.data(),4,TRACE_OTHER)&&port.calls==nativeCalls&&native.mLastTransferReturn==kIOReturnNotReady,"suspend blocks native port");
+    native.mPowerAvailable=true;native.mStopping=true;
+    check(!native.bulkWrite(spi,0,payload.data(),4,TRACE_OTHER)&&port.calls==nativeCalls,"stop blocks native port");
     if(failures) return 1;
     puts("PASS production transport endian/address/length/ownership, argument/allocation failures and nested diagnostic error preservation");
 }
@@ -140,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
     tmp=Path(directory)
     source=tmp/'transport.cpp'
     source.write_text(preamble+abi+mock+declarations+'\n};\n'+'\n'.join(function(n) for n in names)+checks,encoding='utf-8')
-    subprocess.run(['g++','-std=c++17','-O0',str(source),'-o',str(tmp/'transport.exe')],check=True)
+    subprocess.run(['g++','-std=c++17','-O0','-I'+str(ROOT/'CirrusAudioFixup'),str(source),'-o',str(tmp/'transport.exe')],check=True)
     subprocess.run([str(tmp/'transport.exe')],check=True)
 
     iokit = tmp / 'IOKit'

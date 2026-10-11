@@ -47,6 +47,8 @@ struct I2C: cirrus::transport::I2CController {
 };
 struct Hooks: AmplifierLifecycleHooks {
  int failure=0,cleanupFailure=0;unsigned cleanups=0;
+ BringUpDisposition pause=BringUpDisposition::Continue;
+ BringUpDisposition disposition() const override {return !history.empty()&&history.back()==4?pause:BringUpDisposition::Continue;}
  std::vector<int> history;
  int call(int id){history.push_back(id);return failure==id?-100-id:0;}
  IOReturn identify()override{return call(1);}IOReturn authorizeBoard()override{return call(2);}
@@ -161,6 +163,18 @@ int main(){
  group.powerLost();right.failure=0;assert(group.bringUp()==0&&group.startPlayback()==0);
  assert(group.suspend()==0&&group.resume()==0&&group.stage()==AmplifierStage::Playing);
  assert(group.firstFailure()==-104&&group.detach()==0);
+ for(auto pause:{BringUpDisposition::Wait,BringUpDisposition::DebugHalt}) {
+  Hooks a,b;b.pause=pause;AmplifierLifecycle al(a),bl(b);AmplifierLifecycle* pair[]={&al,&bl};AmplifierGroup pending;
+  assert(pending.configure(pair,2)&&pending.bringUp()==kIOReturnNotReady);
+  assert(pending.stage()==(pause==BringUpDisposition::Wait?AmplifierStage::Waiting:AmplifierStage::DebugHalted));
+  assert(!pending.firstFailure()&&!a.cleanups&&!b.cleanups);
+  assert(pending.startPlayback()==kIOReturnNotReady&&al.status().stage==AmplifierStage::Ready);
+  assert(pending.detach()==0&&a.cleanups==1&&b.cleanups==1);
+  b.pause=BringUpDisposition::Continue;assert(pending.bringUp()==0&&pending.startPlayback()==0&&pending.suspend()==0);
+  b.pause=pause;assert(pending.resume()==kIOReturnNotReady&&!pending.firstFailure());
+  assert(al.status().stage==AmplifierStage::Ready&&bl.status().stage!=AmplifierStage::Playing);
+  assert(pending.detach()==0);
+ }
  Hooks broken;AmplifierLifecycle fault(broken);assert(fault.bringUp()==0);broken.cleanupFailure=-200;
  assert(fault.suspend()==-200&&broken.cleanups==1&&fault.status().cleanupResult==-200);
 }

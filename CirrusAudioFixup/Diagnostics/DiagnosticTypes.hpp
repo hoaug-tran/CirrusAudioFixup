@@ -105,11 +105,13 @@ enum class DiagnosticFailure : uint32_t {
     OtpBootError,
     AmpProtection,
     Calibration,
+    SpiTransfer, // Appended: preserve existing published failure numbers.
 };
 
 inline constexpr DiagnosticFailure DIAG_OK = DiagnosticFailure::Ok;
 inline constexpr DiagnosticFailure DIAG_PROVIDER_MISSING = DiagnosticFailure::ProviderMissing;
 inline constexpr DiagnosticFailure DIAG_I2C_TRANSFER = DiagnosticFailure::I2cTransfer;
+inline constexpr DiagnosticFailure DIAG_SPI_TRANSFER = DiagnosticFailure::SpiTransfer;
 inline constexpr DiagnosticFailure DIAG_RESET_GPIO = DiagnosticFailure::ResetGpio;
 inline constexpr DiagnosticFailure DIAG_DEVICE_ID = DiagnosticFailure::DeviceId;
 inline constexpr DiagnosticFailure DIAG_RESET_WRITE = DiagnosticFailure::ResetWrite;

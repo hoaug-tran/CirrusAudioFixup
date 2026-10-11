@@ -193,7 +193,12 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
 
 void CirrusAudioFixup::resolvePlatformProfile() {
     const char* acpiHid = nullptr;
-    if (mProvider) {
+    OSObject* ownedHid = nullptr;
+    if (auto* acpi = OSDynamicCast(IOACPIPlatformDevice, mProvider)) {
+        if (acpi->evaluateObject("_HID", &ownedHid) == kIOReturnSuccess)
+            if (auto* hid = OSDynamicCast(OSString, ownedHid)) acpiHid = hid->getCStringNoCopy();
+    }
+    if (mProvider && !acpiHid) {
         OSString* ioName = OSDynamicCast(OSString, mProvider->getProperty("IOName"));
         if (ioName)
             acpiHid = ioName->getCStringNoCopy();
@@ -222,6 +227,78 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     setProperty("Cirrus_Platform_ACPI_HID", acpiHid ? acpiHid : "unknown");
     CIRRUS_LOG("platform profile selected: %s (hid=%s, endpoints=%lu)", mPlatformProfile->name, acpiHid ? acpiHid : "unknown",
                mPlatformProfile->endpointCount);
+    OSSafeReleaseNULL(ownedHid);
+}
+
+// ACPI SPI matching is deliberately opt-in until physical controller tests.
+bool CirrusAudioFixup::setupNativeSPI(IOService* provider) {
+    auto* acpi = OSDynamicCast(IOACPIPlatformDevice, provider);
+    if (!acpi) { setProperty("Cirrus_Bus", "I2C"); return true; }
+    setProperty("Cirrus_Bus", "SPI");
+    if (!bootArgEnabled("-cirrusspi") || !bootArgEnabled("-cirrusro")) {
+        setProperty("Cirrus_SPI_Status", "REQUIRES_SPI_READ_ONLY_OPTIONS");
+        return false;
+    }
+    // No known SPI board is currently authorized for power/firmware writes.
+    mPlatformAuthorized = false;
+    setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+    IOReturn ret = mNativeSPI.bind(acpi, this, cirrus::transport::CS35L41SPITransport::config());
+    setProperty("Cirrus_SPI_Bind_Return", uint64_t(ret), 32);
+    setProperty("Cirrus_SPI_Status", ret == kIOReturnSuccess ? "BOUND_READ_ONLY" : "BIND_FAILED");
+    if (ret != kIOReturnSuccess) CIRRUS_ERR("native SPI bind failed: ret=0x%08X", ret);
+    return ret == kIOReturnSuccess;
+}
+
+size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
+    mAmpCount = 0;
+    static constexpr const char* names[] = {"spi0", "spi1", "spi2", "spi3"};
+    mProbingAmplifiers = true;
+    setProperty("Cirrus_SPI_Resource_Count", uint64_t(mNativeSPI.count()), 32);
+    for (size_t i = 0; i < mNativeSPI.count() && i < kMaxAmps; ++i) {
+        const auto endpoint = mNativeSPI.endpoint(i);
+        char key[64]{};
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ChipSelect", i);
+        setProperty(key, uint64_t(endpoint.spiChipSelect), 32);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Controller", i);
+        setProperty(key, endpoint.controllerPath);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ClockHz", i);
+        setProperty(key, uint64_t(endpoint.spiClockHz), 32);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Mode", i);
+        setProperty(key, uint64_t(endpoint.spiMode), 32);
+        auto* io = mNativeSPI.registers(i);
+        uint32_t id = 0;
+        const bool readable = io && io->read(cirrus::devices::cs35l41::registers::kRegDeviceId, &id);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Probe_Return", i);
+        setProperty(key, uint64_t(io ? io->lastError() : kIOReturnNotReady), 32);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_DeviceID", i);
+        setProperty(key, uint64_t(id), 32);
+        if (!readable) continue;
+        const auto* descriptor = cirrus::core::findDeviceById(id);
+        if (!descriptor || descriptor->model != cirrus::core::CodecModel::CS35L41)
+            continue;
+        auto& amp = mAmps[mAmpCount++];
+        amp = {};
+        amp.name = names[i];
+        amp.address = 0xff; // SPI chip-select is never an I2C slave address.
+        amp.channel = cirrus::core::AudioChannel::MaxChannels;
+        amp.registerIO = io;
+        amp.endpoint = endpoint;
+        amp.endpointIndex = uint8_t(i);
+        amp.model = descriptor->model;
+        amp.present = true;
+        amp.deviceId = id;
+        CIRRUS_LOG("SPI endpoint=%lu controller=%s CS=%u clock=%u mode=%u DEVID=0x%08X",
+                   i, endpoint.controllerPath, endpoint.spiChipSelect, endpoint.spiClockHz, endpoint.spiMode, id);
+    }
+    mProbingAmplifiers = false;
+    setProperty("Cirrus_Detected_Amplifiers", uint64_t(mAmpCount), 32);
+    setProperty("Cirrus_Amp_Discovery", mAmpCount ? "DETECTED_READ_ONLY" : "NONE");
+    return mAmpCount;
+}
+
+void CirrusAudioFixup::teardownNativeSPI() {
+    for (auto& amp : mAmps) amp.registerIO = nullptr;
+    mNativeSPI.shutdown();
 }
 
 // Validate diagnostic options before any reset or amplifier write.
@@ -273,16 +350,24 @@ bool CirrusAudioFixup::start(IOService* provider) {
         }
     }
 
+    if (!setupNativeSPI(provider)) {
+        teardownNativeSPI();
+        mProvider = nullptr;
+        super::stop(provider);
+        return false;
+    }
     bool hardwareResetVerified = performPlatformHardwareReset();
     if (!hardwareResetVerified) {
         CIRRUS_LOG("Platform hardware reset not asserted or verified; continuing with ACPI and I2C soft reset");
     }
 
     IOSleep(15);
-    detectAmplifiers();
+    if (mNativeSPI.bound()) detectNativeSPIAmplifiers();
+    else detectAmplifiers();
 
     if (!setupProbeTimer()) {
         CIRRUS_ERR("probe timer setup failed");
+        teardownNativeSPI();
         mProvider = nullptr;
         super::stop(provider);
         return false;
@@ -619,6 +704,7 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
                 amp.haloStateRegister = amp.haloHeartbeatRegister = 0;
             }
         }
+        suspendNativeTransport();
         mPowerAvailable = false;
         clearHdaCache();
         mHdaState.streamActive = mHdaState.observed = mHdaState.converterPrepared = false;
@@ -627,6 +713,10 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
         mHdaState.lastFormat = 0;
         setProperty("Cirrus_PM_Powered", uint64_t(0), 32);
     } else {
+        if (!resumeNativeTransport()) {
+            setProperty("Cirrus_SPI_Status", "WAKE_CONTROLLER_NOT_READY");
+            return;
+        }
         mPowerAvailable = true;
         mNeedsReinitialization = !bootArgEnabled("-cirrusro");
         mHdaState.topologyLogged = false;
@@ -669,12 +759,14 @@ void CirrusAudioFixup::stop(IOService* provider) {
         mWorkLoop->removeEventSource(mCommandGate);
     OSSafeReleaseNULL(mCommandGate);
     OSSafeReleaseNULL(mWorkLoop);
+    teardownNativeSPI();
     mProvider = nullptr;
     super::stop(provider);
 }
 
 void CirrusAudioFixup::free() {
     CIRRUS_LOG("free");
+    teardownNativeSPI();
     clearHdaCache();
     if (mTraceLock) {
         IOLockFree(mTraceLock);
@@ -1184,7 +1276,7 @@ bool CirrusAudioFixup::applyCalibration(AmplifierState& amp, const FirmwareImage
         return false;
     }
 
-    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
+    uint8_t ampIdx = amp.registerIO ? amp.endpointIndex : ((amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0);
     bool foundData = false;
     bool invalidData = false;
     bool uidReadFailed = false;
@@ -2282,7 +2374,9 @@ void CirrusAudioFixup::probeAmp(AmplifierState& amp) {
     UInt32 deviceId = 0;
     UInt32 revisionId = 0;
 
-    CIRRUS_LOG("amp %s probe address=0x%02X", amp.name, amp.address);
+    if (amp.registerIO)
+        CIRRUS_LOG("amp %s probe SPI controller=%s CS=%u", amp.name, amp.endpoint.controllerPath, amp.endpoint.spiChipSelect);
+    else CIRRUS_LOG("amp %s probe address=0x%02X", amp.name, amp.address);
 
     if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &deviceId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s device-id read failed", amp.name);
@@ -2471,6 +2565,8 @@ const char* CirrusAudioFixup::failureName(DiagnosticFailure failure) {
         return "PROVIDER_MISSING";
     case DIAG_I2C_TRANSFER:
         return "I2C_TRANSFER";
+    case DIAG_SPI_TRANSFER:
+        return "SPI_TRANSFER";
     case DIAG_RESET_GPIO:
         return "RESET_GPIO";
     case DIAG_DEVICE_ID:
@@ -2751,7 +2847,9 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
             break;
         }
 
-        const char* ampStr = (e.amp == 0) ? "LEFT" : "RIGHT";
+        char nativeLabel[16]{};
+        snprintf(nativeLabel, sizeof(nativeLabel), "SPI%u", e.amp);
+        const char* ampStr = mNativeSPI.bound() ? nativeLabel : ((e.amp == 0) ? "LEFT" : "RIGHT");
 
         if (e.isBulk) {
             snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X\n", e.timestamp, srcStr, ampStr,
@@ -2785,19 +2883,23 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
 
 bool CirrusAudioFixup::bulkRead(AmplifierState& amp, UInt32 reg, UInt8* data, size_t length, TraceSource source) {
     if (!data || length == 0 || length > 0xFFFFU) {
-        recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, 0xFFFFU, (UInt32)length, kIOReturnBadArgument, false);
+        recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, 0xFFFFU, (UInt32)length, kIOReturnBadArgument, false);
         mLastTransferReturn = kIOReturnBadArgument;
         return false;
     }
     UInt8 writeBuffer[4];
     writeBE32(writeBuffer, reg);
-    bool success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, (UInt16)length);
+    bool success;
+    if (amp.registerIO) {
+        success = nativeBusReady() && amp.registerIO->bulkRead(reg, data, length);
+        mLastTransferReturn = nativeBusReady() ? amp.registerIO->lastError() : kIOReturnNotReady;
+    } else success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), data, (UInt16)length);
 
     IOReturn retCode = mLastTransferReturn;
-    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
+    uint8_t ampIdx = amp.registerIO ? amp.endpointIndex : ((amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0);
     recordTrace(source, ampIdx, false, true, reg, (UInt32)length, retCode);
     if (!success && !mCapturingFailureSnapshot) {
-        recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, mLastTransferReturn);
+        recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, mLastTransferReturn);
     }
     mLastTransferReturn = retCode;
     return success;
@@ -2805,35 +2907,39 @@ bool CirrusAudioFixup::bulkRead(AmplifierState& amp, UInt32 reg, UInt8* data, si
 
 bool CirrusAudioFixup::bulkWrite(AmplifierState& amp, UInt32 reg, const UInt8* data, size_t length, TraceSource source) {
     if ((length > 0 && !data) || length > (0xFFFFU - 4U)) {
-        recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, 0xFFFFU - 4U, (UInt32)length, kIOReturnBadArgument, false);
+        recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, 0xFFFFU - 4U, (UInt32)length, kIOReturnBadArgument, false);
         mLastTransferReturn = kIOReturnBadArgument;
         return false;
     }
     UInt8 stackBuffer[8];
     UInt8* writeBuffer = stackBuffer;
-    bool useMalloc = (4 + length > sizeof(stackBuffer));
+    bool useMalloc = !amp.registerIO && (4 + length > sizeof(stackBuffer));
 
     if (useMalloc) {
         writeBuffer = (UInt8*)IOMallocData(4 + length);
         if (!writeBuffer) {
-            recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, kIOReturnNoMemory, false);
+            recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, kIOReturnNoMemory, false);
             mLastTransferReturn = kIOReturnNoMemory;
             return false;
         }
     }
 
     writeBE32(writeBuffer, reg);
-    if (length > 0 && data) {
+    if (!amp.registerIO && length > 0 && data) {
         memcpy(writeBuffer + 4, data, length);
     }
 
-    bool ret = transferToAddress(amp.address, writeBuffer, 4 + length, nullptr, 0);
+    bool ret;
+    if (amp.registerIO) {
+        ret = nativeBusReady() && amp.registerIO->bulkWrite(reg, data, length);
+        mLastTransferReturn = nativeBusReady() ? amp.registerIO->lastError() : kIOReturnNotReady;
+    } else ret = transferToAddress(amp.address, writeBuffer, 4 + length, nullptr, 0);
 
     IOReturn retCode = mLastTransferReturn;
-    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
+    uint8_t ampIdx = amp.registerIO ? amp.endpointIndex : ((amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0);
     recordTrace(source, ampIdx, true, true, reg, (uint32_t)length, retCode);
     if (!ret && !mCapturingFailureSnapshot) {
-        recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, mLastTransferReturn);
+        recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, (UInt32)length, 0, mLastTransferReturn);
     }
 
     if (useMalloc) {
@@ -2845,7 +2951,7 @@ bool CirrusAudioFixup::bulkWrite(AmplifierState& amp, UInt32 reg, const UInt8* d
 
 bool CirrusAudioFixup::readRegister(AmplifierState& amp, UInt32 reg, UInt32* value, TraceSource source) {
     if (!value) {
-        recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, 4, 0, kIOReturnBadArgument, false);
+        recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, 4, 0, kIOReturnBadArgument, false);
         mLastTransferReturn = kIOReturnBadArgument;
         return false;
     }
@@ -2853,10 +2959,16 @@ bool CirrusAudioFixup::readRegister(AmplifierState& amp, UInt32 reg, UInt32* val
 
     UInt8 writeBuffer[4];
     writeBE32(writeBuffer, reg);
-    bool success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), readBuffer, sizeof(readBuffer));
+    bool success;
+    if (amp.registerIO) {
+        uint32_t nativeValue = 0;
+        success = nativeBusReady() && amp.registerIO->read(reg, &nativeValue);
+        mLastTransferReturn = nativeBusReady() ? amp.registerIO->lastError() : kIOReturnNotReady;
+        if (success) writeBE32(readBuffer, nativeValue);
+    } else success = transferToAddress(amp.address, writeBuffer, sizeof(writeBuffer), readBuffer, sizeof(readBuffer));
 
     IOReturn retCode = mLastTransferReturn;
-    uint8_t ampIdx = (amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0;
+    uint8_t ampIdx = amp.registerIO ? amp.endpointIndex : ((amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0);
 
     if (success) {
         *value = readBE32(readBuffer);
@@ -2865,7 +2977,7 @@ bool CirrusAudioFixup::readRegister(AmplifierState& amp, UInt32 reg, UInt32* val
     } else {
         recordTrace(source, ampIdx, false, false, reg, 0, retCode);
         if (!mCapturingFailureSnapshot) {
-            recordDiagnosticFailure(amp, DIAG_I2C_TRANSFER, reg, 4, 0, mLastTransferReturn);
+            recordDiagnosticFailure(amp, amp.registerIO ? DIAG_SPI_TRANSFER : DIAG_I2C_TRANSFER, reg, 4, 0, mLastTransferReturn);
         }
         mLastTransferReturn = retCode;
         return false;
@@ -2973,7 +3085,8 @@ bool CirrusAudioFixup::initCodec(AmplifierState& amp) {
     amp.present = false;
 
     FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
     if (!device.probe(io)) {
         CIRRUS_ERR("failed to identify %s before reset", amp.name);
@@ -3351,7 +3464,8 @@ bool CirrusAudioFixup::applyErrataPatch(AmplifierState& amp) {
 
 bool CirrusAudioFixup::unpackOTP(AmplifierState& amp) {
     FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
     if (!device.unpackOTP(io)) {
         CIRRUS_ERR("failed to unpack OTP on %s", amp.name);
         return false;
@@ -3415,7 +3529,8 @@ bool CirrusAudioFixup::applyPLL(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
     FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
     bool pllLocked = false;
     if (!device.setupPLL(io, &pllLocked)) {
@@ -3450,7 +3565,8 @@ bool CirrusAudioFixup::applyASP(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
     FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
     if (!device.setupASP(io, amp.channel == cirrus::core::AudioChannel::Right, amp.firmwareValidated)) {
         return false;
@@ -3478,7 +3594,8 @@ bool CirrusAudioFixup::applyGPIO(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
     FixupRegisterIOAdapter io(this, amp);
-    cirrus::devices::cs35l41::CS35L41Device device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
     if (!device.setupGPIO(io)) {
         return false;

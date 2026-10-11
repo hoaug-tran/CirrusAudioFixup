@@ -10,7 +10,7 @@
 
 **Open-source macOS kernel extension for Cirrus Logic CS35L41 smart speaker amplifiers over I2C.**
 
-SPI development adds a CS35L41 register adapter, profiled Intel LPSS SPT/BXT/CNL controllers and AMD AMDI0061/AMDI0062 command controllers. Automatic service integration and board support remain pending; see [SPI development status](docs/spi_support.md).
+SPI development adds a CS35L41 register adapter, profiled Intel LPSS SPT/BXT/CNL controllers and AMD AMDI0061/AMDI0062 command controllers. The opt-in ACPI SPI personality now supports native read-only discovery and service suspend/resume; verified SPI board initialization and physical validation remain pending; see [SPI development status](docs/spi_support.md).
 
 The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service migration remains pending.
 
@@ -251,6 +251,7 @@ Flags with a value of `0` are treated as disabled. Debug builds enable routine l
 | `-cirrusro` | Skip GPIO reset, initialization and register writes; collect a one-shot register snapshot. Reads still send an I2C register-address prefix |
 | `-cirrusnodsp` | Skip firmware and coefficient upload; use the explicit DAC bypass path without DSP acoustic protection |
 | `-cirrusphase=<name>` | Stop after a selected initialization stage; playback stays disabled |
+| `-cirrusspi` | Opt-in native ACPI SPI discovery; currently requires `-cirrusro` and never authorizes speaker initialization |
 | `-cirruslegacyprobe` | Permit read-only fixed-address discovery outside automatic profile policy; never invent endpoints or authorize initialization |
 | `-cirrusprobe` | Record the flag in `CirrusBootArgParsed`; currently does not enable a separate transaction-log mode |
 | `-cirrusdelay=<ms>` | Set the read-only snapshot delay, default 100 ms. Does not replace the normal 15 ms startup wait |

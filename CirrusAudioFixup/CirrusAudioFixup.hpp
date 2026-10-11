@@ -32,6 +32,7 @@
 #include "Transport/VoodooI2CTransport.hpp"
 #include "Transport/CS35L41SPITransport.hpp"
 #include "Transport/ACPISPIResources.hpp"
+#include "Transport/NativeSPIHost.hpp"
 
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOInterruptEventSource.h>
@@ -61,6 +62,10 @@ struct AmplifierState {
     // Do not infer routing or tuning from a display name or slave address.
     const char* name{nullptr};
     uint8_t address{0};
+    // Borrowed native register port; null selects the legacy addressed I2C ABI.
+    cirrus::core::RegisterIO* registerIO{nullptr};
+    cirrus::core::BusEndpoint endpoint{};
+    uint8_t endpointIndex{0};
     cirrus::core::CodecModel model{cirrus::core::CodecModel::Unknown};
     cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
     bool present{false};
@@ -171,6 +176,23 @@ private:
     // The provider is borrowed for the attached service lifetime. The workloop
     // and its event sources are owned and removed before stop clears it.
     IOService* mProvider{nullptr};
+    cirrus::transport::NativeSPIHost mNativeSPI;
+    bool setupNativeSPI(IOService* provider);
+    size_t detectNativeSPIAmplifiers();
+    void teardownNativeSPI();
+    void suspendNativeTransport() {
+        mNativeSPI.suspend();
+        if (mNativeSPI.bound()) setProperty("Cirrus_SPI_Status", "SUSPENDED");
+    }
+    bool resumeNativeTransport() {
+        IOReturn ret = mNativeSPI.resume();
+        if (mNativeSPI.bound()) {
+            setProperty("Cirrus_SPI_Wake_Return", uint64_t(ret), 32);
+            if (ret == kIOReturnSuccess) setProperty("Cirrus_SPI_Status", "BOUND_READ_ONLY");
+        }
+        return ret == kIOReturnSuccess;
+    }
+    bool nativeBusReady() const { return mProvider && mPowerAvailable && !mStopping; }
     IOWorkLoop* mWorkLoop{nullptr};
     IOTimerEventSource* mProbeTimer{nullptr};
     IOCommandGate* mCommandGate{nullptr};

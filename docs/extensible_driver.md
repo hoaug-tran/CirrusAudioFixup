@@ -45,7 +45,7 @@ Identify and authorization failures perform no hardware shutdown writes. Once in
 
 ## Current integration boundary
 
-The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, and CS35L41 bring-up now uses the common lifecycle coordinator. Registry selection, persistent playback lifecycle and group ownership have not yet been migrated. No new amplifier is registered by a placeholder definition. SPI automatic discovery/IOService power callbacks and new board support remain pending. Existing Lenovo authorization remains in place.
+The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, and CS35L41 bring-up now uses the common lifecycle coordinator. Registry selection, persistent playback lifecycle and group ownership have not yet been migrated. No new amplifier is registered by a placeholder definition. An opt-in read-only SPI personality now performs ACPI discovery and native controller binding. SPI board authorization and complete controller power-parent coordination remain pending. Existing Lenovo authorization remains in place.
 
 This foundation reduces duplicated transport work for new backends. It does not claim that every future amplifier/controller is supported or that all service code has already become generic.
 
@@ -69,5 +69,11 @@ A subsequent owner retry still performs the existing reset/initialization flow.
 This is the first runtime migration step. Playback, interrupts, sleep/wake and
 transport/controller ownership still use the existing service implementation.
 `BackendRegistry` and `AmplifierGroup` are not yet used for shipping runtime
-selection. Native SPI controllers still need ACPI discovery, resource binding,
-power notifications and validated board data before a SPI machine can attach.
+selection. Native SPI controllers now have opt-in read-only ACPI discovery/resource binding
+and service suspend/resume hooks. Physical validation, controller publication/PM
+coordination and board data remain necessary before SPI playback can be enabled.
+
+Deferred bring-up propagates through `AmplifierGroup` as Waiting/DebugHalted,
+including on wake. Prepared peers remain muted; later members and group playback
+are blocked. This does not record a hardware failure or trigger failure cleanup.
+The owner must explicitly detach/reset before retrying the group.

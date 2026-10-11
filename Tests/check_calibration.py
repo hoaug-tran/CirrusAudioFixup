@@ -75,6 +75,7 @@ struct CirrusFirmwareParser {
 bool CirrusFirmwareParser::missing=false;
 struct CS35L41Amp {
     uint8_t address=0x40; const char* name="L";
+    void* registerIO=nullptr; uint8_t endpointIndex=0;
     bool firmwareValidated=false,playbackFaulted=false;
 };
 using AmplifierState = CS35L41Amp;

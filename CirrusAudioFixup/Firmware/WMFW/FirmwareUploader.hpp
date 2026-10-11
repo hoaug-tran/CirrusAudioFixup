@@ -250,8 +250,7 @@ public:
 
             CIRRUS_LOG("amp %s: transaction %d/%d (dsp=0x%08x size=%d)", deviceName, i + 1, plan.transactionCount, tx.dspRegister, tx.size);
 
-            uint32_t totalPacketLength = tx.size + 4;
-            CIRRUS_LOG("Amp %s:   WRITE    : payload = %d bytes, packet = %d bytes (payload + 4)", deviceName, tx.size, totalPacketLength);
+            CIRRUS_LOG("Amp %s:   WRITE    : register payload = %d bytes", deviceName, tx.size);
             uint64_t t0 = mach_absolute_time();
             bool writeOk = false;
             for (int attempt = 1; attempt <= 2; attempt++) {

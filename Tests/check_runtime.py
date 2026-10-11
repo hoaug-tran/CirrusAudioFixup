@@ -218,6 +218,9 @@ struct IOInterruptEventSource {
 #define OSDynamicCast(type, object) reinterpret_cast<type*>(object)
 class CirrusAudioFixup {
 public:
+    void suspendNativeTransport() {}
+    bool resumeNativeTransport() {return true;}
+public:
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     IOInterruptEventSource* mAmpInterrupt=nullptr;

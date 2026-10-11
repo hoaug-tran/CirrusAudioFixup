@@ -1,0 +1,188 @@
+"""Exercise Intel LPSS FIFO engine and CS35L41 frames against a register model."""
+from pathlib import Path
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+with tempfile.TemporaryDirectory(prefix='cirrus-intel-spi-') as directory:
+    tmp = Path(directory)
+    (tmp/'IOKit').mkdir()
+    (tmp/'IOKit/IOLib.h').write_text('''#pragma once
+using IOReturn=int;
+constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
+ kIOReturnUnsupported=-3,kIOReturnBusy=-4,kIOReturnNoDevice=-5,
+ kIOReturnIOError=-6,kIOReturnTimeout=-7,kIOReturnNotPermitted=-8;
+inline void IOSleep(unsigned) {}
+''')
+    (tmp/'test.cpp').write_text(r'''
+#include <cassert>
+#include <deque>
+#include <vector>
+#include <map>
+#include "Transport/Intel/LPSSSPIEngine.hpp"
+#include "Transport/CS35L41SPITransport.hpp"
+#include "Devices/CS35L41/CS35L41Device.hpp"
+bool gCirrusDebug=false;
+using namespace cirrus::transport;
+using namespace cirrus::transport::intel;
+using E=LPSSSPIEngine;
+struct Window : RegisterWindow {
+    uint32_t regs[0x300/4]{};
+    uint64_t time=0;
+    std::deque<uint8_t> fifo;
+    std::vector<uint8_t> bytes;
+    std::map<uint32_t,uint32_t> codec;
+    std::vector<std::vector<uint8_t>> transactions;
+    std::vector<std::pair<uint32_t,uint32_t>> writes;
+    unsigned busyTail=0,assertions=0,deassertions=0,failAfter=0;
+    bool selected=false,stuck=false,forceBusy=false,overrun=false,missing=false,staleForever=false;
+    Window() {
+        regs[E::kCapabilities/4]=0x20|(3<<9);
+        regs[E::kChipSelect/4]=3;
+        regs[E::kClock/4]=1|(1<<1)|(1<<16);
+        regs[E::kClockGate/4]=0x80;
+        regs[E::kReset/4]=7;
+    }
+    uint32_t read32(uint32_t o) override {
+        ++time;
+        if(o==E::kStatus) {
+            if(missing || (failAfter && bytes.size()>=failAfter)) return 0xffffffff;
+            if(overrun) return E::kOverrun;
+            if(forceBusy || (busyTail && busyTail--)) return E::kBusy;
+            return E::kTxReady|((!fifo.empty()||staleForever)?E::kRxReady:0);
+        }
+        if(o==E::kData) {
+            if(staleForever) return 0;
+            assert(!fifo.empty()); auto b=fifo.front();fifo.pop_front();return b;
+        }
+        return regs[o/4];
+    }
+    void write32(uint32_t o,uint32_t v) override {
+        ++time;writes.emplace_back(o,v);
+        if(o==E::kStatus) return;
+        if(o==E::kChipSelect) {
+            bool next=(v&3)==1;
+            if(next&&!selected) {assertions++;bytes.clear();}
+            if(!next&&selected) {
+                deassertions++;transactions.push_back(bytes);
+                if(bytes.size()>=10 && !(bytes[0]&0x80)) {
+                    uint32_t address=uint32_t(bytes[0])<<24|uint32_t(bytes[1])<<16|uint32_t(bytes[2])<<8|bytes[3];
+                    for(size_t n=6;n+3<bytes.size();n+=4)
+                        codec[address+uint32_t(n-6)]=uint32_t(bytes[n])<<24|uint32_t(bytes[n+1])<<16|uint32_t(bytes[n+2])<<8|bytes[n+3];
+                }
+            }
+            selected=next;
+        }
+        if(o==E::kControl0 && !(v&E::kEnabled)) fifo.clear();
+        regs[o/4]=v;
+        if(o==E::kData) {
+            assert(selected && (regs[E::kControl0/4]&E::kEnabled));
+            bytes.push_back(uint8_t(v));
+            if(!stuck) {
+                // Return recognizable data after the six-byte CS35L41 header.
+                auto n=bytes.size();uint8_t b=0xee;
+                if(n>6) {
+                    uint32_t address=uint32_t(bytes[0]&0x7f)<<24|uint32_t(bytes[1])<<16|uint32_t(bytes[2])<<8|bytes[3];
+                    address+=uint32_t((n-7)/4*4);
+                    auto found=codec.find(address);
+                    uint32_t value=found==codec.end()?0x11223344:found->second;
+                    b=uint8_t(value>>(24-8*((n-7)%4)));
+                }
+                fifo.push_back(b);
+            }
+        }
+    }
+    uint64_t nowUs() override { return ++time; }
+    void delayUs(uint32_t v) override { time+=v; }
+};
+struct Controller : SPIController {
+    Window w; E engine{w};
+    Controller() { assert(engine.initialize()==0); }
+    size_t maxTransferBytes() const override { return E::kMaxFrameBytes; }
+    IOReturn exchange(const SPIEndpoint& ep,const uint8_t* tx,uint8_t* rx,size_t n) override { return engine.exchange(ep,tx,rx,n); }
+};
+void inactive(const Window& w) {
+    assert(!w.selected && !(w.regs[E::kControl0/4]&E::kEnabled));
+    assert(w.regs[E::kClockGate/4]==0x80);
+}
+int main() {
+    SPIEndpoint ep{1,1000000,0}; uint8_t tx[32]{},rx[32]{};
+    Controller c; assert(c.w.writes.empty() && c.engine.selectCount()==2);
+    CS35L41SPITransport amp(&c,ep,true);
+    uint32_t value=0;
+    assert(amp.read(0x02800398,&value)&&value==0x11223344);
+    assert(c.w.transactions.back()==std::vector<uint8_t>({0x82,0x80,3,0x98,0,0,0,0,0,0}));
+    assert(amp.write(0x2018,0x12345678));
+    assert(c.w.transactions.back()==std::vector<uint8_t>({0,0,0x20,0x18,0,0,0x12,0x34,0x56,0x78}));
+    assert(c.w.assertions==2&&c.w.deassertions==2);inactive(c.w);
+    std::vector<uint8_t> firmware(520,0x5a);
+    assert(amp.bulkWrite(0x02800000,firmware.data(),firmware.size()));
+    assert(c.w.transactions.size()==5&&c.w.transactions[2].size()==262);
+    for(unsigned mode=0;mode<4;++mode) {
+        assert(c.engine.exchange({0,3000000,uint8_t(mode)},tx,rx,32)==0);
+        assert(c.engine.actualClockHz()<=3000000);
+        assert(c.w.regs[E::kControl1/4]==(((mode&2)?8:0)|((mode&1)?16:0)));
+        assert((c.w.regs[E::kChipSelect/4]&0x300)==0);inactive(c.w);
+    }
+    c.w.regs[E::kClock/4]=1|(1<<1)|(2<<16);
+    assert(c.engine.exchange(ep,tx,rx,32)==0&&c.engine.actualClockHz()==1000000);
+    assert(((c.w.regs[E::kControl0/4]>>8)&0xfff)==49);
+    c.engine.suspend();auto count=c.w.writes.size();
+    assert(c.engine.exchange(ep,tx,rx,32)==kIOReturnNotReady&&c.w.writes.size()==count);
+    assert(c.engine.resume()==0);assert(c.engine.exchange(ep,tx,nullptr,32)==0);
+    c.engine.shutdown();count=c.w.writes.size();
+    assert(c.engine.exchange(ep,tx,rx,32)==kIOReturnNotReady&&c.w.writes.size()==count);
+    // Existing silicon logic consumes RegisterIO unchanged on an SPI backend.
+    Controller logic;
+    namespace registers=cirrus::devices::cs35l41::registers;
+    logic.w.codec[registers::kRegDeviceId]=registers::kValDeviceId;
+    logic.w.codec[registers::kRegRevisionId]=0xb2;
+    CS35L41SPITransport spiIO(&logic,{0,1000000,0},true);
+    cirrus::devices::cs35l41::CS35L41Device device("left",0);
+    assert(device.probe(spiIO)&&device.isPresent());
+    bool locked=false;
+    assert(device.setupPLL(spiIO,&locked));
+    assert(device.setupASP(spiIO,false,false));
+    assert(device.setupGPIO(spiIO));
+    inactive(logic.w);
+    Controller invalid;count=invalid.w.writes.size();
+    assert(invalid.engine.exchange({2,1000000,0},tx,rx,32)==kIOReturnBadArgument);
+    assert(invalid.engine.exchange({0,0,0},tx,rx,32)==kIOReturnBadArgument);
+    assert(invalid.engine.exchange({0,1000000,4},tx,rx,32)==kIOReturnBadArgument);
+    assert(invalid.engine.exchange(ep,nullptr,rx,32)==kIOReturnBadArgument);
+    assert(invalid.engine.exchange(ep,tx,rx,4097)==kIOReturnBadArgument);
+    assert(invalid.w.writes.size()==count);
+    invalid.w.regs[E::kClock/4]=1|(1<<1);
+    assert(invalid.engine.exchange(ep,tx,rx,32)==kIOReturnUnsupported&&invalid.w.writes.size()==count);
+    Controller lowClock;
+    assert(lowClock.engine.exchange({0,1,0},tx,rx,32)==kIOReturnUnsupported&&lowClock.w.writes.empty());
+    for(unsigned kind=0;kind<3;++kind) {
+        Window w;
+        if(kind==0)w.regs[E::kCapabilities/4]=0xffffffff;
+        if(kind==1)w.regs[E::kCapabilities/4]=0x20|(5<<9);
+        if(kind==2)w.forceBusy=true;
+        E engine(w);assert(engine.initialize()!=0&&w.writes.empty());
+    }
+    Controller timeout;timeout.w.stuck=true;
+    assert(timeout.engine.exchange(ep,tx,rx,32)==kIOReturnTimeout);inactive(timeout.w);
+    assert(timeout.w.assertions==1&&timeout.w.deassertions==1);
+    timeout.w.stuck=false;assert(timeout.engine.exchange(ep,tx,rx,32)==0);inactive(timeout.w);
+    Controller errors;errors.w.overrun=true;
+    assert(errors.engine.exchange(ep,tx,rx,32)==kIOReturnIOError);inactive(errors.w);
+    errors.w.overrun=false;errors.w.staleForever=true;
+    assert(errors.engine.exchange(ep,tx,rx,32)==kIOReturnIOError);inactive(errors.w);
+    Controller busy;busy.w.forceBusy=true;count=busy.w.writes.size();
+    assert(busy.engine.exchange(ep,tx,rx,32)==kIOReturnBusy&&busy.w.writes.size()==count);
+    Controller gone;gone.w.missing=true;
+    assert(gone.engine.exchange(ep,tx,rx,32)==kIOReturnNoDevice&&gone.w.writes.empty());
+    Controller unplug;unplug.w.failAfter=2;
+    assert(unplug.engine.exchange(ep,tx,rx,32)==kIOReturnNoDevice&&!unplug.engine.online());
+}
+''')
+    for flags in [[], ['-fsanitize=address,undefined','-fno-omit-frame-pointer']]:
+        exe=tmp/'intel-spi-test'
+        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
+                        '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
+                        str(tmp/'test.cpp'),'-o',str(exe)],check=True)
+        subprocess.run([str(exe)],check=True)
+print('PASS Intel LPSS PIO + CS35L41: native CS, full-duplex FIFO, modes, clock, firmware chunks, errors, timeout and suspend; hardware untested')

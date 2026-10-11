@@ -81,6 +81,8 @@ python3 Tests/reproduce_host.py
 python3 Tests/check_registers.py
 python3 Tests/check_transport.py
 python3 Tests/check_spi_transport.py
+python3 Tests/check_intel_spi.py
+python3 Tests/check_intel_spi_lifecycle.py
 python3 Tests/check_diagnostics.py
 python3 Tests/check_hda.py
 python3 Tests/check_calibration.py

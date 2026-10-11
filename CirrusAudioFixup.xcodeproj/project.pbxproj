@@ -299,12 +299,41 @@
 			path = "CS35L41SPITransport.hpp";
 			sourceTree = "<group>";
 		};
+		CAFE51000000000000000003 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "LPSSSPIEngine.hpp";
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "IntelLPSSSPIController.hpp";
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000005 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = "IntelLPSSSPIController.cpp";
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000006 = {
+            isa = PBXGroup;
+            children = (CAFE51000000000000000003, CAFE51000000000000000004, CAFE51000000000000000005);
+            path = Intel;
+            sourceTree = "<group>";
+        };
+        CAFE51000000000000000007 = {
+            isa = PBXBuildFile;
+            fileRef = CAFE51000000000000000005;
+        };
 		D1C35C0E3D90A9BEF84D6F6D = {
 			isa = PBXGroup;
 			children = (
 				79E10805A559FC3E5503866B,
 				CAFE51000000000000000001,
 				CAFE51000000000000000002,
+				CAFE51000000000000000006,
 			);
 			path = "Transport";
 			sourceTree = "<group>";
@@ -709,6 +738,7 @@
 			files = (
 				CAFE00000011 ,
 				CAFE00000012 ,
+				CAFE51000000000000000007,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -29,7 +29,7 @@ IntelLPSSSPIController::~IntelLPSSSPIController() {
 }
 
 bool IntelLPSSSPIController::pciIsD0() const {
-    if (!mPCI || mPCI->configRead16(0) != 0x8086 || mPCI->configRead16(2) != 0x7aaa)
+    if (!mPCI || mPCI->configRead16(0) != 0x8086 || mPCI->configRead16(2) != mDeviceId)
         return false;
     uint8_t offset = 0;
     // PMCSR is four bytes after the PM capability header. An absent PM
@@ -44,8 +44,11 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         return kIOReturnBusy;
     if (!pci || !owner)
         return kIOReturnBadArgument;
-    if (pci->configRead16(0) != 0x8086 || pci->configRead16(2) != 0x7aaa)
+    LPSSSPIProfile profile{};
+    if (!lookupLPSSSPIProfile(pci->configRead16(0), pci->configRead16(2), profile))
         return kIOReturnUnsupported;
+    mDeviceId = pci->configRead16(2);
+    mProfile = profile;
     mLock = IOLockAlloc();
     if (!mLock)
         return kIOReturnNoMemory;
@@ -79,7 +82,7 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         return kIOReturnNoResources;
     }
     mWindow.base = reinterpret_cast<volatile uint8_t*>(mMap->getVirtualAddress());
-    IOReturn result = mEngine.initialize();
+    IOReturn result = mEngine.initialize(mProfile);
     if (result != kIOReturnSuccess)
         shutdown();
     return result;

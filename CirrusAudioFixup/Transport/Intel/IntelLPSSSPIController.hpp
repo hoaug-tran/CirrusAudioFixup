@@ -1,4 +1,4 @@
-// PCI/MMIO owner for the 8086:7AAA Intel LPSS SPI controller.
+// PCI/MMIO owner for profiled Intel LPSS SPI controller families.
 // The enclosing IOService supplies PCI D0 and quiesces clients before teardown.
 // No automatic PCI/ACPI matching or amplifier board profile is implied.
 #pragma once
@@ -35,6 +35,8 @@ private:
     };
 
     bool pciIsD0() const;
+    uint16_t mDeviceId{0};
+    LPSSSPIProfile mProfile{};
     IntelLPSSSPIController(const IntelLPSSSPIController&) = delete;
     IntelLPSSSPIController& operator=(const IntelLPSSSPIController&) = delete;
     MMIOWindow mWindow;

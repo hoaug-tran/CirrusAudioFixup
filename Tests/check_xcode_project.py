@@ -38,7 +38,8 @@ for identifier in target['buildPhases']:
         compiled.update(references[objects[item]['fileRef']] for item in phase['files'])
 assert compiled == {ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp',
                     ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEvents.cpp',
-                    ROOT / 'CirrusAudioFixup/Transport/Intel/IntelLPSSSPIController.cpp'}
+                    ROOT / 'CirrusAudioFixup/Transport/Intel/IntelLPSSSPIController.cpp',
+                    ROOT / 'CirrusAudioFixup/Transport/AMD/AMDACPIController.cpp'}
 gates = [objects[i] for i in target['buildPhases']
          if objects[i]['isa'] == 'PBXShellScriptBuildPhase']
 assert len(gates) == 1 and gates[0]['alwaysOutOfDate'] == '1'

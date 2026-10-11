@@ -113,19 +113,16 @@ private:
             if (chunk > payloadLimit)
                 chunk = payloadLimit;
             uint8_t tx[kHeaderBytes + kMaxPayloadBytes]{};
-            uint8_t rx[kHeaderBytes + kMaxPayloadBytes]{};
             encode(tx, reg + static_cast<uint32_t>(offset));
             if (readData)
                 tx[0] |= 0x80;
             else
                 for (size_t i = 0; i < chunk; ++i)
                     tx[kHeaderBytes + i] = writeData[offset + i];
-            mLastReturn = mController->exchange(mEndpoint, tx, readData ? rx : nullptr, kHeaderBytes + chunk);
+            mLastReturn = mController->command(mEndpoint, tx, readData ? kHeaderBytes : kHeaderBytes + chunk,
+                                                readData ? readData + offset : nullptr, readData ? chunk : 0);
             if (mLastReturn != kIOReturnSuccess)
                 return false;
-            if (readData)
-                for (size_t i = 0; i < chunk; ++i)
-                    readData[offset + i] = rx[kHeaderBytes + i];
             offset += chunk;
         }
         return true;

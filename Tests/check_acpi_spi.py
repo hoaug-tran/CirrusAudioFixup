@@ -4,7 +4,7 @@ import tempfile, subprocess
 ROOT=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='cirrus-acpi-spi-') as directory:
     p=Path(directory); (p/'IOKit').mkdir()
-    (p/'IOKit/IOLib.h').write_text('#pragma once\nusing IOReturn=int;\n')
+    (p/'IOKit/IOLib.h').write_text('#pragma once\nusing IOReturn=int; constexpr int kIOReturnBadArgument=-1,kIOReturnSuccess=0;\n')
     (p/'test.cpp').write_text(r'''
 #include <cassert>
 #include <vector>

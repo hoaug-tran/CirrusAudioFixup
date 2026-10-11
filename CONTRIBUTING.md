@@ -80,6 +80,8 @@ Run from the repository root. Host tests need Python 3, Bash and a C++17 compile
 python3 Tests/reproduce_host.py
 python3 Tests/check_registers.py
 python3 Tests/check_transport.py
+python3 Tests/check_amd_spi.py
+python3 Tests/check_amd_spi_lifecycle.py
 python3 Tests/check_acpi_spi.py
 python3 Tests/check_spi_transport.py
 python3 Tests/check_intel_spi.py

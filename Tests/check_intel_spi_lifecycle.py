@@ -74,6 +74,7 @@ inline uint64_t mach_absolute_time(){fakeNs+=1000;return fakeNs;}
 ''')
     (tmp/'test.cpp').write_text(r'''
 #include <cstring>
+#include <initializer_list>
 #include "Transport/Intel/IntelLPSSSPIController.hpp"
 using namespace cirrus::transport;
 using namespace cirrus::transport::intel;
@@ -112,6 +113,11 @@ int main(){
         assert(bad.opened==(mode==1));
         if(mode<=2)assert(bad.closes==0);
         else assert(bad.closes==1&&!bad.memory);
+    }
+    for(uint16_t id : {uint16_t(0x9d29),uint16_t(0x1ac2),uint16_t(0xa32a),uint16_t(0x51aa)}) {
+        IOPCIDevice supported;supported.device=id;IntelLPSSSPIController controller;
+        assert(controller.bind(&supported,&owner)==0);controller.suspend();
+        assert(controller.resume()==0);controller.shutdown();assert(supported.refs==1&&!supported.opened);
     }
     IOPCIDevice noMemory;allocationFail=true;
     {IntelLPSSSPIController bus;assert(bus.bind(&noMemory,&owner)==kIOReturnNoMemory&&noMemory.opens==0);}

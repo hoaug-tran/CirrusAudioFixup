@@ -1,10 +1,11 @@
-// Intel CNL-family LPSS SSP register engine, with polling rather than DMA/IRQ.
+// Intel SPT/BXT/CNL-family LPSS SSP register engine, with polling rather than DMA/IRQ.
 // Register facts and quirks checked against Linux v6.12 intel-lpss{,-pci}.c,
 // spi-pxa2xx.c and pxa2xx_ssp.h (Intel/PXA driver authors). This implementation
 // uses an injected register window so FIFO behavior can be tested on the host.
 #pragma once
 
 #include "Transport/SPIController.hpp"
+#include "LPSSSPIProfiles.hpp"
 
 namespace cirrus::transport::intel {
 
@@ -43,10 +44,12 @@ public:
     // initialize/exchange/suspend/resume/shutdown, including power transitions.
     explicit LPSSSPIEngine(RegisterWindow& window) : mWindow(window) {}
 
-    IOReturn initialize() {
+    IOReturn initialize(LPSSSPIProfile profile = {LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300}) {
         if (mInitialized)
             return kIOReturnBusy;
-        uint32_t caps = mWindow.read32(kCapabilities);
+        mProfile = profile;
+        if (!mProfile.rootClockHz) return kIOReturnBadArgument;
+        uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
         uint32_t status = mWindow.read32(kStatus);
         if (caps == 0xffffffffU || status == 0xffffffffU || ((caps >> 4) & 0xf) != 2)
             return kIOReturnUnsupported;
@@ -90,7 +93,7 @@ public:
     IOReturn resume() {
         if (!mInitialized)
             return kIOReturnNotReady;
-        uint32_t caps = mWindow.read32(kCapabilities);
+        uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
         if (caps == 0xffffffffU || ((caps >> 4) & 0xf) != 2 ||
             ((caps >> 9) & 0xf) != ((1U << mSelectCount) - 1))
             return kIOReturnUnsupported;
@@ -138,7 +141,7 @@ public:
             numerator = denominator = 1;
         if (!numerator || !denominator || numerator > denominator)
             return kIOReturnUnsupported;
-        uint64_t clockNumerator = uint64_t(kRootClockHz) * numerator;
+        uint64_t clockNumerator = uint64_t(mProfile.rootClockHz) * numerator;
         uint64_t divisorDenominator = uint64_t(denominator) * endpoint.clockHz;
         uint64_t divisor = (clockNumerator + divisorDenominator - 1) / divisorDenominator;
         if (!divisor || divisor > 4096)
@@ -159,9 +162,10 @@ public:
         mWindow.write32(kReset, mWindow.read32(kReset) | 3U);
         mWindow.write32(kClock, clock | 1U);
         uint32_t gate = mWindow.read32(kClockGate);
-        mWindow.write32(kClockGate, (gate & ~3U) | 3U);
+        if (mProfile.forceClockGate)
+            mWindow.write32(kClockGate, (gate & ~3U) | 3U);
         mWindow.write32(kControl0, mWindow.read32(kControl0) & ~kEnabled);
-        uint32_t inactive = (mWindow.read32(kChipSelect) & ~0x300U) |
+        uint32_t inactive = (mWindow.read32(kChipSelect) & ~mProfile.selectMask) |
                             (endpoint.chipSelect << 8) | 3U;
         mWindow.write32(kChipSelect, inactive);
         // CS selection is latched; wait at least two input clock cycles before
@@ -254,7 +258,8 @@ private:
 
     void quiesce() {
         uint32_t gate = mWindow.read32(kClockGate);
-        mWindow.write32(kClockGate, (gate & ~3U) | 3U);
+        if (mProfile.forceClockGate)
+            mWindow.write32(kClockGate, (gate & ~3U) | 3U);
         mWindow.write32(kControl0, mWindow.read32(kControl0) & ~kEnabled);
         mWindow.write32(kChipSelect, mWindow.read32(kChipSelect) | 3U);
         (void)mWindow.read32(kChipSelect);
@@ -262,6 +267,7 @@ private:
         mWindow.write32(kClockGate, gate);
     }
 
+    LPSSSPIProfile mProfile{LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300};
     RegisterWindow& mWindow;
     bool mInitialized{false}, mOnline{false}, mTouched{false};
     uint32_t mSelectCount{0}, mActualClockHz{0};

@@ -55,9 +55,12 @@ for bus in ['spi','acpi','pci','platform']:
     base=P('/sys/bus')/bus/'devices'
     if not base.exists(): continue
     for dev in base.iterdir():
-        interesting=bus=='spi' or 'CSC3551' in dev.name.upper() or 'cs35l41' in dev.name.lower()
+        interesting=bus=='spi' or any(x in dev.name.upper() for x in ['CSC3551','CLSA0100','AMDI0061','AMDI0062']) or 'cs35l41' in dev.name.lower()
         if bus=='pci':
-            try: interesting=dev.joinpath('vendor').read_text().strip()=='0x8086' and dev.joinpath('device').read_text().strip()=='0x7aaa'
+            try:
+                vendor=dev.joinpath('vendor').read_text().strip()
+                pci_class=dev.joinpath('class').read_text().strip()
+                interesting=vendor in ['0x8086','0x1022'] and (pci_class.startswith('0x0c') or pci_class=='0x060100')
             except OSError: pass
         if not interesting: continue
         dst=out/'sysfs'/bus/dev.name; dst.mkdir(parents=True,exist_ok=True)

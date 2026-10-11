@@ -106,6 +106,22 @@ void inactive(const Window& w) {
     assert(w.regs[E::kClockGate/4]==0x80);
 }
 int main() {
+    for (uint16_t id : {uint16_t(0x9d29),uint16_t(0x1ac2),uint16_t(0xa32a),uint16_t(0x51aa),uint16_t(0x7aaa)}) {
+        LPSSSPIProfile profile{}; assert(lookupLPSSSPIProfile(0x8086,id,profile));
+        Window w; E engine(w); assert(engine.initialize(profile)==0);
+        uint8_t txProfile[10]{},rxProfile[10]{};
+        assert(engine.exchange({0,7000000,0},txProfile,rxProfile,10)==0);
+        uint32_t divisor=(profile.rootClockHz+6999999)/7000000;
+        assert(engine.actualClockHz()==profile.rootClockHz/divisor);
+        assert(((w.regs[E::kControl0/4]>>8)&0xfff)==divisor-1);
+        assert(engine.selectCount()==(profile.capabilities?2U:1U));
+        if(!profile.capabilities) assert(engine.exchange({1,1000000,0},txProfile,rxProfile,10)==kIOReturnBadArgument);
+        engine.shutdown();
+    }
+    LPSSSPIProfile rejected{};
+    assert(!lookupLPSSSPIProfile(0x1022,0x7aaa,rejected));
+    assert(!lookupLPSSSPIProfile(0x8086,0xa123,rejected));
+
     SPIEndpoint ep{1,1000000,0}; uint8_t tx[32]{},rx[32]{};
     Controller c; assert(c.w.writes.empty() && c.engine.selectCount()==2);
     CS35L41SPITransport amp(&c,ep,true);

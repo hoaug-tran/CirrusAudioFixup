@@ -305,6 +305,19 @@
 			path = "ACPISPIResources.hpp";
 			sourceTree = "<group>";
 		};
+		CAFE51000000000000000009 = {
+ isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "Intel/LPSSSPIProfiles.hpp"; sourceTree = "<group>";
+ };
+		CAFE5100000000000000000A = {
+ isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDSPIEngine.hpp"; sourceTree = "<group>";
+ };
+		CAFE5100000000000000000B = {
+ isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDACPIController.hpp"; sourceTree = "<group>";
+ };
+		CAFE5100000000000000000C = {
+ isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "AMD/AMDACPIController.cpp"; sourceTree = "<group>";
+ };
+		CAFE5100000000000000000D = { isa = PBXBuildFile; fileRef = CAFE5100000000000000000C; };
 		CAFE51000000000000000003 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
@@ -340,6 +353,11 @@
 				CAFE51000000000000000001,
 				CAFE51000000000000000002,
 				CAFE51000000000000000008,
+				CAFE51000000000000000009,
+				CAFE5100000000000000000A,
+				CAFE5100000000000000000B,
+				CAFE5100000000000000000C,
+
 				CAFE51000000000000000006,
 			);
 			path = "Transport";
@@ -746,6 +764,7 @@
 				CAFE00000011 ,
 				CAFE00000012 ,
 				CAFE51000000000000000007,
+                CAFE5100000000000000000D,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

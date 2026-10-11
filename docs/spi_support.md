@@ -2,12 +2,28 @@
 
 Branch: `feat/cs35l41-spi-support`. Tracking: [HP hardware issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
 
-The branch implements a CS35L41 SPI register adapter and a native Intel LPSS
-PIO controller base for PCI 8086:7AAA. The existing shipping IOService path
-still dispatches through VoodooI2C: PCI/ACPI discovery, endpoint wiring, parent
-power notifications and HP board authorization are not connected to this base
-yet. Installing the branch alone does not make HP internal speakers work.
-No automatic CSC3551/PCI match, guessed HP GPIO or firmware override is added.
+The transport layer is independent of CPU and board. Native backends currently
+implement Intel LPSS SPT/BXT/CNL PCI controller families and AMD AMDI0061/
+AMDI0062 ACPI command controllers. The Intel identity table contains all 86
+SPI IDs in Linux v6.12 intel-lpss-pci.c, with family-specific clock and CS
+behavior; 7AAA is one entry, not a special gate. This is not support for every
+SPI controller ever used on Intel/AMD systems.
+
+The existing shipping IOService path still dispatches through VoodooI2C.
+PCI/ACPI discovery, endpoint wiring, parent power notifications and amplifier
+board authorization are not connected to these backends yet. Installing the
+branch alone does not make SPI internal speakers work. A CPU vendor is not a
+controller identity or a board tuning profile.
+
+| Backend | Source support | Limits / remaining work |
+| --- | --- | --- |
+| Intel LPSS SPT | PCI/MMIO owner + PIO | One native CS, 120 MHz root; hardware untested |
+| Intel LPSS BXT | PCI/MMIO owner + PIO | Capabilities/native CS, 100 MHz root; hardware untested |
+| Intel LPSS CNL/TGL | PCI/MMIO owner + PIO | Capabilities/native CS, 120/100 MHz root; hardware untested |
+| AMD AMDI0061/0062 | ACPI/MMIO owner + command FIFO | Mode 0, 64-byte frames, 0.8–100 MHz; hardware untested |
+| Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/backends |
+| Other controllers, external GPIO CS | Not implemented | Need documented register backend and ownership/power behavior |
+| Automatic SPI IOService / amp playback | Not implemented | Needs runtime discovery, power integration and verified board profiles |
 
 ## Research and base selection
 
@@ -16,7 +32,7 @@ Intel 7AAA is listed by Linux v6.12 `intel-lpss-pci.c` under `tgl_spi_info`:
 is `spi-pxa2xx.c`; LPSS glue supplies function reset, private clock and resource
 handling. Intel Serial IO SPI is distinct from the flash/PCH SPI controller.
 The generic endpoint `clockHz` is the peripheral maximum, not the root clock.
-The LPSS fractional divider can reduce the actual SSP input below 100 MHz.
+The LPSS fractional divider can reduce the actual SSP input below its profile root clock.
 
 No verifiable open-source VoodooSPI controller/API for this device was found
 in this investigation. Code does not assume that VoodooI2C exposes SPI or call
@@ -37,7 +53,7 @@ Pinned references:
 
 `Transport/Intel/IntelLPSSSPIController.{hpp,cpp}` implements `SPIController`:
 
-- Exact vendor/device validation, retain/open PCI ownership and BAR0 mapping.
+- Vendor/device profile lookup, retain/open PCI ownership and BAR0 mapping.
 - Reject already opened controllers, missing/short mappings and non-D0 PCI.
 - Preserve PCI memory-decode state and release mappings/ownership on failures.
 - Serialize transfer and suspend/resume calls with an IOLock.
@@ -45,13 +61,13 @@ Pinned references:
 
 `Transport/Intel/LPSSSPIEngine.hpp` implements the controller register engine:
 
-- Validate SPI capabilities and enabled native chip selects.
+- Validate SPI capabilities and enabled native chip selects on BXT/CNL; SPT exposes one native CS.
 - Modes 0–3, eight-bit words, MSB first and active-low native CS.
 - Read the fractional LPSS divider, calculate SCR without exceeding requested
   speed and reject unrepresentable rates.
 - Preserve DMA reset; deassert function reset, enable the clock and run PIO.
 - Hold one CS assertion for a complete full-duplex frame. Select CS while
-  inactive, wait at least two input clock cycles and handle CNL clock gating.
+  inactive, wait at least two input clock cycles and apply BXT/CNL clock gating quirks only for those profiles.
 - Drain RX on writes too; at most eight bytes outstanding to bound FIFO use.
 - Bound transfer time, drain stale RX, detect overruns/bit errors/inaccessible
   MMIO, stop clocks and release CS on accessible-hardware errors.
@@ -71,6 +87,32 @@ It does not parse ACPI SpiSerialBus resources, support external GPIO CS,
 active-high CS, DMA/IRQ acceleration or arbitrary Intel SPI generations.
 An IOLock serializes frames; the enclosing driver must also serialize complete
 register read-modify-write operations. Bind/shutdown cannot race client calls.
+
+## AMD command backend
+
+`Transport/AMD/AMDSPIEngine.hpp` supports AMD AMDI0061 (V1) and AMDI0062 (V2)
+register layouts. `AMDACPIController.{hpp,cpp}` supplies exclusive ACPI provider
+ownership, MMIO mapping, serialized commands, D0 checks when `_PSC` exists,
+and suspend/resume/cleanup. The enclosing service owns AML power sequencing.
+It is not an automatically matched driver personality.
+
+AMD uses a command byte/opcode followed by FIFO TX and then RX under a single
+hardware command. `SPIController::command()` represents this separately from
+simultaneous full-duplex `exchange()`. Intel uses the default bounded bridge;
+AMD implements command directly and rejects full-duplex exchange. CS35L41
+reads send the six-byte address/padding header before receiving payload, so
+both backends use the same register/firmware logic. The AMD frame limit reduces
+CS35L41 firmware chunks automatically to 56 payload bytes.
+
+AMD supports only mode 0, four native chip selections, at most 64 wire bytes,
+and documented rates rounded down to the endpoint maximum (minimum 800 kHz).
+V1/V2 opcode and trigger registers differ. The engine waits for completion on
+writes too; a two-second timeout marks it offline without changing chip select
+on a possibly running command. Recovery requires owner-managed hardware power/
+reset. Generic CS polarity/GPIO switching and arbitrary AMD PCI controllers
+are not implied by these ACPI backends.
+
+Reference: [AMD SPI registers and command semantics](https://github.com/torvalds/linux/blob/v6.12/drivers/spi/spi-amd.c).
 
 ## ACPI endpoint decoding
 
@@ -155,6 +197,10 @@ instead says 103C8CA4; that discrepancy remains unresolved.
 
 Maintained regressions:
 
+- `check_amd_spi.py`: production AMD V1/V2 command/FIFO engine, CS35L41
+  read/write/RMW and firmware chunks, rates, failure and power guards.
+- `check_amd_spi_lifecycle.py`: production AMD ACPI owner with allocation,
+  ownership, mapping, power and rebind fault injection.
 - `check_acpi_spi.py`: bounded ACPI parsing, truncation, revisions, checksum,
   multi-endpoint and malformed-buffer sanitizer checks.
 - `check_spi_transport.py`: production CS35L41 framing, limits and errors.
@@ -166,6 +212,6 @@ Maintained regressions:
 
 Each SPI suite runs normally and with ASan/UBSan. They are included in
 `Tests/run.py`. Debug and Release Xcode builds compile the native controller
-source into the kext. These checks do not validate electrical signals, real
+sources into the kext. These checks do not validate electrical signals, real
 Intel FIFO timing, physical PCI sleep transitions, firmware tuning or acoustic
 output. No HP load/playback result has been obtained yet.

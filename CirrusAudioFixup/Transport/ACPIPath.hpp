@@ -8,7 +8,8 @@ inline bool canonicalACPIPath(const char* path,char* out,size_t capacity) {
     const char* p=path;
     if(!strncmp(p,"IOACPIPlane:",12))p+=12;
     if(*p!='/' && *p!='\\')return false;
-    ++p;size_t n=0;out[n++]='\\';
+    ++p;if(*p=='\\')++p; // Some IOACPIPlane roots retain the AML root prefix.
+    size_t n=0;out[n++]='\\';
     while(*p) {
         if(*p=='/' || *p=='.' || *p=='@' || (*p>='0' && *p<='9'))return false;
         char segment[5]{};size_t bytes=0;

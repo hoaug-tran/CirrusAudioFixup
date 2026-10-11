@@ -143,9 +143,18 @@ private:
         auto* it=IOService::getMatchingServices(IOService::serviceMatching("IOPCIDevice"));
         if(!it)return nullptr;
         IOPCIDevice* found=nullptr;bool duplicate=false;
+        char targetPath[256]{},targetName[256]{};int length=sizeof(targetPath);
+        auto* plane=IORegistryEntry::getPlane("IOACPIPlane");
+        const bool havePath=plane && target->getPath(targetPath,&length,plane) && canonicalACPIPath(targetPath,targetName,sizeof(targetName));
         while(auto* entry=it->getNextObject()) {
             auto* pci=OSDynamicCast(IOPCIDevice,entry);
-            if(pci && pci->getProperty("acpi-device")==target) {
+            bool matches=pci && pci->getProperty("acpi-device")==target;
+            if(pci && !matches && havePath) {
+                auto* path=OSDynamicCast(OSString,pci->getProperty("acpi-path"));
+                char canonical[256]{};
+                matches=path && canonicalACPIPath(path->getCStringNoCopy(),canonical,sizeof(canonical)) && !strcmp(canonical,targetName);
+            }
+            if(matches) {
                 if(found){duplicate=true;break;}found=pci;
             }
         }

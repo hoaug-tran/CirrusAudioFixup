@@ -14,6 +14,8 @@ struct AmplifierBinding {
     uint32_t channelIndex{0};
     uint32_t speakerId{0};
     const char* tuningResource{nullptr};
+    // Optional per-device HID for mixed-silicon boards; board HID is the legacy default.
+    const char* acpiHid{nullptr};
 };
 struct BoardConfiguration {
     BoardIdentity identity{};
@@ -24,12 +26,13 @@ struct BoardConfiguration {
     bool tuningVerified{false};
     bool permits(const BoardIdentity& actual) const {
         if(!wiringVerified || !powerVerified || !tuningVerified || !identity.subsystemVendor ||
-            !identity.subsystemDevice || !identity.acpiHid || !actual.acpiHid ||
+            !identity.subsystemDevice ||
             identity.subsystemVendor!=actual.subsystemVendor || identity.subsystemDevice!=actual.subsystemDevice ||
-            strcmp(identity.acpiHid,actual.acpiHid) || !amplifiers || !count || count>16)return false;
+            (identity.acpiHid && (!*identity.acpiHid || !actual.acpiHid || strcmp(identity.acpiHid,actual.acpiHid))) ||
+            !amplifiers || !count || count>16)return false;
         for(size_t i=0;i<count;++i) {
             const auto& a=amplifiers[i];
-            if(!a.endpoint.valid() || !a.siliconId || !a.tuningResource || !*a.tuningResource)return false;
+            if(!a.endpoint.valid() || !a.siliconId || !a.tuningResource || !*a.tuningResource || (a.acpiHid && !*a.acpiHid) || (!identity.acpiHid && !a.acpiHid))return false;
             for(size_t j=0;j<i;++j)if(a.endpoint.sameDevice(amplifiers[j].endpoint))return false;
         }
         return true;

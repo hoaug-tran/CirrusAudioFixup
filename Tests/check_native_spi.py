@@ -26,6 +26,7 @@ inline void IOSleep(unsigned){}
 struct OSObject {unsigned refs=1;virtual ~OSObject()=default;void retain(){++refs;}void release(){assert(refs);--refs;}};
 #define OSDynamicCast(type,obj) dynamic_cast<type*>(obj)
 #define OSSafeReleaseNULL(obj) do{if(obj){obj->release();obj=nullptr;}}while(0)
+struct OSString:OSObject {std::string value;const char* getCStringNoCopy(){return value.c_str();}};
 struct OSData:OSObject {std::vector<uint8_t> bytes;const void* getBytesNoCopy(){return bytes.data();}size_t getLength(){return bytes.size();}};
 struct IORegistryPlane {};
 inline IORegistryPlane plane;
@@ -51,7 +52,7 @@ struct IOACPIPlatformDevice:IOService {
  unsigned getDeviceStatus(){return status;}
  int evaluateObject(const char*,OSObject** out){if(rejectCRS)return kIOReturnNotFound;crs.retain();*out=&crs;return 0;}
 };
-struct IOPCIDevice:IOService {IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSObject* getProperty(const char*){return acpi;}};
+struct IOPCIDevice:IOService {IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
 inline unsigned liveControllers=0,suspends=0,resumes=0;
 inline bool resumeFailure=false;
 inline uint32_t probeIDs[4]{};
@@ -121,6 +122,7 @@ void resources(IOACPIPlatformDevice& amp,std::initializer_list<std::pair<const c
 int main(){
  char path[256]{};
  assert(canonicalACPIPath("IOACPIPlane:/_SB/PCI0@0/SPI1@100000",path,sizeof(path))&&!strcmp(path,"\\_SB.PCI0.SPI1"));
+ assert(canonicalACPIPath("IOACPIPlane:/\\_SB/PCI0@0/SPI1@100000",path,sizeof(path))&&!strcmp(path,"\\_SB.PCI0.SPI1"));
  assert(resolveACPIPath("\\_SB.PCI0.AMP0","^SPI1",path,sizeof(path))&&!strcmp(path,"\\_SB.PCI0.SPI1"));
  assert(!resolveACPIPath("\\","^SPI1",path,sizeof(path)));
  assert(!canonicalACPIPath("SPI1",path,sizeof(path)));
@@ -150,6 +152,9 @@ int main(){
  resumeFailure=false;b.power=3;assert(host.resume()==kIOReturnNotReady);b.power=0;assert(host.resume()==0&&host.registers(2)->read(0,&value));
  host.shutdown();host.shutdown();assert(!liveControllers&&a.refs==1&&b.refs==1&&!iteratorLive);
  resources(amp,{{"SPI0",0}});amp.crs.bytes[4]=1;assert(host.bind(&amp,&owner,format)==kIOReturnUnsupported&&!liveControllers);
+ pci.acpi=nullptr;pci.acpiPath.value=a.path;resources(amp,{{"SPI0",0}});
+ assert(host.bind(&amp,&owner,format)==0&&host.count()==1);host.shutdown();
+ pci.acpi=&a;pci.acpiPath.value.clear();
  resources(amp,{{"MISSING",0}});assert(host.bind(&amp,&owner,format)==kIOReturnNotFound&&!host.bound()&&!liveControllers);
  resources(amp,{{"SPI0",0},{"SPI1",1}});b.hasPSC=false;
  assert(host.bind(&amp,&owner,format)==kIOReturnNotReady&&!liveControllers&&a.refs==1&&b.refs==1);b.hasPSC=true;

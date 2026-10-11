@@ -16,6 +16,7 @@ struct BackendContext {
     BoardIdentity actualBoard;
     size_t bindingIndex;
     const firmware::FirmwareBundle& firmware;
+    const char* actualDeviceHid{nullptr};
 };
 struct BackendDefinition {
     const char* name;
@@ -67,7 +68,10 @@ public:
         firmware::FirmwareTarget expected{binding.siliconId,context.actualBoard.subsystemVendor,
             context.actualBoard.subsystemDevice,binding.speakerId,binding.channelIndex,binding.tuningResource};
         if(!context.firmware.matches(expected))return nullptr;
-        const auto* definition=find(context.actualBoard.acpiHid,binding.siliconId,context.endpoint.transport);
+        const char* deviceHid=binding.acpiHid?binding.acpiHid:context.actualBoard.acpiHid;
+        if(binding.acpiHid && (!context.actualDeviceHid || strcmp(deviceHid,context.actualDeviceHid)))return nullptr;
+        if(context.actualDeviceHid && strcmp(deviceHid,context.actualDeviceHid))return nullptr;
+        const auto* definition=find(deviceHid,binding.siliconId,context.endpoint.transport);
         if(!definition)return nullptr;
         auto* instance=definition->create(context);
         if(instance)selected=definition;

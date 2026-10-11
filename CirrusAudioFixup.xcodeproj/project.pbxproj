@@ -5,6 +5,12 @@
 	};
 	objectVersion = 56;
 	objects = {
+		A6ACBB061A579B59A193BA93 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "AmplifierRuntime.hpp";
+			sourceTree = "<group>";
+		};
 		CA98C65691C0F2C60B20D60F = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.script.python;
@@ -271,6 +277,7 @@
 		75BA5000D0C47D62AB5DD68C = {
 			isa = PBXGroup;
 			children = (
+                A6ACBB061A579B59A193BA93,
                 0AE7D65E29CF3F41FCDAB433,
                 1E4FC108153F3B68092EDD67,
 				28B22464D8DE199BCB70E2E4,

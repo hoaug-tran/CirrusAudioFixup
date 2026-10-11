@@ -14,6 +14,7 @@ The goal is to add a silicon backend, controller backend and verified board data
 | Firmware identity | `Firmware/FirmwareBundle.hpp` | Borrow immutable assets and match silicon/board/speaker/channel/resource; parsing/integrity/calibration remain backend responsibilities |
 | Lifecycle | `Core/AmplifierLifecycle.hpp` | Identify → authorize → initialize → firmware → verify → ready/playback; bounded backend hooks, suspend/reinitialize on wake and first-failure evidence |
 | Multi-amp coordination | `Core/AmplifierGroup.hpp` | Stop/cleanup healthy peers on failure; reinitialize all members before restarting playback after wake |
+| Owned runtime | `Platform/AmplifierRuntime.hpp` | Own factory-created backends and lifecycle instances; validate the entire topology, coordinate mixed buses/models and retain teardown evidence |
 | Backend registry | `Platform/BackendRegistry.hpp` | Statically linked backend factory/destroy callbacks, transport formats, duplicate/capacity checks and exact board/firmware selection |
 
 `CS35L41SPITransport` now configures the shared register-map implementation rather than maintaining separate framing/chunking/RMW code. Intel and AMD SPI tests exercise that production implementation. The existing custom VoodooI2C addressed ABI is adapted to `I2CController` and tested through the same register map. `AudioDevice` and `CS35L41Device` expose transport-neutral endpoints while retaining the legacy I2C address accessor for existing callers; SPI returns the invalid I2C sentinel 0xff.
@@ -45,7 +46,7 @@ Identify and authorization failures perform no hardware shutdown writes. Once in
 
 ## Current integration boundary
 
-The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, and CS35L41 bring-up now uses the common lifecycle coordinator. Registry selection, persistent playback lifecycle and group ownership have not yet been migrated. No new amplifier is registered by a placeholder definition. An opt-in read-only SPI personality now performs ACPI discovery and native controller binding. SPI board authorization and complete controller power-parent coordination remain pending. Existing Lenovo authorization remains in place.
+The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, and CS35L41 bring-up now uses the common lifecycle coordinator. An owned generic runtime implements registry selection, persistent lifecycle and group ownership; the shipping IOService has not yet switched its CS35L41 playback path to that runtime. No new amplifier is registered by a placeholder definition. An opt-in read-only SPI personality now performs ACPI discovery and native controller binding. SPI board authorization and complete controller power-parent coordination remain pending. Existing Lenovo authorization remains in place.
 
 This foundation reduces duplicated transport work for new backends. It does not claim that every future amplifier/controller is supported or that all service code has already become generic.
 
@@ -77,3 +78,37 @@ Deferred bring-up propagates through `AmplifierGroup` as Waiting/DebugHalted,
 including on wake. Prepared peers remain muted; later members and group playback
 are blocked. This does not record a hardware failure or trigger failure cleanup.
 The owner must explicitly detach/reset before retrying the group.
+
+
+### Owned runtime and mixed amplifier boards
+
+`AmplifierRuntime` validates the complete board topology before any factory runs,
+then owns a copy of each context, its selected backend and its lifecycle. It
+supports up to 16 members with different silicon IDs, device HIDs, register
+formats and I2C/SPI endpoints. Each endpoint needs a distinct `RegisterIO` port;
+aliasing one port across devices is rejected. The board may use subsystem
+identity with per-amplifier HIDs instead of assuming one HID for every amplifier.
+Firmware identity and verified wiring/power/tuning remain mandatory.
+
+Factory failure releases all constructed objects without hardware writes.
+Bring-up, playback, suspend and resume use the shared group coordinator.
+Teardown captures per-member failure and cleanup evidence before destroying
+backends through their matching destroy callbacks. Context metadata is owned;
+register ports, registry definitions, board/firmware data and strings are borrowed
+and must outlive the runtime. The host serializes calls, joins users before
+teardown and restores controller power before resume.
+
+Foundation development is independent of machine enablement. The reported
+[ASUS G614JV](https://github.com/hoaug-tran/CirrusAudioFixup/issues/2) and
+[HP Fury G9](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3) are separate
+board integrations. Neither supplies a universal register map, power sequence or
+tuning profile. Native Intel PCI discovery also accepts an exact canonical
+`acpi-path` when no `acpi-device` pointer is published, rejecting ambiguous matches.
+The generic runtime has 16 slots; the existing native SPI owner separately caps
+its ACPI resource set at four endpoints. These capacities do not imply support
+for unknown controller layouts or unimplemented amplifier backends.
+
+Host regressions cover mixed buses, models and HIDs, temporary context lifetime,
+duplicate endpoint/port rejection, factory rollback, deferred firmware, group
+failure cleanup, destructor cleanup and retained shutdown evidence under
+ASan/UBSan. Hardware playback validation remains a separate integration step.

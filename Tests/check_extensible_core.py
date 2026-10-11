@@ -7,7 +7,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-core-') as directory:
     (p/'IOKit/IOLib.h').write_text('''#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
-kIOReturnNotPermitted=-3,kIOReturnTimeout=-4;
+kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnNoMemory=-5;
 inline unsigned sleeps=0;inline void IOSleep(unsigned){++sleeps;}
 ''')
     (p/'test.cpp').write_text(r'''
@@ -21,6 +21,7 @@ inline unsigned sleeps=0;inline void IOSleep(unsigned){++sleeps;}
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/AmplifierGroup.hpp"
 #include "Platform/BackendRegistry.hpp"
+#include "Platform/AmplifierRuntime.hpp"
 using namespace cirrus::core;
 struct Lock: RegisterOperationLock {
  bool held=false;unsigned calls=0;void lock() override {assert(!held);held=true;++calls;}
@@ -59,6 +60,17 @@ struct Hooks: AmplifierLifecycleHooks {
 Hooks instance;unsigned destroyed=0;
 AmplifierLifecycleHooks* factory(const cirrus::platform::BackendContext&){return &instance;}
 void destroy(AmplifierLifecycleHooks* hooks){assert(hooks==&instance);++destroyed;}
+unsigned heapCreated=0,heapDestroyed=0,heapCleanup=0;
+int failFactory=-1,failFirmware=-1;bool waitFirmware=false;
+struct HeapHooks:Hooks {
+ const cirrus::platform::BackendContext* metadata;
+ IOReturn identify() override {assert(metadata->actualDeviceHid&&metadata->bindingIndex<2);return Hooks::identify();}
+ HeapHooks(const cirrus::platform::BackendContext& context):metadata(&context){++heapCreated;if(int(context.bindingIndex)==failFirmware)failure=4;if(waitFirmware&&context.bindingIndex==1)pause=BringUpDisposition::Wait;}
+ ~HeapHooks() override {++heapDestroyed;}
+ IOReturn safeShutdown() override {++heapCleanup;return Hooks::safeShutdown();}
+};
+AmplifierLifecycleHooks* heapFactory(const cirrus::platform::BackendContext& context){return int(context.bindingIndex)==failFactory?nullptr:new HeapHooks(context);}
+void heapDestroy(AmplifierLifecycleHooks* hooks){delete hooks;}
 int main(){
  for(unsigned width=1;width<=4;++width)for(auto endian:{RegisterEndian::Big,RegisterEndian::Little}){
   Bus bus;RegisterMapConfig config;config.addressBytes=2;config.valueBytes=uint8_t(width);
@@ -175,6 +187,53 @@ int main(){
   assert(al.status().stage==AmplifierStage::Ready&&bl.status().stage!=AmplifierStage::Playing);
   assert(pending.detach()==0);
  }
+ // Fictional mixed-silicon fixtures: no ASUS/HP board support is registered.
+ AmplifierBinding mixed[2];
+ mixed[0].endpoint={BusTransportType::SPI,"\\_SB.SPI1",0,false,0,1000000,0};
+ mixed[0].siliconId=0x1111;mixed[0].tuningResource="fixture-left";mixed[0].acpiHid="SPIAMP";
+ mixed[1].endpoint={BusTransportType::I2C,"\\_SB.I2C1",0x40,false,0,0,0};
+ mixed[1].siliconId=0x2222;mixed[1].channelIndex=1;mixed[1].tuningResource="fixture-right";mixed[1].acpiHid="I2CAMP";
+ BoardIdentity machine{0x1234,0x5678,"BOARD"};BoardConfiguration multiBoard{machine,mixed,2,true,true,true};
+ cirrus::firmware::FirmwareTarget lt{0x1111,0x1234,0x5678,0,0,"fixture-left"},rt{0x2222,0x1234,0x5678,0,1,"fixture-right"};
+ cirrus::firmware::FirmwareBundle lf{lt,cirrus::firmware::FirmwareFormat::None,nullptr,0,nullptr,0},rf{rt,cirrus::firmware::FirmwareFormat::None,nullptr,0,nullptr,0};
+ BackendDefinition spiAmp{"fixture-spi","SPIAMP",0x1111,2,{}, {},heapFactory,heapDestroy};
+ BackendDefinition i2cAmp{"fixture-i2c","I2CAMP",0x2222,1,{}, {},heapFactory,heapDestroy};
+ spiAmp.spiFormat.readable=spiAmp.spiFormat.writable=accessible;
+ i2cAmp.i2cFormat.valueBytes=2;i2cAmp.i2cFormat.readable=i2cAmp.i2cFormat.writable=accessible;
+ BackendRegistry multiRegistry;assert(multiRegistry.add(spiAmp)&&multiRegistry.add(i2cAmp));
+ RegisterMap secondPort(bus,c,true);
+ BackendContext contexts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{secondPort,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
+ AmplifierRuntime runtime;
+ assert(runtime.bind(multiRegistry,contexts,1)==kIOReturnNotPermitted&&!heapCreated);
+ BackendContext duplicateContexts[]={contexts[0],contexts[0]};assert(runtime.bind(multiRegistry,duplicateContexts,2)==kIOReturnBadArgument&&!heapCreated);
+ BackendContext sharedPorts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{map,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
+ assert(runtime.bind(multiRegistry,sharedPorts,2)==kIOReturnBadArgument&&!heapCreated);
+ contexts[1].actualDeviceHid="WRONG";assert(runtime.bind(multiRegistry,contexts,2)==kIOReturnNotPermitted);
+ assert(heapCreated==heapDestroyed&&!heapCleanup&&!runtime.bound());contexts[1].actualDeviceHid="I2CAMP";
+ auto bindTemporary=[&](){BackendContext local[]={contexts[0],contexts[1]};return runtime.bind(multiRegistry,local,2);};
+ assert(bindTemporary()==0&&runtime.count()==2);
+ assert(runtime.backend(0)==&spiAmp&&runtime.backend(1)==&i2cAmp);
+ assert(runtime.startPlayback()==kIOReturnNotReady);
+ assert(runtime.bringUp()==0&&runtime.startPlayback()==0&&runtime.suspend()==0&&runtime.resume()==0);
+ assert(runtime.stage()==AmplifierStage::Playing&&runtime.unbind()==0&&heapCreated==heapDestroyed);
+ assert(runtime.releasedStatus(0)->stage==AmplifierStage::Detached);
+ failFactory=1;unsigned cleanupsBefore=heapCleanup;
+ assert(runtime.bind(multiRegistry,contexts,2)==kIOReturnNotPermitted&&!runtime.bound());
+ assert(heapCreated==heapDestroyed&&heapCleanup==cleanupsBefore);failFactory=-1;
+ failFirmware=1;assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==-104);
+ assert(runtime.stage()==AmplifierStage::Faulted&&runtime.unbind()==kIOReturnNotReady);
+ assert(runtime.releasedStatus(1)->firstFailure==-104&&heapCreated==heapDestroyed);failFirmware=-1;
+ waitFirmware=true;assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==kIOReturnNotReady);
+ assert(runtime.stage()==AmplifierStage::Waiting&&runtime.startPlayback()==kIOReturnNotReady);
+ assert(runtime.unbind()==0&&heapCreated==heapDestroyed);waitFirmware=false;
+ {
+  AmplifierRuntime automatic;assert(automatic.bind(multiRegistry,contexts,2)==0&&automatic.bringUp()==0);
+ }
+ assert(heapCreated==heapDestroyed);
+ // A mixed board need not invent one shared amplifier HID as machine identity.
+ multiBoard.identity.acpiHid=nullptr;contexts[0].actualBoard.acpiHid=contexts[1].actualBoard.acpiHid=nullptr;
+ assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==0&&runtime.unbind()==0);
+ assert(heapCreated==heapDestroyed);
  Hooks broken;AmplifierLifecycle fault(broken);assert(fault.bringUp()==0);broken.cleanupFailure=-200;
  assert(fault.suspend()==-200&&broken.cleanups==1&&fault.status().cleanupResult==-200);
 }

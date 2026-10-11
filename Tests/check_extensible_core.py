@@ -125,6 +125,28 @@ int main(){
   assert(life.bringUp()==kIOReturnNotReady&&hooks.history.size()==count);
   life.powerLost();hooks.failure=0;assert(life.bringUp()==0&&life.status().firstFailure==-100-failure);
  }
+ // Production owner adapter must not verify/play or clean up a pending/debug stop.
+ for(auto deferred:{BringUpDisposition::Wait,BringUpDisposition::DebugHalt}) {
+  unsigned inits=0,uploads=0,verifies=0,cleanups=0;
+  auto progress=BringUpDisposition::Continue;
+  auto init=[&]()->IOReturn{++inits;return 0;};
+  auto fw=[&]()->IOReturn{++uploads;progress=deferred;return 0;};
+  auto verify=[&]()->IOReturn{++verifies;return 0;};
+  auto cleanup=[&]()->IOReturn{++cleanups;return 0;};
+  auto disposition=[&](){return progress;};
+  auto status=runAmplifierBringUp(init,fw,verify,cleanup,disposition);
+  assert(status.stage==(deferred==BringUpDisposition::Wait?AmplifierStage::Waiting:AmplifierStage::DebugHalted));
+  assert(inits==1&&uploads==1&&!verifies&&!cleanups&&!status.failures);
+  // Re-enter only after the owner has reset/revalidated the device.
+  progress=BringUpDisposition::Continue;
+  auto readyFw=[&]()->IOReturn{++uploads;return 0;};
+  status=runAmplifierBringUp(init,readyFw,verify,cleanup,disposition);
+  assert(status.stage==AmplifierStage::Ready&&verifies==1&&!cleanups);
+  auto failed=[&]()->IOReturn{return -333;};
+  status=runAmplifierBringUp(init,failed,verify,cleanup,disposition);
+  assert(status.stage==AmplifierStage::Faulted&&status.firstFailureStage==AmplifierStage::Firmware);
+  assert(status.firstFailure==-333&&verifies==1&&cleanups==1);
+ }
  Hooks hooks;AmplifierLifecycle life(hooks);assert(life.bringUp()==0&&life.startPlayback()==0);
  assert(life.suspend()==0&&life.status().stage==AmplifierStage::Suspended);
  assert(life.resume()==0&&life.status().stage==AmplifierStage::Playing);

@@ -45,7 +45,7 @@ Identify and authorization failures perform no hardware shutdown writes. Once in
 
 ## Current integration boundary
 
-The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, but that service has not been migrated to them. No new amplifier is registered by a placeholder definition. SPI automatic discovery/IOService power callbacks and new board support remain pending. Existing Lenovo authorization remains in place.
+The shipping IOService still performs CS35L41-specific bring-up, firmware/diagnostics and I2C transport selection. The new generic lifecycle/registry/board/firmware contracts are implemented and host-tested, and CS35L41 bring-up now uses the common lifecycle coordinator. Registry selection, persistent playback lifecycle and group ownership have not yet been migrated. No new amplifier is registered by a placeholder definition. SPI automatic discovery/IOService power callbacks and new board support remain pending. Existing Lenovo authorization remains in place.
 
 This foundation reduces duplicated transport work for new backends. It does not claim that every future amplifier/controller is supported or that all service code has already become generic.
 
@@ -54,3 +54,20 @@ This foundation reduces duplicated transport work for new backends. It does not 
 Linux [regmap configuration](https://github.com/torvalds/linux/blob/v6.12/include/linux/regmap.h) motivates independent address/value width, stride, flags, access tables and precious/no-increment registers. [regmap I2C](https://github.com/torvalds/linux/blob/v6.12/drivers/base/regmap/regmap-i2c.c) motivates preserving a combined address/write/read transaction. [CS35L41 HDA](https://github.com/torvalds/linux/blob/v6.12/sound/pci/hda/cs35l41_hda.c) keeps bus framing separate from board properties, DSP firmware/calibration, playback and power sequencing. These are reference facts and architecture, not copied Linux kernel implementation or a Linux ABI exposed on macOS.
 
 `Tests/check_extensible_core.py` exercises production core/manifest/registry code normally and under ASan/UBSan. `check_transport.py` exercises the actual Voodoo adapter and shared register map. SPI framing, Intel/AMD engines and native owners retain their regression suites. Maintained suite: `python3 Tests/run.py --audit`; compile Debug/Release with the repository build checks. Host checks do not validate physical hardware.
+
+### Runtime migration: CS35L41 bring-up
+
+The shipping `initializeCS35L41` now executes its hardware, firmware and idle
+verification callbacks through `AmplifierLifecycle`. Existing silicon checks,
+board gates, phase diagnostics and DSP-bypass behavior remain in the owner.
+The synchronous callback adapter borrows stack callbacks and does not create a
+persistent backend. Initialization failures use one shared shutdown callback.
+Waiting for firmware identity and intentional debug stops leave initialization
+incomplete without recording a hardware failure or running failure cleanup.
+A subsequent owner retry still performs the existing reset/initialization flow.
+
+This is the first runtime migration step. Playback, interrupts, sleep/wake and
+transport/controller ownership still use the existing service implementation.
+`BackendRegistry` and `AmplifierGroup` are not yet used for shipping runtime
+selection. Native SPI controllers still need ACPI discovery, resource binding,
+power notifications and validated board data before a SPI machine can attach.

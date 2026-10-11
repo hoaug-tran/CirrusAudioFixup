@@ -7,10 +7,12 @@
 #include <stdint.h>
 namespace cirrus::core {
 enum class AmplifierStage { Detached, Identify, Authorize, Initialize, Firmware, Verify,
-                            Ready, Start, Playing, Stop, Shutdown, Suspended, Faulted };
+                            Ready, Start, Playing, Stop, Shutdown, Suspended, Faulted, Waiting, DebugHalted };
+enum class BringUpDisposition { Continue, Wait, DebugHalt };
 class AmplifierLifecycleHooks {
 public:
     virtual ~AmplifierLifecycleHooks()=default;
+    virtual BringUpDisposition disposition() const {return BringUpDisposition::Continue;}
     virtual IOReturn identify()=0; // Read-only and reject unknown silicon.
     virtual IOReturn authorizeBoard()=0; // Exact wiring/resource/tuning validation.
     virtual IOReturn initialize()=0;
@@ -95,6 +97,15 @@ private:
     using Operation=IOReturn(AmplifierLifecycleHooks::*)();
     IOReturn step(AmplifierStage stage,Operation operation) {
         mStatus.stage=stage; IOReturn ret=(mHooks.*operation)();
+        if(ret==kIOReturnSuccess && (stage==AmplifierStage::Initialize || stage==AmplifierStage::Firmware || stage==AmplifierStage::Verify)) {
+            const auto disposition=mHooks.disposition();
+            if(disposition!=BringUpDisposition::Continue) {
+                // A deliberate debug stop or pending identity is neither ready
+                // nor a hardware failure. Owner may detach/reset before retry.
+                mStatus.stage=disposition==BringUpDisposition::Wait ? AmplifierStage::Waiting : AmplifierStage::DebugHalted;
+                return kIOReturnNotReady;
+            }
+        }
         if(ret!=kIOReturnSuccess) {
             if(!mStatus.failures) {mStatus.firstFailure=ret;mStatus.firstFailureStage=stage;}
             mStatus.latestFailure=ret;++mStatus.failures;
@@ -111,4 +122,28 @@ private:
     AmplifierLifecycleStatus mStatus{};
     bool mHardwareTouched{false},mResumePlayback{false};
 };
+// Synchronous owner adapter: callback references never escape this call.
+// Playback remains unavailable until a persistent backend owns those hooks.
+template<class Initialize,class Firmware,class Verify,class Cleanup,class Disposition>
+AmplifierLifecycleStatus runAmplifierBringUp(Initialize& initialize,Firmware& firmware,
+                                            Verify& verify,Cleanup& cleanup,Disposition& disposition) {
+    class Hooks final:public AmplifierLifecycleHooks {
+    public:
+        Hooks(Initialize& i,Firmware& f,Verify& v,Cleanup& c,Disposition& d):init(i),fw(f),ready(v),shutdown(c),state(d) {}
+        IOReturn identify() override {return kIOReturnSuccess;} // Owner already probed silicon.
+        IOReturn authorizeBoard() override {return kIOReturnSuccess;} // Owner gates before invocation.
+        IOReturn initialize() override {return init();}
+        IOReturn loadFirmware() override {return fw();}
+        IOReturn verifyReady() override {return ready();}
+        IOReturn safeShutdown() override {return shutdown();}
+        IOReturn startPlayback() override {return kIOReturnNotReady;}
+        IOReturn stopPlayback() override {return kIOReturnNotReady;}
+        BringUpDisposition disposition() const override {return state();}
+    private:
+        Initialize& init;Firmware& fw;Verify& ready;Cleanup& shutdown;Disposition& state;
+    } hooks(initialize,firmware,verify,cleanup,disposition);
+    AmplifierLifecycle lifecycle(hooks);
+    lifecycle.bringUp();
+    return lifecycle.status();
+}
 }

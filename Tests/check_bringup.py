@@ -15,6 +15,7 @@ names = ['fullDriverFlow', 'initializeCS35L41', 'initCodec', 'handlePowerChange'
 amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
 
 preamble = r'''
+#include "Core/AmplifierLifecycle.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include <cstdint>
 #include <cstddef>
@@ -312,7 +313,9 @@ int main() {
 
 with tempfile.TemporaryDirectory(prefix='cirrus-bringup-check-') as directory:
     tmp = Path(directory)
+    (tmp / 'IOKit').mkdir()
+    (tmp / 'IOKit/IOLib.h').write_text('#pragma once\n#include \"Diagnostics/DiagnosticTypes.hpp\"\nconstexpr int kIOReturnNotReady=-2;\n')
     source = tmp / 'bringup.cpp'
     source.write_text(preamble + mock + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'bringup.exe')], check=True)
+    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'bringup.exe')], check=True)
     subprocess.run([str(tmp / 'bringup.exe')], check=True)

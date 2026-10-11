@@ -376,148 +376,166 @@ void CirrusAudioFixup::initializeCS35L41(AmplifierState& amp) {
     amp.haloStateRegister = amp.haloHeartbeatRegister = 0;
     amp.diagnosticControlCount = 0;
     amp.firmwareIdVersion = 0;
-    auto abortInitialization = [&]() {
+    auto cleanup = [&]() -> IOReturn {
+        bool clean = true;
         amp.playbackFaulted = true;
         amp.initialized = amp.firmwareValidated = false;
 
         if (amp.present) {
-            if (!stopPlayback(amp))
+            if (!stopPlayback(amp)) {
+                clean = false;
                 recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK);
-            if (!stopDSP(amp))
+            }
+            if (!stopDSP(amp)) {
+                clean = false;
                 recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
+            }
         }
         amp.dspAlive = false;
         amp.monitorCount = 0;
         amp.haloStateRegister = amp.haloHeartbeatRegister = 0;
         amp.diagnosticControlCount = 0;
+        return clean ? kIOReturnSuccess : kIOReturnNotReady;
     };
+    auto progress = cirrus::core::BringUpDisposition::Continue;
+    auto disposition = [&]() { return progress; };
+    auto stopAt = [&](const char* phase) {
+        if (!stopAfterDebugStage(phase)) return false;
+        progress = cirrus::core::BringUpDisposition::DebugHalt;
+        return true;
+    };
+    auto initialize = [&]() -> IOReturn {
 
-    setDiagnosticStage(amp, STAGE_PROBE);
+        setDiagnosticStage(amp, STAGE_PROBE);
 
-    if (!initCodec(amp)) {
-        CIRRUS_ERR("failed to initialize codec for %s", amp.name);
-        if (amp.diagnostic.latestFailure == DIAG_OK)
-            recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
-                                    cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_OTP_BOOT);
-    if (stopAfterDebugStage("otp"))
-        return;
-
-    setDiagnosticStage(amp, STAGE_ERRATA);
-    if (!initializeHardwareErrata(amp)) {
-        CIRRUS_ERR("failed to apply hardware errata for %s", amp.name);
-        recordDiagnosticFailure(amp, DIAG_ERRATA);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_ERRATA);
-    if (stopAfterDebugStage("errata"))
-        return;
-
-    setDiagnosticStage(amp, STAGE_CLOCK);
-    if (!applyPLL(amp)) {
-        recordDiagnosticFailure(amp, DIAG_PLL_CONFIG, cirrus::devices::cs35l41::registers::kRegPllClockControl);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_CLOCK);
-    if (stopAfterDebugStage("clock"))
-        return;
-
-    setDiagnosticStage(amp, STAGE_ASP);
-    if (!applyASP(amp)) {
-        recordDiagnosticFailure(amp, DIAG_ASP_CONFIG, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, 0x20200200);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_ASP);
-    if (stopAfterDebugStage("asp"))
-        return;
-
-    setDiagnosticStage(amp, STAGE_GPIO);
-    if (!applyGPIO(amp)) {
-        recordDiagnosticFailure(amp, DIAG_GPIO_CONFIG, cirrus::devices::cs35l41::registers::kRegGpioPadControl, 0x02000000);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_GPIO);
-    if (stopAfterDebugStage("gpio"))
-        return;
-
-    setDiagnosticStage(amp, STAGE_PLATFORM);
-    if (!configureHardware(amp)) {
-        CIRRUS_ERR("platform hardware configuration failed for %s", amp.name);
-        recordDiagnosticFailure(amp, DIAG_PLATFORM_CONFIG);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_PLATFORM);
-    if (stopAfterDebugStage("platform"))
-        return;
-
-    if (bypass) {
-        if (!stopDSP(amp)) {
-            recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
-            abortInitialization();
-            return;
-        }
-    } else {
-        setDiagnosticStage(amp, STAGE_FIRMWARE_DISCOVERY);
-        discoverFirmware(amp);
-        if (amp.firmwareIdentityPending)
-            return;
-        if (!amp.wmfwData || amp.wmfwSize == 0 || !amp.binData || amp.binSize == 0) {
-            recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING, 0, 1, 0);
-            abortInitialization();
-            return;
-        }
-        markDiagnosticSuccess(amp, STAGE_FIRMWARE_DISCOVERY);
-        setDiagnosticStage(amp, STAGE_FIRMWARE_UPLOAD);
-        initializeFirmware(amp, "5D.0");
-        if (bootArgStrEquals("-cirrusphase", "firmware") && mDebugPhaseHalted &&
-            amp.firmwareValidated && !amp.playbackFaulted)
-            return;
-        if (amp.playbackFaulted || !amp.firmwareValidated || !amp.dspAlive || amp.monitorCount != 1) {
+        if (!initCodec(amp)) {
+            CIRRUS_ERR("failed to initialize codec for %s", amp.name);
             if (amp.diagnostic.latestFailure == DIAG_OK)
+                recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
+                                        cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
+            return kIOReturnNotReady;
+        }
+        markDiagnosticSuccess(amp, STAGE_OTP_BOOT);
+        if (stopAt("otp"))
+            return kIOReturnSuccess;
+
+        setDiagnosticStage(amp, STAGE_ERRATA);
+        if (!initializeHardwareErrata(amp)) {
+            CIRRUS_ERR("failed to apply hardware errata for %s", amp.name);
+            recordDiagnosticFailure(amp, DIAG_ERRATA);
+            return kIOReturnNotReady;
+        }
+        markDiagnosticSuccess(amp, STAGE_ERRATA);
+        if (stopAt("errata"))
+            return kIOReturnSuccess;
+
+        setDiagnosticStage(amp, STAGE_CLOCK);
+        if (!applyPLL(amp)) {
+            recordDiagnosticFailure(amp, DIAG_PLL_CONFIG, cirrus::devices::cs35l41::registers::kRegPllClockControl);
+            return kIOReturnNotReady;
+        }
+        markDiagnosticSuccess(amp, STAGE_CLOCK);
+        if (stopAt("clock"))
+            return kIOReturnSuccess;
+
+        setDiagnosticStage(amp, STAGE_ASP);
+        if (!applyASP(amp)) {
+            recordDiagnosticFailure(amp, DIAG_ASP_CONFIG, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, 0x20200200);
+            return kIOReturnNotReady;
+        }
+        markDiagnosticSuccess(amp, STAGE_ASP);
+        if (stopAt("asp"))
+            return kIOReturnSuccess;
+
+        setDiagnosticStage(amp, STAGE_GPIO);
+        if (!applyGPIO(amp)) {
+            recordDiagnosticFailure(amp, DIAG_GPIO_CONFIG, cirrus::devices::cs35l41::registers::kRegGpioPadControl, 0x02000000);
+            return kIOReturnNotReady;
+        }
+        markDiagnosticSuccess(amp, STAGE_GPIO);
+        if (stopAt("gpio"))
+            return kIOReturnSuccess;
+
+        setDiagnosticStage(amp, STAGE_PLATFORM);
+        if (!configureHardware(amp)) {
+            CIRRUS_ERR("platform hardware configuration failed for %s", amp.name);
+            recordDiagnosticFailure(amp, DIAG_PLATFORM_CONFIG);
+            return kIOReturnNotReady;
+        }
+        markDiagnosticSuccess(amp, STAGE_PLATFORM);
+        if (stopAt("platform"))
+            return kIOReturnSuccess;
+
+        return kIOReturnSuccess;
+    };
+    auto firmware = [&]() -> IOReturn {
+        if (bypass) {
+            if (!stopDSP(amp)) {
                 recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
-            abortInitialization();
-            return;
+                return kIOReturnNotReady;
+            }
+        } else {
+            setDiagnosticStage(amp, STAGE_FIRMWARE_DISCOVERY);
+            discoverFirmware(amp);
+            if (amp.firmwareIdentityPending) {
+                progress = cirrus::core::BringUpDisposition::Wait;
+                return kIOReturnSuccess;
+            }
+            if (!amp.wmfwData || amp.wmfwSize == 0 || !amp.binData || amp.binSize == 0) {
+                recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING, 0, 1, 0);
+                return kIOReturnNotReady;
+            }
+            markDiagnosticSuccess(amp, STAGE_FIRMWARE_DISCOVERY);
+            setDiagnosticStage(amp, STAGE_FIRMWARE_UPLOAD);
+            initializeFirmware(amp, "5D.0");
+            if (bootArgStrEquals("-cirrusphase", "firmware") && mDebugPhaseHalted &&
+                amp.firmwareValidated && !amp.playbackFaulted) {
+                progress = cirrus::core::BringUpDisposition::DebugHalt;
+                return kIOReturnSuccess;
+            }
+            if (amp.playbackFaulted || !amp.firmwareValidated || !amp.dspAlive || amp.monitorCount != 1) {
+                if (amp.diagnostic.latestFailure == DIAG_OK)
+                    recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
+                return kIOReturnNotReady;
+            }
+            markDiagnosticSuccess(amp, STAGE_DSP_BOOT);
         }
-        markDiagnosticSuccess(amp, STAGE_DSP_BOOT);
-    }
 
-    if ((bypass && stopAfterDebugStage("firmware")) || stopAfterDebugStage("dsp")) {
-        // Firmware initialization includes DSP boot; explicitly halt it before returning.
-        if (!stopDSP(amp)) {
-            amp.playbackFaulted = true;
+        if ((bypass && stopAt("firmware")) || stopAt("dsp")) {
+            // Firmware initialization includes DSP boot; explicitly halt it before returning.
+            if (!stopDSP(amp)) {
+                amp.playbackFaulted = true;
+                recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
+                return kIOReturnNotReady;
+            }
+            return kIOReturnSuccess;
+        }
+
+        return kIOReturnSuccess;
+    };
+    auto verify = [&]() -> IOReturn {
+        setDiagnosticStage(amp, STAGE_IDLE_VERIFY);
+        if (!powerUpAmplifier(amp)) {
+            recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK);
+            return kIOReturnNotReady;
+        }
+        if (!verifyIdleConfiguration(amp)) {
+            CIRRUS_ERR("idle hardware verification failed for %s", amp.name);
+            recordDiagnosticFailure(amp, DIAG_IDLE_INVARIANT);
+            return kIOReturnNotReady;
+        }
+        if (!bypass && !verifyDSPAlive(amp)) {
             recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
+            return kIOReturnNotReady;
         }
-        return;
-    }
+        markDiagnosticSuccess(amp, STAGE_SAFE_IDLE);
+        logASPSnapshot(amp);
 
-    setDiagnosticStage(amp, STAGE_IDLE_VERIFY);
-    if (!powerUpAmplifier(amp)) {
-        recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK);
-        abortInitialization();
+        return kIOReturnSuccess;
+    };
+    const auto lifecycle = cirrus::core::runAmplifierBringUp(initialize, firmware, verify, cleanup, disposition);
+    if (lifecycle.stage != cirrus::core::AmplifierStage::Ready)
         return;
-    }
-    if (!verifyIdleConfiguration(amp)) {
-        CIRRUS_ERR("idle hardware verification failed for %s", amp.name);
-        recordDiagnosticFailure(amp, DIAG_IDLE_INVARIANT);
-        abortInitialization();
-        return;
-    }
-    if (!bypass && !verifyDSPAlive(amp)) {
-        recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
-        abortInitialization();
-        return;
-    }
-    markDiagnosticSuccess(amp, STAGE_SAFE_IDLE);
-    logASPSnapshot(amp);
-
     amp.initialized = true;
 
     CIRRUS_LOG("amplifier %s initialized successfully (dspAlive=%d)", amp.name, amp.dspAlive);

@@ -17,6 +17,10 @@ class RegisterIO {
 public:
     virtual ~RegisterIO() = default;
 
+    // Native controller error when available; -1 is the legacy unspecified
+    // failure sentinel. Read immediately on failure, before cleanup transfers.
+    virtual int32_t lastError() const { return -1; }
+
     virtual bool read(uint32_t reg, uint32_t* value) = 0;
 
     virtual bool write(uint32_t reg, uint32_t value) = 0;

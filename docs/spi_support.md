@@ -130,7 +130,7 @@ and [serial resource conversion](https://github.com/acpica/acpica/blob/master/so
 
 ## CS35L41 register implementation
 
-`Transport/CS35L41SPITransport.hpp` implements `core::RegisterIO`:
+`Transport/CS35L41SPITransport.hpp` configures the shared `Core/RegisterMap.hpp` engine behind `core::RegisterIO` (see [extensible driver foundation](extensible_driver.md)):
 
 - Scalar read/write, updateBits, bulk read/write and polling.
 - Six-byte header: 32-bit BE register address plus 16 zero padding bits.

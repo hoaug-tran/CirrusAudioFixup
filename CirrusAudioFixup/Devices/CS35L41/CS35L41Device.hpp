@@ -29,7 +29,7 @@ constexpr uint8_t kI2cAddressRight = 0x41;
 class CS35L41Device final : public core::AudioDevice {
 private:
     const char* mName{"unknown"};
-    uint8_t mAddress{0};
+    core::BusEndpoint mEndpoint{};
     uint32_t mDeviceId{0};
     uint32_t mRevisionId{0};
     bool mPresent{false};
@@ -37,10 +37,15 @@ private:
     bool mDspAlive{false};
 
 public:
-    CS35L41Device(const char* name, uint8_t address) : mName(name), mAddress(address) {}
+    CS35L41Device(const char* name, uint8_t address) : mName(name) { mEndpoint.i2cAddress=address; }
+    CS35L41Device(const char* name, core::BusEndpoint endpoint) : mName(name), mEndpoint(endpoint) {}
 
     const char* name() const override { return mName; }
-    uint8_t address() const override { return mAddress; }
+    uint8_t address() const override {
+        return mEndpoint.transport==core::BusTransportType::I2C && !mEndpoint.tenBitAddress && mEndpoint.i2cAddress<=0x7f ?
+            uint8_t(mEndpoint.i2cAddress) : 0xff;
+    }
+    core::BusEndpoint endpoint() const override { return mEndpoint; }
     uint32_t deviceId() const { return mDeviceId; }
     uint32_t revisionId() const { return mRevisionId; }
 

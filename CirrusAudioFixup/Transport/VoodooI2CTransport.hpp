@@ -38,6 +38,7 @@ public:
 
     uint8_t slaveAddress() const { return mSlaveAddress; }
     IOReturn lastReturn() const { return mLastReturn; }
+    int32_t lastError() const override { return mLastReturn; }
 
     bool transfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
         return dispatchTransfer(writeBuf, writeLen, readBuf, readLen);
@@ -46,8 +47,10 @@ public:
     bool read(uint32_t reg, uint32_t* value) override {
         // The address prefix and data read belong to one combined transfer.
         // Separate calls may let the provider insert a STOP between them.
-        if (!value)
+        if (!value) {
+            mLastReturn=kIOReturnBadArgument;
             return false;
+        }
         uint8_t regBuf[4];
         writeBigEndian32(regBuf, reg);
         uint8_t valBuf[4] = {0};
@@ -75,8 +78,10 @@ public:
     }
 
     bool bulkRead(uint32_t reg, uint8_t* data, size_t length) override {
-        if (!data || length == 0)
+        if (!data || length == 0) {
+            mLastReturn=kIOReturnBadArgument;
             return false;
+        }
 
         size_t offset = 0;
         while (offset < length) {
@@ -95,8 +100,10 @@ public:
     bool bulkWrite(uint32_t reg, const uint8_t* data, size_t length) override {
         // Each packet includes a four-byte register prefix. Leave room for it
         // within the provider limit and advance by bytes, not register words.
-        if (!data || length == 0)
+        if (!data || length == 0) {
+            mLastReturn=kIOReturnBadArgument;
             return false;
+        }
         size_t offset = 0;
         while (offset < length) {
             size_t chunk = length - offset;
@@ -116,14 +123,19 @@ public:
     bool pollBit(uint32_t reg, uint32_t mask, uint32_t targetVal, uint32_t timeoutMs) override {
         // This synchronous adapter is used from a sleepable driver thread.
         // Yield between reads; a bus failure is terminal for this attempt.
+        if (!timeoutMs || (targetVal & ~mask)) {
+            mLastReturn=kIOReturnBadArgument;
+            return false;
+        }
         for (uint32_t elapsed = 0; elapsed < timeoutMs; ++elapsed) {
             uint32_t val = 0;
             if (!read(reg, &val))
                 return false;
             if ((val & mask) == targetVal)
                 return true;
-            IOSleep(1);
+            if (elapsed+1<timeoutMs) IOSleep(1);
         }
+        mLastReturn=kIOReturnTimeout;
         return false;
     }
 

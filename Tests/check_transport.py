@@ -150,7 +150,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
 #include <cstddef>
 #include <cstdint>
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IOReturn=int;
-constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2;
+constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2,kIOReturnNotPermitted=-3,kIOReturnTimeout=-4;
 inline void IODelay(unsigned) {}
 inline void IOSleep(unsigned) {}
 ''', encoding='utf-8')
@@ -169,6 +169,8 @@ public:
 #include <cstring>
 #include <vector>
 #include "Transport/VoodooI2CTransport.hpp"
+#include "Transport/VoodooI2CController.hpp"
+#include "Core/RegisterMap.hpp"
 bool gCirrusDebug=false;
 struct Provider final : IOService {
     IOReturn result=0; unsigned calls=0; uint8_t address=0; std::vector<uint8_t> bytes;
@@ -186,10 +188,20 @@ int main() {
     Provider provider;
     cirrus::transport::VoodooI2CTransport bus(&provider,0x41);
     uint32_t value=0;
+    assert(!bus.read(0,nullptr)&&bus.lastError()==kIOReturnBadArgument);
+    assert(!bus.pollBit(0,1,1,0)&&bus.lastError()==kIOReturnBadArgument);
     assert(bus.read(0x02800398,&value) && value==0x11223344);
     assert(provider.address==0x41 && provider.bytes==std::vector<uint8_t>({2,0x80,3,0x98}));
     assert(bus.write(0x2018,0x12345678));
     assert(provider.bytes==std::vector<uint8_t>({0,0,0x20,0x18,0x12,0x34,0x56,0x78}));
+    cirrus::transport::VoodooI2CController controller(&provider);
+    cirrus::transport::I2CRegisterBus endpoint(&controller,{0x41,false});
+    cirrus::core::RegisterMap generic(endpoint,{},true);
+    assert(generic.read(0x02800398,&value)&&value==0x11223344);
+    assert(generic.write(0x2018,0x12345678));
+    assert(provider.bytes==std::vector<uint8_t>({0,0,0x20,0x18,0x12,0x34,0x56,0x78}));
+    uint8_t prefix[4]{};
+    assert(controller.transfer({0x41,true},prefix,4,nullptr,0)==kIOReturnBadArgument);
     provider.result=-77;
     assert(!bus.write(0x2018,0) && bus.lastReturn()==-77);
     unsigned beforePoll=provider.calls;

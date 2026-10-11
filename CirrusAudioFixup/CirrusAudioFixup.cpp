@@ -37,6 +37,8 @@ public:
                            cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_PROBE)
         : mFixup(fixup), mAmp(amp), mSource(source) {}
 
+    int32_t lastError() const override { return mFixup->mLastTransferReturn; }
+
     bool read(uint32_t address, uint32_t* value) override {
         return mFixup->readRegister(mAmp, address, value, mSource);
     }

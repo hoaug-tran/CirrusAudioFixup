@@ -10,6 +10,12 @@
 
 #include "Core/DeviceRegistry.hpp"
 #include "Core/RegisterIO.hpp"
+#include "Core/AmplifierLifecycle.hpp"
+#include "Core/AmplifierGroup.hpp"
+#include "Platform/BoardConfiguration.hpp"
+#include "Platform/BackendRegistry.hpp"
+#include "Firmware/FirmwareBundle.hpp"
+#include "Transport/VoodooI2CController.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"
 #include "Devices/CS35L41/Hardware/OTPMap.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"

@@ -50,6 +50,11 @@
 		27521F5A59ABD126183B279A = {
 			isa = PBXGroup;
 			children = (
+                E7B135887CFD04840682F4F3,
+                7A7ADE64047F21EF79F434FA,
+                963BF563D9B6A0EF2350CE7D,
+                6485F2F92AD6BE6DD317F1F6,
+                3C1B9C1975046A6CC0EF9A72,
 				213AEE71073006568DE1EEA0,
 				BDC5ADD1611D328F362B7D02,
 				432953BD9A6B9F4B940AEEE1,
@@ -197,6 +202,7 @@
 		4B398F610293B924D539D0EB = {
 			isa = PBXGroup;
 			children = (
+                6D40FF03FC7BE8EE2E66E123,
 				2C556974E9227C88EE2E8627,
 			);
 			path = "Firmware";
@@ -247,6 +253,8 @@
 		75BA5000D0C47D62AB5DD68C = {
 			isa = PBXGroup;
 			children = (
+                0AE7D65E29CF3F41FCDAB433,
+                1E4FC108153F3B68092EDD67,
 				28B22464D8DE199BCB70E2E4,
 				D1DEE96129AE7010800B6326,
 			);
@@ -318,6 +326,62 @@
  isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "AMD/AMDACPIController.cpp"; sourceTree = "<group>";
  };
 		CAFE5100000000000000000D = { isa = PBXBuildFile; fileRef = CAFE5100000000000000000C; };
+		3C1B9C1975046A6CC0EF9A72 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "RegisterBus.hpp";
+			sourceTree = "<group>";
+		};
+		6485F2F92AD6BE6DD317F1F6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "RegisterMap.hpp";
+			sourceTree = "<group>";
+		};
+		963BF563D9B6A0EF2350CE7D = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "Endpoint.hpp";
+			sourceTree = "<group>";
+		};
+		7A7ADE64047F21EF79F434FA = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "AmplifierLifecycle.hpp";
+			sourceTree = "<group>";
+		};
+		29F371FB87977DF261FF1260 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "SPIRegisterBus.hpp";
+			sourceTree = "<group>";
+		};
+		21C3366F896C719BA60E6170 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "I2CController.hpp";
+			sourceTree = "<group>";
+		};
+		8CF69CE796ABB36A1A3D630F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "VoodooI2CController.hpp";
+			sourceTree = "<group>";
+		};
+		1E4FC108153F3B68092EDD67 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "BoardConfiguration.hpp";
+			sourceTree = "<group>";
+		};
+		6D40FF03FC7BE8EE2E66E123 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "FirmwareBundle.hpp";
+			sourceTree = "<group>";
+		};
+		0AE7D65E29CF3F41FCDAB433 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "BackendRegistry.hpp"; sourceTree = "<group>"; };
+		E7B135887CFD04840682F4F3 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierGroup.hpp"; sourceTree = "<group>"; };
 		CAFE51000000000000000003 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
@@ -349,6 +413,9 @@
 		D1C35C0E3D90A9BEF84D6F6D = {
 			isa = PBXGroup;
 			children = (
+                8CF69CE796ABB36A1A3D630F,
+                21C3366F896C719BA60E6170,
+                29F371FB87977DF261FF1260,
 				79E10805A559FC3E5503866B,
 				CAFE51000000000000000001,
 				CAFE51000000000000000002,

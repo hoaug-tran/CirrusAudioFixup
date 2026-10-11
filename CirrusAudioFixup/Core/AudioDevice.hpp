@@ -10,6 +10,7 @@
 
 #include "Core/RegisterIO.hpp"
 #include "Core/Types.hpp"
+#include "Core/Endpoint.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,7 +22,9 @@ public:
     virtual ~AudioDevice() = default;
 
     virtual const char* name() const = 0;
-    virtual uint8_t address() const = 0;
+    // Legacy I2C identity; new code uses endpoint(). SPI has no I2C address.
+    virtual uint8_t address() const { return 0xff; }
+    virtual BusEndpoint endpoint() const { return {}; }
 
     const char* getName() const { return name(); }
     uint8_t getAddress() const { return address(); }

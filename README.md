@@ -12,6 +12,8 @@
 
 SPI development adds a CS35L41 register adapter, profiled Intel LPSS SPT/BXT/CNL controllers and AMD AMDI0061/AMDI0062 command controllers. Automatic service integration and board support remain pending; see [SPI development status](docs/spi_support.md).
 
+The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service migration remains pending.
+
 Reference platform: **Lenovo Legion 7 16ACHg6 · Realtek ALC287 · AMD**
 
 [Quick start](#installation) • [Hardware status](#hardware-and-macos-scope) • [How it works](#how-it-works) • [Boot arguments](#boot-arguments) • [Diagnostics](#diagnostics) • [Documentation hub](#documentation-hub)

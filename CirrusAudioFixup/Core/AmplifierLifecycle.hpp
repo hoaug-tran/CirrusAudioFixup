@@ -1,0 +1,114 @@
+// Common lifecycle ordering for future silicon backends. Owner serializes all
+// calls on a sleepable workloop and guarantees controller/platform lifetime.
+// Firmware formats, calibration, reset, boost and HDA routing stay in backend
+// and board/resource providers; no generic register cache is replayed on wake.
+#pragma once
+#include <IOKit/IOLib.h>
+#include <stdint.h>
+namespace cirrus::core {
+enum class AmplifierStage { Detached, Identify, Authorize, Initialize, Firmware, Verify,
+                            Ready, Start, Playing, Stop, Shutdown, Suspended, Faulted };
+class AmplifierLifecycleHooks {
+public:
+    virtual ~AmplifierLifecycleHooks()=default;
+    virtual IOReturn identify()=0; // Read-only and reject unknown silicon.
+    virtual IOReturn authorizeBoard()=0; // Exact wiring/resource/tuning validation.
+    virtual IOReturn initialize()=0;
+    virtual IOReturn loadFirmware()=0; // No-DSP backends explicitly return success.
+    virtual IOReturn verifyReady()=0;
+    virtual IOReturn startPlayback()=0; // Includes board route and ready checks.
+    virtual IOReturn stopPlayback()=0;
+    virtual IOReturn safeShutdown()=0; // Bounded, usable after partial initialization.
+};
+struct AmplifierLifecycleStatus {
+    AmplifierStage stage{AmplifierStage::Detached};
+    AmplifierStage firstFailureStage{AmplifierStage::Detached};
+    IOReturn firstFailure{kIOReturnSuccess};
+    IOReturn latestFailure{kIOReturnSuccess};
+    IOReturn cleanupResult{kIOReturnSuccess};
+    uint32_t failures{0};
+};
+class AmplifierLifecycle {
+public:
+    explicit AmplifierLifecycle(AmplifierLifecycleHooks& hooks):mHooks(hooks) {}
+    const AmplifierLifecycleStatus& status() const {return mStatus;}
+    IOReturn bringUp() {
+        if(mStatus.stage!=AmplifierStage::Detached)return kIOReturnNotReady;
+        IOReturn ret=step(AmplifierStage::Identify,&AmplifierLifecycleHooks::identify);
+        if(ret!=kIOReturnSuccess)return ret;
+        ret=step(AmplifierStage::Authorize,&AmplifierLifecycleHooks::authorizeBoard);
+        if(ret!=kIOReturnSuccess)return ret;
+        mHardwareTouched=true;
+        ret=step(AmplifierStage::Initialize,&AmplifierLifecycleHooks::initialize);
+        if(ret!=kIOReturnSuccess)return ret;
+        ret=step(AmplifierStage::Firmware,&AmplifierLifecycleHooks::loadFirmware);
+        if(ret!=kIOReturnSuccess)return ret;
+        ret=step(AmplifierStage::Verify,&AmplifierLifecycleHooks::verifyReady);
+        if(ret==kIOReturnSuccess)mStatus.stage=AmplifierStage::Ready;
+        return ret;
+    }
+    IOReturn startPlayback() {
+        if(mStatus.stage!=AmplifierStage::Ready)return kIOReturnNotReady;
+        IOReturn ret=step(AmplifierStage::Start,&AmplifierLifecycleHooks::startPlayback);
+        if(ret==kIOReturnSuccess)mStatus.stage=AmplifierStage::Playing;
+        return ret;
+    }
+    IOReturn stopPlayback() {
+        if(mStatus.stage==AmplifierStage::Ready)return kIOReturnSuccess;
+        if(mStatus.stage!=AmplifierStage::Playing)return kIOReturnNotReady;
+        IOReturn ret=step(AmplifierStage::Stop,&AmplifierLifecycleHooks::stopPlayback);
+        if(ret==kIOReturnSuccess)mStatus.stage=AmplifierStage::Ready;
+        return ret;
+    }
+    IOReturn suspend() {
+        if(mStatus.stage!=AmplifierStage::Ready && mStatus.stage!=AmplifierStage::Playing)return kIOReturnNotReady;
+        mResumePlayback=mStatus.stage==AmplifierStage::Playing;
+        IOReturn ret=stopPlayback(); if(ret!=kIOReturnSuccess)return ret;
+        ret=step(AmplifierStage::Shutdown,&AmplifierLifecycleHooks::safeShutdown);
+        if(ret==kIOReturnSuccess) {mHardwareTouched=false;mStatus.stage=AmplifierStage::Suspended;}
+        return ret;
+    }
+    // Owner restores bus/platform power before calling resume. Wake revalidates
+    // identity, board and firmware; stale cached coefficients are not replayed.
+    IOReturn resume() {
+        if(mStatus.stage!=AmplifierStage::Suspended)return kIOReturnNotReady;
+        mStatus.stage=AmplifierStage::Detached;
+        IOReturn ret=bringUp();
+        return ret==kIOReturnSuccess && mResumePlayback ? startPlayback() : ret;
+    }
+    IOReturn detach() {
+        if(mStatus.stage==AmplifierStage::Faulted)return kIOReturnNotReady;
+        if(mStatus.stage==AmplifierStage::Playing) {
+            IOReturn ret=stopPlayback();if(ret!=kIOReturnSuccess)return ret;
+        }
+        if(mHardwareTouched) {
+            IOReturn ret=step(AmplifierStage::Shutdown,&AmplifierLifecycleHooks::safeShutdown);
+            if(ret!=kIOReturnSuccess)return ret;
+        }
+        mHardwareTouched=false;mResumePlayback=false;mStatus.stage=AmplifierStage::Detached;
+        return kIOReturnSuccess;
+    }
+    // Explicit owner notification after confirmed power removal / reset.
+    // Avoid touching inaccessible hardware; preserve first-failure evidence.
+    void powerLost() {mHardwareTouched=false;mResumePlayback=false;mStatus.stage=AmplifierStage::Detached;}
+private:
+    using Operation=IOReturn(AmplifierLifecycleHooks::*)();
+    IOReturn step(AmplifierStage stage,Operation operation) {
+        mStatus.stage=stage; IOReturn ret=(mHooks.*operation)();
+        if(ret!=kIOReturnSuccess) {
+            if(!mStatus.failures) {mStatus.firstFailure=ret;mStatus.firstFailureStage=stage;}
+            mStatus.latestFailure=ret;++mStatus.failures;
+            // Do not retry failed shutdown or blindly rerun failed power writes.
+            if(mHardwareTouched && stage!=AmplifierStage::Shutdown) {
+                mStatus.cleanupResult=mHooks.safeShutdown();
+                if(mStatus.cleanupResult==kIOReturnSuccess)mHardwareTouched=false;
+            } else if(stage==AmplifierStage::Shutdown)mStatus.cleanupResult=ret;
+            mStatus.stage=AmplifierStage::Faulted;
+        }
+        return ret;
+    }
+    AmplifierLifecycleHooks& mHooks;
+    AmplifierLifecycleStatus mStatus{};
+    bool mHardwareTouched{false},mResumePlayback{false};
+};
+}

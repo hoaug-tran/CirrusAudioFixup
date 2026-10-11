@@ -154,7 +154,9 @@ int main() {
     logic.w.codec[registers::kRegDeviceId]=registers::kValDeviceId;
     logic.w.codec[registers::kRegRevisionId]=0xb2;
     CS35L41SPITransport spiIO(&logic,{0,1000000,0},true);
-    cirrus::devices::cs35l41::CS35L41Device device("left",0);
+    cirrus::core::BusEndpoint identity{cirrus::core::BusTransportType::SPI,"\\_SB.SPI1",0,false,1,1000000,0};
+    cirrus::devices::cs35l41::CS35L41Device device("left",identity);
+    assert(device.address()==0xff&&device.endpoint().sameDevice(identity));
     assert(device.probe(spiIO)&&device.isPresent());
     bool locked=false;
     assert(device.setupPLL(spiIO,&locked));

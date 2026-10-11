@@ -211,7 +211,13 @@ private:
         IOReturn ret = mNativeSPI.resume();
         if (mNativeSPI.bound()) {
             setProperty("Cirrus_SPI_Wake_Return", uint64_t(ret), 32);
-            if (ret == kIOReturnSuccess) setProperty("Cirrus_SPI_Status", "BOUND_READ_ONLY");
+            setProperty("Cirrus_SPI_Status",ret==kIOReturnSuccess?(mPlatformAuthorized?"BOUND_AUTHORIZED":"BOUND_READ_ONLY"):"WAKE_FAILED");
+            const auto& failure=mNativeSPI.failure();
+            setProperty("Cirrus_SPI_Failure_Reason",failure.reason);
+            setProperty("Cirrus_SPI_Failure_Index",uint64_t(failure.index),32);
+            setProperty("Cirrus_SPI_Failure_Source",failure.source);
+            setProperty("Cirrus_SPI_Failure_Detail",uint64_t(failure.detail),32);
+            if(ret!=kIOReturnSuccess)CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",failure.reason,failure.index,failure.detail,ret);
         }
         return ret == kIOReturnSuccess;
     }

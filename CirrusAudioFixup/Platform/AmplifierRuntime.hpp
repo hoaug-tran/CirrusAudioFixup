@@ -9,6 +9,8 @@ namespace cirrus::platform {
 class AmplifierRuntime {
 public:
     static constexpr size_t kCapacity=core::AmplifierGroup::kCapacity;
+    struct BindFailure{const char* reason{"NONE"};size_t index{0};IOReturn result{kIOReturnSuccess};};
+    const BindFailure& bindFailure() const {return mBindFailure;}
     explicit AmplifierRuntime(bool resumePlaybackAutomatically=true):mResumeAutomatically(resumePlaybackAutomatically){}
     ~AmplifierRuntime(){unbind();}
     AmplifierRuntime(const AmplifierRuntime&)=delete;
@@ -23,44 +25,45 @@ public:
     }
     const BackendDefinition* backend(size_t i) const {return i<mCount?mSlots[i].definition:nullptr;}
     IOReturn bind(const BackendRegistry& registry,const BackendContext* contexts,size_t count) {
-        if(!contexts)return kIOReturnBadArgument;
+        if(!contexts)return rejectBind("NULL_CONTEXTS",kIOReturnBadArgument);
         return bindContexts(registry,count,[&](size_t i)->const BackendContext&{return contexts[i];});
     }
     IOReturn bind(const BackendRegistry& registry,const BackendContext* const* contexts,size_t count) {
-        if(!contexts || count>kCapacity)return kIOReturnBadArgument;
-        for(size_t i=0;i<count;++i)if(!contexts[i])return kIOReturnBadArgument;
+        if(!contexts || count>kCapacity)return rejectBind("INVALID_CONTEXT_ARRAY",kIOReturnBadArgument);
+        for(size_t i=0;i<count;++i)if(!contexts[i])return rejectBind("NULL_MEMBER_CONTEXT",kIOReturnBadArgument,i);
         return bindContexts(registry,count,[&](size_t i)->const BackendContext&{return *contexts[i];});
     }
 private:
     template<class ContextAt>
     IOReturn bindContexts(const BackendRegistry& registry,size_t count,ContextAt contextAt) {
-        if(bound() || !count || count>kCapacity)return kIOReturnBadArgument;
+        mBindFailure={};
+        if(bound() || !count || count>kCapacity)return rejectBind("INVALID_RUNTIME_STATE_OR_COUNT",kIOReturnBadArgument);
         const auto& board=contextAt(0).board;
-        if(board.count!=count || !board.permits(contextAt(0).actualBoard))return kIOReturnNotPermitted;
+        if(board.count!=count || !board.permits(contextAt(0).actualBoard))return rejectBind("BOARD_IDENTITY_OR_COUNT_REJECTED",kIOReturnNotPermitted);
         // Validate the complete topology before calling any factory. Contexts
         // may arrive in any order but cover each manifest binding exactly once.
         for(size_t i=0;i<count;++i) {
             const auto& c=contextAt(i);
             if(&c.board!=&board || !board.permits(c.actualBoard) || c.bindingIndex>=count ||
-               !c.endpoint.sameDevice(board.amplifiers[c.bindingIndex].endpoint))return kIOReturnNotPermitted;
+               !c.endpoint.sameDevice(board.amplifiers[c.bindingIndex].endpoint))return rejectBind("MEMBER_BOARD_OR_ENDPOINT_MISMATCH",kIOReturnNotPermitted,i);
             for(size_t j=0;j<i;++j)
-                if(c.bindingIndex==contextAt(j).bindingIndex || &c.io==&contextAt(j).io || c.endpoint.sameDevice(contextAt(j).endpoint))return kIOReturnBadArgument;
+                if(c.bindingIndex==contextAt(j).bindingIndex || &c.io==&contextAt(j).io || c.endpoint.sameDevice(contextAt(j).endpoint))return rejectBind("DUPLICATE_BINDING_ENDPOINT_OR_PORT",kIOReturnBadArgument,i);
         }
         mGroup=new core::AmplifierGroup;
-        if(!mGroup)return kIOReturnNoMemory;
+        if(!mGroup)return rejectBind("GROUP_ALLOCATION_FAILED",kIOReturnNoMemory);
         core::AmplifierLifecycle* members[kCapacity]{};
         for(size_t i=0;i<count;++i) {
             auto& slot=mSlots[i];
             ++mCount; // Own partial slot state from this point onward.
             slot.context=new BackendContext(contextAt(i));
-            if(!slot.context){releaseUninitialized();return kIOReturnNoMemory;}
+            if(!slot.context){releaseUninitialized();return rejectBind("CONTEXT_ALLOCATION_FAILED",kIOReturnNoMemory,i);}
             slot.hooks=registry.create(*slot.context,slot.definition);
-            if(!slot.hooks){releaseUninitialized();return kIOReturnNotPermitted;}
+            if(!slot.hooks){releaseUninitialized();return rejectBind("BACKEND_FIRMWARE_OR_FACTORY_REJECTED",kIOReturnNotPermitted,i);}
             slot.lifecycle=new core::AmplifierLifecycle(*slot.hooks);
-            if(!slot.lifecycle){releaseUninitialized();return kIOReturnNoMemory;}
+            if(!slot.lifecycle){releaseUninitialized();return rejectBind("LIFECYCLE_ALLOCATION_FAILED",kIOReturnNoMemory,i);}
             members[i]=slot.lifecycle;
         }
-        if(!mGroup->configure(members,count,mResumeAutomatically)){releaseUninitialized();return kIOReturnBadArgument;}
+        if(!mGroup->configure(members,count,mResumeAutomatically)){releaseUninitialized();return rejectBind("GROUP_CONFIGURATION_FAILED",kIOReturnBadArgument);}
         return kIOReturnSuccess;
     }
 public:
@@ -119,6 +122,8 @@ private:
         }
         mCount=0;
     }
+    IOReturn rejectBind(const char* reason,IOReturn result,size_t index=0){mBindFailure={reason,index,result};return result;}
+    BindFailure mBindFailure{};
     struct Slot {
         BackendContext* context{nullptr};
         const BackendDefinition* definition{nullptr};

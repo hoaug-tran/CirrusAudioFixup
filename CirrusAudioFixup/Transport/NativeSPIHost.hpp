@@ -13,6 +13,11 @@
 namespace cirrus::transport {
 class NativeSPIHost {
 public:
+    struct Failure {
+        const char* reason{"NONE"};IOReturn result{kIOReturnSuccess};
+        size_t index{0};uint32_t detail{0};char source[256]{};
+    };
+    const Failure& failure() const {return mFailure;}
     ~NativeSPIHost(){shutdown();}
     bool bound() const {return mCount!=0;}
     size_t count() const {return mCount;}
@@ -24,42 +29,46 @@ public:
         return {core::BusTransportType::SPI,mPaths[i],0,false,r.endpoint.chipSelect,r.endpoint.clockHz,r.endpoint.mode};
     }
     IOReturn bind(IOACPIPlatformDevice* amplifier,IOService* owner,const core::RegisterMapConfig& format) {
-        if(bound() || !amplifier || !owner || !core::RegisterMap::isValidConfig(format))return kIOReturnBadArgument;
+        mFailure={};
+        if(bound() || !amplifier || !owner || !core::RegisterMap::isValidConfig(format))return fail("INVALID_BIND_ARGUMENT",kIOReturnBadArgument);
         // _STA present/enabled. Do not turn on a firmware-disabled device.
-        if((amplifier->getDeviceStatus()&3)!=3)return kIOReturnNotReady;
+        if((amplifier->getDeviceStatus()&3)!=3)return fail("ACPI_DEVICE_DISABLED",kIOReturnNotReady);
         OSObject* object=nullptr;
         IOReturn ret=amplifier->evaluateObject("_CRS",&object);
         auto* data=OSDynamicCast(OSData,object);
-        if(ret!=kIOReturnSuccess || !data){OSSafeReleaseNULL(object);return kIOReturnNotFound;}
+        if(ret!=kIOReturnSuccess || !data){OSSafeReleaseNULL(object);return fail("ACPI_CRS_UNAVAILABLE",ret==kIOReturnSuccess?kIOReturnNotFound:ret);}
         auto result=parseACPISPIResources(static_cast<const uint8_t*>(data->getBytesNoCopy()),data->getLength(),mResources);
         object->release();
-        if(result!=ACPISPIResult::Success)return kIOReturnUnsupported;
+        if(result!=ACPISPIResult::Success)return fail("ACPI_SPI_RESOURCE_REJECTED",kIOReturnUnsupported,0,nullptr,uint32_t(result));
         for(size_t i=0;i<mResources.count;++i) {
             auto& r=mResources.endpoints[i];
-            if(r.sourceIndex!=0){shutdown();return kIOReturnUnsupported;}
+            if(r.sourceIndex!=0){fail("UNSUPPORTED_RESOURCE_SOURCE_INDEX",kIOReturnUnsupported,i,r.source,r.sourceIndex);shutdown();return mFailure.result;}
             // Multiple resources may share a controller, never the same CS.
             for(size_t j=0;j<i;++j)
-                if(!strcmp(r.source,mResources.endpoints[j].source) && r.endpoint.chipSelect==mResources.endpoints[j].endpoint.chipSelect){shutdown();return kIOReturnBadArgument;}
+                if(!strcmp(r.source,mResources.endpoints[j].source) && r.endpoint.chipSelect==mResources.endpoints[j].endpoint.chipSelect){fail("DUPLICATE_CHIP_SELECT",kIOReturnBadArgument,i,r.source,r.endpoint.chipSelect);shutdown();return mFailure.result;}
             IOACPIPlatformDevice* target=resolve(amplifier,r.source);
-            if(!target){shutdown();return kIOReturnNotFound;}
+            if(!target){fail("CONTROLLER_ACPI_PATH_UNRESOLVED_OR_AMBIGUOUS",kIOReturnNotFound,i,r.source);shutdown();return mFailure.result;}
             size_t slot=0;
             while(slot<mControllers && mTargets[slot]!=target)++slot;
             for(size_t j=0;j<i;++j) {
                 if(mSlots[j]==slot && r.endpoint.chipSelect==mResources.endpoints[j].endpoint.chipSelect) {
-                    target->release();shutdown();return kIOReturnBadArgument;
+                    fail("DUPLICATE_CONTROLLER_CHIP_SELECT",kIOReturnBadArgument,i,r.source,r.endpoint.chipSelect);target->release();shutdown();return mFailure.result;
                 }
             }
             char registryPath[256]{};int length=sizeof(registryPath);
             auto* plane=IORegistryEntry::getPlane("IOACPIPlane");
             if(!target->getPath(registryPath,&length,plane) || !canonicalACPIPath(registryPath,mPaths[i],sizeof(mPaths[i]))) {
-                target->release();shutdown();return kIOReturnBadArgument;
+                fail("INVALID_CONTROLLER_ACPI_PATH",kIOReturnBadArgument,i,r.source);target->release();shutdown();return mFailure.result;
             }
             mSlots[i]=slot;
             if(slot==mControllers) {
                 mTargets[slot]=target; // Adopt resolver retain, including failure path.
                 ++mControllers;
                 auto* pci=findPCI(target);
+                const bool intelController=pci!=nullptr;
+                uint32_t controllerIdentity=0;
                 if(pci) {
+                    controllerIdentity=(uint32_t(pci->configRead16(0))<<16)|pci->configRead16(2);
                     mIntel[slot]=new intel::IntelLPSSSPIController;
                     ret=mIntel[slot]?mIntel[slot]->bind(pci,owner):kIOReturnNoMemory;
                     pci->release();
@@ -69,19 +78,23 @@ public:
                     // Require observable D0 instead of assuming MMIO is accessible.
                     uint32_t power=0;
                     if(target->evaluateInteger("_PSC",&power)!=kIOReturnSuccess || power!=0) {
-                        shutdown();return kIOReturnNotReady;
+                        fail("AMD_CONTROLLER_D0_UNVERIFIED",kIOReturnNotReady,i,r.source,power);shutdown();return mFailure.result;
                     }
                     mAMD[slot]=new amd::AMDACPIController;
                     ret=mAMD[slot]?mAMD[slot]->bind(target,owner):kIOReturnNoMemory;
                     mBus[slot]=mAMD[slot];
                 }
-                if(ret!=kIOReturnSuccess){shutdown();return ret;}
+                if(ret!=kIOReturnSuccess) {
+                    const char* reason=intelController?(ret==kIOReturnUnsupported?"INTEL_CONTROLLER_ID_UNSUPPORTED":"INTEL_CONTROLLER_BIND_FAILED"):
+                        (ret==kIOReturnUnsupported?"AMD_CONTROLLER_HID_UNSUPPORTED":"AMD_CONTROLLER_BIND_FAILED");
+                    fail(reason,ret,i,r.source,controllerIdentity);shutdown();return ret;
+                }
             } else target->release();
             // No board write permission is inferred from _CRS or HID.
             mPorts[i]=new SPIRegisterBus(mBus[slot],r.endpoint);
-            if(!mPorts[i]){shutdown();return kIOReturnNoMemory;}
+            if(!mPorts[i]){fail("REGISTER_BUS_ALLOCATION_FAILED",kIOReturnNoMemory,i,r.source);shutdown();return mFailure.result;}
             mRegisters[i]=new core::RegisterMap(*mPorts[i],format,false);
-            if(!mRegisters[i]){shutdown();return kIOReturnNoMemory;}
+            if(!mRegisters[i]){fail("REGISTER_MAP_ALLOCATION_FAILED",kIOReturnNoMemory,i,r.source);shutdown();return mFailure.result;}
             ++mCount;
         }
         return kIOReturnSuccess;
@@ -92,7 +105,8 @@ public:
                                  const platform::BoardConfiguration& board,
                                  const platform::BoardIdentity& actual,const char* deviceHid,bool allowWrites=true) {
         if(!bound() || mAuthorized || !deviceHid || !board.permits(actual) || board.count!=mCount)
-            return kIOReturnNotPermitted;
+            return fail("BOARD_AUTHORIZATION_REJECTED",kIOReturnNotPermitted);
+        mFailure={};
         core::RegisterMap* prepared[ACPISPIResources::kMaxEndpoints]{};
         IOReturn result=kIOReturnSuccess;
         for(size_t i=0;i<mCount;++i) {
@@ -102,11 +116,11 @@ public:
                 if(e.sameDevice(board.amplifiers[j].endpoint))binding=&board.amplifiers[j];
             const char* expected=binding?(binding->acpiHid?binding->acpiHid:actual.acpiHid):nullptr;
             if(!binding || !expected || strcmp(expected,deviceHid) || e.spiMode!=binding->endpoint.spiMode ||
-               e.spiClockHz>binding->endpoint.spiClockHz) {result=kIOReturnNotPermitted;break;}
+               e.spiClockHz>binding->endpoint.spiClockHz) {result=fail("BOARD_ENDPOINT_OR_HID_MISMATCH",kIOReturnNotPermitted,i,e.controllerPath);break;}
             const auto* definition=registry.find(deviceHid,binding->siliconId,core::BusTransportType::SPI);
-            if(!definition){result=kIOReturnUnsupported;break;}
+            if(!definition){result=fail("NO_REGISTERED_SPI_BACKEND",kIOReturnUnsupported,i,e.controllerPath,binding->siliconId);break;}
             prepared[i]=new core::RegisterMap(*mPorts[i],*definition->format(core::BusTransportType::SPI),allowWrites);
-            if(!prepared[i]){result=kIOReturnNoMemory;break;}
+            if(!prepared[i]){result=fail("AUTHORIZED_MAP_ALLOCATION_FAILED",kIOReturnNoMemory,i,e.controllerPath);break;}
         }
         if(result!=kIOReturnSuccess) {
             for(auto* map:prepared)delete map;
@@ -117,13 +131,14 @@ public:
     }
     void suspend(){for(size_t i=0;i<mControllers;++i){if(mIntel[i])mIntel[i]->suspend();if(mAMD[i])mAMD[i]->suspend();}}
     IOReturn resume(){
+        mFailure={};
         for(size_t i=0;i<mControllers;++i) {
             uint32_t power=0;
             if(mAMD[i] && (mTargets[i]->evaluateInteger("_PSC",&power)!=kIOReturnSuccess || power!=0)) {
-                suspend();return kIOReturnNotReady;
+                fail("AMD_RESUME_D0_UNVERIFIED",kIOReturnNotReady,i,controllerSource(i),power);suspend();return mFailure.result;
             }
             IOReturn ret=mIntel[i]?mIntel[i]->resume():mAMD[i]->resume();
-            if(ret!=kIOReturnSuccess){suspend();return ret;}
+            if(ret!=kIOReturnSuccess){fail("CONTROLLER_RESUME_FAILED",ret,i,controllerSource(i));suspend();return ret;}
         }
         return kIOReturnSuccess;
     }
@@ -191,6 +206,18 @@ private:
         if(found && !duplicate)found->retain();
         it->release();return duplicate?nullptr:found;
     }
+    const char* controllerSource(size_t slot) const {
+        for(size_t i=0;i<mCount;++i)if(mSlots[i]==slot)return mPaths[i];
+        return "";
+    }
+    IOReturn fail(const char* reason,IOReturn result,size_t index=0,const char* source=nullptr,uint32_t detail=0) {
+        mFailure={};mFailure.reason=reason;mFailure.result=result;mFailure.index=index;mFailure.detail=detail;
+        if(source){size_t n=strlen(source);if(n>=sizeof(mFailure.source))n=sizeof(mFailure.source)-1;memcpy(mFailure.source,source,n);}
+        return result;
+    }
+    // Copy failure context before shutdown clears discovery paths/resources.
+    // No hardware traffic or log allocation occurs during error reporting.
+    Failure mFailure{};
     ACPISPIResources mResources{};
     size_t mCount{0},mControllers{0};
     bool mAuthorized{false};

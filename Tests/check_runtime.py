@@ -981,6 +981,7 @@ int main() {
     CirrusAudioFixup::amplifierInterruptReceived(reinterpret_cast<OSObject*>(&irqDriver),&irqSource,1);
     checkNew(!irqSource.enabled && irqDriver.mAmps[0].playbackFaulted,
              "protection IRQ latches fault and disables level delivery");
+    checkNew(irqDriver.properties["Cirrus_Amp_IRQ_Mode"]=="FAULT_LATCHED_IRQ_DISABLED","IRQ fault evidence survives polling fallback");
     CirrusAudioFixup irqSetupFault;
     assert(irqSetupFault.bindAmplifierRuntime() && irqSetupFault.mAmplifierRuntime.bringUp()==0);
     irqSetupFault.failAt=2;

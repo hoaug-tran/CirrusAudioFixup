@@ -214,12 +214,13 @@ int main(){
  AmplifierRuntime runtime;
  assert(runtime.bind(multiRegistry,contexts,1)==kIOReturnNotPermitted&&!heapCreated);
  BackendContext duplicateContexts[]={contexts[0],contexts[0]};assert(runtime.bind(multiRegistry,duplicateContexts,2)==kIOReturnBadArgument&&!heapCreated);
+ assert(!strcmp(runtime.bindFailure().reason,"DUPLICATE_BINDING_ENDPOINT_OR_PORT")&&runtime.bindFailure().index==1);
  BackendContext sharedPorts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{map,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
  assert(runtime.bind(multiRegistry,sharedPorts,2)==kIOReturnBadArgument&&!heapCreated);
  contexts[1].actualDeviceHid="WRONG";assert(runtime.bind(multiRegistry,contexts,2)==kIOReturnNotPermitted);
  assert(heapCreated==heapDestroyed&&!heapCleanup&&!runtime.bound());contexts[1].actualDeviceHid="I2CAMP";
  auto bindTemporary=[&](){BackendContext local[]={contexts[0],contexts[1]};return runtime.bind(multiRegistry,local,2);};
- assert(bindTemporary()==0&&runtime.count()==2);
+ assert(bindTemporary()==0&&runtime.count()==2&&!strcmp(runtime.bindFailure().reason,"NONE"));
  assert(runtime.backend(0)==&spiAmp&&runtime.backend(1)==&i2cAmp);
  assert(runtime.startPlayback()==kIOReturnNotReady);
  assert(runtime.bringUp()==0&&runtime.startPlayback()==0&&runtime.suspend()==0&&runtime.resume()==0);

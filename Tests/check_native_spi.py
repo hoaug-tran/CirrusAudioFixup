@@ -53,7 +53,7 @@ struct IOACPIPlatformDevice:IOService {
  unsigned getDeviceStatus(){return status;}
  int evaluateObject(const char* method,OSObject** out){if(!strcmp(method,"_HID")){if(hid.value.empty())return kIOReturnNotFound;hid.retain();*out=&hid;return 0;}if(rejectCRS)return kIOReturnNotFound;crs.retain();*out=&crs;return 0;}
 };
-struct IOPCIDevice:IOService {IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
+struct IOPCIDevice:IOService {uint16_t configRead16(unsigned offset){return offset?0x7aaa:0x8086;}IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
 inline unsigned liveControllers=0,suspends=0,resumes=0;
 inline bool resumeFailure=false;
 inline uint32_t probeIDs[4]{};
@@ -225,26 +225,34 @@ int main(){
  assert(!host.registers(0)->write(0,123)&&host.registers(0)->lastError()==kIOReturnNotPermitted);
  host.suspend();value=123;assert(!host.registers(0)->read(0,&value)&&value==123);
  resumeFailure=true;assert(host.resume()==kIOReturnNotReady);assert(!host.registers(1)->read(0,&value));
+ assert(!strcmp(host.failure().reason,"CONTROLLER_RESUME_FAILED")&&host.failure().result==kIOReturnNotReady);
  resumeFailure=false;b.power=3;assert(host.resume()==kIOReturnNotReady);b.power=0;assert(host.resume()==0&&host.registers(2)->read(0,&value));
  host.shutdown();host.shutdown();assert(!liveControllers&&a.refs==1&&b.refs==1&&!iteratorLive);
  resources(amp,{{"SPI0",0}});amp.crs.bytes[4]=1;assert(host.bind(&amp,&owner,format)==kIOReturnUnsupported&&!liveControllers);
  pci.acpi=nullptr;pci.acpiPath.value=a.path;resources(amp,{{"SPI0",0}});
  assert(host.bind(&amp,&owner,format)==0&&host.count()==1);host.shutdown();
  pci.acpi=&a;pci.acpiPath.value.clear();
+ pci.supported=false;assert(host.bind(&amp,&owner,format)==kIOReturnUnsupported&&!liveControllers);
+ assert(!strcmp(host.failure().reason,"INTEL_CONTROLLER_ID_UNSUPPORTED")&&host.failure().detail==0x80867aaa);pci.supported=true;
  resources(amp,{{"MISSING",0}});assert(host.bind(&amp,&owner,format)==kIOReturnNotFound&&!host.bound()&&!liveControllers);
+ assert(!strcmp(host.failure().reason,"CONTROLLER_ACPI_PATH_UNRESOLVED_OR_AMBIGUOUS")&&!strcmp(host.failure().source,"MISSING"));
+ host.shutdown();assert(!strcmp(host.failure().source,"MISSING")&&host.failure().result==kIOReturnNotFound);
  resources(amp,{{"SPI0",0},{"SPI1",1}});b.hasPSC=false;
  assert(host.bind(&amp,&owner,format)==kIOReturnNotReady&&!liveControllers&&a.refs==1&&b.refs==1);b.hasPSC=true;
  b.amd=false;
- assert(host.bind(&amp,&owner,format)==kIOReturnUnsupported&&!host.bound()&&!liveControllers&&a.refs==1&&b.refs==1);b.amd=true;
+ assert(host.bind(&amp,&owner,format)==kIOReturnUnsupported&&!host.bound()&&!liveControllers&&a.refs==1&&b.refs==1);
+ assert(!strcmp(host.failure().reason,"AMD_CONTROLLER_HID_UNSUPPORTED")&&host.failure().index==1&&!strcmp(host.failure().source,"SPI1"));b.amd=true;
  resources(amp,{{"SPI0",0},{"SPI0",0}});assert(host.bind(&amp,&owner,format)==kIOReturnBadArgument&&!liveControllers);
+ assert(!strcmp(host.failure().reason,"DUPLICATE_CHIP_SELECT")&&host.failure().index==1);
  resources(amp,{{"SPI0",0},{"\\_SB.SPI0",0}});assert(host.bind(&amp,&owner,format)==kIOReturnBadArgument&&!liveControllers);
  resources(amp,{{"SPI0",0}});amp.status=0;assert(host.bind(&amp,&owner,format)==kIOReturnNotReady);amp.status=3;
  amp.rejectCRS=true;assert(host.bind(&amp,&owner,format)==kIOReturnNotFound);amp.rejectCRS=false;
  iteratorFailure=true;assert(host.bind(&amp,&owner,format)==kIOReturnNotFound&&!liveControllers);iteratorFailure=false;
  IOACPIPlatformDevice duplicate;duplicate.path=a.path;nodes.push_back(&duplicate);
  assert(host.bind(&amp,&owner,format)==kIOReturnNotFound&&!liveControllers&&a.refs==1);nodes.pop_back();
+ assert(host.failure().result==kIOReturnNotFound);
  format.addressBytes=1;format.valueBytes=1;format.stride=1;format.paddingBytes=0;format.readFlag=0;format.maxRegister=255;
- assert(host.bind(&amp,&owner,format)==0);uint8_t bytes[3]{};assert(host.registers(0)->bulkRead(1,bytes,3));
+ assert(host.bind(&amp,&owner,format)==0&&!strcmp(host.failure().reason,"NONE"));uint8_t bytes[3]{};assert(host.registers(0)->bulkRead(1,bytes,3));
  host.shutdown();assert(!liveControllers&&!iteratorLive&&amp.crs.refs==1);
  CirrusAudioFixup gated;IOService i2c;
  assert(gated.setupNativeSPI(&i2c)&&gated.strings["Cirrus_Bus"]=="I2C");

@@ -163,3 +163,36 @@ reset/power removal. It clears lifecycle hardware state, quiesces controllers an
 requires full identity/authorization/firmware bring-up on the next successful
 resume. Playback remains stopped. This is not a substitute for a GPIO/regulator
 reset and does not erase recorded failure evidence.
+
+## Failure reporting and fallbacks
+
+The owner logs unsupported silicon, unmatched endpoints, missing SPI opt-in and
+blocked board/topology initialization. SPI bind errors retain a reason, native
+IOReturn, resource/controller index, copied ACPI source and parser/power detail
+through rollback and shutdown. Intel controller rejection includes the actual
+PCI vendor/device pair in `detail` (vendor in the upper 16 bits). A new
+bind/resume resets that operation's failure
+record. The standalone SPI executor exposes `transportFailure()` to its owner.
+
+IORegistry exposes `Cirrus_SPI_Failure_Reason`, `_Index`, `_Source`, `_Detail`,
+`Cirrus_SPI_Bind_Return` and `Cirrus_SPI_Wake_Return`. Runtime factory/topology
+rejections expose `Cirrus_Runtime_Bind_Reason`, `_Index` and `_Return`.
+Per-member lifecycle first-failure stage and cleanup return remain separate;
+configured I2C probes publish `Cirrus_I2C_<index>_Probe_Return` and `_DeviceID`.
+These properties are evidence of the attempted operation, not playback proof.
+
+IRQ falls back to polling only when that polling path is available. Reasons
+include opt-in disabled, read-only/unready state, absent verified wiring, missing
+ACPI resources, GPIO mismatch and backend/source setup failure. Inspect
+`Cirrus_Amp_IRQ_Fallback` and `Cirrus_Amp_IRQ_Mode`. A latched IRQ fault retains
+`FAULT_LATCHED_IRQ_DISABLED`; a spurious level retains the unexplained-IRQ mode.
+Controller resume failure keeps amplifier initialization blocked. Unknown boards
+remain read-only; unsupported controllers/AMPs do not fall back to another chip's
+register protocol or tuning. Failed shutdown is never blindly retried.
+
+Release keeps error logs enabled. `-cirrusdbg` enables routine context logs;
+bounded register trace and explicit diagnostic options supply detailed transfer
+history without printing every periodic poll. Diagnostic register reads honor
+precious-register policy. Keep the first transfer error even when a diagnostic
+read or cleanup produces another error. These host-tested contracts do not
+establish controller ownership or physical speaker behavior on untested hardware.

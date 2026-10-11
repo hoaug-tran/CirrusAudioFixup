@@ -13,6 +13,7 @@ public:
     NativeSPIAmplifierRuntime& operator=(const NativeSPIAmplifierRuntime&)=delete;
     const AmplifierRuntime& runtime() const {return mRuntime;}
     bool bound() const {return mRuntime.bound();}
+    const transport::NativeSPIHost::Failure& transportFailure() const {return mHost.failure();}
     IOReturn bind(IOACPIPlatformDevice* device,IOService* owner,const BackendRegistry& registry,
                   const BoardConfiguration& board,const BoardIdentity& actual,
                   const firmware::FirmwareBundle* firmware,size_t count,

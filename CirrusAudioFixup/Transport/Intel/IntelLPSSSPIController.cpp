@@ -91,7 +91,7 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
         return kIOReturnNotReady;
     IOLockLock(mLock);
     IOReturn result = kIOReturnNotReady;
-    if (mWindow.base && pciIsD0())
+    if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U))
         result = mEngine.exchange(endpoint, tx, rx, length);
     IOLockUnlock(mLock);
     return result;
@@ -103,7 +103,7 @@ void IntelLPSSSPIController::suspend() {
     IOLockLock(mLock);
     // The owner calls this before PCI D3. If PCI is already inaccessible,
     // only mark offline: never issue MMIO against a powered-down function.
-    if (mWindow.base && pciIsD0())
+    if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U))
         mEngine.suspend();
     else
         mEngine.markOffline();
@@ -117,7 +117,10 @@ IOReturn IntelLPSSSPIController::resume() {
     IOReturn result = kIOReturnNotReady;
     if (mWindow.base && pciIsD0()) {
         mPCI->setMemoryEnable(true);
-        result = mEngine.resume();
+        if (mPCI->configRead16(kIOPCIConfigCommand) & 2U)
+            result = mEngine.resume();
+        else
+            mEngine.markOffline();
     }
     IOLockUnlock(mLock);
     return result;
@@ -128,7 +131,7 @@ void IntelLPSSSPIController::shutdown() {
     // freeing a lock while another caller waits on it is not safe.
     if (mLock)
         IOLockLock(mLock);
-    if (mWindow.base && pciIsD0())
+    if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U))
         mEngine.shutdown();
     else
         mEngine.abandon();

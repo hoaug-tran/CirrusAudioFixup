@@ -90,7 +90,10 @@ int main(){
         assert(bus.exchange(ep,tx,rx,10)==kIOReturnNotReady&&pci.map.regs[0x200/4]==clock);
         pci.state=3;assert(bus.resume()==kIOReturnNotReady);
         bus.suspend();assert(bus.exchange(ep,tx,rx,10)==kIOReturnNotReady);
-        pci.state=0;assert(bus.resume()==0);
+        pci.state=0; pci.memory=false; pci.rejectMemory=true;
+        assert(bus.resume()==kIOReturnNotReady);
+        assert(bus.exchange(ep,tx,nullptr,sizeof(tx))==kIOReturnNotReady);
+        pci.rejectMemory=false;assert(bus.resume()==0);
         bus.shutdown();assert(pci.refs==1&&!pci.opened&&!pci.memory&&pci.map.releases==1);
         bus.shutdown();assert(pci.closes==1);
         assert(bus.bind(&pci,&owner)==0); // owner can bind again after teardown

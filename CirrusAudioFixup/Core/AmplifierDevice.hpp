@@ -1,5 +1,5 @@
 //
-// AudioDevice.hpp
+// AmplifierDevice.hpp
 // Common register-level device operations.
 // This interface does not yet own the complete driver lifecycle. CS35L41 DSP
 // upload, mailbox sequencing and playback verification remain in the service.
@@ -9,17 +9,17 @@
 #pragma once
 
 #include "Core/RegisterIO.hpp"
-#include "Core/Types.hpp"
-#include "Core/Endpoint.hpp"
+#include "Core/AudioTypes.hpp"
+#include "Core/BusEndpoint.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
 
 namespace cirrus::core {
 
-class AudioDevice {
+class AmplifierDevice {
 public:
-    virtual ~AudioDevice() = default;
+    virtual ~AmplifierDevice() = default;
 
     virtual const char* name() const = 0;
     // Legacy I2C identity; new code uses endpoint(). SPI has no I2C address.
@@ -35,7 +35,8 @@ public:
 
     virtual InitResult initialize(RegisterIO& io) = 0;
 
-    virtual bool bootDsp(RegisterIO& io, const uint8_t* wmfw, size_t wmfwSize, const uint8_t* bin, size_t binSize) = 0;
+    // Firmware formats and DSP boot belong to AmplifierLifecycleHooks.
+    // Register helpers must not impose WMFW/BIN on another amplifier.
 
     virtual bool startPlayback(RegisterIO& io) = 0;
 

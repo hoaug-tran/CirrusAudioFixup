@@ -4,12 +4,12 @@
 #pragma once
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/RegisterMap.hpp"
-#include "Core/Endpoint.hpp"
+#include "Core/BusEndpoint.hpp"
 #include "Platform/BoardConfiguration.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include <string.h>
 namespace cirrus::platform {
-struct BackendContext {
+struct AmplifierBackendContext {
     core::RegisterIO& io;
     core::BusEndpoint endpoint;
     const BoardConfiguration& board;
@@ -19,14 +19,14 @@ struct BackendContext {
     const char* actualDeviceHid{nullptr};
     void* platformContext{nullptr};
 };
-struct BackendDefinition {
+struct AmplifierBackendDefinition {
     const char* name;
     const char* acpiHid;
     uint32_t siliconId;
     uint8_t transportMask; // Bit 0 I2C, bit 1 SPI. No implicit SoundWire support.
     core::RegisterMapConfig i2cFormat;
     core::RegisterMapConfig spiFormat;
-    core::AmplifierLifecycleHooks* (*create)(const BackendContext&);
+    core::AmplifierLifecycleHooks* (*create)(const AmplifierBackendContext&);
     void (*destroy)(core::AmplifierLifecycleHooks*);
     bool supportsDeferredFirmware{false};
     uint32_t identityRegister{0},identityMask{0xffffffffU};
@@ -36,10 +36,10 @@ struct BackendDefinition {
         return nullptr;
     }
 };
-class BackendRegistry {
+class AmplifierBackendRegistry {
 public:
     static constexpr size_t kCapacity=32;
-    bool add(const BackendDefinition& definition) {
+    bool add(const AmplifierBackendDefinition& definition) {
         if(mCount==kCapacity || !definition.name || !*definition.name || !definition.acpiHid ||
             !*definition.acpiHid || !definition.siliconId || !definition.transportMask ||
             (definition.transportMask&~3U) || !definition.identityMask || !definition.create || !definition.destroy ||
@@ -52,7 +52,7 @@ public:
         }
         mDefinitions[mCount++]=&definition;return true;
     }
-    const BackendDefinition* find(const char* hid,uint32_t siliconId,core::BusTransportType bus) const {
+    const AmplifierBackendDefinition* find(const char* hid,uint32_t siliconId,core::BusTransportType bus) const {
         if(!hid)return nullptr;
         for(size_t i=0;i<mCount;++i) {
             const auto& d=*mDefinitions[i];
@@ -62,7 +62,7 @@ public:
     }
     // Factory selection does not authorize power writes. The returned backend's
     // identify/authorizeBoard hooks still run before lifecycle initialization.
-    core::AmplifierLifecycleHooks* create(const BackendContext& context,const BackendDefinition*& selected) const {
+    core::AmplifierLifecycleHooks* create(const AmplifierBackendContext& context,const AmplifierBackendDefinition*& selected) const {
         if(!context.board.permits(context.actualBoard) || context.bindingIndex>=context.board.count ||
             !context.endpoint.sameDevice(context.board.amplifiers[context.bindingIndex].endpoint))return nullptr;
         const auto& binding=context.board.amplifiers[context.bindingIndex];
@@ -81,7 +81,7 @@ public:
         return instance;
     }
 private:
-    const BackendDefinition* mDefinitions[kCapacity]{};
+    const AmplifierBackendDefinition* mDefinitions[kCapacity]{};
     size_t mCount{0};
 };
 }

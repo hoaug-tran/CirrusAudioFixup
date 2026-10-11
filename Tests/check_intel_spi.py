@@ -20,7 +20,7 @@ inline void IOSleep(unsigned) {}
 #include <vector>
 #include <map>
 #include "Transport/Intel/LPSSSPIEngine.hpp"
-#include "Transport/CS35L41SPITransport.hpp"
+#include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"
 bool gCirrusDebug=false;
 using namespace cirrus::transport;
@@ -124,7 +124,7 @@ int main() {
 
     SPIEndpoint ep{1,1000000,0}; uint8_t tx[32]{},rx[32]{};
     Controller c; assert(c.w.writes.empty() && c.engine.selectCount()==2);
-    CS35L41SPITransport amp(&c,ep,true);
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO amp(&c,ep,true);
     uint32_t value=0;
     assert(amp.read(0x02800398,&value)&&value==0x11223344);
     assert(c.w.transactions.back()==std::vector<uint8_t>({0x82,0x80,3,0x98,0,0,0,0,0,0}));
@@ -153,7 +153,7 @@ int main() {
     namespace registers=cirrus::devices::cs35l41::registers;
     logic.w.codec[registers::kRegDeviceId]=registers::kValDeviceId;
     logic.w.codec[registers::kRegRevisionId]=0xb2;
-    CS35L41SPITransport spiIO(&logic,{0,1000000,0},true);
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO spiIO(&logic,{0,1000000,0},true);
     cirrus::core::BusEndpoint identity{cirrus::core::BusTransportType::SPI,"\\_SB.SPI1",0,false,1,1000000,0};
     cirrus::devices::cs35l41::CS35L41Device device("left",identity);
     assert(device.address()==0xff&&device.endpoint().sameDevice(identity));

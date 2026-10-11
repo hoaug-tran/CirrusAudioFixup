@@ -1,5 +1,5 @@
 //
-// AudioEvents.hpp
+// AudioEventSource.hpp
 // IOAudioFamily observations delivered to the amplifier workloop.
 // See LICENSE for distribution terms.
 //

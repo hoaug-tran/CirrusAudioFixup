@@ -77,8 +77,8 @@ public:
 
     bool mPowerAvailable=true,mStopping=false,missing=false;
     unsigned lookups=0;
-    size_t mAmpCount{2};
-    int mAmps[2]{};
+    size_t mAmplifierCount{2};
+    int mAmplifiers[2]{};
     IOPCIDevice pci;
     IOPCIDevice* mHdaPci=nullptr;
     IOMemoryMap* mHdaMap=nullptr;

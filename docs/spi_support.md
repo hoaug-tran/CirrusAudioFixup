@@ -94,7 +94,7 @@ register read-modify-write operations. Bind/shutdown cannot race client calls.
 ## AMD command backend
 
 `Transport/AMD/AMDSPIEngine.hpp` supports AMD AMDI0061 (V1) and AMDI0062 (V2)
-register layouts. `AMDACPIController.{hpp,cpp}` supplies exclusive ACPI provider
+register layouts. `AMDSPIController.{hpp,cpp}` supplies exclusive ACPI provider
 ownership, MMIO mapping, serialized commands, D0 checks when `_PSC` exists,
 and suspend/resume/cleanup. The enclosing service owns AML power sequencing.
 It is not an automatically matched driver personality.
@@ -133,7 +133,7 @@ and [serial resource conversion](https://github.com/acpica/acpica/blob/master/so
 
 ## CS35L41 register implementation
 
-`Transport/CS35L41SPITransport.hpp` configures the shared `Core/RegisterMap.hpp` engine behind `core::RegisterIO` (see [extensible driver foundation](extensible_driver.md)):
+`Devices/CS35L41/CS35L41SPIRegisterIO.hpp` configures the shared `Core/RegisterMap.hpp` engine behind `core::RegisterIO` (see [extensible driver foundation](extensible_driver.md)):
 
 - Scalar read/write, updateBits, bulk read/write and polling.
 - Six-byte header: 32-bit BE register address plus 16 zero padding bits.
@@ -149,14 +149,14 @@ Other DSP packing must be converted to 32-bit register-stride buffers by the
 uploader before invoking the adapter, consistent with the current upload plan.
 
 An owning service can bind the native controller and pass a checked ACPI
-endpoint into `CS35L41SPITransport`. For example, with `controller` stored for
+endpoint into `CS35L41SPIRegisterIO`. For example, with `controller` stored for
 the service lifetime, `pci` already in D0 and `endpoint` parsed from real ACPI:
 
 ```cpp
 IOReturn result = controller.bind(pci, this);
 if (result != kIOReturnSuccess)
     return false;
-cirrus::transport::CS35L41SPITransport io(&controller, endpoint);
+cirrus::devices::cs35l41::CS35L41SPIRegisterIO io(&controller, endpoint);
 uint32_t deviceId = 0;
 if (!io.read(0, &deviceId)) {
     controller.shutdown();
@@ -255,7 +255,7 @@ verifying that native accesses bypass I2C frames, preserve errors and honor slee
 ## Registered SPI amplifier executor
 
 `NativeSPIAmplifierRuntime` connects native Intel/AMD controller ownership to
-`BackendRegistry` and `AmplifierRuntime`. Up to 16 resolved ACPI endpoints may use
+`AmplifierBackendRegistry` and `AmplifierRuntime`. Up to 16 resolved ACPI endpoints may use
 different silicon register formats. A verified manifest plus actual provider HID,
 exact endpoint/mode/clock matching and firmware identity precede binding; backend
 identity and authorization precede initialization. Bind does not write amplifier

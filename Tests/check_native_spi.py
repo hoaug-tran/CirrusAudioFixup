@@ -59,8 +59,8 @@ inline bool resumeFailure=false;
 inline uint32_t probeIDs[4]{};
 inline unsigned writeTransfers=0;inline std::vector<std::vector<uint8_t>> writes;
 ''')
- for name,kind in (('Intel/IntelLPSSSPIController.hpp','intel'),('AMD/AMDACPIController.hpp','amd')):
-  cls='IntelLPSSSPIController' if kind=='intel' else 'AMDACPIController'
+ for name,kind in (('Intel/IntelLPSSSPIController.hpp','intel'),('AMD/AMDSPIController.hpp','amd')):
+  cls='IntelLPSSSPIController' if kind=='intel' else 'AMDSPIController'
   typ='IOPCIDevice' if kind=='intel' else 'IOACPIPlatformDevice'
   valid='p->supported' if kind=='intel' else 'p->amd'
   (p/'Transport'/name).write_text(f'''#pragma once
@@ -83,6 +83,7 @@ public:
  (p/'Transport/VoodooI2CController.hpp').write_text(r'''
 #pragma once
 #include "Transport/I2CController.hpp"
+#include "Transport/I2CRegisterBus.hpp"
 #include "IOKit/IORegistryEntry.h"
 inline std::vector<std::vector<uint8_t>> i2cWrites;
 namespace cirrus::transport {
@@ -105,8 +106,8 @@ public:
 #include "Transport/NativeSPIHost.hpp"
 #include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Platform/PlatformProfile.hpp"
-#include "Core/DeviceRegistry.hpp"
-#include "Transport/CS35L41SPITransport.hpp"
+#include "Core/AmplifierDescriptors.hpp"
+#include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Transport/VoodooI2CController.hpp"
 #include <map>
@@ -117,12 +118,12 @@ constexpr bool kOSBooleanFalse=false,kOSBooleanTrue=true;
 struct Amp {
  char endpointLabel[16]{};const char* name=nullptr;uint8_t address=0;cirrus::core::AudioChannel channel{};
  cirrus::core::RegisterIO* registerIO=nullptr;cirrus::core::BusEndpoint endpoint{};uint8_t endpointIndex=0;
- cirrus::core::CodecModel model{};bool present=false,playbackFaulted=false;uint32_t deviceId=0;
+ cirrus::core::AmplifierModel model{};bool present=false,playbackFaulted=false;uint32_t deviceId=0;
 };
 using AmplifierState=Amp;
 class CirrusAudioFixup:public IOService {
 public:
- static constexpr size_t kMaxAmps=4;size_t mAmpCount=0;bool mProbingAmplifiers=false;Amp mAmps[4]{};
+ static constexpr size_t kMaxAmplifiers=4;size_t mAmplifierCount=0;bool mProbingAmplifiers=false;Amp mAmplifiers[4]{};
  cirrus::transport::NativeSPIHost mNativeSPI;
  std::map<std::string,uint64_t> numbers;std::map<std::string,std::string> strings;
  void setProperty(const char* k,uint64_t v,unsigned){numbers[k]=v;}
@@ -132,14 +133,14 @@ public:
  void setProperty(const char* k,bool value){numbers[k]=value;}
  const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
  uint32_t mPlatformSubsystemId=0;
- cirrus::platform::BackendRegistry mBackendRegistry;
+ cirrus::platform::AmplifierBackendRegistry mBackendRegistry;
  IOService* mProvider=nullptr;char mRuntimeControllerPath[256]{};
  cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
  cirrus::core::RegisterIO* mRuntimePorts[4]{};
  cirrus::transport::VoodooI2CController* mI2CController=nullptr;
  cirrus::transport::I2CRegisterBus* mI2CBuses[4]{};
  cirrus::core::RegisterMap* mI2CMaps[4]{};
- struct BackendOwner{CirrusAudioFixup* owner;Amp* amp;};BackendOwner mBackendOwners[4]{};
+ struct AmplifierBackendOwner{CirrusAudioFixup* owner;Amp* amp;};AmplifierBackendOwner mBackendOwners[4]{};
  cirrus::platform::AmplifierBinding mRuntimeBindings[4]{};
  cirrus::firmware::FirmwareBundle mRuntimeFirmware[4]{};
  cirrus::platform::BoardConfiguration mRuntimeBoard{};
@@ -152,10 +153,10 @@ public:
 };
 '''+r'''
 // Register dispatch itself is tested against the production owner separately.
-class FixupRegisterIOAdapter:public cirrus::core::RegisterIO {
+class ServiceRegisterIO:public cirrus::core::RegisterIO {
  Amp& amp;
 public:
- FixupRegisterIOAdapter(CirrusAudioFixup*,Amp& a):amp(a){}
+ ServiceRegisterIO(CirrusAudioFixup*,Amp& a):amp(a){}
  int32_t lastError()const override{return amp.registerIO->lastError();}
  bool read(uint32_t r,uint32_t* v)override{return amp.registerIO->read(r,v);}
  bool write(uint32_t r,uint32_t v)override{return amp.registerIO->write(r,v);}
@@ -181,8 +182,8 @@ unsigned backendsCreated=0,backendsDestroyed=0;
 int failStage=0;bool rejectFactory=false;
 bool access(uint32_t reg){return reg<=0x20;}
 struct SPIHooks:cirrus::core::AmplifierLifecycleHooks {
- const cirrus::platform::BackendContext& context;
- SPIHooks(const cirrus::platform::BackendContext& c):context(c){++backendsCreated;}
+ const cirrus::platform::AmplifierBackendContext& context;
+ SPIHooks(const cirrus::platform::AmplifierBackendContext& c):context(c){++backendsCreated;}
  ~SPIHooks(){++backendsDestroyed;}
  IOReturn identify() override {uint32_t value=0;return context.io.read(0,&value)&&value==context.board.amplifiers[context.bindingIndex].siliconId?0:kIOReturnNotFound;}
  IOReturn authorizeBoard() override {return context.board.permits(context.actualBoard)?0:kIOReturnNotPermitted;}
@@ -193,7 +194,7 @@ struct SPIHooks:cirrus::core::AmplifierLifecycleHooks {
  IOReturn stopPlayback() override {return context.io.write(4,0)?0:kIOReturnNotReady;}
  IOReturn safeShutdown() override {if(failStage==4)return kIOReturnNotReady;return context.io.write(4,0)?0:kIOReturnNotReady;}
 };
-cirrus::core::AmplifierLifecycleHooks* createSPI(const cirrus::platform::BackendContext& c){return rejectFactory?nullptr:new SPIHooks(c);}
+cirrus::core::AmplifierLifecycleHooks* createSPI(const cirrus::platform::AmplifierBackendContext& c){return rejectFactory?nullptr:new SPIHooks(c);}
 void destroySPI(cirrus::core::AmplifierLifecycleHooks* h){delete h;}
 int main(){
  char path[256]{};
@@ -273,21 +274,21 @@ int main(){
  probeIDs[0]=probeIDs[2]=0x35a40;probeIDs[1]=0xdead;
  assert(service.mNativeSPI.bind(&amp,&service,format)==0);
  assert(service.detectNativeSPIAmplifiers()==2);
- assert(service.mAmps[0].endpointIndex==1&&service.mAmps[0].endpoint.spiChipSelect==0);
- assert(!strcmp(service.mAmps[0].name,"spi1")&&service.mAmps[0].address==0xff);
- assert(service.mAmps[0].channel==cirrus::core::AudioChannel::MaxChannels);
- assert(service.mAmps[1].endpointIndex==2&&!strcmp(service.mAmps[1].name,"spi2"));
+ assert(service.mAmplifiers[0].endpointIndex==1&&service.mAmplifiers[0].endpoint.spiChipSelect==0);
+ assert(!strcmp(service.mAmplifiers[0].name,"spi1")&&service.mAmplifiers[0].address==0xff);
+ assert(service.mAmplifiers[0].channel==cirrus::core::AudioChannel::MaxChannels);
+ assert(service.mAmplifiers[1].endpointIndex==2&&!strcmp(service.mAmplifiers[1].name,"spi2"));
  assert(service.numbers["Cirrus_SPI_0_DeviceID"]==0xdead&&service.numbers["Cirrus_SPI_Resource_Count"]==3);
- service.teardownNativeSPI();assert(!service.mAmps[0].registerIO&&!liveControllers&&!iteratorLive);
+ service.teardownNativeSPI();assert(!service.mAmplifiers[0].registerIO&&!liveControllers&&!iteratorLive);
  // Full production native-controller -> register-map -> backend -> group path.
  using namespace cirrus::platform;
  resources(amp,{{"SPI1",2},{"SPI0",0}});amp.hid.value="TESTAMP";
  probeIDs[0]=0x1111;probeIDs[2]=0x2222;
  auto f1=format;f1.maxRegister=0x20;f1.readable=access;f1.writable=access;
  auto f2=f1;f2.addressBytes=2;f2.paddingBytes=1;f2.addressEndian=cirrus::core::RegisterEndian::Little;
- BackendDefinition d1{"test-spi-1","TESTAMP",0x1111,2,{},f1,createSPI,destroySPI};
- BackendDefinition d2{"test-spi-2","TESTAMP",0x2222,2,{},f2,createSPI,destroySPI};
- BackendRegistry registry;assert(registry.add(d1)&&registry.add(d2));
+ AmplifierBackendDefinition d1{"test-spi-1","TESTAMP",0x1111,2,{},f1,createSPI,destroySPI};
+ AmplifierBackendDefinition d2{"test-spi-2","TESTAMP",0x2222,2,{},f2,createSPI,destroySPI};
+ AmplifierBackendRegistry registry;assert(registry.add(d1)&&registry.add(d2));
  AmplifierBinding bindings[2]{{{cirrus::core::BusTransportType::SPI,"\\_SB.SPI0",0,false,0,1000000,0},0x1111,0,1,"tune-a","TESTAMP"},
                             {{cirrus::core::BusTransportType::SPI,"\\_SB.SPI1",0,false,2,1000000,0},0x2222,1,2,"tune-b","TESTAMP"}};
  BoardConfiguration board{{0x1234,0x5678,nullptr},bindings,2,true,true,true};
@@ -348,13 +349,13 @@ int main(){
  BoardConfiguration shipBoard{{0x1234,0x5678,"CSC3551"},shipBindings,2,true,true,true};
  cirrus::firmware::FirmwareBundle shipFirmware[2]{firmware[0],firmware[1]};
  for(auto& asset:shipFirmware)asset.target.siliconId=0x35a40;
- cirrus::platform::PlatformProfile shipProfile{"fixture-spi","CSC3551",cirrus::core::CodecModel::CS35L41,nullptr,0,nullptr,true,&shipBoard,shipFirmware,2};
- BackendDefinition shipDefinition{"fixture-service","CSC3551",0x35a40,2,{},f1,createSPI,destroySPI};
+ cirrus::platform::PlatformProfile shipProfile{"fixture-spi","CSC3551",cirrus::core::AmplifierModel::CS35L41,nullptr,0,nullptr,true,&shipBoard,shipFirmware,2};
+ AmplifierBackendDefinition shipDefinition{"fixture-service","CSC3551",0x35a40,2,{},f1,createSPI,destroySPI};
  CirrusAudioFixup shipping;shipping.mProvider=&amp;shipping.mPlatformProfile=&shipProfile;shipping.mPlatformSubsystemId=0x12345678;
  assert(shipping.mBackendRegistry.add(shipDefinition));shipping.flags["-cirrusspi"]=true;
  before=writeTransfers;
  assert(shipping.setupNativeSPI(&amp)&&shipping.mPlatformAuthorized&&shipping.detectNativeSPIAmplifiers()==2);
- assert(shipping.mAmps[0].channel==cirrus::core::AudioChannel::Right&&shipping.mAmps[1].channel==cirrus::core::AudioChannel::Left);
+ assert(shipping.mAmplifiers[0].channel==cirrus::core::AudioChannel::Right&&shipping.mAmplifiers[1].channel==cirrus::core::AudioChannel::Left);
  assert(shipping.bindAmplifierRuntime()&&writeTransfers==before);
  assert(shipping.mAmplifierRuntime.bringUp()==0&&shipping.mAmplifierRuntime.startPlayback()==0);
  shipping.teardownNativeSPI();assert(!shipping.mAmplifierRuntime.bound()&&!liveControllers&&backendsCreated==backendsDestroyed);
@@ -369,21 +370,21 @@ int main(){
  IOService i2cProvider;i2cProvider.path="fixture-i2c-controller";
  AmplifierBinding i2cBinding{{cirrus::core::BusTransportType::I2C,"fixture-i2c-controller",0x40},0x35a40,0,1,"tune-a","CSC3551"};
  BoardConfiguration i2cBoard{{0x1234,0x5678,"CSC3551"},&i2cBinding,1,true,true,true};
- cirrus::platform::PlatformProfile i2cProfile{"fixture-i2c","CSC3551",cirrus::core::CodecModel::CS35L41,nullptr,0,nullptr,true,&i2cBoard,shipFirmware,1};
+ cirrus::platform::PlatformProfile i2cProfile{"fixture-i2c","CSC3551",cirrus::core::AmplifierModel::CS35L41,nullptr,0,nullptr,true,&i2cBoard,shipFirmware,1};
  auto i2cFormat=f1;i2cFormat.addressBytes=1;i2cFormat.paddingBytes=0;i2cFormat.readFlag=0;
- BackendDefinition i2cDefinition{"fixture-i2c","CSC3551",0x35a40,1,i2cFormat,{},createSPI,destroySPI};
+ AmplifierBackendDefinition i2cDefinition{"fixture-i2c","CSC3551",0x35a40,1,i2cFormat,{},createSPI,destroySPI};
  CirrusAudioFixup i2cShipping;i2cShipping.mProvider=&i2cProvider;i2cShipping.mPlatformProfile=&i2cProfile;i2cShipping.mPlatformSubsystemId=0x12345678;
  assert(i2cShipping.mBackendRegistry.add(i2cDefinition));
  assert(i2cShipping.detectConfiguredI2CAmplifiers()==1&&i2cWrites.empty());
  assert(i2cShipping.bindAmplifierRuntime()&&i2cWrites.empty());
  assert(i2cShipping.mAmplifierRuntime.bringUp()==0&&i2cShipping.mAmplifierRuntime.startPlayback()==0);
  assert(i2cWrites.size()==3&&i2cWrites[0].size()==5&&i2cWrites[0][0]==4);
- i2cShipping.teardownNativeSPI();assert(!i2cShipping.mAmps[0].registerIO&&!i2cShipping.mI2CController&&backendsCreated==backendsDestroyed);
+ i2cShipping.teardownNativeSPI();assert(!i2cShipping.mAmplifiers[0].registerIO&&!i2cShipping.mI2CController&&backendsCreated==backendsDestroyed);
  CirrusAudioFixup i2cReadOnly;i2cReadOnly.mProvider=&i2cProvider;i2cReadOnly.mPlatformProfile=&i2cProfile;i2cReadOnly.mPlatformSubsystemId=0x12345678;i2cReadOnly.flags["-cirrusro"]=true;
  assert(i2cReadOnly.mBackendRegistry.add(i2cDefinition)&&i2cReadOnly.detectConfiguredI2CAmplifiers()==1);
  auto i2cBefore=i2cWrites.size();
- assert(!i2cReadOnly.mAmps[0].registerIO->write(4,1)&&!i2cReadOnly.bindAmplifierRuntime()&&i2cWrites.size()==i2cBefore);
- i2cReadOnly.teardownNativeSPI();assert(!i2cReadOnly.mAmps[0].registerIO&&!i2cReadOnly.mI2CController);
+ assert(!i2cReadOnly.mAmplifiers[0].registerIO->write(4,1)&&!i2cReadOnly.bindAmplifierRuntime()&&i2cWrites.size()==i2cBefore);
+ i2cReadOnly.teardownNativeSPI();assert(!i2cReadOnly.mAmplifiers[0].registerIO&&!i2cReadOnly.mI2CController);
 }
 ''')
  for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):

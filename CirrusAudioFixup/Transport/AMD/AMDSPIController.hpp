@@ -5,10 +5,10 @@
 #include "AMDSPIEngine.hpp"
 #include <IOKit/acpi/IOACPIPlatformDevice.h>
 namespace cirrus::transport::amd {
-class AMDACPIController final : public SPIController {
+class AMDSPIController final : public SPIController {
 public:
-    AMDACPIController() : mEngine(mWindow) {}
-    ~AMDACPIController() override { shutdown(); }
+    AMDSPIController() : mEngine(mWindow) {}
+    ~AMDSPIController() override { shutdown(); }
     IOReturn bind(IOACPIPlatformDevice* provider, IOService* owner);
     void suspend();
     IOReturn resume();
@@ -28,8 +28,8 @@ private:
         void delayUs(uint32_t us) override { IODelay(us); }
     };
     bool isD0() const;
-    AMDACPIController(const AMDACPIController&) = delete;
-    AMDACPIController& operator=(const AMDACPIController&) = delete;
+    AMDSPIController(const AMDSPIController&) = delete;
+    AMDSPIController& operator=(const AMDSPIController&) = delete;
     MMIOWindow mWindow;
     AMDSPIEngine mEngine;
     IOACPIPlatformDevice* mProvider{nullptr};

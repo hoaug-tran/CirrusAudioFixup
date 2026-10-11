@@ -1,5 +1,5 @@
 //
-// AudioEvents.cpp
+// AudioEventSource.cpp
 // Preserve IOAudioFamily behavior and observe completed state changes.
 // Hooks remain installed until shutdown; module unload is rejected.
 // See LICENSE for distribution terms.
@@ -7,7 +7,7 @@
 
 #define PRODUCT_NAME CirrusAudioFixup
 #include <Headers/kern_api.hpp>
-#include "AudioEvents.hpp"
+#include "AudioEventSource.hpp"
 #include <libkern/c++/OSNumber.h>
 #include <IOKit/IORegistryEntry.h>
 

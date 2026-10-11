@@ -14,7 +14,7 @@ public:
     const AmplifierRuntime& runtime() const {return mRuntime;}
     bool bound() const {return mRuntime.bound();}
     const transport::NativeSPIHost::Failure& transportFailure() const {return mHost.failure();}
-    IOReturn bind(IOACPIPlatformDevice* device,IOService* owner,const BackendRegistry& registry,
+    IOReturn bind(IOACPIPlatformDevice* device,IOService* owner,const AmplifierBackendRegistry& registry,
                   const BoardConfiguration& board,const BoardIdentity& actual,
                   const firmware::FirmwareBundle* firmware,size_t count,
                   void* const* platformContexts=nullptr) {
@@ -30,13 +30,13 @@ public:
         result=mHost.bind(device,owner,*first->format(core::BusTransportType::SPI));
         if(result==kIOReturnSuccess)result=mHost.configureAuthorized(registry,board,actual,hid);
         if(result!=kIOReturnSuccess){releaseHost();return result;}
-        const BackendContext* contexts[transport::ACPISPIResources::kMaxEndpoints]{};
+        const AmplifierBackendContext* contexts[transport::ACPISPIResources::kMaxEndpoints]{};
         for(size_t i=0;i<count;++i) {
             auto endpoint=mHost.endpoint(i);
             size_t binding=0;
             while(binding<count && !endpoint.sameDevice(board.amplifiers[binding].endpoint))++binding;
             if(binding==count){result=kIOReturnNotPermitted;break;}
-            contexts[i]=new BackendContext{*mHost.registers(i),endpoint,board,actual,binding,firmware[binding],hid,platformContexts?platformContexts[binding]:nullptr};
+            contexts[i]=new AmplifierBackendContext{*mHost.registers(i),endpoint,board,actual,binding,firmware[binding],hid,platformContexts?platformContexts[binding]:nullptr};
             if(!contexts[i]){result=kIOReturnNoMemory;break;}
         }
         if(result==kIOReturnSuccess)result=mRuntime.bind(registry,contexts,count);

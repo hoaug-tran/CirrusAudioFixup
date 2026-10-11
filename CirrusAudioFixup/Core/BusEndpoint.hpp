@@ -1,7 +1,7 @@
 // Bus identity belongs to an endpoint, not to CPU vendor or amplifier model.
 // Source paths are borrowed immutable board/ACPI data, valid for driver lifetime.
 #pragma once
-#include "Types.hpp"
+#include "AudioTypes.hpp"
 #include <string.h>
 namespace cirrus::core {
 struct BusEndpoint {

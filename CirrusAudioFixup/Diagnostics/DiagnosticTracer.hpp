@@ -1,14 +1,14 @@
 //
 // DiagnosticTracer.hpp
-// Bounded I2C flight recorder.
+// Bounded register-transfer flight recorder for I2C and SPI.
 // The lock protects trace indices and counters, not hardware sequencing.
-// Record completed transfers here; never hold this lock across I2C or sleeps.
+// Record completed transfers here; never hold this lock across bus transfers or sleeps.
 // See LICENSE for distribution terms.
 //
 
 #pragma once
 
-#include "CirrusAudioFixup.hpp"
+#include "Diagnostics/DiagnosticTypes.hpp"
 
 #include "Support/Logging.hpp"
 

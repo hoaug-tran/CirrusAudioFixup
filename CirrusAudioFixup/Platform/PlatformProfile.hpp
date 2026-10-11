@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "Core/Types.hpp"
+#include "Core/AudioTypes.hpp"
 #include "Platform/BoardConfiguration.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 
@@ -43,7 +43,7 @@ static constexpr InterruptWiring kLegionProtectionIRQ={"GPIO84_PROTECTION_WITH_P
 struct PlatformProfile {
     const char* name;
     const char* acpiHid;
-    core::CodecModel amplifierModel;
+    core::AmplifierModel amplifierModel;
     const AmplifierEndpoint* endpoints;
     size_t endpointCount;
     const ResetControllerQuirk* resetQuirk;
@@ -65,14 +65,14 @@ static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
 };
 
 static constexpr PlatformProfile kPlatformProfiles[] = {
-    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true,nullptr,nullptr,0,&kLegionProtectionIRQ},
-    {"lenovo-clsa0101-cs35l41", "CLSA0101", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
-    {"generic-csc3551-cs35l41", "CSC3551", core::CodecModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
+    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true,nullptr,nullptr,0,&kLegionProtectionIRQ},
+    {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
+    {"generic-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
 };
 
 static constexpr PlatformProfile kSafeUnknownPlatform = {"unrecognized-fail-closed",
                                                          nullptr,
-                                                         core::CodecModel::CS35L41,
+                                                         core::AmplifierModel::CS35L41,
                                                          kCs35l41StereoEndpoints,
                                                          2,
                                                          nullptr,

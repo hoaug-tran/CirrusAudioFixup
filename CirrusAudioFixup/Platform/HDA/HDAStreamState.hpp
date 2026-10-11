@@ -1,5 +1,5 @@
 //
-// HDAController.hpp
+// HDAStreamState.hpp
 // State observed by the service's HDA stream scanner.
 // RUN, tag and format checks describe controller activity. They do not prove
 // that PCM reaches the speaker pin or that the speakers produce sound.

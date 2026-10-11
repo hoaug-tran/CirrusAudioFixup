@@ -6,7 +6,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
-TRANSPORT_HEADER = (ROOT / 'CirrusAudioFixup/Transport/VoodooI2CTransport.hpp').read_text(encoding='utf-8')
+TRANSPORT_HEADER = (ROOT / 'CirrusAudioFixup/Transport/VoodooI2CProvider.hpp').read_text(encoding='utf-8')
 
 def function(name):
     start = re.search(r'bool CirrusAudioFixup::' + name + r'\(', SOURCE).start()
@@ -18,7 +18,7 @@ abi_end = TRANSPORT_HEADER.index('\n};', abi_start) + 4
 abi = TRANSPORT_HEADER[abi_start:abi_end]
 preamble = r'''
 #include "Core/RegisterIO.hpp"
-#include "Core/Endpoint.hpp"
+#include "Core/BusEndpoint.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -58,9 +58,9 @@ struct Provider {
     }
 };
 namespace cirrus { namespace transport {
-class VoodooI2CTransport {
+class VoodooI2CProvider {
 public:
-    VoodooI2CTransport(Provider* provider,UInt8 address):mProvider(provider),mAddress(address) {}
+    VoodooI2CProvider(Provider* provider,UInt8 address):mProvider(provider),mAddress(address) {}
     bool transfer(UInt8* writeBuffer,UInt16 writeLength,UInt8* readBuffer,UInt16 readLength) {
         VoodooI2CAddressedTransfer request{mAddress,writeBuffer,writeLength,readBuffer,readLength};
         mLastReturn=mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS,true,&request,nullptr,nullptr,nullptr);
@@ -198,8 +198,9 @@ public:
 #include <cassert>
 #include <cstring>
 #include <vector>
-#include "Transport/VoodooI2CTransport.hpp"
+#include "Transport/VoodooI2CProvider.hpp"
 #include "Transport/VoodooI2CController.hpp"
+#include "Transport/I2CRegisterBus.hpp"
 #include "Core/RegisterMap.hpp"
 bool gCirrusDebug=false;
 struct Provider final : IOService {
@@ -216,7 +217,9 @@ struct Provider final : IOService {
 };
 int main() {
     Provider provider;
-    cirrus::transport::VoodooI2CTransport bus(&provider,0x41);
+    cirrus::transport::VoodooI2CController registerController(&provider);
+    cirrus::transport::I2CRegisterBus registerEndpoint(&registerController,{0x41,false});
+    cirrus::core::RegisterMap bus(registerEndpoint,{},true);
     uint32_t value=0;
     assert(!bus.read(0,nullptr)&&bus.lastError()==kIOReturnBadArgument);
     assert(!bus.pollBit(0,1,1,0)&&bus.lastError()==kIOReturnBadArgument);
@@ -237,10 +240,10 @@ int main() {
     unsigned beforePoll=provider.calls;
     assert(!bus.pollBit(0x10010,1,1,100) && bus.lastReturn()==-77);
     assert(provider.calls==beforePoll+1);
-    cirrus::transport::VoodooI2CTransport missing(nullptr,0x40);
-    assert(!missing.read(0,&value) && missing.lastReturn()==kIOReturnNotReady);
-    cirrus::transport::VoodooI2CTransport invalid(&provider,0x80);
-    assert(!invalid.read(0,&value) && invalid.lastReturn()==kIOReturnBadArgument);
+    cirrus::transport::VoodooI2CProvider missing(nullptr,0x40);
+    assert(!missing.transfer(prefix,4,nullptr,0) && missing.lastReturn()==kIOReturnNotReady);
+    cirrus::transport::VoodooI2CProvider invalid(&provider,0x80);
+    assert(!invalid.transfer(prefix,4,nullptr,0) && invalid.lastReturn()==kIOReturnBadArgument);
 }
 ''', encoding='utf-8')
     subprocess.run([

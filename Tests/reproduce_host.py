@@ -39,7 +39,7 @@ struct OSObject {};
 struct OSNumber : OSObject { unsigned unsigned32BitValue() { return 0; } };
 constexpr int TRACE_OTHER = 0;
 ''', encoding='utf-8')
-    uploader = (CODEC / 'FirmwareUploader.hpp').read_text(encoding='utf-8')
+    uploader = (CODEC / 'WMFWUploader.hpp').read_text(encoding='utf-8')
     uploader = uploader.replace('#include "Core/RegisterIO.hpp"', '#include "fake.hpp"').replace('#include "Firmware/WMFW/WMFWParser.hpp"', '#include "WMFWParser.hpp"')
     (tmp / 'uploader.hpp').write_text(uploader, encoding='utf-8')
     resources = (DEVICE / 'Firmware.hpp').read_text(encoding='utf-8')

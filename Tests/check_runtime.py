@@ -13,7 +13,7 @@ def function(name):
     end = SOURCE.index('\n}', start) + 2
     return SOURCE[start:end]
 
-names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringupDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'transferToAddress', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
+names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringUpDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'transferToAddress', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
 names.extend(['configureCS35L41Interrupt','monitorCS35L41','validateCS35L41Playback','commitCS35L41Playback','snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryFirmwareIdentity'])
 functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierRuntime.bound() && bindAmplifierRuntime())mAmplifierRuntime.bringUp();')
 
@@ -164,12 +164,12 @@ struct Provider {
 };
 using IOService=Provider;
 namespace cirrus::transport {
-class VoodooI2CTransport {
+class VoodooI2CProvider {
     IOService* provider;
     UInt8 address;
     IOReturn result{kIOReturnNotReady};
 public:
-    VoodooI2CTransport(IOService* p, UInt8 a) : provider(p), address(a) {}
+    VoodooI2CProvider(IOService* p, UInt8 a) : provider(p), address(a) {}
     bool transfer(UInt8* writeBuffer, UInt16 writeLength, UInt8* readBuffer, UInt16 readLength) {
         if (!provider) { result=kIOReturnNotReady; return false; }
         VoodooI2CAddressedTransfer request{address,writeBuffer,writeLength,readBuffer,readLength};
@@ -225,8 +225,8 @@ public:
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     IOInterruptEventSource* mAmpInterrupt=nullptr;
-    size_t mAmpCount{2};
-    CS35L41Amp mAmps[2]{};
+    size_t mAmplifierCount{2};
+    CS35L41Amp mAmplifiers[2]{};
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
     bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
@@ -282,8 +282,8 @@ public:
         mHdaConverterPrepared=true; mHdaTopologyLogged=true;
         mHdaControllerObserved=true; mHdaStreamActive=true;
         mHdaLastStreamTag=1;
-        auto& a=mAmps[0]; a.name="host"; a.present=true; a.initialized=true;
-        a.model=cirrus::core::CodecModel::CS35L41;
+        auto& a=mAmplifiers[0]; a.name="host"; a.present=true; a.initialized=true;
+        a.model=cirrus::core::AmplifierModel::CS35L41;
         a.monitorCount=1; a.firmwareValidated=true; a.dspAlive=true;
         a.haloStateRegister=0x02800398; a.haloHeartbeatRegister=0x0280039C;
         a.firmwareIdVersion=0x1500;
@@ -366,7 +366,7 @@ public:
     void setProperty(const char* p,OSString* v) { properties[p]=v->value; }
     void setProperty(const char* p,uint64_t v,unsigned) { numericProperties[p]=v; }
     void setProperty(const char*,bool) {}
-    bool initCodec(CS35L41Amp&) { return false; }
+    bool initializeCS35L41Device(CS35L41Amp&) { return false; }
     bool initializeHardwareErrata(CS35L41Amp&) { return false; }
     uint32_t calculateRegistersCRC32(CS35L41Amp&) { return 0; }
     void logPowerSnapshot(CS35L41Amp&) {}
@@ -382,7 +382,7 @@ public:
     IOReturn loadCS35L41Firmware(CS35L41Amp&){return 0;}
     IOReturn verifyCS35L41Ready(CS35L41Amp& a){a.initialized=true;return 0;}
     IOReturn shutdownCS35L41(CS35L41Amp& a){bool stopped=stopPlayback(a);bool halted=stopDSP(a);a.initialized=false;a.firmwareValidated=false;return stopped&&halted?0:kIOReturnNotReady;}
-    void fullDriverFlow(){if(mNeedsReinitialization)++restores;if(bindAmplifierRuntime())mAmplifierRuntime.bringUp();}
+    void bringUpAmplifiers(){if(mNeedsReinitialization)++restores;if(bindAmplifierRuntime())mAmplifierRuntime.bringUp();}
     void initializeFirmware(CS35L41Amp&,const char*) {}
     static const char* failureName(DiagnosticFailure) { return "failure"; }
     static const char* stageName(DriverStage) { return "stage"; }
@@ -393,7 +393,7 @@ public:
         runMonitorStep();
         for(unsigned tick=0; tick<150; ++tick) {
             bool pending=false;
-            for(auto& a:mAmps) pending |= a.present && (a.playbackTransition.pending() || a.shutdownTransition.pending());
+            for(auto& a:mAmplifiers) pending |= a.present && (a.playbackTransition.pending() || a.shutdownTransition.pending());
             if(!pending) break;
             hostNowNs += 1000000;
             runMonitorStep();
@@ -406,16 +406,16 @@ declarations = '\n'.join(function(name).split('{', 1)[0].replace('CirrusAudioFix
 declarations = declarations.replace('void amplifierInterruptReceived(', 'static void amplifierInterruptReceived(')
 
 adapter = r'''
-class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
-    CirrusAudioFixup* mFixup;
-    CS35L41Amp& mAmp;
+class ServiceRegisterIO : public cirrus::core::RegisterIO {
+    CirrusAudioFixup* mService;
+    CS35L41Amp& mAmplifier;
 public:
-    FixupRegisterIOAdapter(CirrusAudioFixup* f, CS35L41Amp& a,TraceSource=TRACE_OTHER) : mFixup(f), mAmp(a) {}
-    bool read(uint32_t reg,uint32_t* val) override {if(reg==0){*val=0x35a40;return true;}return mFixup->readRegister(mAmp,reg,val);}
-    bool write(uint32_t reg, uint32_t val) override { return mFixup->writeRegister(mAmp, reg, val); }
-    bool updateBits(uint32_t reg, uint32_t mask, uint32_t val) override { return mFixup->updateRegisterBits(mAmp, reg, mask, val); }
-    bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mFixup->pollRegisterBit(mAmp, r, m, e, t); }
-    bool bulkRead(uint32_t reg, uint8_t* buf, size_t len) override { return mFixup->bulkRead(mAmp, reg, buf, len); }
+    ServiceRegisterIO(CirrusAudioFixup* f, CS35L41Amp& a,TraceSource=TRACE_OTHER) : mService(f), mAmplifier(a) {}
+    bool read(uint32_t reg,uint32_t* val) override {if(reg==0){*val=0x35a40;return true;}return mService->readRegister(mAmplifier,reg,val);}
+    bool write(uint32_t reg, uint32_t val) override { return mService->writeRegister(mAmplifier, reg, val); }
+    bool updateBits(uint32_t reg, uint32_t mask, uint32_t val) override { return mService->updateRegisterBits(mAmplifier, reg, mask, val); }
+    bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mService->pollRegisterBit(mAmplifier, r, m, e, t); }
+    bool bulkRead(uint32_t reg, uint8_t* buf, size_t len) override { return mService->bulkRead(mAmplifier, reg, buf, len); }
     bool bulkWrite(uint32_t, const uint8_t*, size_t) override { return true; }
 };
 '''
@@ -427,64 +427,64 @@ int main() {
         CirrusAudioFixup stereo;
         stereo.isolateEndpoints=true;
         stereo.suppressRightPup=true;
-        stereo.mAmps[0].address=0x40;
-        stereo.mAmps[1]=stereo.mAmps[0];
-        stereo.mAmps[1].name="right";
-        stereo.mAmps[1].address=0x41;
+        stereo.mAmplifiers[0].address=0x40;
+        stereo.mAmplifiers[1]=stereo.mAmplifiers[0];
+        stereo.mAmplifiers[1].name="right";
+        stereo.mAmplifiers[1].address=0x41;
         stereo.endpointRegs[0x40]=stereo.regs;
         stereo.endpointRegs[0x41]=stereo.regs;
         hostSleepCount=0;
         for(unsigned i=0;i<6;++i) { stereo.runMonitorStep(); hostNowNs+=1000000; }
-        assert(stereo.mAmps[0].playbackTransition.phase==PlaybackPhase::Prepared);
-        assert(stereo.mAmps[1].playbackTransition.phase==PlaybackPhase::Pup);
+        assert(stereo.mAmplifiers[0].playbackTransition.phase==PlaybackPhase::Prepared);
+        assert(stereo.mAmplifiers[1].playbackTransition.phase==PlaybackPhase::Pup);
         assert(stereo.unmute==0 && hostSleepCount==0);
         stereo.endpointRegs[0x41][0x10010]|=0x01000000;
         for(unsigned i=0;i<2;++i) { stereo.runMonitorStep(); hostNowNs+=1000000; }
-        assert(stereo.mAmps[0].playbackActive && stereo.mAmps[1].playbackActive);
+        assert(stereo.mAmplifiers[0].playbackActive && stereo.mAmplifiers[1].playbackActive);
         assert(stereo.unmute==2 && hostSleepCount==0);
 
         for(uint32_t corrupted : {0x4804U,0x4808U,0x4830U,0x4840U,0x4C40U,
                                   0x4C44U,0x4C48U,0x4C4CU,0x4C50U,0x4C54U}) {
             CirrusAudioFixup changed;
             changed.isolateEndpoints=true; changed.suppressRightPup=true;
-            changed.mAmps[0].address=0x40;
-            changed.mAmps[1]=changed.mAmps[0];
-            changed.mAmps[1].name="right"; changed.mAmps[1].address=0x41;
+            changed.mAmplifiers[0].address=0x40;
+            changed.mAmplifiers[1]=changed.mAmplifiers[0];
+            changed.mAmplifiers[1].name="right"; changed.mAmplifiers[1].address=0x41;
             changed.endpointRegs[0x40]=changed.regs;
             changed.endpointRegs[0x41]=changed.regs;
             for(unsigned i=0;i<6;++i) { changed.runMonitorStep(); hostNowNs+=1000000; }
-            assert(changed.mAmps[0].playbackTransition.phase==PlaybackPhase::Prepared);
+            assert(changed.mAmplifiers[0].playbackTransition.phase==PlaybackPhase::Prepared);
             changed.endpointRegs[0x40][corrupted]^=1;
             changed.endpointRegs[0x41][0x10010]|=0x01000000;
             changed.runBackgroundMonitor();
             assert(changed.unmute==0);
-            assert(!changed.mAmps[0].playbackActive && !changed.mAmps[1].playbackActive);
+            assert(!changed.mAmplifiers[0].playbackActive && !changed.mAmplifiers[1].playbackActive);
         }
 
         CirrusAudioFixup failedPair;
         failedPair.isolateEndpoints=true;
         failedPair.failRightGain=true;
-        failedPair.mAmps[0].address=0x40;
-        failedPair.mAmps[1]=failedPair.mAmps[0];
-        failedPair.mAmps[1].name="right";
-        failedPair.mAmps[1].address=0x41;
+        failedPair.mAmplifiers[0].address=0x40;
+        failedPair.mAmplifiers[1]=failedPair.mAmplifiers[0];
+        failedPair.mAmplifiers[1].name="right";
+        failedPair.mAmplifiers[1].address=0x41;
         failedPair.endpointRegs[0x40]=failedPair.regs;
         failedPair.endpointRegs[0x41]=failedPair.regs;
         failedPair.runBackgroundMonitor();
-        assert(!failedPair.mAmps[0].playbackActive && !failedPair.mAmps[1].playbackActive);
-        assert(failedPair.mAmps[1].playbackFaulted);
+        assert(!failedPair.mAmplifiers[0].playbackActive && !failedPair.mAmplifiers[1].playbackActive);
+        assert(failedPair.mAmplifiers[1].playbackFaulted);
         assert(failedPair.endpointRegs[0x40][0x6000]==0xA678 && failedPair.endpointRegs[0x41][0x6000]==0xA678);
 
         CirrusAudioFixup deadline;
         deadline.pup=false;
         for(unsigned i=0;i<3;++i) { deadline.runMonitorStep(); hostNowNs+=1000000; }
-        assert(deadline.mAmps[0].playbackTransition.phase==PlaybackPhase::Pup);
+        assert(deadline.mAmplifiers[0].playbackTransition.phase==PlaybackPhase::Pup);
         hostNowNs+=100000000;
         deadline.runMonitorStep();
-        assert(deadline.mAmps[0].playbackFaulted && deadline.unmute==0);
-        assert(deadline.mAmps[0].diagnostic.firstFailure==DIAG_POWER_UP_TIMEOUT);
+        assert(deadline.mAmplifiers[0].playbackFaulted && deadline.unmute==0);
+        assert(deadline.mAmplifiers[0].diagnostic.firstFailure==DIAG_POWER_UP_TIMEOUT);
         deadline.runBackgroundMonitor();
-        assert(!deadline.mAmps[0].shutdownTransition.pending());
+        assert(!deadline.mAmplifiers[0].shutdownTransition.pending());
 
         for(auto phase : {PlaybackPhase::Resume, PlaybackPhase::Power, PlaybackPhase::Pup,
                           PlaybackPhase::Output, PlaybackPhase::Pll, PlaybackPhase::Prepared}) {
@@ -492,14 +492,14 @@ int main() {
             cirrus::platform::hda::AudioEventSource events;
             events.state={true,true,true,true,1};
             cancelled.mAudioEvents=&events;
-            cancelled.mAmps[0].firmwareIdVersion=0x1D00;
+            cancelled.mAmplifiers[0].firmwareIdVersion=0x1D00;
             if(phase==PlaybackPhase::Prepared) {
                 cancelled.isolateEndpoints=true;
                 cancelled.suppressRightPup=true;
-                cancelled.mAmps[0].address=0x40;
-                cancelled.mAmps[1]=cancelled.mAmps[0];
-                cancelled.mAmps[1].name="right";
-                cancelled.mAmps[1].address=0x41;
+                cancelled.mAmplifiers[0].address=0x40;
+                cancelled.mAmplifiers[1]=cancelled.mAmplifiers[0];
+                cancelled.mAmplifiers[1].name="right";
+                cancelled.mAmplifiers[1].address=0x41;
                 cancelled.endpointRegs[0x40]=cancelled.regs;
                 cancelled.endpointRegs[0x41]=cancelled.regs;
             }
@@ -507,7 +507,7 @@ int main() {
             for(unsigned i=0;i<10 && !reached;++i) {
                 cancelled.runMonitorStep();
                 hostNowNs+=1000000;
-                reached=cancelled.mAmps[0].playbackTransition.phase==phase;
+                reached=cancelled.mAmplifiers[0].playbackTransition.phase==phase;
             }
             assert(reached);
             events.state.speakers=false;
@@ -515,7 +515,7 @@ int main() {
             hostSleepCount=0;
             cancelled.runBackgroundMonitor();
             assert(cancelled.unmute==0 && hostSleepCount==0);
-            assert(!cancelled.mAmps[0].playbackActive && !cancelled.mAmps[0].shutdownTransition.pending());
+            assert(!cancelled.mAmplifiers[0].playbackActive && !cancelled.mAmplifiers[0].shutdownTransition.pending());
         }
 
         CirrusAudioFixup shutdown;
@@ -526,17 +526,17 @@ int main() {
         ++shutdown.mAudioState.generation;
         hostSleepCount=0;
         shutdown.runMonitorStep();
-        assert(shutdown.regs[0x6000]==0xA678 && shutdown.mAmps[0].shutdownTransition.pending());
+        assert(shutdown.regs[0x6000]==0xA678 && shutdown.mAmplifiers[0].shutdownTransition.pending());
         assert(hostSleepCount==0);
         hostNowNs+=100000000;
         shutdown.runBackgroundMonitor();
-        assert(shutdown.mAmps[0].playbackFaulted && hostSleepCount==0);
-        assert(shutdown.mAmps[0].diagnostic.firstFailure==DIAG_POWER_DOWN_TIMEOUT);
+        assert(shutdown.mAmplifiers[0].playbackFaulted && hostSleepCount==0);
+        assert(shutdown.mAmplifiers[0].diagnostic.firstFailure==DIAG_POWER_DOWN_TIMEOUT);
 
         CirrusAudioFixup unsupported;
-        unsupported.mAmps[0].model=cirrus::core::CodecModel::CS35L56;
+        unsupported.mAmplifiers[0].model=cirrus::core::AmplifierModel::CS35L56;
         unsupported.runMonitorStep();
-        assert(unsupported.ops==0 && unsupported.unmute==0 && unsupported.mAmps[0].playbackFaulted);
+        assert(unsupported.ops==0 && unsupported.unmute==0 && unsupported.mAmplifiers[0].playbackFaulted);
         // Linux-style final observations: time elapsed does not erase an
         // acknowledgement, but an unsatisfied condition still times out.
         for (auto phase : {PlaybackPhase::Resume, PlaybackPhase::Output, PlaybackPhase::Pup, PlaybackPhase::Pll}) {
@@ -549,7 +549,7 @@ int main() {
                 polled.regs[0x13004]=ready?0:1;
                 polled.regs[0x10010]=ready?0x01000000:0;
                 polled.pll=ready;
-                FixupRegisterIOAdapter io(&polled,polled.mAmps[0]);
+                ServiceRegisterIO io(&polled,polled.mAmplifiers[0]);
                 PlaybackTransition transition;
                 transition.phase=phase;
                 transition.deadlineMs=1;
@@ -563,7 +563,7 @@ int main() {
                 polled.regs[0x10010]=ready?0x00800000:0;
                 unsigned expected=phase==ShutdownPhase::Pause?1:0;
                 polled.regs[0x13004]=ready?expected:2;
-                FixupRegisterIOAdapter io(&polled,polled.mAmps[0]);
+                ServiceRegisterIO io(&polled,polled.mAmplifiers[0]);
                 ShutdownTransition transition;
                 transition.phase=phase;
                 transition.deadlineMs=1;
@@ -576,25 +576,25 @@ int main() {
         slowBus.runMonitorStep();
         slowBus.mailboxReadDelayNs=6000000;
         slowBus.runMonitorStep();
-        assert(slowBus.unmute==0 && !slowBus.mAmps[0].playbackFaulted);
-        assert(slowBus.mAmps[0].playbackTransition.phase==PlaybackPhase::Power);
+        assert(slowBus.unmute==0 && !slowBus.mAmplifiers[0].playbackFaulted);
+        assert(slowBus.mAmplifiers[0].playbackTransition.phase==PlaybackPhase::Power);
         // A late callback must accept an already completed DSP command.
         CirrusAudioFixup lateMailbox;
         lateMailbox.runMonitorStep();
         hostNowNs+=30000000;
         lateMailbox.runMonitorStep();
-        assert(!lateMailbox.mAmps[0].playbackFaulted);
-        assert(lateMailbox.mAmps[0].playbackTransition.phase==PlaybackPhase::Power);
+        assert(!lateMailbox.mAmplifiers[0].playbackFaulted);
+        assert(lateMailbox.mAmplifiers[0].playbackTransition.phase==PlaybackPhase::Power);
         CirrusAudioFixup expiredMailbox;
         expiredMailbox.mailbox=false;
         expiredMailbox.runMonitorStep();
         hostNowNs+=30000000;
         expiredMailbox.runMonitorStep();
-        assert(expiredMailbox.unmute==0 && expiredMailbox.mAmps[0].playbackFaulted);
-        assert(expiredMailbox.mAmps[0].diagnostic.firstFailure==DIAG_DSP_MAILBOX);
+        assert(expiredMailbox.unmute==0 && expiredMailbox.mAmplifiers[0].playbackFaulted);
+        assert(expiredMailbox.mAmplifiers[0].diagnostic.firstFailure==DIAG_DSP_MAILBOX);
         for(unsigned version : {0x1500U, 0x1D00U}) {
         CirrusAudioFixup cleanupBaseline;
-        cleanupBaseline.mAmps[0].firmwareIdVersion=version;
+        cleanupBaseline.mAmplifiers[0].firmwareIdVersion=version;
         cleanupBaseline.mAudioState={true,true,true,true,1};
         cleanupBaseline.runBackgroundMonitor();
         cleanupBaseline.ops=0;
@@ -604,7 +604,7 @@ int main() {
         unsigned cleanupOperations=cleanupBaseline.ops;
         for(unsigned fault=1;fault<=cleanupOperations;++fault) {
             CirrusAudioFixup d;
-            d.mAmps[0].firmwareIdVersion=version;
+            d.mAmplifiers[0].firmwareIdVersion=version;
             d.mAudioState={true,true,true,true,1};
             d.runBackgroundMonitor();
             d.ops=0;
@@ -613,19 +613,19 @@ int main() {
             ++d.mAudioState.generation;
             hostSleepCount=0;
             d.runBackgroundMonitor();
-            assert(d.failed && d.mAmps[0].playbackFaulted && d.unmute==1);
-            assert(hostSleepCount==0 && !d.mAmps[0].shutdownTransition.pending());
+            assert(d.failed && d.mAmplifiers[0].playbackFaulted && d.unmute==1);
+            assert(hostSleepCount==0 && !d.mAmplifiers[0].shutdownTransition.pending());
         }
         printf("PASS runtime shutdown version=0x%X single-I/O fault sweep (%u positions), no sleeping callbacks\n", version, cleanupOperations);
         }
         CirrusAudioFixup suspendedPreparation;
         for(unsigned i=0;i<3;++i) { suspendedPreparation.runMonitorStep(); hostNowNs+=1000000; }
-        assert(suspendedPreparation.mAmps[0].playbackTransition.phase==PlaybackPhase::Pup);
+        assert(suspendedPreparation.mAmplifiers[0].playbackTransition.phase==PlaybackPhase::Pup);
         suspendedPreparation.handlePowerChange(false);
         auto suspendedOps=suspendedPreparation.ops;
         suspendedPreparation.runMonitorStep();
         assert(suspendedPreparation.unmute==0 && suspendedPreparation.ops==suspendedOps);
-        assert(!suspendedPreparation.mAmps[0].initialized && !suspendedPreparation.mAmps[0].playbackTransition.pending());
+        assert(!suspendedPreparation.mAmplifiers[0].initialized && !suspendedPreparation.mAmplifiers[0].playbackTransition.pending());
         puts("PASS asynchronous steps, delayed-peer stereo barrier, pair rollback and elapsed PUP deadline");
     }
     {
@@ -677,18 +677,18 @@ int main() {
     for(unsigned fmt : {0U,0x30U,0x4031U,0x831U,0x8031U,0x41U,0xB1U,0x2031U}) assert(!CirrusAudioFixup().supportedHdaFormat(fmt));
     for(unsigned version : {0x1500U,0x1D00U}) {
         CirrusAudioFixup baseline;
-        baseline.mAmps[0].firmwareIdVersion=version;
+        baseline.mAmplifiers[0].firmwareIdVersion=version;
         baseline.runBackgroundMonitor();
-        assert(baseline.mAmps[0].playbackActive && baseline.unmute==1);
+        assert(baseline.mAmplifiers[0].playbackActive && baseline.unmute==1);
         unsigned count=baseline.ops;
         for(unsigned i=1;i<=count;i++) {
             CirrusAudioFixup d;
-            d.mAmps[0].firmwareIdVersion=version;
+            d.mAmplifiers[0].firmwareIdVersion=version;
             d.failAt=i;
             d.runBackgroundMonitor();
             if(d.unmuteAfterFault) fprintf(stderr,"unmute after fault index=%u version=%X\n",i,version);
             assert(d.unmuteAfterFault==0);
-            if(d.mAmps[0].playbackFaulted) assert(!d.mAmps[0].playbackActive);
+            if(d.mAmplifiers[0].playbackFaulted) assert(!d.mAmplifiers[0].playbackActive);
         }
         printf("PASS playback version=0x%X single-I/O fault sweep (%u positions)\n",version,count);
     }
@@ -697,37 +697,37 @@ int main() {
         if(mode==0) d.pup=false;
         if(mode==1) d.pll=false;
         if(mode==2) d.mailbox=false;
-        if(mode==3) { d.mAmps[0].monitorCount=0; d.mAmps[0].dspAlive=false; }
+        if(mode==3) { d.mAmplifiers[0].monitorCount=0; d.mAmplifiers[0].dspAlive=false; }
         d.runBackgroundMonitor();
-        assert(!d.mAmps[0].playbackActive && d.mAmps[0].playbackFaulted && d.unmute==0);
+        assert(!d.mAmplifiers[0].playbackActive && d.mAmplifiers[0].playbackFaulted && d.unmute==0);
     }
     CirrusAudioFixup shortStream;
     shortStream.endStreamBeforeUnmute=true;
     shortStream.runBackgroundMonitor();
-    assert(shortStream.unmute==0 && !shortStream.mAmps[0].playbackActive && !shortStream.mAmps[0].playbackFaulted);
+    assert(shortStream.unmute==0 && !shortStream.mAmplifiers[0].playbackActive && !shortStream.mAmplifiers[0].playbackFaulted);
     shortStream.endStreamBeforeUnmute=false;
     shortStream.mHdaStreamActive=true; shortStream.streamEnded=false;
     shortStream.runBackgroundMonitor();
-    assert(shortStream.mAmps[0].playbackActive && shortStream.unmute==1);
+    assert(shortStream.mAmplifiers[0].playbackActive && shortStream.unmute==1);
     CirrusAudioFixup badRoute;
     badRoute.corruptRoute=true;
     badRoute.runBackgroundMonitor();
-    assert(badRoute.unmute==0 && badRoute.mAmps[0].playbackFaulted);
+    assert(badRoute.unmute==0 && badRoute.mAmplifiers[0].playbackFaulted);
     CirrusAudioFixup noHda;
     noHda.mHdaControllerObserved=false;
     noHda.runBackgroundMonitor();
     assert(noHda.unmute==0);
     CirrusAudioFixup bypass;
     bypass.bypass=true;
-    bypass.mAmps[0].monitorCount=0;
-    bypass.mAmps[0].dspAlive=false;
+    bypass.mAmplifiers[0].monitorCount=0;
+    bypass.mAmplifiers[0].dspAlive=false;
     bypass.runBackgroundMonitor();
-    assert(bypass.mAmps[0].playbackActive && (bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x8000 || bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x0000));
+    assert(bypass.mAmplifiers[0].playbackActive && (bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x8000 || bypass.regs[CS35L41_AMP_DIG_VOL_CTRL]==0x0000));
     assert(bypass.regs[CS35L41_AMP_GAIN_CTRL]==0x84);
     unsigned bypassOps=bypass.ops;
     for(unsigned i=1;i<=bypassOps;i++) {
         CirrusAudioFixup d;
-        d.bypass=true; d.mAmps[0].monitorCount=0; d.mAmps[0].dspAlive=false;
+        d.bypass=true; d.mAmplifiers[0].monitorCount=0; d.mAmplifiers[0].dspAlive=false;
         d.failAt=i; d.runBackgroundMonitor();
         assert(d.unmuteAfterFault==0);
     }
@@ -735,7 +735,7 @@ int main() {
     persistent.runBackgroundMonitor();
     persistent.failAllFrom=persistent.ops+1;
     for(unsigned i=0;i<8;i++) persistent.runBackgroundMonitor();
-    assert(persistent.mAmps[0].cleanupAttempts==3 && persistent.mAmps[0].playbackFaulted);
+    assert(persistent.mAmplifiers[0].cleanupAttempts==3 && persistent.mAmplifiers[0].playbackFaulted);
     unsigned stoppedOps=persistent.ops;
     persistent.runBackgroundMonitor();
     assert(persistent.ops==stoppedOps);
@@ -743,40 +743,40 @@ int main() {
     CirrusAudioFixup baseline;
     baseline.runBackgroundMonitor();
     baseline.ops=0;
-    assert(baseline.stopPlayback(baseline.mAmps[0]));
+    assert(baseline.stopPlayback(baseline.mAmplifiers[0]));
     unsigned count=baseline.ops;
     for(unsigned i=1;i<=count;i++) {
         CirrusAudioFixup d; d.runBackgroundMonitor(); d.ops=0; d.failAt=i;
-        assert(!d.stopPlayback(d.mAmps[0]));
-        assert(d.mAmps[0].playbackFaulted);
+        assert(!d.stopPlayback(d.mAmplifiers[0]));
+        assert(d.mAmplifiers[0].playbackFaulted);
         assert(d.properties["Cirrus_Playback_Verdict_host"]!="SAFE_IDLE_VERIFIED");
     }
     for(unsigned mode=0;mode<2;mode++) {
         CirrusAudioFixup d; d.runBackgroundMonitor();
         if(mode==0) d.pdn=false; else d.mailbox=false;
-        assert(!d.stopPlayback(d.mAmps[0]));
-        assert(d.mAmps[0].playbackFaulted);
+        assert(!d.stopPlayback(d.mAmplifiers[0]));
+        assert(d.mAmplifiers[0].playbackFaulted);
     }
     CirrusAudioFixup boot;
-    assert(boot.bringupDSP(boot.mAmps[0]));
-    assert(boot.verifyDSPAlive(boot.mAmps[0]));
+    assert(boot.bringUpDSP(boot.mAmplifiers[0]));
+    assert(boot.verifyDSPAlive(boot.mAmplifiers[0]));
     for(unsigned i=1;i<=boot.ops;i++) {
         CirrusAudioFixup d; d.failAt=i;
-        bool started=d.bringupDSP(d.mAmps[0]);
-        bool healthy=started && d.verifyDSPAlive(d.mAmps[0]);
+        bool started=d.bringUpDSP(d.mAmplifiers[0]);
+        bool healthy=started && d.verifyDSPAlive(d.mAmplifiers[0]);
         assert(!healthy);
         assert(d.unmute==0);
     }
     CirrusAudioFixup badBoot; badBoot.halo=false;
-    assert(!badBoot.bringupDSP(badBoot.mAmps[0]));
+    assert(!badBoot.bringUpDSP(badBoot.mAmplifiers[0]));
     assert(!(badBoot.regs[CS35L41_DSP1_CCM_CORE_CTRL]&HALO_CORE_EN));
     Timer timer;
     CirrusAudioFixup power;
     power.mProbeTimer=&timer;
     power.runBackgroundMonitor();
     power.handlePowerChange(false);
-    assert(!power.mPowerAvailable && !power.mAmps[0].playbackActive);
-    assert(!power.mAmps[0].initialized && !power.mAmps[0].firmwareValidated && !power.mAmps[0].dspAlive);
+    assert(!power.mPowerAvailable && !power.mAmplifiers[0].playbackActive);
+    assert(!power.mAmplifiers[0].initialized && !power.mAmplifiers[0].firmwareValidated && !power.mAmplifiers[0].dspAlive);
     unsigned offOps=power.ops;
     power.runBackgroundMonitor(); power.handlePowerChange(false);
     assert(power.ops==offOps && timer.cancelled==1);
@@ -790,7 +790,7 @@ int main() {
     assert(ro.ops==0 && !ro.mNeedsReinitialization);
     CirrusAudioFixup dirty; dirty.runBackgroundMonitor(); dirty.pdn=false;
     dirty.handlePowerChange(false); dirty.handlePowerChange(true);
-    assert(dirty.mAmps[0].playbackFaulted && !dirty.mAmps[0].initialized && dirty.restores==1);
+    assert(dirty.mAmplifiers[0].playbackFaulted && !dirty.mAmplifiers[0].initialized && dirty.restores==1);
     Provider provider;
     CirrusAudioFixup transport; transport.mProvider=&provider;
     uint8_t byte=0;
@@ -803,8 +803,8 @@ int main() {
     assert(power.properties["Cirrus_Driver_Verdict"]!="READY_DSP");
     assert(dirty.properties["Cirrus_Driver_Verdict"]=="FAULT_LATCHED");
     CirrusAudioFixup verdict;
-    verdict.mAmps[1]=verdict.mAmps[0];
-    verdict.mAmps[0].dspAlive=false;
+    verdict.mAmplifiers[1]=verdict.mAmplifiers[0];
+    verdict.mAmplifiers[0].dspAlive=false;
     verdict.publishDriverVerdict();
     assert(verdict.properties["Cirrus_Driver_Verdict"]=="OUTPUT_DISABLED_DSP_UNVERIFIED");
     verdict.bypass=true; verdict.publishDriverVerdict();
@@ -814,49 +814,49 @@ int main() {
     unsigned newFailures=0;
     auto checkNew=[&](bool ok,const char* name) { if(!ok) { fprintf(stderr,"FAIL %s\n",name); ++newFailures; } };
     CirrusAudioFixup stereoShort;
-    stereoShort.mAmps[1]=stereoShort.mAmps[0]; stereoShort.mAmps[1].name="right";stereoShort.mAmps[1].address=0x41;stereoShort.mAmps[1].channel=cirrus::core::AudioChannel::Right;
+    stereoShort.mAmplifiers[1]=stereoShort.mAmplifiers[0]; stereoShort.mAmplifiers[1].name="right";stereoShort.mAmplifiers[1].address=0x41;stereoShort.mAmplifiers[1].channel=cirrus::core::AudioChannel::Right;
     stereoShort.endStreamBeforeUnmute=true;
     stereoShort.runBackgroundMonitor();
     checkNew(stereoShort.startsAfterStreamEnd==0 && stereoShort.unmute==0 &&
-             !stereoShort.mAmps[1].playbackFaulted,"second amp cannot start from HDA state invalidated by first amp");
+             !stereoShort.mAmplifiers[1].playbackFaulted,"second amp cannot start from HDA state invalidated by first amp");
     CirrusAudioFixup clock;
     clock.failAt=4;
-    checkNew(!clock.applyPLL(clock.mAmps[0]),"PLL configuration rejects status read failure");
+    checkNew(!clock.applyPLL(clock.mAmplifiers[0]),"PLL configuration rejects status read failure");
     CirrusAudioFixup noClock;
     noClock.pll=false;
-    checkNew(noClock.applyPLL(noClock.mAmps[0]),"PLL configuration allows idle BCLK absence");
+    checkNew(noClock.applyPLL(noClock.mAmplifiers[0]),"PLL configuration allows idle BCLK absence");
     for(unsigned slot=0;slot<2;++slot) {
         CirrusAudioFixup d;
-        d.mAmps[0].name=slot?"right":"left";
-        d.mAmps[0].channel=slot?cirrus::core::AudioChannel::Right:cirrus::core::AudioChannel::Left;
+        d.mAmplifiers[0].name=slot?"right":"left";
+        d.mAmplifiers[0].channel=slot?cirrus::core::AudioChannel::Right:cirrus::core::AudioChannel::Left;
         d.regs[CS35L41_SP_FRAME_RX_SLOT]=0xABCDEF00;
-        checkNew(d.applyASP(d.mAmps[0]),"ASP channel setup");
+        checkNew(d.applyASP(d.mAmplifiers[0]),"ASP channel setup");
         checkNew(d.regs[CS35L41_SP_FRAME_RX_SLOT]==(0xABCDEF00U|slot),"ASP slot selection preserves other fields");
     }
     CirrusAudioFixup external;
     external.regs[CS35L41_PWR_CTRL2_REG]=0x30;
-    checkNew(external.powerUpAmplifier(external.mAmps[0]) && !(external.regs[CS35L41_PWR_CTRL2_REG]&0x30),"external boost init disables internal boost");
+    checkNew(external.powerUpAmplifier(external.mAmplifiers[0]) && !(external.regs[CS35L41_PWR_CTRL2_REG]&0x30),"external boost init disables internal boost");
     external.regs[CS35L41_SP_FORMAT]=0x20200200;
     external.regs[CS35L41_PWR_CTRL2_REG]|=0x20;
-    checkNew(!external.verifyIdleConfiguration(external.mAmps[0]),"idle verification rejects internal boost enabled");
+    checkNew(!external.verifyIdleConfiguration(external.mAmplifiers[0]),"idle verification rejects internal boost enabled");
     for(uint32_t bit : {0x80000000U,0x100U,0x8000U,0x20000U,0x40U,0x80U}) {
         CirrusAudioFixup initFault;
         initFault.regs[0x10010]=bit;
-        checkNew(!initFault.powerUpAmplifier(initFault.mAmps[0]),"idle init rejects protection fault");
+        checkNew(!initFault.powerUpAmplifier(initFault.mAmplifiers[0]),"idle init rejects protection fault");
         bool released=false;
         for(auto w:initFault.writes) if(w.first==0x2034) released=true;
         checkNew(!released,"idle init cannot release a protection fault to become ready");
         CirrusAudioFixup startFault;
         startFault.regs[0x10010]=bit;
         startFault.runBackgroundMonitor();
-        checkNew(startFault.unmute==0 && startFault.mAmps[0].playbackFaulted,"latched protection fault blocks start");
+        checkNew(startFault.unmute==0 && startFault.mAmplifiers[0].playbackFaulted,"latched protection fault blocks start");
         CirrusAudioFixup activeFault;
         activeFault.runBackgroundMonitor(); activeFault.regs[0x10010]|=bit;
         activeFault.runBackgroundMonitor();
-        checkNew(activeFault.mAmps[0].playbackFaulted && !activeFault.mAmps[0].playbackActive,"protection fault stops active playback");
+        checkNew(activeFault.mAmplifiers[0].playbackFaulted && !activeFault.mAmplifiers[0].playbackActive,"protection fault stops active playback");
         CirrusAudioFixup prepareFault;
         prepareFault.injectProtectionAtPup=bit; prepareFault.runBackgroundMonitor();
-        checkNew(prepareFault.unmute==0 && prepareFault.mAmps[0].playbackFaulted,"fault arriving during prepare blocks unmute");
+        checkNew(prepareFault.unmute==0 && prepareFault.mAmplifiers[0].playbackFaulted,"fault arriving during prepare blocks unmute");
     }
     for(unsigned fault=0;fault<6;++fault) {
         CirrusAudioFixup d; d.runBackgroundMonitor();
@@ -867,54 +867,54 @@ int main() {
         if(fault==4) d.regs[CS35L41_PWR_CTRL1_REG]=0;
         if(fault==5) d.regs[CS35L41_PWR_CTRL2_REG]|=0x20;
         d.runBackgroundMonitor();
-        checkNew(d.mAmps[0].playbackFaulted && !d.mAmps[0].playbackActive,"lost active hardware/DSP state stops playback");
+        checkNew(d.mAmplifiers[0].playbackFaulted && !d.mAmplifiers[0].playbackActive,"lost active hardware/DSP state stops playback");
     }
     CirrusAudioFixup ending;
     CirrusAudioFixup clockLostDuringPrepare;
     clockLostDuringPrepare.losePllAtPup=true;
     clockLostDuringPrepare.runBackgroundMonitor();
-    checkNew(clockLostDuringPrepare.unmute==0 && clockLostDuringPrepare.mAmps[0].playbackFaulted,
+    checkNew(clockLostDuringPrepare.unmute==0 && clockLostDuringPrepare.mAmplifiers[0].playbackFaulted,
              "PLL loss during prepare blocks unmute");
     ending.runBackgroundMonitor(); ending.pll=false; ending.mHdaStreamActive=false;
     ending.runBackgroundMonitor(); ending.runBackgroundMonitor();
-    checkNew(!ending.mAmps[0].playbackFaulted && !ending.mAmps[0].playbackActive,"normal HDA close with clocks stopped stays recoverable");
+    checkNew(!ending.mAmplifiers[0].playbackFaulted && !ending.mAmplifiers[0].playbackActive,"normal HDA close with clocks stopped stays recoverable");
     CirrusAudioFixup stable;
     stable.runBackgroundMonitor(); stable.ops=0; stable.runBackgroundMonitor();
     unsigned activeOps=stable.ops;
-    checkNew(stable.mAmps[0].playbackActive && !stable.mAmps[0].playbackFaulted && stable.unmute==1,"healthy active monitor does not repeat start");
+    checkNew(stable.mAmplifiers[0].playbackActive && !stable.mAmplifiers[0].playbackFaulted && stable.unmute==1,"healthy active monitor does not repeat start");
     for(unsigned i=1;i<=activeOps;++i) {
         CirrusAudioFixup d; d.runBackgroundMonitor(); d.ops=0; d.failAt=i;
         d.runBackgroundMonitor();
-        checkNew(d.mAmps[0].playbackFaulted && !d.mAmps[0].playbackActive,"active monitor I/O fault causes cleanup");
+        checkNew(d.mAmplifiers[0].playbackFaulted && !d.mAmplifiers[0].playbackActive,"active monitor I/O fault causes cleanup");
     }
     CirrusAudioFixup stuck;
     stuck.stuckBoost=true; stuck.runBackgroundMonitor();
-    checkNew(stuck.unmute==0 && stuck.mAmps[0].playbackFaulted &&
+    checkNew(stuck.unmute==0 && stuck.mAmplifiers[0].playbackFaulted &&
              stuck.properties["Cirrus_Playback_Verdict_host"]=="CLEANUP_UNVERIFIED","uncleared boost bit blocks unmute and safe-idle verdict");
     CirrusAudioFixup headphoneCycle;
     Timer headphoneTimer;
     headphoneCycle.mProbeTimer = &headphoneTimer;
     headphoneCycle.runBackgroundMonitor();
-    assert(headphoneCycle.mAmps[0].playbackActive);
+    assert(headphoneCycle.mAmplifiers[0].playbackActive);
     headphoneCycle.pll = false;
     headphoneCycle.pup = false;
     headphoneCycle.runBackgroundMonitor();
-    checkNew(headphoneCycle.mAmps[0].playbackFaulted && !headphoneCycle.mAmps[0].playbackActive, "headphone plug stops playback");
+    checkNew(headphoneCycle.mAmplifiers[0].playbackFaulted && !headphoneCycle.mAmplifiers[0].playbackActive, "headphone plug stops playback");
     for(int tick = 0; tick < 250; ++tick) headphoneCycle.runBackgroundMonitor();
-    checkNew(headphoneCycle.unmute == 1 && !headphoneCycle.mAmps[0].playbackActive &&
-             headphoneCycle.mAmps[0].pllRecoveryPending && headphoneCycle.mAmps[0].pllRecoveryAttempts == 0,
+    checkNew(headphoneCycle.unmute == 1 && !headphoneCycle.mAmplifiers[0].playbackActive &&
+             headphoneCycle.mAmplifiers[0].pllRecoveryPending && headphoneCycle.mAmplifiers[0].pllRecoveryAttempts == 0,
              "headphone clock absence stays muted without exhausting recovery");
     headphoneCycle.pup = true;
     headphoneCycle.pll = true;
-    headphoneCycle.mAmps[0].pllRetryCooldown = 20;
+    headphoneCycle.mAmplifiers[0].pllRetryCooldown = 20;
     for(int tick = 0; tick < 25; ++tick) headphoneCycle.runBackgroundMonitor();
-    checkNew(!headphoneCycle.mAmps[0].playbackFaulted && headphoneCycle.mAmps[0].playbackActive, "headphone unplug restores speaker playback");
+    checkNew(!headphoneCycle.mAmplifiers[0].playbackFaulted && headphoneCycle.mAmplifiers[0].playbackActive, "headphone unplug restores speaker playback");
     for(int cycle = 0; cycle < 8; ++cycle) {
         headphoneCycle.pll = false;
         headphoneCycle.runBackgroundMonitor();
         headphoneCycle.pll = true;
         for(int tick = 0; tick < 25; ++tick) headphoneCycle.runBackgroundMonitor();
-        checkNew(headphoneCycle.mAmps[0].playbackActive, "fallback survives repeated clock returns");
+        checkNew(headphoneCycle.mAmplifiers[0].playbackActive, "fallback survives repeated clock returns");
     }
     CirrusAudioFixup recoveryPowerFault;
     // Run the actual monitor body with completed output/engine observations.
@@ -922,10 +922,10 @@ int main() {
     // the old speaker clock remain active throughout the route transition.
     CirrusAudioFixup eventDriver;
     const auto silentSnapshotOps = eventDriver.ops;
-    eventDriver.snapshotDiagnostics(eventDriver.mAmps[0], "QUIET RELEASE");
+    eventDriver.snapshotDiagnostics(eventDriver.mAmplifiers[0], "QUIET RELEASE");
     checkNew(eventDriver.ops == silentSnapshotOps, "quiet snapshots perform no diagnostic I2C sweep");
     gCirrusDebug=true;
-    eventDriver.snapshotDiagnostics(eventDriver.mAmps[0], "REQUESTED DEBUG");
+    eventDriver.snapshotDiagnostics(eventDriver.mAmplifiers[0], "REQUESTED DEBUG");
     checkNew(eventDriver.ops > silentSnapshotOps, "requested snapshots retain diagnostic I2C reads");
     gCirrusDebug=false;
     CirrusAudioFixup quietHealth;
@@ -948,7 +948,7 @@ int main() {
     CirrusAudioFixup delayedIdentity;
     Timer identityTimer;
     delayedIdentity.mProbeTimer=&identityTimer;
-    auto& delayedAmp=delayedIdentity.mAmps[0];
+    auto& delayedAmp=delayedIdentity.mAmplifiers[0];
     delayedAmp.initialized=false;
     delayedAmp.firmwareIdentityPending=true;
     delayedAmp.firmwareIdentityDeadlineMs=playbackTimeMilliseconds()+30000;
@@ -962,7 +962,7 @@ int main() {
     delayedIdentity.retryFirmwareIdentity();
     checkNew(delayedIdentity.identityInitializations==1,"ready identity does not repeat initialization");
     CirrusAudioFixup missingIdentity;
-    auto& missingAmp=missingIdentity.mAmps[0];
+    auto& missingAmp=missingIdentity.mAmplifiers[0];
     missingAmp.firmwareIdentityPending=true;
     missingAmp.firmwareIdentityDeadlineMs=playbackTimeMilliseconds();
     missingIdentity.retryFirmwareIdentity();
@@ -979,7 +979,7 @@ int main() {
     checkNew(irqDriver.regs[0x11008]==0,"IRQ setup leaves GPIO1 supply untouched");
     irqDriver.regs[0x10010]=0x80;
     CirrusAudioFixup::amplifierInterruptReceived(reinterpret_cast<OSObject*>(&irqDriver),&irqSource,1);
-    checkNew(!irqSource.enabled && irqDriver.mAmps[0].playbackFaulted,
+    checkNew(!irqSource.enabled && irqDriver.mAmplifiers[0].playbackFaulted,
              "protection IRQ latches fault and disables level delivery");
     checkNew(irqDriver.properties["Cirrus_Amp_IRQ_Mode"]=="FAULT_LATCHED_IRQ_DISABLED","IRQ fault evidence survives polling fallback");
     CirrusAudioFixup irqSetupFault;
@@ -990,36 +990,36 @@ int main() {
     CirrusAudioFixup spuriousIrq;
     irqSource.enabled=true;
     CirrusAudioFixup::amplifierInterruptReceived(reinterpret_cast<OSObject*>(&spuriousIrq),&irqSource,1);
-    checkNew(!irqSource.enabled && !spuriousIrq.mAmps[0].playbackFaulted,
+    checkNew(!irqSource.enabled && !spuriousIrq.mAmplifiers[0].playbackFaulted,
              "unexplained shared level IRQ falls back without an interrupt storm");
     CirrusAudioFixup gatedPll;
     gatedPll.mAudioState = {true, true, true, true, 1};
     gatedPll.pll=false;
     gatedPll.lockPllAtPup=true;
     gatedPll.runBackgroundMonitor();
-    checkNew(gatedPll.mAmps[0].playbackActive,
+    checkNew(gatedPll.mAmplifiers[0].playbackActive,
              "speaker preparation supports PLL that locks only after GLOBAL_EN");
     checkNew(gatedPll.regs[CS35L41_AMP_DIG_VOL_CTRL] == 0x8000,
              "unmute retains Linux HDA high-pass at zero dB digital volume");
     CirrusAudioFixup tuned;
-    tuned.mAmps[0].tuningPcmGain=14;
+    tuned.mAmplifiers[0].tuningPcmGain=14;
     tuned.runBackgroundMonitor();
-    checkNew(tuned.mAmps[0].playbackActive && tuned.regs[CS35L41_AMP_GAIN_CTRL]==((14U<<5)|19U),
+    checkNew(tuned.mAmplifiers[0].playbackActive && tuned.regs[CS35L41_AMP_GAIN_CTRL]==((14U<<5)|19U),
              "playback applies selected embedded tuning PCM gain and verifies it");
     CirrusAudioFixup partialStereo;
     Timer stereoTimer;
     partialStereo.mProbeTimer=&stereoTimer;
     partialStereo.mAudioState={true,true,true,true,1};
     partialStereo.mAudioPrepareRetries=40;
-    partialStereo.mAmps[1]=partialStereo.mAmps[0];
-    partialStereo.mAmps[1].name="right";partialStereo.mAmps[1].address=0x41;
-    partialStereo.mAmps[1].channel=cirrus::core::AudioChannel::Right;
+    partialStereo.mAmplifiers[1]=partialStereo.mAmplifiers[0];
+    partialStereo.mAmplifiers[1].name="right";partialStereo.mAmplifiers[1].address=0x41;
+    partialStereo.mAmplifiers[1].channel=cirrus::core::AudioChannel::Right;
     partialStereo.runBackgroundMonitor();
-    partialStereo.mAmps[1].playbackActive=false;
-    partialStereo.mAmps[1].playbackFaulted=true;
-    partialStereo.mAmps[1].pllRecoveryPending=true;
-    partialStereo.mAmps[1].diagnostic.latestFailure=DIAG_PLL_UNLOCKED;
-    partialStereo.mAmps[1].pllRecoveryAttempts=0;
+    partialStereo.mAmplifiers[1].playbackActive=false;
+    partialStereo.mAmplifiers[1].playbackFaulted=true;
+    partialStereo.mAmplifiers[1].pllRecoveryPending=true;
+    partialStereo.mAmplifiers[1].diagnostic.latestFailure=DIAG_PLL_UNLOCKED;
+    partialStereo.mAmplifiers[1].pllRecoveryAttempts=0;
     partialStereo.mHdaStreamActive=false;
     partialStereo.runBackgroundMonitor();
     checkNew(stereoTimer.lastDelay==5 && partialStereo.mAudioPrepareRetries==39,
@@ -1031,20 +1031,20 @@ int main() {
     staleRoute.changeRouteAtPup=true;
     staleRoute.pup=false;
     staleRoute.runBackgroundMonitor();
-    checkNew(staleRoute.unmute==0 && !staleRoute.mAmps[0].playbackActive,
+    checkNew(staleRoute.unmute==0 && !staleRoute.mAmplifiers[0].playbackActive,
              "headphone event during power preparation prevents obsolete unmute");
-    checkNew(staleRoute.irqReads<15 && !staleRoute.mAmps[0].playbackFaulted &&
-             staleRoute.mAmps[0].diagnostic.latestFailure!=DIAG_POWER_UP_TIMEOUT,
+    checkNew(staleRoute.irqReads<15 && !staleRoute.mAmplifiers[0].playbackFaulted &&
+             staleRoute.mAmplifiers[0].diagnostic.latestFailure!=DIAG_POWER_UP_TIMEOUT,
              "cancelled preparation stops waiting without fabricating timeout faults");
     Timer eventTimer;
     eventDriver.mProbeTimer = &eventTimer;
     eventDriver.mAudioState = {true, true, true, true, 1};
     eventDriver.runBackgroundMonitor();
-    checkNew(eventDriver.mAmps[0].playbackActive, "speaker event starts output");
+    checkNew(eventDriver.mAmplifiers[0].playbackActive, "speaker event starts output");
     eventDriver.mAudioState = {true, false, true, true, 2};
     auto timerCalls = eventTimer.scheduled;
     eventDriver.runBackgroundMonitor();
-    checkNew(!eventDriver.mAmps[0].playbackActive && !eventDriver.mAmps[0].shutdownTransition.pending() &&
+    checkNew(!eventDriver.mAmplifiers[0].playbackActive && !eventDriver.mAmplifiers[0].shutdownTransition.pending() &&
              eventTimer.scheduled - timerCalls <= 5,
              "headphone event completes bounded asynchronous cleanup");
     timerCalls = eventTimer.scheduled;
@@ -1069,11 +1069,11 @@ int main() {
     eventDriver.mAudioState.generation = 4;
     eventDriver.mAudioPrepareRetries = 40;
     eventDriver.runBackgroundMonitor();
-    checkNew(eventDriver.mAmps[0].playbackActive, "new ready speaker event restarts immediately");
+    checkNew(eventDriver.mAmplifiers[0].playbackActive, "new ready speaker event restarts immediately");
     eventDriver.mAudioState = {true, true, true, false, 5};
     timerCalls = eventTimer.scheduled;
     eventDriver.runBackgroundMonitor();
-    checkNew(!eventDriver.mAmps[0].playbackActive && !eventDriver.mAmps[0].shutdownTransition.pending() &&
+    checkNew(!eventDriver.mAmplifiers[0].playbackActive && !eventDriver.mAmplifiers[0].shutdownTransition.pending() &&
              eventTimer.scheduled - timerCalls <= 5,
              "engine stop quiesces without persistent timer");
     recoveryPowerFault.runBackgroundMonitor();
@@ -1082,8 +1082,8 @@ int main() {
     recoveryPowerFault.pll = true;
     recoveryPowerFault.pup = false;
     for(int tick = 0; tick < 30; ++tick) recoveryPowerFault.runBackgroundMonitor();
-    checkNew(recoveryPowerFault.mAmps[0].playbackFaulted &&
-             recoveryPowerFault.mAmps[0].diagnostic.latestFailure == DIAG_POWER_UP_TIMEOUT &&
+    checkNew(recoveryPowerFault.mAmplifiers[0].playbackFaulted &&
+             recoveryPowerFault.mAmplifiers[0].diagnostic.latestFailure == DIAG_POWER_UP_TIMEOUT &&
              recoveryPowerFault.unmute == 1, "power timeout with clock present remains latched");
     CirrusAudioFixup recoveryProtectionFault;
     recoveryProtectionFault.runBackgroundMonitor();
@@ -1096,7 +1096,7 @@ int main() {
     recoveryProtectionFault.pll = true;
     recoveryProtectionFault.pup = true;
     for(int tick = 0; tick < 30; ++tick) recoveryProtectionFault.runBackgroundMonitor();
-    checkNew(recoveryProtectionFault.mAmps[0].playbackFaulted && recoveryProtectionFault.unmute == 1,
+    checkNew(recoveryProtectionFault.mAmplifiers[0].playbackFaulted && recoveryProtectionFault.unmute == 1,
              "protection fault during clock wait prevents recovery");
     if(newFailures) return 1;
     CirrusAudioFixup latchedIo;
@@ -1104,11 +1104,11 @@ int main() {
     latchedIo.failAt=0;
     unsigned afterFault=latchedIo.ops;
     for(unsigned i=0;i<20;++i) latchedIo.runBackgroundMonitor();
-    assert(latchedIo.mAmps[0].playbackFaulted && latchedIo.ops==afterFault && latchedIo.unmute==1);
+    assert(latchedIo.mAmplifiers[0].playbackFaulted && latchedIo.ops==afterFault && latchedIo.unmute==1);
     CirrusAudioFixup boundedPll;
     boundedPll.runBackgroundMonitor(); boundedPll.pll=false; boundedPll.runBackgroundMonitor();
     for(unsigned i=0;i<30;++i) boundedPll.runBackgroundMonitor();
-    assert(boundedPll.mAmps[0].playbackFaulted && boundedPll.mAmps[0].pllRecoveryAttempts==3);
+    assert(boundedPll.mAmplifiers[0].playbackFaulted && boundedPll.mAmplifiers[0].pllRecoveryAttempts==3);
     CirrusAudioFixup halted; halted.mDebugPhaseHalted=true; halted.runBackgroundMonitor();
     assert(halted.ops==0 && halted.unmute==0);
     puts("PASS configuration, external boost invariants, protection and active-state loss checks");

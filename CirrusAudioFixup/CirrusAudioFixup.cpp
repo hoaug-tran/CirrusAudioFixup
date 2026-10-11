@@ -10,7 +10,7 @@
 #include "CirrusAudioFixup.hpp"
 
 #include "Devices/CS35L41/Resources/Firmware.hpp"
-#include "Firmware/WMFW/FirmwareUploader.hpp"
+#include "Firmware/WMFW/WMFWUploader.hpp"
 #include "Firmware/WMFW/WMFWParser.hpp"
 
 #include <IOKit/IOMemoryDescriptor.h>
@@ -26,49 +26,49 @@ OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
 
     class CirrusAudioFixup;
 
-class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
+class ServiceRegisterIO : public cirrus::core::RegisterIO {
 private:
-    CirrusAudioFixup* mFixup;
-    AmplifierState& mAmp;
+    CirrusAudioFixup* mService;
+    AmplifierState& mAmplifier;
     cirrus::diagnostics::TraceSource mSource;
 
 public:
-    FixupRegisterIOAdapter(CirrusAudioFixup* fixup, AmplifierState& amp,
+    ServiceRegisterIO(CirrusAudioFixup* fixup, AmplifierState& amp,
                            cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_PROBE)
-        : mFixup(fixup), mAmp(amp), mSource(source) {}
+        : mService(fixup), mAmplifier(amp), mSource(source) {}
 
-    int32_t lastError() const override { return mFixup->mLastTransferReturn; }
+    int32_t lastError() const override { return mService->mLastTransferReturn; }
 
     bool read(uint32_t address, uint32_t* value) override {
-        return mFixup->readRegister(mAmp, address, value, mSource);
+        return mService->readRegister(mAmplifier, address, value, mSource);
     }
 
     bool write(uint32_t address, uint32_t value) override {
-        return mFixup->writeRegister(mAmp, address, value, mSource);
+        return mService->writeRegister(mAmplifier, address, value, mSource);
     }
 
     bool readForDiagnostic(uint32_t address,uint32_t* value) override {
-        return mFixup->readRegister(mAmp,address,value,cirrus::diagnostics::TRACE_DUMP);
+        return mService->readRegister(mAmplifier,address,value,cirrus::diagnostics::TRACE_DUMP);
     }
 
     bool bulkReadForDiagnostic(uint32_t address,uint8_t* data,size_t length) override {
-        return mFixup->bulkRead(mAmp,address,data,length,cirrus::diagnostics::TRACE_DUMP);
+        return mService->bulkRead(mAmplifier,address,data,length,cirrus::diagnostics::TRACE_DUMP);
     }
 
     bool updateBits(uint32_t address, uint32_t mask, uint32_t value) override {
-        return mFixup->updateRegisterBits(mAmp, address, mask, value, mSource);
+        return mService->updateRegisterBits(mAmplifier, address, mask, value, mSource);
     }
 
     bool pollBit(uint32_t address, uint32_t mask, uint32_t expected, uint32_t timeoutMs) override {
-        return mFixup->pollRegisterBit(mAmp, address, mask, expected, timeoutMs, cirrus::diagnostics::TRACE_PROBE);
+        return mService->pollRegisterBit(mAmplifier, address, mask, expected, timeoutMs, cirrus::diagnostics::TRACE_PROBE);
     }
 
     bool bulkRead(uint32_t address, uint8_t* data, size_t length) override {
-        return mFixup->bulkRead(mAmp, address, data, length, cirrus::diagnostics::TRACE_FIRMWARE);
+        return mService->bulkRead(mAmplifier, address, data, length, cirrus::diagnostics::TRACE_FIRMWARE);
     }
 
     bool bulkWrite(uint32_t address, const uint8_t* data, size_t length) override {
-        return mFixup->bulkWrite(mAmp, address, data, length, cirrus::diagnostics::TRACE_FIRMWARE);
+        return mService->bulkWrite(mAmplifier, address, data, length, cirrus::diagnostics::TRACE_FIRMWARE);
     }
 };
 
@@ -83,77 +83,17 @@ static uint64_t playbackTimeMilliseconds() {
     return nanos / 1000000;
 }
 
-class CirrusAudioFixup::CS35L41ServiceBackend final : public cirrus::core::AmplifierLifecycleHooks {
-    CirrusAudioFixup& owner;
-    AmplifierState& amp;
-    const cirrus::platform::BackendContext& context;
-public:
-    explicit CS35L41ServiceBackend(const cirrus::platform::BackendContext& c)
-        :owner(*static_cast<BackendOwner*>(c.platformContext)->owner),
-         amp(*static_cast<BackendOwner*>(c.platformContext)->amp),context(c) {}
-    cirrus::core::BringUpDisposition disposition() const override {return amp.bringUpDisposition;}
-    IOReturn identify() override {
-        uint32_t id=0;
-        if(!context.io.read(cirrus::devices::cs35l41::registers::kRegDeviceId,&id) ||
-           id!=cirrus::devices::cs35l41::registers::kValDeviceId) {
-            amp.playbackFaulted=true;owner.recordDiagnosticFailure(amp,DIAG_DEVICE_ID);return kIOReturnNotFound;
-        }
-        return kIOReturnSuccess;
-    }
-    IOReturn authorizeBoard() override {
-        return owner.mPlatformAuthorized && context.board.permits(context.actualBoard) &&
-            (amp.channel==cirrus::core::AudioChannel::Left || amp.channel==cirrus::core::AudioChannel::Right)
-            ?kIOReturnSuccess:kIOReturnNotPermitted;
-    }
-    IOReturn initialize() override {auto ret=owner.initializeCS35L41Hardware(amp);if(ret!=kIOReturnSuccess)amp.playbackFaulted=true;return ret;}
-    IOReturn loadFirmware() override {auto ret=owner.loadCS35L41Firmware(amp);if(ret!=kIOReturnSuccess)amp.playbackFaulted=true;return ret;}
-    IOReturn verifyReady() override {auto ret=owner.verifyCS35L41Ready(amp);if(ret!=kIOReturnSuccess)amp.playbackFaulted=true;return ret;}
-    IOReturn startPlayback() override {return owner.commitCS35L41Playback(amp);}
-    IOReturn stopPlayback() override {if(owner.stopPlayback(amp))return kIOReturnSuccess;amp.playbackFaulted=true;return kIOReturnNotReady;}
-    IOReturn safeShutdown() override {auto ret=owner.shutdownCS35L41(amp);if(ret!=kIOReturnSuccess)amp.playbackFaulted=true;return ret;}
-    void captureDiagnostics() override {owner.captureCS35L41FailureSnapshot(amp,amp.diagnostic.latestFailure);}
-    IOReturn configureInterrupt(bool enabled) override {
-        if(context.board.amplifiers[context.bindingIndex].interruptGpio!=2)return kIOReturnUnsupported;
-        return owner.configureCS35L41Interrupt(amp,enabled)?kIOReturnSuccess:kIOReturnNotReady;
-    }
-    IOReturn handleInterrupt() override {
-        if(owner.checkProtectionStatus(amp))return kIOReturnSuccess;
-        amp.playbackFaulted=true;return kIOReturnNotReady;
-    }
-    bool managesPlaybackTransitions() const override {return true;}
-    IOReturn runtimeTick(const cirrus::core::PlaybackContext& context) override {owner.monitorCS35L41(amp,context);return kIOReturnSuccess;}
-    bool playbackNeedsPreparation() const override {return amp.initialized && !amp.playbackActive && (!amp.playbackFaulted || (amp.pllRecoveryPending && amp.pllRecoveryAttempts<3));}
-    bool playbackStartCancelled() const override {return amp.playbackStartCancelled;}
-    bool playbackPrepared() const override {return amp.initialized && !amp.playbackFaulted && amp.playbackTransition.phase==cirrus::devices::cs35l41::PlaybackPhase::Prepared;}
-    bool playbackPending() const override {return amp.playbackTransition.pending() || amp.shutdownTransition.pending();}
-    bool playbackFaulted() const override {return amp.playbackFaulted && (!amp.pllRecoveryPending || amp.pllRecoveryAttempts>=3);}
-    bool validatePlayback(const cirrus::core::PlaybackContext& context) override {return owner.validateCS35L41Playback(amp,context);}
-    IOReturn cancelPlayback() override {
-        if(!amp.shutdownTransition.pending() && amp.cleanupAttempts<3 && (amp.playbackActive || amp.playbackTransition.pending()))owner.stopRuntimePlayback(amp);
-        return kIOReturnSuccess;
-    }
-    cirrus::core::ObservedPlayback observedPlayback() const override {return amp.playbackActive?cirrus::core::ObservedPlayback::Active:cirrus::core::ObservedPlayback::Idle;}
-
-};
-
-cirrus::core::AmplifierLifecycleHooks* cirrus::devices::cs35l41::createServiceBackend(const cirrus::platform::BackendContext& context) {
-    auto* binding=static_cast<CirrusAudioFixup::BackendOwner*>(context.platformContext);
-    if(!binding || !binding->owner || !binding->amp || binding->amp->model!=cirrus::core::CodecModel::CS35L41)return nullptr;
-    return new CirrusAudioFixup::CS35L41ServiceBackend(context);
-}
-void cirrus::devices::cs35l41::destroyServiceBackend(cirrus::core::AmplifierLifecycleHooks* backend){delete backend;}
-
 bool CirrusAudioFixup::registerAmplifierBackends(){return cirrus::devices::registerBackends(mBackendRegistry);}
 
 bool CirrusAudioFixup::bindAmplifierRuntime() {
     if(mAmplifierRuntime.bound())return true;
     if(bootArgEnabled("-cirrusro"))return false;
-    if(!mPlatformAuthorized || !mPlatformProfile || !mAmpCount || mAmpCount>kMaxAmps)return false;
+    if(!mPlatformAuthorized || !mPlatformProfile || !mAmplifierCount || mAmplifierCount>kMaxAmplifiers)return false;
     cirrus::platform::BoardIdentity actual{uint16_t(mPlatformSubsystemId>>16),uint16_t(mPlatformSubsystemId),mPlatformProfile->acpiHid};
     if(!mNativeSPI.bound()) {
         int length=sizeof(mRuntimeControllerPath);
         if(!mProvider->getPath(mRuntimeControllerPath,&length,gIOServicePlane))return false;
-        for(size_t i=0;i<mAmpCount;++i)mAmps[i].endpoint={cirrus::core::BusTransportType::I2C,mRuntimeControllerPath,mAmps[i].address};
+        for(size_t i=0;i<mAmplifierCount;++i)mAmplifiers[i].endpoint={cirrus::core::BusTransportType::I2C,mRuntimeControllerPath,mAmplifiers[i].address};
         mI2CController=new cirrus::transport::VoodooI2CController(mProvider);
         if(!mI2CController)return false;
     }
@@ -161,19 +101,19 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
     else {
         int length=sizeof(mRuntimeControllerPath);
         if(!mProvider->getPath(mRuntimeControllerPath,&length,gIOServicePlane)){teardownAmplifierRuntime();return false;}
-        for(size_t i=0;i<mAmpCount;++i) {
-            auto& amp=mAmps[i];
+        for(size_t i=0;i<mAmplifierCount;++i) {
+            auto& amp=mAmplifiers[i];
             amp.endpoint={cirrus::core::BusTransportType::I2C,mRuntimeControllerPath,amp.address};
             mRuntimeBindings[i]={amp.endpoint,amp.deviceId,uint32_t(amp.channel),1,amp.name,mPlatformProfile->acpiHid,2};
         }
         // The legacy allowlist authorizes only its compiled reference routing,
         // reset/power and firmware-selection plan. No new board is inferred.
-        mRuntimeBoard={actual,mRuntimeBindings,mAmpCount,true,true,true};
+        mRuntimeBoard={actual,mRuntimeBindings,mAmplifierCount,true,true,true};
     }
-    const cirrus::platform::BackendContext* contexts[kMaxAmps]{};
+    const cirrus::platform::AmplifierBackendContext* contexts[kMaxAmplifiers]{};
     IOReturn ret=kIOReturnSuccess;
-    for(size_t i=0;i<mAmpCount;++i) {
-        auto& amp=mAmps[i];
+    for(size_t i=0;i<mAmplifierCount;++i) {
+        auto& amp=mAmplifiers[i];
         size_t index=0;
         while(index<mRuntimeBoard.count && !amp.endpoint.sameDevice(mRuntimeBoard.amplifiers[index].endpoint))++index;
         if(index==mRuntimeBoard.count || !amp.present){ret=kIOReturnNotPermitted;break;}
@@ -188,17 +128,17 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
             amp.registerIO=mI2CMaps[i];amp.endpointIndex=uint8_t(i);
         }
         mBackendOwners[i]={this,&amp};
-        mRuntimePorts[i]=new FixupRegisterIOAdapter(this,amp);
+        mRuntimePorts[i]=new ServiceRegisterIO(this,amp);
         if(!mRuntimePorts[i]){ret=kIOReturnNoMemory;break;}
         if(mPlatformProfile->firmwareBundles) {
             if(index>=mPlatformProfile->firmwareBundleCount){ret=kIOReturnNotPermitted;break;}
             mRuntimeFirmware[i]=mPlatformProfile->firmwareBundles[index];
         } else mRuntimeFirmware[i]={{binding.siliconId,actual.subsystemVendor,actual.subsystemDevice,binding.speakerId,binding.channelIndex,binding.tuningResource},cirrus::firmware::FirmwareFormat::Deferred};
-        contexts[i]=new cirrus::platform::BackendContext{*mRuntimePorts[i],amp.endpoint,mRuntimeBoard,actual,index,mRuntimeFirmware[i],mPlatformProfile->acpiHid,&mBackendOwners[i]};
+        contexts[i]=new cirrus::platform::AmplifierBackendContext{*mRuntimePorts[i],amp.endpoint,mRuntimeBoard,actual,index,mRuntimeFirmware[i],mPlatformProfile->acpiHid,&mBackendOwners[i]};
         if(!contexts[i]){ret=kIOReturnNoMemory;break;}
     }
     if(ret==kIOReturnSuccess) {
-        ret=mAmplifierRuntime.bind(mBackendRegistry,contexts,mAmpCount);
+        ret=mAmplifierRuntime.bind(mBackendRegistry,contexts,mAmplifierCount);
         const auto& failure=mAmplifierRuntime.bindFailure();
         setProperty("Cirrus_Runtime_Bind_Reason",failure.reason);
         setProperty("Cirrus_Runtime_Bind_Index",uint64_t(failure.index),32);
@@ -206,7 +146,7 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
     } else setProperty("Cirrus_Runtime_Bind_Reason","PORT_OR_PROFILE_PREPARATION_FAILED");
     for(auto* context:contexts)delete context;
     setProperty("Cirrus_Runtime_Bind_Return",uint64_t(ret),32);
-    if(ret!=kIOReturnSuccess){CIRRUS_ERR("amplifier runtime bind rejected: profile=%s endpoints=%lu ret=0x%08X",mPlatformProfile->name,mAmpCount,ret);teardownAmplifierRuntime();return false;}
+    if(ret!=kIOReturnSuccess){CIRRUS_ERR("amplifier runtime bind rejected: profile=%s endpoints=%lu ret=0x%08X",mPlatformProfile->name,mAmplifierCount,ret);teardownAmplifierRuntime();return false;}
     setProperty("Cirrus_Runtime","REGISTERED_BACKENDS");return true;
 }
 void CirrusAudioFixup::teardownAmplifierRuntime() {
@@ -214,8 +154,8 @@ void CirrusAudioFixup::teardownAmplifierRuntime() {
     setProperty("Cirrus_Runtime_Release_Return",uint64_t(ret),32);
     if(ret!=kIOReturnSuccess)CIRRUS_ERR("amplifier runtime teardown incomplete: ret=0x%08X; retained failure evidence",ret);
     for(auto*& port:mRuntimePorts){delete port;port=nullptr;}
-    for(size_t i=0;i<kMaxAmps;++i) {
-        if(mI2CMaps[i])mAmps[i].registerIO=nullptr;
+    for(size_t i=0;i<kMaxAmplifiers;++i) {
+        if(mI2CMaps[i])mAmplifiers[i].registerIO=nullptr;
         delete mI2CMaps[i];mI2CMaps[i]=nullptr;
         delete mI2CBuses[i];mI2CBuses[i]=nullptr;
     }
@@ -387,7 +327,7 @@ bool CirrusAudioFixup::setupNativeSPI(IOService* provider) {
     if(!bootArgEnabled("-cirrusspi")) {
         setProperty("Cirrus_SPI_Status","REQUIRES_SPI_OPTION");CIRRUS_ERR("SPI attachment blocked: -cirrusspi is required");return false;
     }
-    auto format=cirrus::transport::CS35L41SPITransport::config();
+    auto format=cirrus::devices::cs35l41::CS35L41SPIRegisterIO::config();
     if(mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->count) {
         const auto& first=mPlatformProfile->boardConfiguration->amplifiers[0];
         const auto* backend=mBackendRegistry.find(mPlatformProfile->acpiHid,first.siliconId,cirrus::core::BusTransportType::SPI);
@@ -416,10 +356,10 @@ bool CirrusAudioFixup::setupNativeSPI(IOService* provider) {
 }
 
 size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
-    mAmpCount = 0;
+    mAmplifierCount = 0;
     mProbingAmplifiers = true;
     setProperty("Cirrus_SPI_Resource_Count", uint64_t(mNativeSPI.count()), 32);
-    for (size_t i = 0; i < mNativeSPI.count() && i < kMaxAmps; ++i) {
+    for (size_t i = 0; i < mNativeSPI.count() && i < kMaxAmplifiers; ++i) {
         const auto endpoint = mNativeSPI.endpoint(i);
         char key[64]{};
         snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ChipSelect", i);
@@ -450,12 +390,12 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
             CIRRUS_ERR("SPI identity read failed: endpoint=%lu controller=%s CS=%u reg=0x%08X ret=0x%08X",i,endpoint.controllerPath,endpoint.spiChipSelect,identityRegister,io?io->lastError():kIOReturnNotReady);
             continue;
         }
-        const auto* descriptor = cirrus::core::findDeviceById(id);
+        const auto* descriptor = cirrus::core::findAmplifierById(id);
         if(!descriptor) {
             CIRRUS_ERR("SPI silicon unsupported: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization",i,endpoint.controllerPath,endpoint.spiChipSelect,id);
             continue;
         }
-        auto& amp = mAmps[mAmpCount++];
+        auto& amp = mAmplifiers[mAmplifierCount++];
         amp = {};
         snprintf(amp.endpointLabel,sizeof(amp.endpointLabel),"spi%lu",i);
         amp.name=amp.endpointLabel;
@@ -479,14 +419,14 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                    i, endpoint.controllerPath, endpoint.spiChipSelect, endpoint.spiClockHz, endpoint.spiMode, id);
     }
     mProbingAmplifiers = false;
-    setProperty("Cirrus_Detected_Amplifiers", uint64_t(mAmpCount), 32);
-    setProperty("Cirrus_Amp_Discovery",mAmpCount?(mPlatformAuthorized?"DETECTED_AUTHORIZED":"DETECTED_READ_ONLY"):"NONE");
-    return mAmpCount;
+    setProperty("Cirrus_Detected_Amplifiers", uint64_t(mAmplifierCount), 32);
+    setProperty("Cirrus_Amp_Discovery",mAmplifierCount?(mPlatformAuthorized?"DETECTED_AUTHORIZED":"DETECTED_READ_ONLY"):"NONE");
+    return mAmplifierCount;
 }
 
 void CirrusAudioFixup::teardownNativeSPI() {
     teardownAmplifierRuntime();
-    for (auto& amp : mAmps) amp.registerIO = nullptr;
+    for (auto& amp : mAmplifiers) amp.registerIO = nullptr;
     mNativeSPI.shutdown();
 }
 
@@ -573,7 +513,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
         publishDriverVerdict();
     } else {
         CIRRUS_LOG("CirrusAudioFixup starting FULL DRIVER FLOW");
-        fullDriverFlow();
+        bringUpAmplifiers();
         if (mProbeTimer) {
             mProbeTimer->setTimeoutMS(50);
         }
@@ -593,18 +533,18 @@ bool CirrusAudioFixup::start(IOService* provider) {
 // Unsupported models are rejected without silicon-specific writes.
 // Keep the original failure in diagnostics even if cleanup also fails.
 // A debug phase stops at its boundary and never publishes playback readiness.
-void CirrusAudioFixup::fullDriverFlow() {
+void CirrusAudioFixup::bringUpAmplifiers() {
     CIRRUS_LOG("starting hardware initialization flow");
     if (bootArgEnabled("-cirrusro"))
         return;
-    if (!mPlatformAuthorized || !mPlatformProfile || mAmpCount != expectedAmplifierCount()) {
+    if (!mPlatformAuthorized || !mPlatformProfile || mAmplifierCount != expectedAmplifierCount()) {
         setProperty("Cirrus_Runtime_Block_Reason",!mPlatformAuthorized?"BOARD_NOT_AUTHORIZED":"INCOMPLETE_TOPOLOGY");
-        CIRRUS_ERR("initialization blocked: authorized=%u detected=%lu expected=%lu; no amplifier initialization",unsigned(mPlatformAuthorized),mAmpCount,expectedAmplifierCount());
+        CIRRUS_ERR("initialization blocked: authorized=%u detected=%lu expected=%lu; no amplifier initialization",unsigned(mPlatformAuthorized),mAmplifierCount,expectedAmplifierCount());
         publishDriverVerdict();
         return;
     }
-    for (size_t i = 0; i < mAmpCount; ++i) {
-        if (!mAmps[i].present) {
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
+        if (!mAmplifiers[i].present) {
             publishDriverVerdict();
             return;
         }
@@ -620,8 +560,8 @@ void CirrusAudioFixup::fullDriverFlow() {
     for(size_t i=0;i<mAmplifierRuntime.count();++i) {
         const auto* status=mAmplifierRuntime.status(i);
         if(status) {
-            mAmps[i].initialized=status->stage==cirrus::core::AmplifierStage::Ready || status->stage==cirrus::core::AmplifierStage::Playing;
-            if(status->stage==cirrus::core::AmplifierStage::Faulted)mAmps[i].playbackFaulted=true;
+            mAmplifiers[i].initialized=status->stage==cirrus::core::AmplifierStage::Ready || status->stage==cirrus::core::AmplifierStage::Playing;
+            if(status->stage==cirrus::core::AmplifierStage::Faulted)mAmplifiers[i].playbackFaulted=true;
             char key[64]{};
             snprintf(key,sizeof(key),"Cirrus_Runtime_%lu_Stage",i);setProperty(key,uint64_t(status->stage),32);
             snprintf(key,sizeof(key),"Cirrus_Runtime_%lu_FirstFailure",i);setProperty(key,uint64_t(status->firstFailure),32);
@@ -656,7 +596,7 @@ IOReturn CirrusAudioFixup::initializeCS35L41Hardware(AmplifierState& amp) {
 
         setDiagnosticStage(amp, STAGE_PROBE);
 
-        if (!initCodec(amp)) {
+        if (!initializeCS35L41Device(amp)) {
             CIRRUS_ERR("failed to initialize codec for %s", amp.name);
             if (amp.diagnostic.latestFailure == DIAG_OK)
                 recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
@@ -902,7 +842,7 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
                 IOReturn ret=mAmplifierRuntime.resume();
                 setProperty("Cirrus_Runtime_Resume_Return",uint64_t(ret),32);
                 if(ret!=kIOReturnSuccess)CIRRUS_ERR("AMP resume not ready: stage=%u ret=0x%08X; playback blocked",unsigned(mAmplifierRuntime.stage()),ret);
-            } else fullDriverFlow();
+            } else bringUpAmplifiers();
             mNeedsReinitialization=false;
         }
         if (mAmpInterrupt && configureAmplifierInterrupt())
@@ -1203,7 +1143,7 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
         return;
     }
 
-    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, image)) {
+    if (!WMFWParser::parseWMFW(amp.wmfwData, amp.wmfwSize, image)) {
         CIRRUS_ERR("wmfw parsing failed for %s", amp.name);
         recordDiagnosticFailure(amp, DIAG_FIRMWARE_PARSE);
         IOFree(image, sizeof(FirmwareImage));
@@ -1214,11 +1154,11 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
 
     MappedImage* wmfwMapped = (MappedImage*)IOMalloc(sizeof(MappedImage));
     if (wmfwMapped) {
-        if (CirrusFirmwareMapper::mapFirmwareImage(*image, *wmfwMapped)) {
+        if (WMFWMemoryMapper::mapFirmwareImage(*image, *wmfwMapped)) {
             CIRRUS_LOG("mapping wmfw image successful on %s, starting upload", amp.name);
             UploadSession session;
-            FixupRegisterIOAdapter io(this, amp);
-            wmfwUploaded = CirrusFirmwareScheduler::run(amp.name, io, *wmfwMapped, session);
+            ServiceRegisterIO io(this, amp);
+            wmfwUploaded = WMFWUploadScheduler::run(amp.name, io, *wmfwMapped, session);
         } else {
             CIRRUS_ERR("failed to map wmfw image on %s", amp.name);
             recordDiagnosticFailure(amp, DIAG_FIRMWARE_PARSE);
@@ -1239,13 +1179,13 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
         return;
     }
     WMFWControlRef stateRef{}, heartbeatRef{};
-    if (!CirrusFirmwareParser::findControl(image, "HALO_STATE", stateRef) ||
-        !CirrusFirmwareParser::findControl(image, "HALO_HEARTBEAT", heartbeatRef) ||
+    if (!WMFWParser::findControl(image, "HALO_STATE", stateRef) ||
+        !WMFWParser::findControl(image, "HALO_HEARTBEAT", heartbeatRef) ||
         (stateRef.algorithm->id & 0x00FFFFFF) != (image->firmwareId & 0x00FFFFFF) ||
         (heartbeatRef.algorithm->id & 0x00FFFFFF) != (image->firmwareId & 0x00FFFFFF) || stateRef.control->type != WMFW_ADSP2_XM ||
         stateRef.control->len != 4 || heartbeatRef.control->type != WMFW_ADSP2_XM || heartbeatRef.control->len != 4 ||
-        !CirrusFirmwareParser::resolveControl(*image, stateRef, amp.haloStateRegister) ||
-        !CirrusFirmwareParser::resolveControl(*image, heartbeatRef, amp.haloHeartbeatRegister)) {
+        !WMFWParser::resolveControl(*image, stateRef, amp.haloStateRegister) ||
+        !WMFWParser::resolveControl(*image, heartbeatRef, amp.haloHeartbeatRegister)) {
         amp.haloStateRegister = amp.haloHeartbeatRegister = 0;
         recordDiagnosticFailure(amp, DIAG_FIRMWARE_PARSE);
         IOFree(image, sizeof(FirmwareImage));
@@ -1295,8 +1235,8 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
                 WMFWControlRef ref{};
                 uint32_t regAddress = 0;
                 if (ctl.len == 4 && (ctl.type == WMFW_ADSP2_XM || ctl.type == WMFW_ADSP2_YM) &&
-                    CirrusFirmwareParser::findControl(image, ctl.name, ref) &&
-                    CirrusFirmwareParser::resolveControl(*image, ref, regAddress)) {
+                    WMFWParser::findControl(image, ctl.name, ref) &&
+                    WMFWParser::resolveControl(*image, ref, regAddress)) {
                     strlcpy(amp.diagnosticControls[amp.diagnosticControlCount].name, ctl.name, sizeof(amp.diagnosticControls[0].name));
                     amp.diagnosticControls[amp.diagnosticControlCount].address = regAddress;
                     CIRRUS_LOG("registered diagnostic control '%s' at 0x%08X on %s", ctl.name, regAddress, amp.name);
@@ -1309,8 +1249,8 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
     for (const char* name : calibrationControls) {
         WMFWControlRef ref{};
         uint32_t address = 0;
-        if (CirrusFirmwareParser::findControl(image, name, ref) && ref.algorithm->id == 0xCD && ref.control->type == WMFW_ADSP2_XM &&
-            ref.control->len == 4 && CirrusFirmwareParser::resolveControl(*image, ref, address) &&
+        if (WMFWParser::findControl(image, name, ref) && ref.algorithm->id == 0xCD && ref.control->type == WMFW_ADSP2_XM &&
+            ref.control->len == 4 && WMFWParser::resolveControl(*image, ref, address) &&
             amp.diagnosticControlCount < sizeof(amp.diagnosticControls) / sizeof(amp.diagnosticControls[0])) {
             auto& control = amp.diagnosticControls[amp.diagnosticControlCount++];
             strlcpy(control.name, name, sizeof(control.name));
@@ -1326,15 +1266,15 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
     }
     CIRRUS_LOG("found %u matching diagnostic controls on %s", amp.diagnosticControlCount, amp.name);
 
-    if (CirrusFirmwareParser::parseBIN(amp.binData, amp.binSize, image)) {
+    if (WMFWParser::parseBIN(amp.binData, amp.binSize, image)) {
         CIRRUS_LOG("bin parsing successful on %s, found %u coefficient blocks", amp.name, image->coefficientCount);
         MappedImage* coeffMapped = (MappedImage*)IOMalloc(sizeof(MappedImage));
         if (coeffMapped) {
-            if (CirrusFirmwareMapper::mapCoefficients(*image, *coeffMapped) && coeffMapped->regionCount > 0) {
+            if (WMFWMemoryMapper::mapCoefficients(*image, *coeffMapped) && coeffMapped->regionCount > 0) {
                 CIRRUS_LOG("starting coefficient file upload on %s", amp.name);
                 UploadSession session;
-                FixupRegisterIOAdapter io(this, amp);
-                coefficientsUploaded = CirrusFirmwareScheduler::run(amp.name, io, *coeffMapped, session);
+                ServiceRegisterIO io(this, amp);
+                coefficientsUploaded = WMFWUploadScheduler::run(amp.name, io, *coeffMapped, session);
             } else {
                 CIRRUS_ERR("coefficient mapping produced no uploadable regions on %s", amp.name);
                 recordDiagnosticFailure(amp, DIAG_COEFFICIENT_PARSE);
@@ -1369,7 +1309,7 @@ void CirrusAudioFixup::initializeFirmware(AmplifierState& amp, const char* phase
         IOFree(image, sizeof(FirmwareImage));
         return;
     }
-    bool booted = bringupDSP(amp);
+    bool booted = bringUpDSP(amp);
 
     if (booted && verifyDSPAlive(amp)) {
         CIRRUS_LOG("dsp is successfully verified alive on %s", amp.name);
@@ -1432,16 +1372,16 @@ bool CirrusAudioFixup::applyCalibration(AmplifierState& amp, const FirmwareImage
     uint32_t addrAmbient = 0, addrR = 0, addrStatus = 0, addrChecksum = 0;
     WMFWControlRef refAmbient{}, refR{}, refStatus{}, refChecksum{};
     bool resolved =
-        CirrusFirmwareParser::findControl(image, "CAL_AMBIENT", refAmbient) && refAmbient.algorithm->id == 0xCD &&
+        WMFWParser::findControl(image, "CAL_AMBIENT", refAmbient) && refAmbient.algorithm->id == 0xCD &&
         refAmbient.control->type == WMFW_ADSP2_XM && refAmbient.control->len == 4 &&
-        CirrusFirmwareParser::resolveControl(*image, refAmbient, addrAmbient) && CirrusFirmwareParser::findControl(image, "CAL_R", refR) &&
+        WMFWParser::resolveControl(*image, refAmbient, addrAmbient) && WMFWParser::findControl(image, "CAL_R", refR) &&
         refR.algorithm->id == 0xCD && refR.control->type == WMFW_ADSP2_XM && refR.control->len == 4 &&
-        CirrusFirmwareParser::resolveControl(*image, refR, addrR) && CirrusFirmwareParser::findControl(image, "CAL_STATUS", refStatus) &&
+        WMFWParser::resolveControl(*image, refR, addrR) && WMFWParser::findControl(image, "CAL_STATUS", refStatus) &&
         refStatus.algorithm->id == 0xCD && refStatus.control->type == WMFW_ADSP2_XM && refStatus.control->len == 4 &&
-        CirrusFirmwareParser::resolveControl(*image, refStatus, addrStatus) &&
-        CirrusFirmwareParser::findControl(image, "CAL_CHECKSUM", refChecksum) && refChecksum.algorithm->id == 0xCD &&
+        WMFWParser::resolveControl(*image, refStatus, addrStatus) &&
+        WMFWParser::findControl(image, "CAL_CHECKSUM", refChecksum) && refChecksum.algorithm->id == 0xCD &&
         refChecksum.control->type == WMFW_ADSP2_XM && refChecksum.control->len == 4 &&
-        CirrusFirmwareParser::resolveControl(*image, refChecksum, addrChecksum);
+        WMFWParser::resolveControl(*image, refChecksum, addrChecksum);
 
     if (!resolved) {
         CIRRUS_ERR("failed to resolve all 4 calibration controls in algorithm 0xCD on %s", amp.name);
@@ -1644,7 +1584,7 @@ void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* send
 // An ACPI HID describes the provider, not the amplifier silicon. Check DEVID
 // against the registry before using the endpoint's channel and tuning.
 size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
-    mAmpCount=0;
+    mAmplifierCount=0;
     if(!mPlatformAuthorized || !mPlatformProfile || !mPlatformProfile->boardConfiguration)return 0;
     const auto& board=*mPlatformProfile->boardConfiguration;
     int length=sizeof(mRuntimeControllerPath);
@@ -1655,7 +1595,7 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         if(!mI2CController)return 0;
     }
     cirrus::transport::VoodooI2CController controller(mProvider);
-    for(size_t i=0;i<board.count && mAmpCount<kMaxAmps;++i) {
+    for(size_t i=0;i<board.count && mAmplifierCount<kMaxAmplifiers;++i) {
         const auto& binding=board.amplifiers[i];
         const auto& endpoint=binding.endpoint;
         if(endpoint.transport!=cirrus::core::BusTransportType::I2C || endpoint.tenBitAddress ||
@@ -1678,36 +1618,36 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         if(!readable || (id&backend->identityMask)!=binding.siliconId) {
             CIRRUS_ERR("I2C identity rejected: endpoint=%lu controller=%s address=0x%X actual=0x%08X expected=0x%08X mask=0x%08X ret=0x%08X",i,endpoint.controllerPath,unsigned(endpoint.i2cAddress),id,binding.siliconId,backend->identityMask,map.lastError());continue;
         }
-        const auto* descriptor=cirrus::core::findDeviceById(binding.siliconId);
+        const auto* descriptor=cirrus::core::findAmplifierById(binding.siliconId);
         if(!descriptor){CIRRUS_ERR("I2C silicon unregistered: endpoint=%lu DEVID=0x%08X",i,binding.siliconId);continue;}
-        auto& amp=mAmps[mAmpCount];amp={};
+        auto& amp=mAmplifiers[mAmplifierCount];amp={};
         snprintf(amp.endpointLabel,sizeof(amp.endpointLabel),"i2c%lu",i);amp.name=amp.endpointLabel;
-        amp.endpoint=endpoint;amp.address=uint8_t(endpoint.i2cAddress);amp.endpointIndex=uint8_t(mAmpCount);
+        amp.endpoint=endpoint;amp.address=uint8_t(endpoint.i2cAddress);amp.endpointIndex=uint8_t(mAmplifierCount);
         amp.channel=static_cast<cirrus::core::AudioChannel>(binding.channelIndex);
         if(readOnly) {
-            mI2CBuses[mAmpCount]=new cirrus::transport::I2CRegisterBus(mI2CController,{endpoint.i2cAddress,endpoint.tenBitAddress});
-            if(!mI2CBuses[mAmpCount])break;
-            mI2CMaps[mAmpCount]=new cirrus::core::RegisterMap(*mI2CBuses[mAmpCount],*backend->format(cirrus::core::BusTransportType::I2C),false);
-            if(!mI2CMaps[mAmpCount])break;
-            amp.registerIO=mI2CMaps[mAmpCount];
+            mI2CBuses[mAmplifierCount]=new cirrus::transport::I2CRegisterBus(mI2CController,{endpoint.i2cAddress,endpoint.tenBitAddress});
+            if(!mI2CBuses[mAmplifierCount])break;
+            mI2CMaps[mAmplifierCount]=new cirrus::core::RegisterMap(*mI2CBuses[mAmplifierCount],*backend->format(cirrus::core::BusTransportType::I2C),false);
+            if(!mI2CMaps[mAmplifierCount])break;
+            amp.registerIO=mI2CMaps[mAmplifierCount];
         }
-        amp.model=descriptor->model;amp.deviceId=binding.siliconId;amp.present=true;++mAmpCount;
+        amp.model=descriptor->model;amp.deviceId=binding.siliconId;amp.present=true;++mAmplifierCount;
     }
-    setProperty("Cirrus_Detected_Amplifiers",uint64_t(mAmpCount),32);
-    setProperty("Cirrus_Amp_Discovery",mAmpCount?"DETECTED_CONFIGURED_I2C":"NONE");
-    return mAmpCount;
+    setProperty("Cirrus_Detected_Amplifiers",uint64_t(mAmplifierCount),32);
+    setProperty("Cirrus_Amp_Discovery",mAmplifierCount?"DETECTED_CONFIGURED_I2C":"NONE");
+    return mAmplifierCount;
 }
 
 size_t CirrusAudioFixup::detectAmplifiers() {
     if(mPlatformProfile && mPlatformProfile->boardConfiguration)return detectConfiguredI2CAmplifiers();
-    for (size_t i = 0; i < kMaxAmps; ++i) {
-        mAmps[i].present = false;
+    for (size_t i = 0; i < kMaxAmplifiers; ++i) {
+        mAmplifiers[i].present = false;
     }
 
     const cirrus::platform::PlatformProfile& profile = mPlatformProfile ? *mPlatformProfile : cirrus::platform::defaultPlatformProfile();
     bool explicitLegacyProbe = bootArgEnabled("-cirruslegacyprobe");
     size_t candidateCount = mPlatformAuthorized || explicitLegacyProbe
-                                ? (profile.endpointCount < kMaxAmps ? profile.endpointCount : kMaxAmps)
+                                ? (profile.endpointCount < kMaxAmplifiers ? profile.endpointCount : kMaxAmplifiers)
                                 : 0;
 
     size_t detected = 0;
@@ -1725,14 +1665,14 @@ size_t CirrusAudioFixup::detectAmplifiers() {
                     (static_cast<uint32_t>(readBuf[2]) << 8) | static_cast<uint32_t>(readBuf[3]);
         }
 
-        const cirrus::core::DeviceDescriptor* descriptor = cirrus::core::findDeviceById(devId);
+        const cirrus::core::AmplifierDescriptor* descriptor = cirrus::core::findAmplifierById(devId);
         if (descriptor && descriptor->model == profile.amplifierModel) {
-            mAmps[detected].name = endpoint.name;
-            mAmps[detected].address = addr;
-            mAmps[detected].model = descriptor->model;
-            mAmps[detected].channel = endpoint.channel;
-            mAmps[detected].present = true;
-            mAmps[detected].deviceId = devId;
+            mAmplifiers[detected].name = endpoint.name;
+            mAmplifiers[detected].address = addr;
+            mAmplifiers[detected].model = descriptor->model;
+            mAmplifiers[detected].channel = endpoint.channel;
+            mAmplifiers[detected].present = true;
+            mAmplifiers[detected].deviceId = devId;
             detected++;
             CIRRUS_LOG("detected %s amplifier %s at address 0x%02X (DEVID=0x%08X)", descriptor->name, endpoint.name, addr, devId);
         } else if (ok && devId != 0) {
@@ -1743,18 +1683,18 @@ size_t CirrusAudioFixup::detectAmplifiers() {
 
     setProperty("Cirrus_Discovery_Fallback", kOSBooleanFalse);
 
-    mAmpCount = detected;
-    setProperty("Cirrus_Detected_Amplifiers", (uint64_t)mAmpCount, 32);
-    setProperty("Cirrus_Amp_Discovery", mAmpCount ? "DETECTED" : "NONE");
-    CIRRUS_LOG("dynamic amplifier detection complete: %lu speaker(s) active (profile=%s)", mAmpCount, profile.name);
-    return mAmpCount;
+    mAmplifierCount = detected;
+    setProperty("Cirrus_Detected_Amplifiers", (uint64_t)mAmplifierCount, 32);
+    setProperty("Cirrus_Amp_Discovery", mAmplifierCount ? "DETECTED" : "NONE");
+    CIRRUS_LOG("dynamic amplifier detection complete: %lu speaker(s) active (profile=%s)", mAmplifierCount, profile.name);
+    return mAmplifierCount;
 }
 
 void CirrusAudioFixup::runReadOnlyProbe() {
     CIRRUS_LOG("read-only probe begin");
 
-    for (size_t i = 0; i < mAmpCount; ++i) {
-        probeAmp(mAmps[i]);
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
+        probeAmplifier(mAmplifiers[i]);
     }
 
     publishStatistics();
@@ -1809,9 +1749,9 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
     IOService* audioCtrl = mHdaPci ? mHdaPci : getAudioController();
     if (!audioCtrl) {
         if (mHdaState.missCount < 20 && ++mHdaState.missCount == 20) {
-            for (size_t i = 0; i < mAmpCount; ++i) {
-                setDiagnosticStage(mAmps[i], STAGE_HDA_DETECT);
-                recordDiagnosticFailure(mAmps[i], DIAG_HDA_CONTROLLER, 0, 1, 0, kIOReturnNotFound, false);
+            for (size_t i = 0; i < mAmplifierCount; ++i) {
+                setDiagnosticStage(mAmplifiers[i], STAGE_HDA_DETECT);
+                recordDiagnosticFailure(mAmplifiers[i], DIAG_HDA_CONTROLLER, 0, 1, 0, kIOReturnNotFound, false);
             }
         }
         publishStatus(mHdaState.missCount >= 20 ? "MISSING_AFTER_20_POLLS" : "MISSING");
@@ -1912,9 +1852,9 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
     bool streamActive = converterPrepared;
 
     if (outputRunning && activeStream != 0 && !supportedHdaFormat(activeFormat)) {
-        for (size_t i = 0; i < mAmpCount; ++i) {
-            setDiagnosticStage(mAmps[i], STAGE_HDA_DETECT);
-            recordDiagnosticFailure(mAmps[i], DIAG_HDA_STREAM_FORMAT, activeDescriptor, 1, activeFormat, kIOReturnSuccess, false);
+        for (size_t i = 0; i < mAmplifierCount; ++i) {
+            setDiagnosticStage(mAmplifiers[i], STAGE_HDA_DETECT);
+            recordDiagnosticFailure(mAmplifiers[i], DIAG_HDA_STREAM_FORMAT, activeDescriptor, 1, activeFormat, kIOReturnSuccess, false);
         }
     }
 
@@ -1979,7 +1919,7 @@ bool CirrusAudioFixup::checkProtectionStatus(AmplifierState& amp) {
 // when the final readback and power-down acknowledgement agree.
 // playbackActive remains true after unverified cleanup to allow bounded retries.
 bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
-    if (amp.model != cirrus::core::CodecModel::CS35L41) {
+    if (amp.model != cirrus::core::AmplifierModel::CS35L41) {
         amp.playbackFaulted = true;
         recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, 0, 0, 0, kIOReturnNotReady, false);
         return false;
@@ -2076,7 +2016,7 @@ bool CirrusAudioFixup::stopPlayback(AmplifierState& amp) {
 // bounded recovery policy because it cannot observe the selected output.
 bool CirrusAudioFixup::stopRuntimePlayback(AmplifierState& amp) {
     using namespace cirrus::devices::cs35l41;
-    if (amp.model != cirrus::core::CodecModel::CS35L41) {
+    if (amp.model != cirrus::core::AmplifierModel::CS35L41) {
         amp.playbackFaulted = true;
         recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, 0, 0, 0, kIOReturnNotReady, false);
         return false;
@@ -2091,7 +2031,7 @@ bool CirrusAudioFixup::stopRuntimePlayback(AmplifierState& amp) {
     }
     uint64_t now = 0;
     absolutetime_to_nanoseconds(mach_absolute_time(), &now);
-    FixupRegisterIOAdapter io(this, amp, TRACE_PLAYBACK);
+    ServiceRegisterIO io(this, amp, TRACE_PLAYBACK);
     auto result = Playback::shutdown(io, state, now / 1000000, amp.dspAlive, amp.firmwareIdVersion, playbackTimeMilliseconds);
     if (result == PlaybackProgress::Pending) {
         // This flag means cleanup is unverified, not that audio is unmuted.
@@ -2189,8 +2129,8 @@ void CirrusAudioFixup::audioEventReceived(OSObject* owner, const cirrus::platfor
 bool CirrusAudioFixup::retryFirmwareIdentity() {
     bool waiting = false;
     bool changed = false;
-    for (size_t i = 0; i < mAmpCount; ++i) {
-        auto& amp = mAmps[i];
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
+        auto& amp = mAmplifiers[i];
         if (!amp.present || !amp.firmwareIdentityPending || amp.playbackFaulted)
             continue;
         discoverFirmware(amp);
@@ -2210,7 +2150,7 @@ bool CirrusAudioFixup::retryFirmwareIdentity() {
             // Re-enter complete chip initialization only after an identity
             // is available; no default SSID or unrelated tuning is invented.
             teardownAmplifierRuntime();
-            fullDriverFlow();
+            bringUpAmplifiers();
             changed = true;
         }
     }
@@ -2241,7 +2181,7 @@ IOReturn CirrusAudioFixup::commitCS35L41Playback(AmplifierState& amp) {
         amp.playbackStartCancelled=true;return kIOReturnNotReady;
     }
     if(amp.playbackTransition.phase!=PlaybackPhase::Prepared)return kIOReturnNotReady;
-    FixupRegisterIOAdapter io(this,amp,TRACE_PLAYBACK);
+    ServiceRegisterIO io(this,amp,TRACE_PLAYBACK);
     uint32_t gain=amp.monitorCount>=1?tuning::encodeGain(amp.tuningPcmGain):registers::kPlaybackBypassGain;
     if(!Playback::commit(io,amp.playbackTransition,gain,amp.monitorCount>=1)) {
         amp.playbackFaulted=true;recordDiagnosticFailure(amp,amp.playbackTransition.failure);return kIOReturnNotReady;
@@ -2262,7 +2202,7 @@ void CirrusAudioFixup::monitorCS35L41(AmplifierState& amp,const cirrus::core::Pl
     const uint64_t nowMs=context.nowMs;
         if (!amp.present)
             return;
-        if (amp.model != cirrus::core::CodecModel::CS35L41) {
+        if (amp.model != cirrus::core::AmplifierModel::CS35L41) {
             // Initialization dispatch is not enough: runtime must also keep
             // unimplemented chips away from CS35L41 register transactions.
             amp.playbackFaulted = true;
@@ -2440,7 +2380,7 @@ void CirrusAudioFixup::monitorCS35L41(AmplifierState& amp,const cirrus::core::Pl
             using namespace cirrus::devices::cs35l41;
             auto& transition = amp.playbackTransition;
             const bool dspMode = amp.monitorCount >= 1;
-            if (amp.model != cirrus::core::CodecModel::CS35L41 ||
+            if (amp.model != cirrus::core::AmplifierModel::CS35L41 ||
                 (!dspMode && !bootArgEnabled("-cirrusnodsp")) ||
                 (dspMode && (!amp.dspAlive || !amp.firmwareValidated))) {
                 amp.playbackFaulted = true;
@@ -2454,7 +2394,7 @@ void CirrusAudioFixup::monitorCS35L41(AmplifierState& amp,const cirrus::core::Pl
                 transition.streamFormat = mHdaState.lastFormat;
                 setDiagnosticStage(amp, STAGE_PLAYBACK_PREPARE);
             }
-            FixupRegisterIOAdapter io(this, amp, TRACE_PLAYBACK);
+            ServiceRegisterIO io(this, amp, TRACE_PLAYBACK);
             auto result = Playback::advance(io, transition, nowMs, dspMode, amp.firmwareIdVersion, playbackTimeMilliseconds);
             if (result == PlaybackProgress::Failed) {
                 const auto failure = transition.failure;
@@ -2553,8 +2493,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
     }
 }
 
-void CirrusAudioFixup::probeAmp(AmplifierState& amp) {
-    if(amp.model!=cirrus::core::CodecModel::CS35L41) {
+void CirrusAudioFixup::probeAmplifier(AmplifierState& amp) {
+    if(amp.model!=cirrus::core::AmplifierModel::CS35L41) {
         CIRRUS_LOG("endpoint %s model=%u cached ID=0x%08X; diagnostic registers belong to its backend",amp.name,unsigned(amp.model),amp.deviceId);
         return;
     }
@@ -2606,7 +2546,7 @@ bool CirrusAudioFixup::transferToAddress(UInt8 address, UInt8* writeBuffer, UInt
     }
 
     setProperty("CirrusTransferCalled", kOSBooleanTrue);
-    cirrus::transport::VoodooI2CTransport transport(mProvider, address);
+    cirrus::transport::VoodooI2CProvider transport(mProvider, address);
     bool success = transport.transfer(writeBuffer, writeLength, readBuffer, readLength);
     IOReturn ret = transport.lastReturn();
     mLastTransferReturn = ret;
@@ -2908,9 +2848,9 @@ void CirrusAudioFixup::recordDiagnosticFailure(AmplifierState& amp, DiagnosticFa
 // The recursion guard prevents those reads from starting another snapshot.
 // Keep the original record and bounded trace even when the device is offline.
 void CirrusAudioFixup::captureFailureSnapshot(AmplifierState& amp,DiagnosticFailure failure) {
-    size_t index=0;while(index<mAmpCount && &mAmps[index]!=&amp)++index;
+    size_t index=0;while(index<mAmplifierCount && &mAmplifiers[index]!=&amp)++index;
     if(index<mAmplifierRuntime.count())mAmplifierRuntime.captureDiagnostics(index);
-    else if(amp.model==cirrus::core::CodecModel::CS35L41 && amp.deviceId==cirrus::devices::cs35l41::registers::kValDeviceId)
+    else if(amp.model==cirrus::core::AmplifierModel::CS35L41 && amp.deviceId==cirrus::devices::cs35l41::registers::kValDeviceId)
         captureCS35L41FailureSnapshot(amp,failure);
 }
 void CirrusAudioFixup::captureCS35L41FailureSnapshot(AmplifierState& amp,DiagnosticFailure failure) {
@@ -2959,25 +2899,25 @@ void CirrusAudioFixup::captureCS35L41FailureSnapshot(AmplifierState& amp,Diagnos
 // A fault takes precedence over a deliberate debug halt. READY_DSP describes
 // the driver's verified state; speaker routing remains a separate check.
 void CirrusAudioFixup::publishDriverVerdict() {
-    bool topologyComplete = mPlatformProfile && mAmpCount == expectedAmplifierCount();
-    for (size_t i = 0; i < mAmpCount; ++i)
-        topologyComplete &= mAmps[i].present;
-    bool allInitialized = (mAmpCount > 0);
-    bool allDsp = (mAmpCount > 0);
+    bool topologyComplete = mPlatformProfile && mAmplifierCount == expectedAmplifierCount();
+    for (size_t i = 0; i < mAmplifierCount; ++i)
+        topologyComplete &= mAmplifiers[i].present;
+    bool allInitialized = (mAmplifierCount > 0);
+    bool allDsp = (mAmplifierCount > 0);
     bool anyFaulted = false;
     bool identityPending = false,allLegacyCS=true;
-    for (size_t i = 0; i < mAmpCount; ++i) {
-        if (!mAmps[i].present)
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
+        if (!mAmplifiers[i].present)
             continue;
-        allLegacyCS &= mAmps[i].model==cirrus::core::CodecModel::CS35L41;
+        allLegacyCS &= mAmplifiers[i].model==cirrus::core::AmplifierModel::CS35L41;
         const auto* status=mAmplifierRuntime.status(i);
-        const bool ready=mAmps[i].model==cirrus::core::CodecModel::CS35L41?mAmps[i].initialized:
+        const bool ready=mAmplifiers[i].model==cirrus::core::AmplifierModel::CS35L41?mAmplifiers[i].initialized:
             status && (status->stage==cirrus::core::AmplifierStage::Ready || status->stage==cirrus::core::AmplifierStage::Playing);
         if(!ready)allInitialized=false;
-        if (!mAmps[i].dspAlive || !mAmps[i].firmwareValidated)
+        if (!mAmplifiers[i].dspAlive || !mAmplifiers[i].firmwareValidated)
             allDsp = false;
-        identityPending |= mAmps[i].firmwareIdentityPending;
-        if (mAmps[i].playbackFaulted)
+        identityPending |= mAmplifiers[i].firmwareIdentityPending;
+        if (mAmplifiers[i].playbackFaulted)
             anyFaulted = true;
     }
     anyFaulted |= mAmplifierRuntime.stage()==cirrus::core::AmplifierStage::Faulted;
@@ -2999,9 +2939,9 @@ void CirrusAudioFixup::publishDriverVerdict() {
         setProperty("Cirrus_Driver_Verdict", value);
         value->release();
     }
-    for(size_t i=0;i<mAmpCount;++i)
-        CIRRUS_LOG("DIAG_VERDICT driver=%s amp=%s first=%s latest=%s last_good=%s",verdict,mAmps[i].name,
-                   failureName(mAmps[i].diagnostic.firstFailure),failureName(mAmps[i].diagnostic.latestFailure),stageName(mAmps[i].diagnostic.lastGoodStage));
+    for(size_t i=0;i<mAmplifierCount;++i)
+        CIRRUS_LOG("DIAG_VERDICT driver=%s amp=%s first=%s latest=%s last_good=%s",verdict,mAmplifiers[i].name,
+                   failureName(mAmplifiers[i].diagnostic.firstFailure),failureName(mAmplifiers[i].diagnostic.latestFailure),stageName(mAmplifiers[i].diagnostic.lastGoodStage));
     setProperty("Cirrus_Runtime_Stage",uint64_t(mAmplifierRuntime.stage()),32);
 
 }
@@ -3288,11 +3228,11 @@ bool CirrusAudioFixup::sendMailboxCommand(AmplifierState& amp, UInt32 command, U
 // Recheck identity before and after software reset.
 // Do not reuse a prior present flag or continue from a partially completed
 // reset. Later stages need the current silicon and OTP boot result.
-bool CirrusAudioFixup::initCodec(AmplifierState& amp) {
+bool CirrusAudioFixup::initializeCS35L41Device(AmplifierState& amp) {
     setDiagnosticStage(amp, STAGE_PROBE);
     amp.present = false;
 
-    FixupRegisterIOAdapter io(this, amp);
+    ServiceRegisterIO io(this, amp);
     auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
@@ -3323,7 +3263,7 @@ bool CirrusAudioFixup::initCodec(AmplifierState& amp) {
     setDiagnosticStage(amp, STAGE_RESET);
 
     auto result = device.initialize(io);
-    if (result == cirrus::core::AudioDevice::InitResult::ResetFailed) {
+    if (result == cirrus::core::AmplifierDevice::InitResult::ResetFailed) {
         CIRRUS_ERR("failed to send soft reset to %s", amp.name);
         recordDiagnosticFailure(amp, DIAG_RESET_WRITE, cirrus::devices::cs35l41::registers::kRegSoftwareReset,
                                 cirrus::devices::cs35l41::registers::kValSoftwareReset, 0, mLastTransferReturn);
@@ -3331,21 +3271,21 @@ bool CirrusAudioFixup::initCodec(AmplifierState& amp) {
     }
 
     setDiagnosticStage(amp, STAGE_OTP_BOOT);
-    if (result == cirrus::core::AudioDevice::InitResult::BootTimeout) {
+    if (result == cirrus::core::AmplifierDevice::InitResult::BootTimeout) {
         CIRRUS_ERR("otp boot complete polling failed on %s", amp.name);
         recordDiagnosticFailure(amp, DIAG_OTP_TIMEOUT, cirrus::devices::cs35l41::registers::kRegIrq1Status4,
                                 cirrus::devices::cs35l41::registers::kMaskOtpBootDone, 0);
         return false;
     }
 
-    if (result == cirrus::core::AudioDevice::InitResult::BootError) {
+    if (result == cirrus::core::AmplifierDevice::InitResult::BootError) {
         UInt32 otpStatus = 0;
         readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1Status3, &otpStatus, TRACE_PROBE);
         recordDiagnosticFailure(amp, DIAG_OTP_BOOT_ERROR, cirrus::devices::cs35l41::registers::kRegIrq1Status3, 0, otpStatus);
         return false;
     }
 
-    if (result != cirrus::core::AudioDevice::InitResult::Success) {
+    if (result != cirrus::core::AmplifierDevice::InitResult::Success) {
         CIRRUS_ERR("failed to initialize %s", amp.name);
         return false;
     }
@@ -3671,7 +3611,7 @@ bool CirrusAudioFixup::applyErrataPatch(AmplifierState& amp) {
 }
 
 bool CirrusAudioFixup::unpackOTP(AmplifierState& amp) {
-    FixupRegisterIOAdapter io(this, amp);
+    ServiceRegisterIO io(this, amp);
     auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
     if (!device.unpackOTP(io)) {
@@ -3736,7 +3676,7 @@ bool CirrusAudioFixup::applyRegisterSequence(AmplifierState& amp, const Register
 bool CirrusAudioFixup::applyPLL(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
-    FixupRegisterIOAdapter io(this, amp);
+    ServiceRegisterIO io(this, amp);
     auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
@@ -3772,7 +3712,7 @@ bool CirrusAudioFixup::applyPLL(AmplifierState& amp) {
 bool CirrusAudioFixup::applyASP(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
-    FixupRegisterIOAdapter io(this, amp);
+    ServiceRegisterIO io(this, amp);
     auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
@@ -3801,7 +3741,7 @@ bool CirrusAudioFixup::applyASP(AmplifierState& amp) {
 bool CirrusAudioFixup::applyGPIO(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
-    FixupRegisterIOAdapter io(this, amp);
+    ServiceRegisterIO io(this, amp);
     auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
 
@@ -4355,7 +4295,7 @@ void CirrusAudioFixup::discoverFirmware(AmplifierState& amp) {
     setProperty(propFW, (uint64_t)binCrc, 32);
 
     uint32_t fwVersion = foundRes->wmfwSize >= 12 ? foundRes->wmfw[11] : 0;
-    uint32_t binVersion = chanBinSize >= 12 ? CirrusFirmwareParser::readLE32(chanBin + 8) : 0;
+    uint32_t binVersion = chanBinSize >= 12 ? WMFWParser::readLE32(chanBin + 8) : 0;
 
     char propFwVer[64];
     snprintf(propFwVer, sizeof(propFwVer), "Cirrus_WMFW_Container_Version_%s", amp.name);
@@ -4388,7 +4328,7 @@ void CirrusAudioFixup::discoverFirmware(AmplifierState& amp) {
 // Start the selected Halo image while keeping speaker output gated.
 // Firmware control addresses come from the parsed image. Do not substitute
 // addresses from another image merely because its algorithm names match.
-bool CirrusAudioFixup::bringupDSP(AmplifierState& amp) {
+bool CirrusAudioFixup::bringUpDSP(AmplifierState& amp) {
     if (!amp.firmwareValidated || !amp.haloStateRegister || !amp.haloHeartbeatRegister)
         return false;
     auto failBoot = [&]() -> bool {
@@ -4746,7 +4686,7 @@ bool CirrusAudioFixup::parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& ou
     outImage.algorithmCount = 0;
     if (!bulkRead(amp, 0x02800000, table, 40, TRACE_FIRMWARE))
         return false;
-    uint32_t count = CirrusFirmwareParser::readUnpacked32BE(table, 9);
+    uint32_t count = WMFWParser::readUnpacked32BE(table, 9);
     if (!count || count > 31)
         return false;
     size_t length = 40 + count * 24;
@@ -4758,7 +4698,7 @@ bool CirrusAudioFixup::parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& ou
             return false;
         offset += chunk;
     }
-    return CirrusFirmwareParser::parseAlgorithmTable(table, length, outImage);
+    return WMFWParser::parseAlgorithmTable(table, length, outImage);
 }
 
 void CirrusAudioFixup::uploadFirmware(AmplifierState& amp, const char* phaseArg) {
@@ -4776,7 +4716,7 @@ void CirrusAudioFixup::uploadFirmware(AmplifierState& amp, const char* phaseArg)
         return;
     }
 
-    if (!CirrusFirmwareParser::parseWMFW(amp.wmfwData, amp.wmfwSize, image)) {
+    if (!WMFWParser::parseWMFW(amp.wmfwData, amp.wmfwSize, image)) {
         CIRRUS_ERR("wmfw parsing failed on %s", amp.name);
         IOFree(image, sizeof(FirmwareImage));
         return;
@@ -4789,7 +4729,7 @@ void CirrusAudioFixup::uploadFirmware(AmplifierState& amp, const char* phaseArg)
         return;
     }
 
-    if (!CirrusFirmwareMapper::mapFirmwareImage(*image, *mappedImg)) {
+    if (!WMFWMemoryMapper::mapFirmwareImage(*image, *mappedImg)) {
         CIRRUS_ERR("firmware mapping failed on %s", amp.name);
         IOFree(mappedImg, sizeof(MappedImage));
         IOFree(image, sizeof(FirmwareImage));
@@ -4797,8 +4737,8 @@ void CirrusAudioFixup::uploadFirmware(AmplifierState& amp, const char* phaseArg)
     }
 
     UploadSession session;
-    FixupRegisterIOAdapter io(this, amp);
-    if (CirrusFirmwareScheduler::run(amp.name, io, *mappedImg, session)) {
+    ServiceRegisterIO io(this, amp);
+    if (WMFWUploadScheduler::run(amp.name, io, *mappedImg, session)) {
         CIRRUS_LOG("firmware upload complete on %s", amp.name);
     } else {
         CIRRUS_ERR("firmware upload failed on %s", amp.name);

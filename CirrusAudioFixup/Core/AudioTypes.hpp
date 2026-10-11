@@ -1,5 +1,5 @@
 //
-// Types.hpp
+// AudioTypes.hpp
 // Identifiers shared by platform profiles and device code.
 // Sample rates, channels and codec names describe possible hardware. Their
 // presence here does not mean the current backend can drive every value.
@@ -50,7 +50,7 @@ enum class BusTransportType : uint8_t {
     SoundWire,
 };
 
-enum class CodecModel : uint16_t {
+enum class AmplifierModel : uint16_t {
     Unknown = 0,
     CS35L41 = 0x3541,
     CS35L45 = 0x3545,

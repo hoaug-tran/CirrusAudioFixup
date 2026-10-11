@@ -55,13 +55,13 @@ struct IOACPIPlatformDevice {
     (p/'kern/clock.h').write_text('#pragma once\n#include "IOKit/IOLib.h"\ninline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* n){*n=t;}\n')
     (p/'mach/mach_time.h').write_text('#pragma once\n#include "IOKit/IOLib.h"\ninline uint64_t mach_absolute_time(){return ++now;}\n')
     (p/'test.cpp').write_text(r'''
-#include "Transport/AMD/AMDACPIController.hpp"
+#include "Transport/AMD/AMDSPIController.hpp"
 using namespace cirrus::transport;using namespace cirrus::transport::amd;
 int main(){
  IOService owner;SPIEndpoint ep{0,1000000,0};uint8_t tx[6]{},rx[4]{};
  for(unsigned revision=1;revision<=2;++revision){
   IOACPIPlatformDevice acpi;acpi.hid.value=revision==1?"AMDI0061":"AMDI0062";
-  AMDACPIController bus;assert(bus.bind(&acpi,&owner)==0&&acpi.refs==2&&acpi.opened);
+  AMDSPIController bus;assert(bus.bind(&acpi,&owner)==0&&acpi.refs==2&&acpi.opened);
   assert(bus.bind(&acpi,&owner)==kIOReturnBusy);bus.suspend();
   assert(bus.command(ep,tx,6,rx,4)==kIOReturnNotReady);
   acpi.power=3;assert(bus.resume()==kIOReturnNotReady);
@@ -72,7 +72,7 @@ int main(){
   assert(acpi.hid.refs==1&&acpi.refs==1&&acpi.closes==2);
  }
  for(unsigned failure=0;failure<7;++failure){
-  IOACPIPlatformDevice acpi;AMDACPIController bus;
+  IOACPIPlatformDevice acpi;AMDSPIController bus;
   if(failure==0)acpi.hid.value="AMDI9999";
   if(failure==1)acpi.opened=true;
   if(failure==2)acpi.failOpen=true;
@@ -83,12 +83,12 @@ int main(){
   assert(bus.bind(&acpi,&owner)!=0&&acpi.refs==1&&acpi.hid.refs==1);
   assert(acpi.opened==(failure==1));
  }
- IOACPIPlatformDevice acpi;AMDACPIController bus;failAlloc=true;
+ IOACPIPlatformDevice acpi;AMDSPIController bus;failAlloc=true;
  assert(bus.bind(&acpi,&owner)==kIOReturnNoMemory&&acpi.opens==0);failAlloc=false;
  acpi.hasPSC=false;assert(bus.bind(&acpi,&owner)==0);bus.shutdown();assert(allocs==frees);
 }
 ''')
     for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),str(ROOT/'CirrusAudioFixup/Transport/AMD/AMDACPIController.cpp'),'-o',str(p/'test')],check=True)
+        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),str(ROOT/'CirrusAudioFixup/Transport/AMD/AMDSPIController.cpp'),'-o',str(p/'test')],check=True)
         subprocess.run([str(p/'test')],check=True)
 print('PASS AMD ACPI owner: HID, exclusive access, mapping, D0, allocation cleanup and repeat bind')

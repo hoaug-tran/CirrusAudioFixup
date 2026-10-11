@@ -16,11 +16,12 @@ inline unsigned sleeps=0;inline void IOSleep(unsigned){++sleeps;}
 #include <vector>
 #include "Core/RegisterMap.hpp"
 #include "Transport/I2CController.hpp"
+#include "Transport/I2CRegisterBus.hpp"
 #include "Platform/BoardConfiguration.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/AmplifierGroup.hpp"
-#include "Platform/BackendRegistry.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
 #include "Platform/AmplifierRuntime.hpp"
 using namespace cirrus::core;
 struct Lock: RegisterOperationLock {
@@ -59,19 +60,19 @@ struct Hooks: AmplifierLifecycleHooks {
  IOReturn stopPlayback()override{return call(7);}IOReturn safeShutdown()override{++cleanups;history.push_back(8);return cleanupFailure;}
 };
 Hooks instance;unsigned destroyed=0;
-AmplifierLifecycleHooks* factory(const cirrus::platform::BackendContext&){return &instance;}
+AmplifierLifecycleHooks* factory(const cirrus::platform::AmplifierBackendContext&){return &instance;}
 void destroy(AmplifierLifecycleHooks* hooks){assert(hooks==&instance);++destroyed;}
 unsigned heapCreated=0,heapDestroyed=0,heapCleanup=0;
 int failFactory=-1,failFirmware=-1,failTick=-1;bool waitFirmware=false;
 struct HeapHooks:Hooks {
- const cirrus::platform::BackendContext* metadata;
+ const cirrus::platform::AmplifierBackendContext* metadata;
  IOReturn identify() override {assert(metadata->actualDeviceHid&&metadata->bindingIndex<2);return Hooks::identify();}
- HeapHooks(const cirrus::platform::BackendContext& context):metadata(&context){++heapCreated;if(int(context.bindingIndex)==failFirmware)failure=4;if(waitFirmware&&context.bindingIndex==1)pause=BringUpDisposition::Wait;}
+ HeapHooks(const cirrus::platform::AmplifierBackendContext& context):metadata(&context){++heapCreated;if(int(context.bindingIndex)==failFirmware)failure=4;if(waitFirmware&&context.bindingIndex==1)pause=BringUpDisposition::Wait;}
  ~HeapHooks() override {++heapDestroyed;}
  IOReturn runtimeTick(const PlaybackContext&) override {return int(metadata->bindingIndex)==failTick?-300:0;}
  IOReturn safeShutdown() override {++heapCleanup;return Hooks::safeShutdown();}
 };
-AmplifierLifecycleHooks* heapFactory(const cirrus::platform::BackendContext& context){return int(context.bindingIndex)==failFactory?nullptr:new HeapHooks(context);}
+AmplifierLifecycleHooks* heapFactory(const cirrus::platform::AmplifierBackendContext& context){return int(context.bindingIndex)==failFactory?nullptr:new HeapHooks(context);}
 void heapDestroy(AmplifierLifecycleHooks* hooks){delete hooks;}
 int main(){
  for(unsigned width=1;width<=4;++width)for(auto endian:{RegisterEndian::Big,RegisterEndian::Little}){
@@ -129,13 +130,13 @@ int main(){
  assert(fw.matches(target));auto wrongFW=target;wrongFW.channelIndex=1;assert(!fw.matches(wrongFW));
  fw.program=nullptr;assert(!fw.matches(target));fw.format=cirrus::firmware::FirmwareFormat::None;fw.programBytes=0;assert(fw.matches(target));
  board.powerVerified=true;fw.format=cirrus::firmware::FirmwareFormat::WMFW;fw.program=payload;fw.programBytes=4;
- BackendDefinition definition{"test-fixture","CSC3551",0x35a40,3,{}, {},factory,destroy};
- BackendRegistry registry;assert(!registry.add(definition));
+ AmplifierBackendDefinition definition{"test-fixture","CSC3551",0x35a40,3,{}, {},factory,destroy};
+ AmplifierBackendRegistry registry;assert(!registry.add(definition));
  definition.i2cFormat.readable=definition.i2cFormat.writable=accessible;
  definition.spiFormat.readable=definition.spiFormat.writable=accessible;
  assert(registry.add(definition)&&!registry.add(definition));
- BackendContext context{map,bindings[0].endpoint,board,identity,0,fw};
- const BackendDefinition* selected=nullptr;auto* created=registry.create(context,selected);
+ AmplifierBackendContext context{map,bindings[0].endpoint,board,identity,0,fw};
+ const AmplifierBackendDefinition* selected=nullptr;auto* created=registry.create(context,selected);
  assert(created==&instance&&selected==&definition);selected->destroy(created);assert(destroyed==1);
  context.actualBoard=wrong;assert(!registry.create(context,selected)&&selected==&definition);
  assert(!registry.find("CSC3551",0x35a40,BusTransportType::SoundWire));
@@ -204,22 +205,22 @@ int main(){
  BoardIdentity machine{0x1234,0x5678,"BOARD"};BoardConfiguration multiBoard{machine,mixed,2,true,true,true};
  cirrus::firmware::FirmwareTarget lt{0x1111,0x1234,0x5678,0,0,"fixture-left"},rt{0x2222,0x1234,0x5678,0,1,"fixture-right"};
  cirrus::firmware::FirmwareBundle lf{lt,cirrus::firmware::FirmwareFormat::None,nullptr,0,nullptr,0},rf{rt,cirrus::firmware::FirmwareFormat::None,nullptr,0,nullptr,0};
- BackendDefinition spiAmp{"fixture-spi","SPIAMP",0x1111,2,{}, {},heapFactory,heapDestroy};
- BackendDefinition i2cAmp{"fixture-i2c","I2CAMP",0x2222,1,{}, {},heapFactory,heapDestroy};
+ AmplifierBackendDefinition spiAmp{"fixture-spi","SPIAMP",0x1111,2,{}, {},heapFactory,heapDestroy};
+ AmplifierBackendDefinition i2cAmp{"fixture-i2c","I2CAMP",0x2222,1,{}, {},heapFactory,heapDestroy};
  spiAmp.spiFormat.readable=spiAmp.spiFormat.writable=accessible;
  i2cAmp.i2cFormat.valueBytes=2;i2cAmp.i2cFormat.readable=i2cAmp.i2cFormat.writable=accessible;
- BackendRegistry multiRegistry;assert(multiRegistry.add(spiAmp)&&multiRegistry.add(i2cAmp));
+ AmplifierBackendRegistry multiRegistry;assert(multiRegistry.add(spiAmp)&&multiRegistry.add(i2cAmp));
  RegisterMap secondPort(bus,c,true);
- BackendContext contexts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{secondPort,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
+ AmplifierBackendContext contexts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{secondPort,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
  AmplifierRuntime runtime;
  assert(runtime.bind(multiRegistry,contexts,1)==kIOReturnNotPermitted&&!heapCreated);
- BackendContext duplicateContexts[]={contexts[0],contexts[0]};assert(runtime.bind(multiRegistry,duplicateContexts,2)==kIOReturnBadArgument&&!heapCreated);
+ AmplifierBackendContext duplicateContexts[]={contexts[0],contexts[0]};assert(runtime.bind(multiRegistry,duplicateContexts,2)==kIOReturnBadArgument&&!heapCreated);
  assert(!strcmp(runtime.bindFailure().reason,"DUPLICATE_BINDING_ENDPOINT_OR_PORT")&&runtime.bindFailure().index==1);
- BackendContext sharedPorts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{map,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
+ AmplifierBackendContext sharedPorts[]={{map,mixed[0].endpoint,multiBoard,machine,0,lf,"SPIAMP"},{map,mixed[1].endpoint,multiBoard,machine,1,rf,"I2CAMP"}};
  assert(runtime.bind(multiRegistry,sharedPorts,2)==kIOReturnBadArgument&&!heapCreated);
  contexts[1].actualDeviceHid="WRONG";assert(runtime.bind(multiRegistry,contexts,2)==kIOReturnNotPermitted);
  assert(heapCreated==heapDestroyed&&!heapCleanup&&!runtime.bound());contexts[1].actualDeviceHid="I2CAMP";
- auto bindTemporary=[&](){BackendContext local[]={contexts[0],contexts[1]};return runtime.bind(multiRegistry,local,2);};
+ auto bindTemporary=[&](){AmplifierBackendContext local[]={contexts[0],contexts[1]};return runtime.bind(multiRegistry,local,2);};
  assert(bindTemporary()==0&&runtime.count()==2&&!strcmp(runtime.bindFailure().reason,"NONE"));
  assert(runtime.backend(0)==&spiAmp&&runtime.backend(1)==&i2cAmp);
  assert(runtime.startPlayback()==kIOReturnNotReady);

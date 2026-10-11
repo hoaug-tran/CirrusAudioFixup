@@ -58,9 +58,53 @@ dates or replace upstream attribution with project ownership.
 | **Classes / Structs** | `PascalCase` | `AmplifierState`, `CS35L41Device` |
 | **Methods / Functions** | `lowerCamelCase` | `synchronizeHdaStream()`, `stopPlayback()` |
 | **Member Variables** | `m` + `PascalCase` | `mPowerAvailable`, `mProbeTimer` |
-| **Constants / Enums** | `k` + `PascalCase` | `kMaxAmps`, `kRegPowerControl1` |
+| **Constants** | `k` + `PascalCase` | `kMaxAmplifiers`, `kRegPowerControl1` |
+| **Enum types / values** | `PascalCase` | `AmplifierModel::CS35L41`, `AmplifierStage::Ready` |
 | **Namespaces** | `lowercase` | `cirrus::devices::cs35l41` |
 | **Macros** | `UPPER_SNAKE_CASE` | `CIRRUS_LOG`, `CIRRUS_ERR` |
+
+### Source layout and naming
+
+Use PascalCase `.hpp` / `.cpp` filenames describing the main type or narrowly
+scoped responsibility. Keep acronym spelling consistent: `I2C`, `SPI`, `ACPI`,
+`HDA`, `WMFW`, `CS35L41`. Public record fields and local variables use
+lowerCamelCase; private class state uses `mPascalCase`. Name functions for their
+operation: `bringUpAmplifiers`, `findAmplifierById`, `initializeCS35L41Device`.
+Avoid vague implementation labels such as `Real`, `FixupAdapter`, or an empty
+controller source. Related helper types may share one header; one file per tiny
+struct is not required.
+
+| Directory | Responsibility | Examples |
+| --- | --- | --- |
+| `Core/` | Bus-independent register and amplifier contracts | `RegisterIO`, `RegisterMap`, `BusEndpoint`, `AmplifierLifecycle`, `AmplifierDescriptors` |
+| `Transport/` | Bus/provider transactions and controller ownership | `I2CController`, `I2CRegisterBus`, `VoodooI2CProvider`, `NativeSPIHost` |
+| `Transport/Intel/`, `Transport/AMD/` | Documented controller families | `IntelLPSSSPIController`, `AMDSPIController` |
+| `Platform/` | Board identity, resources, backend selection and owned runtime | `BoardConfiguration`, `AmplifierBackendRegistry`, `AmplifierRuntime` |
+| `Devices/<Model>/` | Silicon registers, framing, errata, lifecycle and resources | `CS35L41Backend`, `CS35L41SPIRegisterIO` |
+| `Firmware/<Format>/` | Format-specific parser, mapping and upload | `WMFWParser`, `WMFWMemoryMapper`, `WMFWUploader` |
+| `Diagnostics/`, `Support/` | Transfer evidence and small kernel utilities | `DiagnosticTracer`, `Logging` |
+
+Generic extension points must not acquire one AMP's model name or register
+layout. A protocol-specific firmware parser should retain its protocol name.
+Adding another AMP does not mean treating WMFW, CS35L41 framing or Intel LPSS
+registers as universal. `AmplifierModel` describes speaker AMP silicon, distinct
+from the Realtek HDA codec. `AmplifierDevice` retains register-level helpers;
+shipping lifecycle ownership lives in `AmplifierRuntime` and backend hooks.
+
+IOKit entry classes keep their established globally scoped names because
+`OSMetaClass`, personalities and loader symbols use those identities. Keep
+boot arguments, IORegistry property keys and the custom VoodooI2C request ABI
+stable during source renaming. Changes to those interfaces need their own
+migration. Existing silicon helper implementations may still live in the service
+translation unit; their names must expose that silicon scope.
+
+These are this project's C++/IOKit conventions, not a universal kernel folder
+standard. Apple [IOService source](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/IOKit/IOService.h)
+uses named C++ service interfaces; Linux's [coding style](https://docs.kernel.org/process/coding-style.html#naming)
+requires descriptive global identifiers, while its [CS35L41 I2C driver](https://github.com/torvalds/linux/blob/master/sound/soc/codecs/cs35l41-i2c.c)
+keeps silicon/bus binding separate. Apply those responsibilities without importing
+Linux C spelling rules into this C++ kext. Run `Tests/check_source_layout.py` and
+the complete host/build checks after moving or renaming files.
 
 ### Documentation & Comments
 

@@ -14,7 +14,7 @@ suites = (
     "check_extensible_core", "check_native_spi", "check_amd_spi", "check_amd_spi_lifecycle", "check_acpi_spi", "check_spi_transport", "check_intel_spi", "check_intel_spi_lifecycle", "check_hda", "check_calibration", "check_tuning", "check_bringup",
     "check_runtime", "check_audio_events", "check_firmware_identity",
     "check_architecture", "check_release", "check_build_policy", "check_tools",
-    "check_vtable_policy", "check_xcode_project",
+    "check_vtable_policy", "check_xcode_project", "check_source_layout",
 )
 for suite in suites + (("check_windows_payloads",) if args.audit else ()):
     print(f"Running {suite}", flush=True)

@@ -17,7 +17,7 @@ inline void IOSleep(unsigned) { ++sleeps; }
     (tmp/'test.cpp').write_text(r'''
 #include <cassert>
 #include <vector>
-#include "Transport/CS35L41SPITransport.hpp"
+#include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 using namespace cirrus::transport;
 struct Controller : SPIController {
     size_t limit=262;
@@ -44,13 +44,13 @@ struct Controller : SPIController {
 int main() {
     SPIEndpoint ep{1,1000000,0};
     Controller c;
-    CS35L41SPITransport io(&c,ep,true);
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO io(&c,ep,true);
     uint32_t value=0;
     assert(io.read(0x02800398,&value) && value==0x11223344);
     assert(c.frames.back()==std::vector<uint8_t>({0x82,0x80,3,0x98,0,0,0,0,0,0}));
     assert(io.write(0x2018,0x12345678));
     assert(c.frames.back()==std::vector<uint8_t>({0,0,0x20,0x18,0,0,0x12,0x34,0x56,0x78}));
-    CS35L41SPITransport ro(&c,ep);
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO ro(&c,ep);
     unsigned before=c.calls;
     assert(!ro.write(0x2018,0) && ro.lastReturn()==kIOReturnNotPermitted && c.calls==before);
     assert(ro.updateBits(0x2018,0,0) && c.calls==before+1);
@@ -91,10 +91,10 @@ int main() {
     assert(!io.pollBit(0,1,1,5) && c.calls==before+1 && io.lastReturn()==-77);
     before=c.calls;
     assert(!io.pollBit(0,1,2,5) && !io.pollBit(0,1,1,0) && c.calls==before);
-    CS35L41SPITransport missing(nullptr,ep);
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO missing(nullptr,ep);
     assert(!missing.read(0,&value) && missing.lastReturn()==kIOReturnNotReady);
-    CS35L41SPITransport badClock(&c,{1,0,0});
-    CS35L41SPITransport badMode(&c,{1,1000000,4});
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO badClock(&c,{1,0,0});
+    cirrus::devices::cs35l41::CS35L41SPIRegisterIO badMode(&c,{1,1000000,4});
     assert(!badClock.read(0,&value) && !badMode.read(0,&value) && c.calls==before);
 }
 ''')

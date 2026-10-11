@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "Core/AudioDevice.hpp"
+#include "Core/AmplifierDevice.hpp"
 #include "Core/RegisterIO.hpp"
 #include "Devices/CS35L41/Hardware/Errata.hpp"
 #include "Devices/CS35L41/Hardware/OTPMap.hpp"
@@ -26,7 +26,7 @@ namespace cirrus::devices::cs35l41 {
 constexpr uint8_t kI2cAddressLeft = 0x40;
 constexpr uint8_t kI2cAddressRight = 0x41;
 
-class CS35L41Device final : public core::AudioDevice {
+class CS35L41Device final : public core::AmplifierDevice {
 private:
     const char* mName{"unknown"};
     core::BusEndpoint mEndpoint{};
@@ -71,12 +71,12 @@ public:
         return mPresent;
     }
 
-    core::AudioDevice::InitResult initialize(core::RegisterIO& io) override {
+    core::AmplifierDevice::InitResult initialize(core::RegisterIO& io) override {
         if (!mPresent)
-            return core::AudioDevice::InitResult::DeviceNotFound;
+            return core::AmplifierDevice::InitResult::DeviceNotFound;
 
         if (!io.write(registers::kRegSoftwareReset, registers::kValSoftwareReset))
-            return core::AudioDevice::InitResult::ResetFailed;
+            return core::AmplifierDevice::InitResult::ResetFailed;
 
         IODelay(3000);
 
@@ -90,20 +90,20 @@ public:
         irqMasksOk = io.write(registers::kRegIrq2Mask3, 0xFFFFFFFF) && irqMasksOk;
         irqMasksOk = io.write(registers::kRegIrq2Mask4, 0xFFFFFFFF) && irqMasksOk;
         if (!irqMasksOk)
-            return core::AudioDevice::InitResult::ResetFailed;
+            return core::AmplifierDevice::InitResult::ResetFailed;
 
         if (!io.pollBit(registers::kRegIrq1Status4, registers::kMaskOtpBootDone, registers::kMaskOtpBootDone, 100))
-            return core::AudioDevice::InitResult::BootTimeout;
+            return core::AmplifierDevice::InitResult::BootTimeout;
 
         uint32_t otpStatus = 0;
         if (!io.read(registers::kRegIrq1Status3, &otpStatus))
-            return core::AudioDevice::InitResult::ResetFailed;
+            return core::AmplifierDevice::InitResult::ResetFailed;
 
         if (otpStatus & registers::kMaskOtpBootError)
-            return core::AudioDevice::InitResult::BootError;
+            return core::AmplifierDevice::InitResult::BootError;
 
         mInitialized = true;
-        return core::AudioDevice::InitResult::Success;
+        return core::AmplifierDevice::InitResult::Success;
     }
 
     bool setupPLL(core::RegisterIO& io, bool* locked) {
@@ -281,18 +281,6 @@ public:
         ok = io.write(registers::kRegIrq2Mask4, 0xFFFFFFFF) && ok;
         ok = io.write(0x00002020, 0x00000006) && ok;
         return ok;
-    }
-
-    bool bootDsp(core::RegisterIO& io, const uint8_t* wmfw, size_t wmfwSize, const uint8_t* bin, size_t binSize) override {
-        // The service owns parsing, verification and Halo boot today.
-        // This interface method is deliberately unimplemented; do not treat
-        // the lightweight register helper as a complete DSP backend.
-        (void)io;
-        (void)wmfw;
-        (void)wmfwSize;
-        (void)bin;
-        (void)binSize;
-        return false;
     }
 
     bool startPlayback(core::RegisterIO& io) override {

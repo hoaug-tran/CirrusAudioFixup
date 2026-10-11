@@ -1,5 +1,5 @@
 //
-// FirmwareUploader.hpp
+// WMFWUploader.hpp
 // Bounded firmware upload plans and transfer verification.
 // Validate the entire region and transaction limits before writing DSP memory.
 // A successful transfer alone does not establish a running DSP or safe playback.
@@ -12,9 +12,9 @@
 #include "Firmware/WMFW/WMFWParser.hpp"
 #include "Support/Logging.hpp"
 
-#include "Firmware/WMFW/UploadPlan.hpp"
+#include "Firmware/WMFW/WMFWUploadPlan.hpp"
 
-class CirrusFirmwareUploadPlanner {
+class WMFWUploadPlanner {
 public:
     static bool generatePlan(uint32_t regionIndex, const MappedRegion& region, const UploadPolicy& policy, UploadPlan& outPlan) {
         outPlan.regionType = region.regionType;
@@ -24,7 +24,7 @@ public:
         outPlan.planCrc = 0xFFFFFFFF;
 
         uint32_t mappedBase = 0;
-        if (CirrusFirmwareMapper::mapPackedAddress(region.regionType, 0, 0, mappedBase) != MappingStatus::OK ||
+        if (WMFWMemoryMapper::mapPackedAddress(region.regionType, 0, 0, mappedBase) != MappingStatus::OK ||
             policy.maxPayloadBytes < 4 || policy.maxPayloadBytes > 252 || (region.size && !region.data.begin) ||
             region.data.size < region.size || (region.dspRegister & 3) || (region.size & 3) ||
             uint64_t(region.dspRegister) + region.size > 0x100000000ULL)
@@ -89,7 +89,7 @@ public:
     }
 };
 
-class CirrusFirmwareDryRunSimulator {
+class WMFWUploadSimulator {
 public:
     static void simulate(const UploadPlan& plan) {
         CIRRUS_LOG("--- Dry-Run Simulation for Region #%d ---", plan.regionIndex);
@@ -170,7 +170,7 @@ static inline const char* regionTypeName(RegionType t) {
     }
 }
 
-class CirrusFirmwareRealUploader {
+class WMFWUploader {
 public:
     static bool upload(const char* deviceName, cirrus::core::RegisterIO& io, const UploadPlan& plan, UploadStats* outStats = nullptr) {
         if (outStats)
@@ -395,7 +395,7 @@ struct UploadSession {
     bool complete;
 };
 
-class CirrusFirmwareScheduler {
+class WMFWUploadScheduler {
 public:
     static bool run(const char* deviceName, cirrus::core::RegisterIO& io, MappedImage& mappedImg, UploadSession& session) {
         session = {};
@@ -412,7 +412,7 @@ public:
             if (region.regionType == RegionType::INFO_TEXT || region.regionType == RegionType::NAME_TEXT ||
                 region.regionType == RegionType::METADATA || region.regionType == RegionType::ALGORITHM_DATA)
                 continue;
-            if (++expectedRegions > 32 || !CirrusFirmwareUploadPlanner::generatePlan(i, region, policy, *preflight)) {
+            if (++expectedRegions > 32 || !WMFWUploadPlanner::generatePlan(i, region, policy, *preflight)) {
                 valid = false;
                 break;
             }
@@ -445,7 +445,7 @@ public:
                 break;
             }
 
-            bool planOk = CirrusFirmwareUploadPlanner::generatePlan(i, region, policy, *plan);
+            bool planOk = WMFWUploadPlanner::generatePlan(i, region, policy, *plan);
             if (!planOk) {
                 CIRRUS_ERR("Amp %s: Region %d plan FAIL", deviceName, i);
                 IOFree(plan, sizeof(UploadPlan));
@@ -456,7 +456,7 @@ public:
 
             uint64_t t0 = mach_absolute_time();
             UploadStats stats = {};
-            bool ok = CirrusFirmwareRealUploader::upload(deviceName, io, *plan, &stats);
+            bool ok = WMFWUploader::upload(deviceName, io, *plan, &stats);
             uint64_t t1 = mach_absolute_time();
 
             uint64_t nsecs = 0;

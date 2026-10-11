@@ -231,7 +231,7 @@ inline HaloMemoryPointer decodePointer(uint32_t value) {
     return {static_cast<uint8_t>(value >> 16), static_cast<uint16_t>(value & 0xFFFF)};
 }
 
-class CirrusFirmwareMapper {
+class WMFWMemoryMapper {
 public:
     static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t& regAddress) {
         uint64_t base = 0, stride = 0;
@@ -394,7 +394,7 @@ public:
     }
 };
 
-class CirrusFirmwareParser {
+class WMFWParser {
 public:
     static uint32_t calculateCrc32(const uint8_t* data, size_t length) {
         uint32_t crc = 0xFFFFFFFF;
@@ -438,7 +438,7 @@ public:
 
     static uint32_t regionToReg(uint16_t type, uint32_t dspWord) {
         uint32_t reg = 0;
-        return CirrusFirmwareMapper::mapPackedAddress(static_cast<RegionType>(type), dspWord, 0, reg) == MappingStatus::OK ? reg : 0;
+        return WMFWMemoryMapper::mapPackedAddress(static_cast<RegionType>(type), dspWord, 0, reg) == MappingStatus::OK ? reg : 0;
     }
 
     static bool resolveControl(const FirmwareImage& fw, const WMFWControlRef& ref, uint32_t& reg) {
@@ -467,7 +467,7 @@ public:
             }
             if (base > 0xFFFFFFFFu - ctl.offset)
                 return false;
-            return CirrusFirmwareMapper::mapPackedAddress(static_cast<RegionType>(ctl.type), base + ctl.offset, 0, reg) ==
+            return WMFWMemoryMapper::mapPackedAddress(static_cast<RegionType>(ctl.type), base + ctl.offset, 0, reg) ==
                    MappingStatus::OK;
         }
         return false;

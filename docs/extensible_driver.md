@@ -6,7 +6,7 @@ The goal is to add a silicon backend, controller backend and verified board data
 
 | Layer | Implementation | Responsibility |
 | --- | --- | --- |
-| Bus identity | `Core/Endpoint.hpp` | Controller source path plus I2C address or SPI CS/clock/mode; no fabricated I2C identity for SPI |
+| Bus identity | `Core/BusEndpoint.hpp` | Controller source path plus I2C address or SPI CS/clock/mode; no fabricated I2C identity for SPI |
 | Controller transactions | `Transport/I2CController.hpp`, `SPIController.hpp` | Combined repeated-START I2C or single-CS SPI command/exchange; bounded controller limits |
 | Bus adapters | `VoodooI2CController.hpp`, `I2CRegisterBus`, `SPIRegisterBus.hpp` | Borrow controller and endpoint; preserve underlying errors |
 | Register map | `Core/RegisterMap.hpp` | 8/16/24/32-bit addresses/values, independent endian/stride, padding and flags, range checks, chunking, access policy, optional operation lock |
@@ -15,9 +15,9 @@ The goal is to add a silicon backend, controller backend and verified board data
 | Lifecycle | `Core/AmplifierLifecycle.hpp` | Identify → authorize → initialize → firmware → verify → ready/playback; bounded backend hooks, suspend/reinitialize on wake and first-failure evidence |
 | Multi-amp coordination | `Core/AmplifierGroup.hpp` | Stop/cleanup healthy peers on failure; reinitialize all members before restarting playback after wake |
 | Owned runtime | `Platform/AmplifierRuntime.hpp` | Own factory-created backends and lifecycle instances; validate the entire topology, coordinate mixed buses/models and retain teardown evidence |
-| Backend registry | `Platform/BackendRegistry.hpp` | Statically linked backend factory/destroy callbacks, transport formats, duplicate/capacity checks and exact board/firmware selection |
+| Backend registry | `Platform/AmplifierBackendRegistry.hpp` | Statically linked backend factory/destroy callbacks, transport formats, duplicate/capacity checks and exact board/firmware selection |
 
-`CS35L41SPITransport` now configures the shared register-map implementation rather than maintaining separate framing/chunking/RMW code. Intel and AMD SPI tests exercise that production implementation. The existing custom VoodooI2C addressed ABI is adapted to `I2CController` and tested through the same register map. `AudioDevice` and `CS35L41Device` expose transport-neutral endpoints while retaining the legacy I2C address accessor for existing callers; SPI returns the invalid I2C sentinel 0xff.
+`CS35L41SPIRegisterIO` now configures the shared register-map implementation rather than maintaining separate framing/chunking/RMW code. Intel and AMD SPI tests exercise that production implementation. The existing custom VoodooI2C addressed ABI is adapted to `I2CController` and tested through the same register map. `AmplifierDevice` and `CS35L41Device` expose transport-neutral endpoints while retaining the legacy I2C address accessor for existing callers; SPI returns the invalid I2C sentinel 0xff.
 
 ## Register-map semantics
 
@@ -34,7 +34,7 @@ Non-byte-aligned packed protocols, bank/page selection, register windows and add
 1. Establish ACPI identity, actual silicon/revision reads, I2C/SPI format and register access rules from authoritative source/datasheet plus machine evidence. Unknown identifiers remain unsupported.
 2. Provide a controller backend only when its layout, capabilities, ownership, CS/repeated-START behavior and power resources are known. Existing Intel LPSS and AMD command controllers have separate implementations. Generic interfaces do not implement unknown controllers.
 3. Implement `AmplifierLifecycleHooks` against `RegisterIO` and board/platform resource providers. Keep reset, boost, clock, DSP packing, mailbox, calibration, ASP routing, faults and shutdown specific to silicon/board. A no-DSP backend explicitly treats firmware loading as a no-op.
-4. Supply a static `BackendDefinition`, factory/destroy pair and formats with explicit readable/writable policies; select immutable assets with `FirmwareBundle`. Factories use kernel allocation helpers. A registry definition is not automatic IOService discovery or permission to bypass identity checks.
+4. Supply a static `AmplifierBackendDefinition`, factory/destroy pair and formats with explicit readable/writable policies; select immutable assets with `FirmwareBundle`. Factories use kernel allocation helpers. A registry definition is not automatic IOService discovery or permission to bypass identity checks.
 5. Add a verified `BoardConfiguration`; resolve its source paths to owned controller instances from actual ACPI/IORegistry data. Controller ownership, GPIO/reset, regulators, clock and interrupt callback providers belong to the host IOService. Do not reuse another board's GPIO offsets or calibration.
 6. Test format/endian/stride/chunk limits, missing resources, access policy, firmware identity, lifecycle failures, shutdown failures and sleep/wake. Then validate actual transfer, routing, both speaker channels, idle, faults and physical playback before advertising support.
 
@@ -47,9 +47,9 @@ Identify and authorization failures perform no hardware shutdown writes. Once in
 ## Shipping service integration
 
 The IOService owns a persistent `AmplifierRuntime`, selects definitions from
-`Devices/BackendCatalog.hpp` and dispatches bring-up, firmware, grouped playback,
+`Devices/AmplifierBackends.hpp` and dispatches bring-up, firmware, grouped playback,
 interrupt handling, diagnostics and suspend/resume through backend hooks.
-`Devices/CS35L41/ServiceBackend.hpp` declares the implemented production factory;
+`Devices/CS35L41/CS35L41Backend.hpp` declares the implemented production factory;
 its concrete backend delegates the existing CS35L41 silicon sequences to owner
 helpers. CS35L41 register/firmware logic remains specific to that backend.
 There is no common model-switch dispatch and no placeholder AMP support.

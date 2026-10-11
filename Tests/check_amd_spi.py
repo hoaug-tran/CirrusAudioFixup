@@ -17,7 +17,7 @@ inline void IOSleep(unsigned) {}
 #include <vector>
 #include <cstring>
 #include "Transport/AMD/AMDSPIEngine.hpp"
-#include "Transport/CS35L41SPITransport.hpp"
+#include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 using namespace cirrus::transport;
 struct Window : amd::RegisterWindow {
     uint8_t regs[0x100]{};uint64_t clock=0;unsigned writes=0,commands=0;
@@ -60,7 +60,7 @@ int main() {
     Window w;w.v2=v2;amd::AMDSPIEngine bus(w);
     auto rev=v2?amd::AMDSPIRevision::V2:amd::AMDSPIRevision::V1;
     assert(bus.initialize(rev)==0);
-    SPIEndpoint ep{1,1000000,0};CS35L41SPITransport io(&bus,ep,true);
+    SPIEndpoint ep{1,1000000,0};cirrus::devices::cs35l41::CS35L41SPIRegisterIO io(&bus,ep,true);
     w.values[0]=0x35a40;uint32_t id=0;
     assert(io.read(0,&id)&&id==0x35a40&&bus.actualClockHz()==800000);
     assert(io.write(0x2018,0x11223344)&&w.values[0x2018]==0x11223344);
@@ -88,7 +88,7 @@ int main() {
     bus.abandon();
  }
  Window clean;amd::AMDSPIEngine bus(clean);assert(bus.initialize(amd::AMDSPIRevision::V1)==0);
- CS35L41SPITransport io(&bus,{0,4000000,0},true);assert(io.write(0x100,1));bus.shutdown();
+ cirrus::devices::cs35l41::CS35L41SPIRegisterIO io(&bus,{0,4000000,0},true);assert(io.write(0x100,1));bus.shutdown();
  assert(clean.read32(0x20)==0&&clean.read32(0x6c)==0&&clean.read8(0x1d)==0);
 }
 ''')

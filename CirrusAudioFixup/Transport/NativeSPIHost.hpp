@@ -4,11 +4,11 @@
 #include "Transport/ACPISPIResources.hpp"
 #include "Transport/ACPIPath.hpp"
 #include "Core/RegisterMap.hpp"
-#include "Core/Endpoint.hpp"
-#include "Platform/BackendRegistry.hpp"
+#include "Core/BusEndpoint.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
 #include "Transport/SPIRegisterBus.hpp"
 #include "Transport/Intel/IntelLPSSSPIController.hpp"
-#include "Transport/AMD/AMDACPIController.hpp"
+#include "Transport/AMD/AMDSPIController.hpp"
 #include <IOKit/IORegistryEntry.h>
 namespace cirrus::transport {
 class NativeSPIHost {
@@ -80,7 +80,7 @@ public:
                     if(target->evaluateInteger("_PSC",&power)!=kIOReturnSuccess || power!=0) {
                         fail("AMD_CONTROLLER_D0_UNVERIFIED",kIOReturnNotReady,i,r.source,power);shutdown();return mFailure.result;
                     }
-                    mAMD[slot]=new amd::AMDACPIController;
+                    mAMD[slot]=new amd::AMDSPIController;
                     ret=mAMD[slot]?mAMD[slot]->bind(target,owner):kIOReturnNoMemory;
                     mBus[slot]=mAMD[slot];
                 }
@@ -101,7 +101,7 @@ public:
     }
     // Call before lending register ports to clients. Replaces the read-only
     // discovery maps only after every endpoint has a verified board/backend.
-    IOReturn configureAuthorized(const platform::BackendRegistry& registry,
+    IOReturn configureAuthorized(const platform::AmplifierBackendRegistry& registry,
                                  const platform::BoardConfiguration& board,
                                  const platform::BoardIdentity& actual,const char* deviceHid,bool allowWrites=true) {
         if(!bound() || mAuthorized || !deviceHid || !board.permits(actual) || board.count!=mCount)
@@ -223,7 +223,7 @@ private:
     bool mAuthorized{false};
     IOACPIPlatformDevice* mTargets[ACPISPIResources::kMaxEndpoints]{};
     intel::IntelLPSSSPIController* mIntel[ACPISPIResources::kMaxEndpoints]{};
-    amd::AMDACPIController* mAMD[ACPISPIResources::kMaxEndpoints]{};
+    amd::AMDSPIController* mAMD[ACPISPIResources::kMaxEndpoints]{};
     SPIController* mBus[ACPISPIResources::kMaxEndpoints]{};
     core::RegisterMap* mRegisters[ACPISPIResources::kMaxEndpoints]{};
     SPIRegisterBus* mPorts[ACPISPIResources::kMaxEndpoints]{};

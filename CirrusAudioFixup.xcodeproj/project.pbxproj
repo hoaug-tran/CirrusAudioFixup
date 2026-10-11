@@ -5,8 +5,11 @@
 	};
 	objectVersion = 56;
 	objects = {
-		5471378CA53C475A884BD29A = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "ServiceBackend.hpp";sourceTree = "<group>";};
-		884B6D453F48442FA6D0B874 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "BackendCatalog.hpp";sourceTree = "<group>";};
+        AECFDA71B41745F7BD246B9B = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41Backend.cpp";sourceTree = "<group>";};
+        8A9A66A1329F44D390D8B6B8 = {isa = PBXBuildFile;fileRef = AECFDA71B41745F7BD246B9B;};
+        28FCF60355DB403CA8D56264 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "I2CRegisterBus.hpp";sourceTree = "<group>";};
+		5471378CA53C475A884BD29A = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41Backend.hpp";sourceTree = "<group>";};
+		884B6D453F48442FA6D0B874 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AmplifierBackends.hpp";sourceTree = "<group>";};
 		B71011000000000000000001 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
@@ -58,13 +61,13 @@
 		213AEE71073006568DE1EEA0 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "AudioDevice.hpp";
+			path = "AmplifierDevice.hpp";
 			sourceTree = "<group>";
 		};
 		BDC5ADD1611D328F362B7D02 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "DeviceRegistry.hpp";
+			path = "AmplifierDescriptors.hpp";
 			sourceTree = "<group>";
 		};
 		432953BD9A6B9F4B940AEEE1 = {
@@ -76,7 +79,7 @@
 		1E89978DD38922A7CFE8E4F6 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "Types.hpp";
+			path = "AudioTypes.hpp";
 			sourceTree = "<group>";
 		};
 		27521F5A59ABD126183B279A = {
@@ -159,6 +162,8 @@
 		5F18E3977620B1AFB2AEDD59 = {
 			isa = PBXGroup;
 			children = (
+                AECFDA71B41745F7BD246B9B,
+                CAFE51000000000000000002,
                 5471378CA53C475A884BD29A,
 				90842EAEFC1528FA929AB2B2,
 				DBD8EDACAC2E17BAD75D5AC6,
@@ -201,13 +206,13 @@
 		3EE5A64B016195D0B95976FE = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "FirmwareUploader.hpp";
+			path = "WMFWUploader.hpp";
 			sourceTree = "<group>";
 		};
 		E0E51BBBD43F09274B6FFE7E = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "UploadPlan.hpp";
+			path = "WMFWUploadPlan.hpp";
 			sourceTree = "<group>";
 		};
 		C2DDAB80313D23D86D767E21 = {
@@ -245,19 +250,13 @@
 		79C731287875A3F568EE7384 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "AudioEvents.hpp";
-			sourceTree = "<group>";
-		};
-		204F092B6A6DD097F823ADA7 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.cpp;
-			path = "HDAController.cpp";
+			path = "AudioEventSource.hpp";
 			sourceTree = "<group>";
 		};
 		DC4498D631C3CF6EF1CBABAB = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "HDAController.hpp";
+			path = "HDAStreamState.hpp";
 			sourceTree = "<group>";
 		};
 		B8ADFE1DB47399E479E14F55 = {
@@ -271,7 +270,6 @@
 			children = (
 				CAFE00000004,
 				79C731287875A3F568EE7384,
-				204F092B6A6DD097F823ADA7,
 				DC4498D631C3CF6EF1CBABAB,
 				B8ADFE1DB47399E479E14F55,
 			);
@@ -328,7 +326,7 @@
 		79E10805A559FC3E5503866B = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "VoodooI2CTransport.hpp";
+			path = "VoodooI2CProvider.hpp";
 			sourceTree = "<group>";
 		};
 		CAFE51000000000000000001 = {
@@ -340,7 +338,7 @@
 		CAFE51000000000000000002 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "CS35L41SPITransport.hpp";
+			path = "CS35L41SPIRegisterIO.hpp";
 			sourceTree = "<group>";
 		};
 		CAFE51000000000000000008 = {
@@ -356,10 +354,10 @@
  isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDSPIEngine.hpp"; sourceTree = "<group>";
  };
 		CAFE5100000000000000000B = {
- isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDACPIController.hpp"; sourceTree = "<group>";
+ isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDSPIController.hpp"; sourceTree = "<group>";
  };
 		CAFE5100000000000000000C = {
- isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "AMD/AMDACPIController.cpp"; sourceTree = "<group>";
+ isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "AMD/AMDSPIController.cpp"; sourceTree = "<group>";
  };
 		CAFE5100000000000000000D = { isa = PBXBuildFile; fileRef = CAFE5100000000000000000C; };
 		3C1B9C1975046A6CC0EF9A72 = {
@@ -377,7 +375,7 @@
 		963BF563D9B6A0EF2350CE7D = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "Endpoint.hpp";
+			path = "BusEndpoint.hpp";
 			sourceTree = "<group>";
 		};
 		7A7ADE64047F21EF79F434FA = {
@@ -416,7 +414,7 @@
 			path = "FirmwareBundle.hpp";
 			sourceTree = "<group>";
 		};
-		0AE7D65E29CF3F41FCDAB433 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "BackendRegistry.hpp"; sourceTree = "<group>"; };
+		0AE7D65E29CF3F41FCDAB433 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierBackendRegistry.hpp"; sourceTree = "<group>"; };
 		E7B135887CFD04840682F4F3 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierGroup.hpp"; sourceTree = "<group>"; };
 		CAFE51000000000000000003 = {
 			isa = PBXFileReference;
@@ -449,6 +447,7 @@
 		D1C35C0E3D90A9BEF84D6F6D = {
 			isa = PBXGroup;
 			children = (
+                28FCF60355DB403CA8D56264,
                 1FB54EE34BAE0041B4906A8F,
                 906368FCA2EB8FE548BD7705,
                 8CF69CE796ABB36A1A3D630F,
@@ -456,7 +455,6 @@
                 29F371FB87977DF261FF1260,
 				79E10805A559FC3E5503866B,
 				CAFE51000000000000000001,
-				CAFE51000000000000000002,
 				CAFE51000000000000000008,
 				CAFE51000000000000000009,
 				CAFE5100000000000000000A,
@@ -740,7 +738,7 @@
 		CAFE00000004 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.cpp;
-			path = AudioEvents.cpp;
+			path = AudioEventSource.cpp;
 			sourceTree = "<group>";
 		};
 		CAFE00000011  = {
@@ -867,6 +865,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                8A9A66A1329F44D390D8B6B8,
 				CAFE00000011 ,
 				CAFE00000012 ,
 				CAFE51000000000000000007,

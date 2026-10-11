@@ -46,7 +46,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-build-policy-") as directory:
 driver = (ROOT / "CirrusAudioFixup/CirrusAudioFixup.cpp").read_text(encoding="utf-8")
 assert driver.count('kDefaultVerboseLogging || bootArgEnabled("-cirrusdbg")') == 2
 assert 'setProperty("Cirrus_Build_Configuration"' in driver
-assert 'mAmplifierRuntime.bringUp()' in driver and 'cs35l41::createServiceBackend' in driver
+backend = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp').read_text()
+assert 'mAmplifierRuntime.bringUp()' in driver and 'cs35l41::createBackend' in backend
 assert 'switch (amp.model)' not in driver
 
 readme = (ROOT / "README.md").read_text(encoding="utf-8")

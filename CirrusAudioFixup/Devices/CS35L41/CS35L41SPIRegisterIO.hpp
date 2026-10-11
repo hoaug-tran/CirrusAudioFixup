@@ -2,13 +2,13 @@
 // Linux cs35l41-lib.c: 32-bit BE address/value, 16 pad bits, read flag 0x80.
 #pragma once
 #include "Core/RegisterMap.hpp"
-#include "SPIRegisterBus.hpp"
-namespace cirrus::transport {
-class CS35L41SPITransport final : public core::RegisterIO {
+#include "Transport/SPIRegisterBus.hpp"
+namespace cirrus::devices::cs35l41 {
+class CS35L41SPIRegisterIO final : public core::RegisterIO {
 public:
     static constexpr size_t kHeaderBytes=6;
     static constexpr size_t kMaxPayloadBytes=256;
-    CS35L41SPITransport(SPIController* controller,SPIEndpoint endpoint,bool allowWrites=false,
+    CS35L41SPIRegisterIO(transport::SPIController* controller,transport::SPIEndpoint endpoint,bool allowWrites=false,
                        core::RegisterOperationLock* lock=nullptr)
         : mBus(controller,endpoint),mMap(mBus,config(),allowWrites,lock) {}
     IOReturn lastReturn() const { return mMap.lastReturn(); }
@@ -24,7 +24,7 @@ public:
         core::RegisterMapConfig c{}; c.paddingBytes=2; c.maxRegister=0x7ffffffc; c.readFlag=0x80; return c;
     }
 private:
-    SPIRegisterBus mBus;
+    transport::SPIRegisterBus mBus;
     core::RegisterMap mMap;
 };
 }

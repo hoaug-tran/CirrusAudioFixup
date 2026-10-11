@@ -12,7 +12,7 @@
 
 Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered backends for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; ASUS/HP profiles and physical SPI playback validation remain pending. See [SPI development status](docs/spi_support.md).
 
-The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon backends are registered in `Devices/BackendCatalog.hpp`.
+The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon backends are registered in `Devices/AmplifierBackends.hpp`.
 
 Reference platform: **Lenovo Legion 7 16ACHg6 · Realtek ALC287 · AMD**
 
@@ -456,7 +456,7 @@ Existing board/speaker entries and resource symbols reject import without change
 replace an existing profile explicitly in source after reviewing its resources.
 Generated arrays carry SHA-256 comments for byte identity, not proof of authenticity.
 
-For another amplifier model, implement `AmplifierLifecycleHooks`, silicon identity/access rules and bus formats, then register its factory in `Devices/BackendCatalog.hpp`. Add its silicon descriptor and matching IOService personality where needed, plus a verified board manifest and exact firmware/tuning bindings. Common bring-up, playback coordination and PM dispatch do not need a new model switch. Reset/trim, clocks, power, DSP parsing, IRQ handling and fault recovery remain backend responsibilities. See [the backend contract](docs/extensible_driver.md).
+For another amplifier model, implement `AmplifierLifecycleHooks`, silicon identity/access rules and bus formats, then register its factory in `Devices/AmplifierBackends.hpp`. Add its silicon descriptor and matching IOService personality where needed, plus a verified board manifest and exact firmware/tuning bindings. Common bring-up, playback coordination and PM dispatch do not need a new model switch. Reset/trim, clocks, power, DSP parsing, IRQ handling and fault recovery remain backend responsibilities. See [the backend contract](docs/extensible_driver.md).
 
 ---
 

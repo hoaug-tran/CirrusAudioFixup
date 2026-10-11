@@ -6,8 +6,8 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-header = (ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEvents.hpp').read_text(encoding='utf-8')
-source = (ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEvents.cpp').read_text(encoding='utf-8')
+header = (ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEventSource.hpp').read_text(encoding='utf-8')
+source = (ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEventSource.cpp').read_text(encoding='utf-8')
 sdk_types = (ROOT / 'MacKernelSDK/Headers/IOKit/audio/IOAudioTypes.h').read_text(encoding='utf-8')
 engine_enum = re.search(r'typedef\s+enum\s+(\w+)\s*\{[^}]*kIOAudioEngineRunning', sdk_types, re.S).group(1)
 assert f'__ZN13IOAudioEngine8setStateE{len(engine_enum)}{engine_enum}' in source, 'Hook must use the SDK enum tag, not its typedef alias'

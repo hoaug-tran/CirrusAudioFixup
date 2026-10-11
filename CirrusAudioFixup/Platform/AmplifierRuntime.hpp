@@ -3,7 +3,7 @@
 // all callers before destruction; controller D0 precedes resume. No CPU/model
 // switch, board name, register width, reset sequence or transport framing here.
 #pragma once
-#include "Platform/BackendRegistry.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
 #include "Core/AmplifierGroup.hpp"
 namespace cirrus::platform {
 class AmplifierRuntime {
@@ -23,19 +23,19 @@ public:
         if(i>=mCount)return nullptr;
         return &mSlots[i].lifecycle->status();
     }
-    const BackendDefinition* backend(size_t i) const {return i<mCount?mSlots[i].definition:nullptr;}
-    IOReturn bind(const BackendRegistry& registry,const BackendContext* contexts,size_t count) {
+    const AmplifierBackendDefinition* backend(size_t i) const {return i<mCount?mSlots[i].definition:nullptr;}
+    IOReturn bind(const AmplifierBackendRegistry& registry,const AmplifierBackendContext* contexts,size_t count) {
         if(!contexts)return rejectBind("NULL_CONTEXTS",kIOReturnBadArgument);
-        return bindContexts(registry,count,[&](size_t i)->const BackendContext&{return contexts[i];});
+        return bindContexts(registry,count,[&](size_t i)->const AmplifierBackendContext&{return contexts[i];});
     }
-    IOReturn bind(const BackendRegistry& registry,const BackendContext* const* contexts,size_t count) {
+    IOReturn bind(const AmplifierBackendRegistry& registry,const AmplifierBackendContext* const* contexts,size_t count) {
         if(!contexts || count>kCapacity)return rejectBind("INVALID_CONTEXT_ARRAY",kIOReturnBadArgument);
         for(size_t i=0;i<count;++i)if(!contexts[i])return rejectBind("NULL_MEMBER_CONTEXT",kIOReturnBadArgument,i);
-        return bindContexts(registry,count,[&](size_t i)->const BackendContext&{return *contexts[i];});
+        return bindContexts(registry,count,[&](size_t i)->const AmplifierBackendContext&{return *contexts[i];});
     }
 private:
     template<class ContextAt>
-    IOReturn bindContexts(const BackendRegistry& registry,size_t count,ContextAt contextAt) {
+    IOReturn bindContexts(const AmplifierBackendRegistry& registry,size_t count,ContextAt contextAt) {
         mBindFailure={};
         if(bound() || !count || count>kCapacity)return rejectBind("INVALID_RUNTIME_STATE_OR_COUNT",kIOReturnBadArgument);
         const auto& board=contextAt(0).board;
@@ -55,7 +55,7 @@ private:
         for(size_t i=0;i<count;++i) {
             auto& slot=mSlots[i];
             ++mCount; // Own partial slot state from this point onward.
-            slot.context=new BackendContext(contextAt(i));
+            slot.context=new AmplifierBackendContext(contextAt(i));
             if(!slot.context){releaseUninitialized();return rejectBind("CONTEXT_ALLOCATION_FAILED",kIOReturnNoMemory,i);}
             slot.hooks=registry.create(*slot.context,slot.definition);
             if(!slot.hooks){releaseUninitialized();return rejectBind("BACKEND_FIRMWARE_OR_FACTORY_REJECTED",kIOReturnNotPermitted,i);}
@@ -125,8 +125,8 @@ private:
     IOReturn rejectBind(const char* reason,IOReturn result,size_t index=0){mBindFailure={reason,index,result};return result;}
     BindFailure mBindFailure{};
     struct Slot {
-        BackendContext* context{nullptr};
-        const BackendDefinition* definition{nullptr};
+        AmplifierBackendContext* context{nullptr};
+        const AmplifierBackendDefinition* definition{nullptr};
         core::AmplifierLifecycleHooks* hooks{nullptr};
         core::AmplifierLifecycle* lifecycle{nullptr};
     };

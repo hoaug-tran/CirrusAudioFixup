@@ -1,7 +1,7 @@
 // Transport-neutral board manifest for future backends. This does not infer
 // reset, boost, ASP routing or tuning from a silicon ID or a subsystem vendor.
 #pragma once
-#include "Core/Endpoint.hpp"
+#include "Core/BusEndpoint.hpp"
 namespace cirrus::platform {
 struct BoardIdentity {
     uint16_t subsystemVendor{0};

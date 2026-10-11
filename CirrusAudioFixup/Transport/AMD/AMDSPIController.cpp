@@ -1,20 +1,20 @@
-#include "AMDACPIController.hpp"
+#include "AMDSPIController.hpp"
 #include <kern/clock.h>
 #include <mach/mach_time.h>
 #include <libkern/c++/OSString.h>
 namespace cirrus::transport::amd {
-uint8_t AMDACPIController::MMIOWindow::read8(uint32_t o) { uint8_t v=base[o]; OSSynchronizeIO(); return v; }
-void AMDACPIController::MMIOWindow::write8(uint32_t o,uint8_t v) { base[o]=v; OSSynchronizeIO(); }
-uint32_t AMDACPIController::MMIOWindow::read32(uint32_t o) {
+uint8_t AMDSPIController::MMIOWindow::read8(uint32_t o) { uint8_t v=base[o]; OSSynchronizeIO(); return v; }
+void AMDSPIController::MMIOWindow::write8(uint32_t o,uint8_t v) { base[o]=v; OSSynchronizeIO(); }
+uint32_t AMDSPIController::MMIOWindow::read32(uint32_t o) {
     uint32_t v=*reinterpret_cast<volatile uint32_t*>(base+o); OSSynchronizeIO(); return v;
 }
-void AMDACPIController::MMIOWindow::write32(uint32_t o,uint32_t v) {
+void AMDSPIController::MMIOWindow::write32(uint32_t o,uint32_t v) {
     *reinterpret_cast<volatile uint32_t*>(base+o)=v; OSSynchronizeIO();
 }
-uint64_t AMDACPIController::MMIOWindow::nowUs() {
+uint64_t AMDSPIController::MMIOWindow::nowUs() {
     uint64_t ns=0; absolutetime_to_nanoseconds(mach_absolute_time(),&ns); return ns/1000;
 }
-bool AMDACPIController::isD0() const {
+bool AMDSPIController::isD0() const {
     if (!mProvider || !mPowerAvailable) return false;
     // Missing _PSC is legal. The owning service must still order all power
     // resources before bind/resume and call suspend before removing power.
@@ -22,7 +22,7 @@ bool AMDACPIController::isD0() const {
     UInt32 state=0;
     return mProvider->evaluateInteger("_PSC",&state)==kIOReturnSuccess && state==0;
 }
-IOReturn AMDACPIController::bind(IOACPIPlatformDevice* provider,IOService* owner) {
+IOReturn AMDSPIController::bind(IOACPIPlatformDevice* provider,IOService* owner) {
     if (mProvider || mLock) return kIOReturnBusy;
     if (!provider || !owner) return kIOReturnBadArgument;
     OSObject* object=nullptr;
@@ -53,24 +53,24 @@ IOReturn AMDACPIController::bind(IOACPIPlatformDevice* provider,IOService* owner
     if (result!=kIOReturnSuccess) shutdown();
     return result;
 }
-IOReturn AMDACPIController::command(const SPIEndpoint& ep,const uint8_t* tx,size_t nt,uint8_t* rx,size_t nr) {
+IOReturn AMDSPIController::command(const SPIEndpoint& ep,const uint8_t* tx,size_t nt,uint8_t* rx,size_t nr) {
     if (!mLock) return kIOReturnNotReady;
     IOLockLock(mLock);
     IOReturn result=mWindow.base && isD0() ? mEngine.command(ep,tx,nt,rx,nr) : kIOReturnNotReady;
     IOLockUnlock(mLock); return result;
 }
-void AMDACPIController::suspend() {
+void AMDSPIController::suspend() {
     if (!mLock) return;
     IOLockLock(mLock); mEngine.suspend(); mPowerAvailable=false; IOLockUnlock(mLock);
 }
-IOReturn AMDACPIController::resume() {
+IOReturn AMDSPIController::resume() {
     if (!mLock) return kIOReturnNotReady;
     IOLockLock(mLock); mPowerAvailable=true;
     IOReturn result=mWindow.base && isD0() ? mEngine.resume() : kIOReturnNotReady;
     if (result!=kIOReturnSuccess) mPowerAvailable=false;
     IOLockUnlock(mLock); return result;
 }
-void AMDACPIController::shutdown() {
+void AMDSPIController::shutdown() {
     // The owner has stopped/joined clients; no caller can wait on this lock.
     if (mLock) IOLockLock(mLock);
     if (mWindow.base && isD0()) mEngine.shutdown(); else mEngine.abandon();

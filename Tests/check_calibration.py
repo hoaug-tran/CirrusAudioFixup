@@ -9,7 +9,7 @@ start = re.search(r'struct\s+cs35l41_amp_cal_data\s*\{', SOURCE).start()
 end = start + re.search(r'\nvoid\s+CirrusAudioFixup::scheduleReadOnlyProbe', SOURCE[start:]).start()
 calibration = SOURCE[start:end]
 gate_start = re.search(r'if\s*\(!applyCalibration\(amp,\s*image\)\)', SOURCE).start()
-m_boot = re.search(r'bool\s+booted\s*=\s*bringupDSP\(amp\);', SOURCE[gate_start:])
+m_boot = re.search(r'bool\s+booted\s*=\s*bringUpDSP\(amp\);', SOURCE[gate_start:])
 gate_end = gate_start + m_boot.end()
 gate = SOURCE[gate_start:gate_end]
 preamble = r'''
@@ -63,7 +63,7 @@ struct FirmwareImage {};
 struct Algorithm { uint32_t id=0xCD; };
 struct Control { uint32_t type=5,len=4; };
 struct WMFWControlRef { Algorithm* algorithm; Control* control; uint32_t address; };
-struct CirrusFirmwareParser {
+struct WMFWParser {
     static bool missing;
     static bool findControl(const FirmwareImage*,const char* n,WMFWControlRef& r) {
         static Algorithm a; static Control c; r.algorithm=&a; r.control=&c;
@@ -72,7 +72,7 @@ struct CirrusFirmwareParser {
     }
     static bool resolveControl(const FirmwareImage&,WMFWControlRef& r,uint32_t& address) { address=r.address; return true; }
 };
-bool CirrusFirmwareParser::missing=false;
+bool WMFWParser::missing=false;
 struct CS35L41Amp {
     uint8_t address=0x40; const char* name="L";
     void* registerIO=nullptr; uint8_t endpointIndex=0;
@@ -101,7 +101,7 @@ public:
     }
     void recordDiagnosticFailure(AmplifierState&,unsigned) { ++failures; }
     bool stopDSP(AmplifierState&) { stopped=true; return true; }
-    bool bringupDSP(AmplifierState&) { booted=true; return true; }
+    bool bringUpDSP(AmplifierState&) { booted=true; return true; }
     bool phaseHalted=false;
     bool stopAfterDebugStage(const char*) { return phaseHalted; }
     bool applyCalibration(AmplifierState&,const FirmwareImage*);
@@ -215,10 +215,10 @@ int main() {
     CirrusAudioFixup badAmbient;
     check(!badAmbient.applyCalibration(amp,&image) && !badAmbient.writes,"ambient must fit EFI signed byte");
     args.clear(); IORegistryEntry::data=&data;
-    CirrusFirmwareParser::missing=true; CirrusAudioFixup missingControl;
+    WMFWParser::missing=true; CirrusAudioFixup missingControl;
     missingControl.boot(amp,&image);
     check(!missingControl.booted && missingControl.failures,"missing control blocks boot");
-    CirrusFirmwareParser::missing=false;
+    WMFWParser::missing=false;
     CirrusAudioFixup normal; normal.boot(amp,&image);
     check(normal.booted && amp.firmwareValidated,"valid calibration permits boot");
     unsigned beforePhase=freedImages;
@@ -237,14 +237,14 @@ int main() {
     const char* expectedStatuses[]={"NOT_AVAILABLE","SKIPPED_BY_BOOT_ARG","CONTROL_RESOLUTION_FAILED",
         "INVALID_EFI_DATA","INVALID_BOOT_ARG_DATA","VERIFY_FAILED","VERIFY_FAILED","VERIFY_FAILED"};
     for(unsigned mode=0;mode<9;++mode) {
-        args.clear(); IORegistryEntry::data=&data; CirrusFirmwareParser::missing=false;
+        args.clear(); IORegistryEntry::data=&data; WMFWParser::missing=false;
         CirrusAudioFixup d;
         CS35L41Amp right; right.name="R"; right.address=0x41;
         check(d.applyCalibration(amp,&image) && d.applyCalibration(right,&image),"seed both channel properties");
         check(d.numbers.size()==8,"both channels publish four verified values");
         if(mode==0) IORegistryEntry::data=nullptr;
         if(mode==1) d.skip=true;
-        if(mode==2) CirrusFirmwareParser::missing=true;
+        if(mode==2) WMFWParser::missing=true;
         if(mode==3) IORegistryEntry::data=&wrongType;
         if(mode==4) { IORegistryEntry::data=nullptr; args={{"-cirruscalr0l",5846}}; }
         if(mode==5) d.failWrite=d.writes+1;
@@ -259,7 +259,7 @@ int main() {
         if(mode<8) check(d.properties["Cirrus_Calibration_Status_L"]==expectedStatuses[mode],"repeat status describes current attempt");
         else check(!d.properties.count("Cirrus_Calibration_Status_L"),"null image cannot retain successful status");
         d.skip=false; d.failWrite=d.failRead=d.corruptRead=0;
-        args.clear(); IORegistryEntry::data=&data; CirrusFirmwareParser::missing=false;
+        args.clear(); IORegistryEntry::data=&data; WMFWParser::missing=false;
         check(d.applyCalibration(amp,&image) && d.numbers.size()==8,"successful retry republishes current evidence");
     }
     check(borrowedReads==0,"EFI data retained throughout parsing");

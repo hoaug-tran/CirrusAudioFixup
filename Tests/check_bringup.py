@@ -12,7 +12,7 @@ def function(name):
     start = re.search(r'(?:bool|void|IOReturn) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
-names = ['fullDriverFlow', 'initializeCS35L41Hardware','loadCS35L41Firmware','verifyCS35L41Ready','shutdownCS35L41','stopCS35L41At', 'initCodec', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
+names = ['bringUpAmplifiers', 'initializeCS35L41Hardware','loadCS35L41Firmware','verifyCS35L41Ready','shutdownCS35L41','stopCS35L41At', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
 amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
 
 preamble = r'''
@@ -64,8 +64,8 @@ public:
     bool resumeNativeTransport() { return true; }
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
-    size_t mAmpCount{2};
-    CS35L41Amp mAmps[2]{};
+    size_t mAmplifierCount{2};
+    CS35L41Amp mAmplifiers[2]{};
     Timer* mProbeTimer=nullptr;
     Timer* mAmpInterrupt=nullptr;
     bool configureAmplifierInterrupt() { return true; }
@@ -94,10 +94,10 @@ public:
     bool muted[2]{},powered[2]{};
     std::map<std::string,std::string> properties;
     CirrusAudioFixup() {
-        mAmps[0].name="L"; mAmps[0].address=0;
-        mAmps[1].name="R"; mAmps[1].address=1;
-        for(auto& a:mAmps) { a.model=cirrus::core::CodecModel::CS35L41; a.present=true; }
-        mAmps[1].channel=cirrus::core::AudioChannel::Right;
+        mAmplifiers[0].name="L"; mAmplifiers[0].address=0;
+        mAmplifiers[1].name="R"; mAmplifiers[1].address=1;
+        for(auto& a:mAmplifiers) { a.model=cirrus::core::AmplifierModel::CS35L41; a.present=true; }
+        mAmplifiers[1].channel=cirrus::core::AudioChannel::Right;
     }
     static const char* failureName(DiagnosticFailure) { return "failure"; }
     static const char* stageName(DriverStage) { return "stage"; }
@@ -184,8 +184,8 @@ public:
     }
     void publishDriverVerdict();
     void handlePowerChange(bool powered);
-    bool initCodec(CS35L41Amp&);
-    void fullDriverFlow();
+    bool initializeCS35L41Device(CS35L41Amp&);
+    void bringUpAmplifiers();
     IOReturn initializeCS35L41Hardware(AmplifierState&);
     IOReturn loadCS35L41Firmware(AmplifierState&);
     IOReturn verifyCS35L41Ready(AmplifierState&);
@@ -201,15 +201,15 @@ public:
 ''' + FIELDS + r'''
 };
 
-class FixupRegisterIOAdapter : public cirrus::core::RegisterIO {
-    CirrusAudioFixup* mFixup;
-    CS35L41Amp& mAmp;
+class ServiceRegisterIO : public cirrus::core::RegisterIO {
+    CirrusAudioFixup* mService;
+    CS35L41Amp& mAmplifier;
 public:
-    FixupRegisterIOAdapter(CirrusAudioFixup* f, CS35L41Amp& a) : mFixup(f), mAmp(a) {}
-    bool read(uint32_t reg, uint32_t* val) override { return mFixup->readRegister(mAmp, reg, val); }
-    bool write(uint32_t reg, uint32_t val) override { return mFixup->writeRegister(mAmp, reg, val); }
+    ServiceRegisterIO(CirrusAudioFixup* f, CS35L41Amp& a) : mService(f), mAmplifier(a) {}
+    bool read(uint32_t reg, uint32_t* val) override { return mService->readRegister(mAmplifier, reg, val); }
+    bool write(uint32_t reg, uint32_t val) override { return mService->writeRegister(mAmplifier, reg, val); }
     bool updateBits(uint32_t, uint32_t, uint32_t) override { return true; }
-    bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mFixup->pollRegisterBit(mAmp, r, m, e, t); }
+    bool pollBit(uint32_t r, uint32_t m, uint32_t e, uint32_t t) override { return mService->pollRegisterBit(mAmplifier, r, m, e, t); }
     bool bulkRead(uint32_t, uint8_t*, size_t) override { return true; }
     bool bulkWrite(uint32_t, const uint8_t*, size_t) override { return true; }
 };
@@ -220,103 +220,103 @@ unsigned failures=0;
 void check(bool ok,const std::string& label) { if(!ok) { ++failures; printf("FAIL %s\n",label.c_str()); } }
 int main() {
     for(const char* stage : {"probe","otp","errata","clock","asp","gpio","platform","firmware","dsp"}) {
-        CirrusAudioFixup d; d.phase=stage; d.fullDriverFlow();
-        check(d.mDebugPhaseHalted && !d.mAmps[0].initialized && !d.mAmps[1].initialized,"phase never publishes readiness");
+        CirrusAudioFixup d; d.phase=stage; d.bringUpAmplifiers();
+        check(d.mDebugPhaseHalted && !d.mAmplifiers[0].initialized && !d.mAmplifiers[1].initialized,"phase never publishes readiness");
         check(d.properties["Cirrus_Driver_Verdict"]=="DEBUG_PHASE_HALTED","phase verdict");
         check(d.uploads==((std::string(stage)=="dsp" || std::string(stage)=="firmware")?1U:0U),"phase cannot upload past requested stage");
         if(std::string(stage)=="probe") check(d.io==0,"probe phase never resets silicon");
     }
     CirrusAudioFixup phaseFailure;phaseFailure.phase="firmware";phaseFailure.failStage="upload";phaseFailure.faultAddress=1;
-    phaseFailure.fullDriverFlow();
+    phaseFailure.bringUpAmplifiers();
     check(phaseFailure.mDebugPhaseHalted && phaseFailure.uploads==1 && phaseFailure.resets[1]==0,
           "group debug boundary blocks all later members");
     CirrusAudioFixup identityDelay;
     identityDelay.delayIdentity=true;
-    identityDelay.fullDriverFlow();
-    check(!identityDelay.mAmps[0].playbackFaulted && !identityDelay.mAmps[1].playbackFaulted &&
+    identityDelay.bringUpAmplifiers();
+    check(!identityDelay.mAmplifiers[0].playbackFaulted && !identityDelay.mAmplifiers[1].playbackFaulted &&
           identityDelay.uploads==0 && identityDelay.properties["Cirrus_Driver_Verdict"]=="WAITING_FOR_CODEC_IDENTITY",
           "zero boot identity defers upload without latching unsupported firmware");
     identityDelay.delayIdentity=false;
     identityDelay.teardownAmplifierRuntime();
-    identityDelay.fullDriverFlow();
+    identityDelay.bringUpAmplifiers();
     check(identityDelay.uploads==2 && identityDelay.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
           "identity publication permits complete stereo bringup");
-    CirrusAudioFixup ro; ro.readonly=true; ro.fullDriverFlow();
+    CirrusAudioFixup ro; ro.readonly=true; ro.bringUpAmplifiers();
     check(ro.io==0 && ro.uploads==0,"readonly flow never writes hardware");
-    CirrusAudioFixup unknown; unknown.mAmps[0].model=cirrus::core::CodecModel::CS35L56; unknown.fullDriverFlow();
-    check(unknown.resets[0]==0 && unknown.mAmps[0].playbackFaulted,"unsupported backend rejected before reset");
+    CirrusAudioFixup unknown; unknown.mAmplifiers[0].model=cirrus::core::AmplifierModel::CS35L56; unknown.bringUpAmplifiers();
+    check(unknown.resets[0]==0 && unknown.mAmplifiers[0].playbackFaulted,"unsupported backend rejected before reset");
     CirrusAudioFixup codec;
-    check(codec.initCodec(codec.mAmps[0]),"normal OTP boot");
+    check(codec.initializeCS35L41Device(codec.mAmplifiers[0]),"normal OTP boot");
     for(unsigned i=1;i<=codec.io;++i) {
         CirrusAudioFixup d; d.failIO=i;
-        check(!d.initCodec(d.mAmps[0]),"codec init rejects I/O fault "+std::to_string(i));
-        check(d.mAmps[0].diagnostic.firstFailure==DIAG_I2C_TRANSFER,"codec init preserves transport first failure");
+        check(!d.initializeCS35L41Device(d.mAmplifiers[0]),"codec init rejects I/O fault "+std::to_string(i));
+        check(d.mAmplifiers[0].diagnostic.firstFailure==DIAG_I2C_TRANSFER,"codec init preserves transport first failure");
     }
     CirrusAudioFixup otp;
     otp.otpError=true;
-    check(!otp.initCodec(otp.mAmps[0]),"OTP_BOOT_DONE plus OTP_BOOT_ERR must reject boot");
-    check(otp.mAmps[0].diagnostic.firstFailure!=DIAG_OK,"OTP error has an explicit diagnostic");
-    check(otp.mAmps[0].diagnostic.firstFailure==DIAG_OTP_BOOT_ERROR,"OTP error is distinct from timeout");
+    check(!otp.initializeCS35L41Device(otp.mAmplifiers[0]),"OTP_BOOT_DONE plus OTP_BOOT_ERR must reject boot");
+    check(otp.mAmplifiers[0].diagnostic.firstFailure!=DIAG_OK,"OTP error has an explicit diagnostic");
+    check(otp.mAmplifiers[0].diagnostic.firstFailure==DIAG_OTP_BOOT_ERROR,"OTP error is distinct from timeout");
     CirrusAudioFixup unreadable;
     unreadable.otpReadError=true;
-    check(!unreadable.initCodec(unreadable.mAmps[0]),"OTP status unreadable must reject boot");
+    check(!unreadable.initializeCS35L41Device(unreadable.mAmplifiers[0]),"OTP status unreadable must reject boot");
     CirrusAudioFixup absent;
-    absent.mAmps[0].present=true; absent.identityReadError=true;
-    check(!absent.initCodec(absent.mAmps[0]) && !absent.mAmps[0].present,"failed identity read clears stale presence");
+    absent.mAmplifiers[0].present=true; absent.identityReadError=true;
+    check(!absent.initializeCS35L41Device(absent.mAmplifiers[0]) && !absent.mAmplifiers[0].present,"failed identity read clears stale presence");
     for(const char* stage : {"otp-timeout","errata","pll","asp","gpio","platform","missing-firmware","upload","idle-prepare","idle-verify","dsp-verify"}) {
         CirrusAudioFixup d;
         d.failStage=stage;
-        auto& a=d.mAmps[0];
+        auto& a=d.mAmplifiers[0];
         a.initialized=a.firmwareValidated=a.dspAlive=true; a.monitorCount=1;
         a.haloStateRegister=0xDEAD; a.diagnosticControlCount=1;
-        d.fullDriverFlow();
+        d.bringUpAmplifiers();
         std::string prefix=std::string(stage)+": ";
         check(!a.initialized && !a.firmwareValidated && !a.dspAlive && a.monitorCount==0,prefix+"invalidate readiness");
         check(a.playbackFaulted,prefix+"latch failure before returning");
         check(d.stops[0]>0 && d.halts[0]>0 && d.muted[0] && !d.powered[0],prefix+"synchronous output/core cleanup");
         check(a.haloStateRegister==0 && a.haloHeartbeatRegister==0 && a.diagnosticControlCount==0,prefix+"invalidate control addresses");
         check(a.diagnostic.firstFailure!=DIAG_OK,prefix+"preserve first failure");
-        check(!d.mAmps[1].initialized && d.resets[1]==0,prefix+"group failure blocks later peers");
-        unsigned resets=d.resets[0]; d.fullDriverFlow();
+        check(!d.mAmplifiers[1].initialized && d.resets[1]==0,prefix+"group failure blocks later peers");
+        unsigned resets=d.resets[0]; d.bringUpAmplifiers();
         check(d.resets[0]==resets,prefix+"latched failure never auto retries reset");
     }
     CirrusAudioFixup bypass;
-    bypass.bypass=true; bypass.fullDriverFlow();
+    bypass.bypass=true; bypass.bringUpAmplifiers();
     check(bypass.discoveries==0 && bypass.uploads==0,"explicit bypass skips firmware and coefficient loading");
-    for(auto& a:bypass.mAmps) {
+    for(auto& a:bypass.mAmplifiers) {
         check(a.initialized && !a.dspAlive && !a.firmwareValidated && a.monitorCount==0,"explicit bypass leaves DSP halted");
         check(bypass.halts[a.address]>0,"explicit bypass verifies core stop");
     }
     check(bypass.properties["Cirrus_Driver_Verdict"]=="READY_BYPASS_EXPLICIT","explicit bypass verdict");
     CirrusAudioFixup badBypass;
-    badBypass.bypass=true; badBypass.haltError=true; badBypass.fullDriverFlow();
-    check(!badBypass.mAmps[0].initialized && badBypass.mAmps[0].playbackFaulted && badBypass.uploads==0,
+    badBypass.bypass=true; badBypass.haltError=true; badBypass.bringUpAmplifiers();
+    check(!badBypass.mAmplifiers[0].initialized && badBypass.mAmplifiers[0].playbackFaulted && badBypass.uploads==0,
           "bypass cannot become ready if core halt fails");
     for(unsigned mode=0;mode<2;++mode) {
         CirrusAudioFixup d; d.failStage="idle-verify";
         d.cleanupError=mode==0; d.haltError=mode==1;
-        d.fullDriverFlow();
-        auto& a=d.mAmps[0];
+        d.bringUpAmplifiers();
+        auto& a=d.mAmplifiers[0];
         check(a.diagnostic.firstFailure==DIAG_IDLE_INVARIANT,"rollback failure preserves original idle invariant");
         check(a.playbackFaulted && !a.initialized && !a.firmwareValidated,"failed rollback cannot publish readiness");
         check(d.properties["Cirrus_Driver_Verdict"]=="FAULT_LATCHED","failed rollback verdict");
         check(d.halts[0]>0,"core halt still attempted after output cleanup fails");
     }
-    CirrusAudioFixup single; single.mAmpCount=1; single.fullDriverFlow();
+    CirrusAudioFixup single; single.mAmplifierCount=1; single.bringUpAmplifiers();
     check(single.uploads==0 && single.properties["Cirrus_Driver_Verdict"]=="INCOMPLETE_TOPOLOGY", "missing peer blocks pair initialization");
-    CirrusAudioFixup unsupportedBoard; unsupportedBoard.mPlatformAuthorized=false; unsupportedBoard.fullDriverFlow();
+    CirrusAudioFixup unsupportedBoard; unsupportedBoard.mPlatformAuthorized=false; unsupportedBoard.bringUpAmplifiers();
     check(unsupportedBoard.uploads==0 && unsupportedBoard.resets[0]==0 && unsupportedBoard.properties["Cirrus_Driver_Verdict"]=="UNSUPPORTED_PLATFORM", "unsupported board performs no reset or upload");
     unsupportedBoard.handlePowerChange(false);
     check(unsupportedBoard.stops[0]==0 && unsupportedBoard.halts[0]==0,"unsupported board suspend does not write hardware");
     single.handlePowerChange(false);
     check(single.stops[0]==0 && single.halts[0]==0,"incomplete uninitialized pair suspend does not write hardware");
-    CirrusAudioFixup normal; normal.fullDriverFlow();
+    CirrusAudioFixup normal; normal.bringUpAmplifiers();
     check(normal.uploads==2 && normal.properties["Cirrus_Driver_Verdict"]=="READY_DSP","normal DSP startup");
     normal.handlePowerChange(false); normal.handlePowerChange(true);
-    check(normal.uploads==4 && normal.mAmps[0].initialized && normal.mAmps[1].initialized,"wake executes actual boot orchestration");
-    CirrusAudioFixup wake; wake.fullDriverFlow(); wake.handlePowerChange(false);
+    check(normal.uploads==4 && normal.mAmplifiers[0].initialized && normal.mAmplifiers[1].initialized,"wake executes actual boot orchestration");
+    CirrusAudioFixup wake; wake.bringUpAmplifiers(); wake.handlePowerChange(false);
     wake.failStage="dsp-verify"; wake.handlePowerChange(true);
-    check(!wake.mAmps[0].initialized && wake.mAmps[0].playbackFaulted && wake.muted[0],"wake verify failure cannot reuse pre-sleep readiness");
+    check(!wake.mAmplifiers[0].initialized && wake.mAmplifiers[0].playbackFaulted && wake.muted[0],"wake verify failure cannot reuse pre-sleep readiness");
     if(failures) { printf("FAIL bringup assertions=%u\n",failures); return 1; }
     printf("PASS codec init single-I/O fault sweep (%u positions)\n",codec.io);
     puts("PASS OTP error/read failure, stale identity, 11 boot-stage faults, explicit bypass, cleanup faults and actual boot/wake orchestration");

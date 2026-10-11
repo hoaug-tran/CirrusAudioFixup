@@ -7,14 +7,15 @@
 //
 
 #pragma once
+#include "Transport/I2CRegisterBus.hpp"
 
-#include "Core/DeviceRegistry.hpp"
-#include "Devices/BackendCatalog.hpp"
+#include "Core/AmplifierDescriptors.hpp"
+#include "Devices/AmplifierBackends.hpp"
 #include "Core/RegisterIO.hpp"
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/AmplifierGroup.hpp"
 #include "Platform/BoardConfiguration.hpp"
-#include "Platform/BackendRegistry.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
 #include "Platform/AmplifierRuntime.hpp"
 #include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Firmware/FirmwareBundle.hpp"
@@ -25,15 +26,15 @@
 #include "Devices/CS35L41/Playback.hpp"
 #include "Devices/CS35L41/Resources/Tuning.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
-#include "Firmware/WMFW/FirmwareUploader.hpp"
-#include "Platform/HDA/HDAController.hpp"
+#include "Firmware/WMFW/WMFWUploader.hpp"
+#include "Platform/HDA/HDAStreamState.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
-#include "Platform/HDA/AudioEvents.hpp"
+#include "Platform/HDA/AudioEventSource.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
-#include "Transport/VoodooI2CTransport.hpp"
-#include "Transport/CS35L41SPITransport.hpp"
+#include "Transport/VoodooI2CProvider.hpp"
+#include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Transport/ACPISPIResources.hpp"
 #include "Transport/NativeSPIHost.hpp"
 
@@ -71,7 +72,7 @@ struct AmplifierState {
     cirrus::core::RegisterIO* registerIO{nullptr};
     cirrus::core::BusEndpoint endpoint{};
     uint8_t endpointIndex{0};
-    cirrus::core::CodecModel model{cirrus::core::CodecModel::Unknown};
+    cirrus::core::AmplifierModel model{cirrus::core::AmplifierModel::Unknown};
     cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
     bool present{false};
     uint32_t deviceId{0};
@@ -152,7 +153,7 @@ struct FirmwareResource {
 };
 
 class CirrusAudioFixup : public IOService {
-    friend class FixupRegisterIOAdapter;
+    friend class ServiceRegisterIO;
 
     OSDeclareDefaultStructors(CirrusAudioFixup)
 
@@ -165,16 +166,16 @@ public:
     IOReturn setPowerState(unsigned long state, IOService* device) override;
 
 private:
-    void fullDriverFlow();
+    void bringUpAmplifiers();
     IOReturn initializeCS35L41Hardware(AmplifierState& amp);
     IOReturn loadCS35L41Firmware(AmplifierState& amp);
     IOReturn verifyCS35L41Ready(AmplifierState& amp);
     IOReturn shutdownCS35L41(AmplifierState& amp);
     bool stopCS35L41At(AmplifierState& amp,const char* phase);
-    class CS35L41ServiceBackend;
-    struct BackendOwner {CirrusAudioFixup* owner;AmplifierState* amp;};
-    friend cirrus::core::AmplifierLifecycleHooks* cirrus::devices::cs35l41::createServiceBackend(const cirrus::platform::BackendContext&);
-    friend void cirrus::devices::cs35l41::destroyServiceBackend(cirrus::core::AmplifierLifecycleHooks*);
+    class CS35L41Backend;
+    struct AmplifierBackendOwner {CirrusAudioFixup* owner;AmplifierState* amp;};
+    friend cirrus::core::AmplifierLifecycleHooks* cirrus::devices::cs35l41::createBackend(const cirrus::platform::AmplifierBackendContext&);
+    friend void cirrus::devices::cs35l41::destroyBackend(cirrus::core::AmplifierLifecycleHooks*);
     IOReturn commitCS35L41Playback(AmplifierState& amp);
     bool configureCS35L41Interrupt(AmplifierState& amp,bool enabled);
     bool validateCS35L41Playback(AmplifierState& amp,const cirrus::core::PlaybackContext&);
@@ -256,24 +257,24 @@ private:
 
     // Storage capacity is not supported topology. Current profiles permit
     // only the two channels with matching routing and speaker tuning.
-    static constexpr size_t kMaxAmps = cirrus::platform::AmplifierRuntime::kCapacity;
-    size_t mAmpCount{0};
-    AmplifierState mAmps[kMaxAmps]{};
+    static constexpr size_t kMaxAmplifiers = cirrus::platform::AmplifierRuntime::kCapacity;
+    size_t mAmplifierCount{0};
+    AmplifierState mAmplifiers[kMaxAmplifiers]{};
     const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
     size_t expectedAmplifierCount() const {
         return mPlatformProfile?(mPlatformProfile->boardConfiguration?mPlatformProfile->boardConfiguration->count:mPlatformProfile->endpointCount):0;
     }
     bool mPlatformAuthorized{false};
     uint32_t mPlatformSubsystemId{0};
-    cirrus::platform::BackendRegistry mBackendRegistry;
+    cirrus::platform::AmplifierBackendRegistry mBackendRegistry;
     cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
-    cirrus::core::RegisterIO* mRuntimePorts[kMaxAmps]{};
+    cirrus::core::RegisterIO* mRuntimePorts[kMaxAmplifiers]{};
     cirrus::transport::VoodooI2CController* mI2CController{nullptr};
-    cirrus::transport::I2CRegisterBus* mI2CBuses[kMaxAmps]{};
-    cirrus::core::RegisterMap* mI2CMaps[kMaxAmps]{};
-    BackendOwner mBackendOwners[kMaxAmps]{};
-    cirrus::platform::AmplifierBinding mRuntimeBindings[kMaxAmps]{};
-    cirrus::firmware::FirmwareBundle mRuntimeFirmware[kMaxAmps]{};
+    cirrus::transport::I2CRegisterBus* mI2CBuses[kMaxAmplifiers]{};
+    cirrus::core::RegisterMap* mI2CMaps[kMaxAmplifiers]{};
+    AmplifierBackendOwner mBackendOwners[kMaxAmplifiers]{};
+    cirrus::platform::AmplifierBinding mRuntimeBindings[kMaxAmplifiers]{};
+    cirrus::firmware::FirmwareBundle mRuntimeFirmware[kMaxAmplifiers]{};
     cirrus::platform::BoardConfiguration mRuntimeBoard{};
 
     static const size_t kTraceBufferSize = 1024;
@@ -308,7 +309,7 @@ private:
     bool setupProbeTimer();
     void scheduleReadOnlyProbe(uint32_t delayMs);
     void runReadOnlyProbe();
-    void probeAmp(AmplifierState& amp);
+    void probeAmplifier(AmplifierState& amp);
     size_t detectAmplifiers();
 
     bool mProbingAmplifiers{false};
@@ -340,7 +341,7 @@ private:
     void snapshotPlayback(AmplifierState& amp);
     void snapshotDiagnostics(AmplifierState& amp, const char* stage);
 
-    bool initCodec(AmplifierState& amp);
+    bool initializeCS35L41Device(AmplifierState& amp);
 
     bool unlockTestKey(AmplifierState& amp);
     bool lockTestKey(AmplifierState& amp);
@@ -360,11 +361,11 @@ private:
 
     void discoverFirmware(AmplifierState& amp);
 
-    bool bringupDSP(AmplifierState& amp);
-    bool bootDsp(AmplifierState& amp) { return bringupDSP(amp); }
+    bool bringUpDSP(AmplifierState& amp);
+    bool bootDsp(AmplifierState& amp) { return bringUpDSP(amp); }
 
-    void startBringup() { fullDriverFlow(); }
-    bool resetAndInitCodec(AmplifierState& amp) { return initCodec(amp); }
+    void startBringUp() { bringUpAmplifiers(); }
+    bool resetAndInitCodec(AmplifierState& amp) { return initializeCS35L41Device(amp); }
     bool loadOtpCalibration(AmplifierState& amp) { return unpackOTP(amp); }
 
     bool stopPlayback(AmplifierState& amp);

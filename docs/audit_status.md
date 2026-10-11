@@ -59,7 +59,7 @@ phase protection and pair-commit verification. Quiet health skips timestamp and
 ASP logging reads. Per-endpoint prepare durations are published in IORegistry;
 a faster end-to-end transition is not claimed until the new bundle is booted.
 
-`WMFWFormat.hpp` and `UploadPlan.hpp` are now the canonical production types.
+`WMFWFormat.hpp` and `WMFWUploadPlan.hpp` are now the canonical production types.
 Parser and uploader consume them instead of defining incompatible duplicates.
 This closes the duplicate-type cleanup; further service/backend extraction is
 still open. IRQ provider forwarding has been reviewed against the supplied custom
@@ -103,7 +103,7 @@ cancellation rolls back without manufacturing a hardware timeout. The separate
 initialization/PM mailbox helper remains synchronous. No runtime filesystem
 loader or helper was added.
 
-The service now owns the only HDA scanner. HDAController.cpp is not compiled and
+The service now owns the only HDA scanner. The empty alternate-scanner source was removed and
 contains no alternate implementation. The shared header contains observation
 state; the format decoder contains no MMIO scanner.
 
@@ -173,8 +173,8 @@ instruction addresses and limits of the disassembly findings.
   start/stop now use a state machine and elapsed-time deadlines. Firmware
   initialization, PM quiesce and the synchronous I2C provider remain possible
   sources of latency. See [runtime transition design](runtime_transition_design.md).
-- Consolidate the unused namespaced UploadPlan.hpp declarations with the active
-  FirmwareUploader.hpp types before making that interface public.
+- Consolidate the unused namespaced WMFWUploadPlan.hpp declarations with the active
+  WMFWUploader.hpp types before making that interface public.
 
 Do not use READY_DSP or an HDA RUN bit as proof of audible output or measured
 speaker calibration. Preserve both the original failure and later cleanup results.

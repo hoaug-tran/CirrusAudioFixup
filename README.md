@@ -10,6 +10,8 @@
 
 **Open-source macOS kernel extension for Cirrus Logic CS35L41 smart speaker amplifiers over I2C.**
 
+SPI development adds a tested CS35L41 register adapter. Intel SPI controller integration and HP board support remain pending; see [SPI development status](docs/spi_support.md).
+
 Reference platform: **Lenovo Legion 7 16ACHg6 · Realtek ALC287 · AMD**
 
 [Quick start](#installation) • [Hardware status](#hardware-and-macos-scope) • [How it works](#how-it-works) • [Boot arguments](#boot-arguments) • [Diagnostics](#diagnostics) • [Documentation hub](#documentation-hub)

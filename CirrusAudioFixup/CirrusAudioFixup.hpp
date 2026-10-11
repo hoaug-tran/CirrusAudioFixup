@@ -24,6 +24,7 @@
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
 #include "Transport/VoodooI2CTransport.hpp"
+#include "Transport/CS35L41SPITransport.hpp"
 
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOInterruptEventSource.h>

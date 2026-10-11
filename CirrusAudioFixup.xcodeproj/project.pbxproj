@@ -287,10 +287,24 @@
 			path = "VoodooI2CTransport.hpp";
 			sourceTree = "<group>";
 		};
+		CAFE51000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "SPIController.hpp";
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000002 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "CS35L41SPITransport.hpp";
+			sourceTree = "<group>";
+		};
 		D1C35C0E3D90A9BEF84D6F6D = {
 			isa = PBXGroup;
 			children = (
 				79E10805A559FC3E5503866B,
+				CAFE51000000000000000001,
+				CAFE51000000000000000002,
 			);
 			path = "Transport";
 			sourceTree = "<group>";

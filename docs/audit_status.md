@@ -350,3 +350,30 @@ Installed UUID `6670947A-557E-3938-8046-AFD36E3CC12A`, executable SHA-256
 The kernel still runs old UUID `2564C407-4ED3-379A-8693-8C529B52434D` until reboot;
 new-build hardware validation is pending. See [EFI boot validation](efi_boot_validation.md)
 for exact identities, preparation evidence, boot checks and rollback.
+
+## Delayed board identity boot regression — 2026-10-13
+
+The supplied `/Volumes/EFI/log.txt` shows the intended Debug UUID booted, with
+service attachment at 1.592 s. The HDA PCI SSID was still zero and initialization
+was blocked at 1.608 s by BOARD_NOT_AUTHORIZED. The runtime then parked without
+retrying board discovery. IOAudioFamily hooks appeared at 21.239 s; live HDEF
+registry now exposes subsystem vendor 17AA and subsystem ID 382B, already in the
+existing allowlist. This establishes a missing dependency retry, not AMP damage
+or an unsupported physical board. `log-other.txt` contains no Cirrus messages;
+the unrelated graphics allocation errors do not establish the amplifier cause.
+
+Missing board identity now enters WAITING_BOARD_IDENTITY for at most 30 seconds,
+with 100 ms dependency polling on the workloop. It performs no reset or amplifier
+initialization while identity is absent. Once identity arrives, it revalidates the
+unchanged board policy and communication/identity preflight before reset, discovery
+and bringup. Unknown boards, expired identity and failed preflight remain blocked.
+Repeated unchanged profile resolution does not repeat property/log publication.
+Faulted/unbound diagnostic attachments still park after the dependency resolves
+or expires. Pending verdicts stay distinguishable from unsupported identity.
+
+The author registry property was never removed. The earlier diagnostic cleanup
+removed the console banner. A concise `Author: Tran Kinh Hoang (hoaugtr)` line is
+restored for Debug or `-cirrusdbg`; quiet Release remains free of routine banners.
+Regression executes the production retry for identity at 21 s, no early reset,
+once-only bringup, unsupported identity, deadline, factory failure, preflight
+identity rejection and both transport discovery branches under ASan/UBSan.

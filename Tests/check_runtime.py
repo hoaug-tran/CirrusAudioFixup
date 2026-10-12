@@ -267,6 +267,8 @@ public:
     void suspendCommunication() {}
     bool resumeCommunication() {return true;}
 public:
+    bool retryPlatformIdentity(){return false;}
+    bool mPlatformIdentityPending=false;
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     IOInterruptEventSource* mAmpInterrupt=nullptr;

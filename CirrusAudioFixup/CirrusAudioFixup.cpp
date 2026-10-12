@@ -371,6 +371,8 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
 }
 
 void CirrusAudioFixup::resolvePlatformProfile() {
+    const auto* previousProfile = mPlatformProfile;
+    const uint32_t previousSubsystemId = mPlatformSubsystemId;
     const char* acpiHid = nullptr;
     OSObject* ownedHid = nullptr;
     if (auto* acpi = OSDynamicCast(IOACPIPlatformDevice, mProvider)) {
@@ -403,13 +405,15 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         mPlatformProfile = exact;
     mPlatformSubsystemId = pciSubsystemId;
     mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, pciSubsystemId);
-    setProperty("Cirrus_Platform_PCI_SSID", uint64_t(pciSubsystemId), 32);
-    setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
-    setProperty("Cirrus_Board_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
-    setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
-    setProperty("Cirrus_Platform_ACPI_HID", acpiHid ? acpiHid : "unknown");
-    CIRRUS_LOG("platform profile selected: %s (hid=%s, endpoints=%lu)", mPlatformProfile->name, acpiHid ? acpiHid : "unknown",
-               mPlatformProfile->endpointCount);
+    if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != pciSubsystemId) {
+        setProperty("Cirrus_Platform_PCI_SSID", uint64_t(pciSubsystemId), 32);
+        setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
+        setProperty("Cirrus_Board_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
+        setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
+        setProperty("Cirrus_Platform_ACPI_HID", acpiHid ? acpiHid : "unknown");
+        CIRRUS_LOG("platform profile selected: %s (hid=%s, endpoints=%lu)", mPlatformProfile->name, acpiHid ? acpiHid : "unknown",
+                   mPlatformProfile->endpointCount);
+    }
     OSSafeReleaseNULL(ownedHid);
 }
 
@@ -684,6 +688,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
     setProperty("Cirrus_Audio_Event_Mode", "HDA_TIMER_FALLBACK");
     IOLog("CirrusAudioFixup: %s build; verbose logging %s\n", cirrus::support::kBuildConfiguration, gCirrusDebug ? "enabled" : "disabled");
     setProperty("CirrusReachedStart", kOSBooleanTrue);
+    CIRRUS_LOG("Author: Tran Kinh Hoang (hoaugtr)");
     CIRRUS_LOG("start");
 
     if (!super::start(provider)) {
@@ -722,16 +727,27 @@ bool CirrusAudioFixup::start(IOService* provider) {
         super::stop(provider);
         return false;
     }
-    bool hardwareResetVerified = performPlatformHardwareReset();
-    if (!hardwareResetVerified) {
-        CIRRUS_LOG("Platform hardware reset not asserted or verified; continuing with ACPI and I2C soft reset");
-    }
+    mPlatformIdentityPending = !mPlatformSubsystemId && mPlatformProfile->allowAutomaticInitialization && !bootArgEnabled("-cirrusro");
+    if (mPlatformIdentityPending) {
+        mPlatformIdentityDeadlineMs = playbackTimeMilliseconds() + 30000;
+        mAttachment.amplifier = "WAITING_BOARD_IDENTITY";
+        setProperty("Cirrus_Board_Identity_Status", "WAITING_HDA_PCI_IDENTITY");
+        setProperty("Cirrus_Driver_Verdict", "WAITING_BOARD_IDENTITY");
+        CIRRUS_LOG("BOARD_IDENTITY_WAIT profile=%s deadline_ms=%llu; no reset or amplifier initialization", mPlatformProfile->name,
+                   mPlatformIdentityDeadlineMs);
+        publishAttachmentStatus();
+    } else {
+        bool hardwareResetVerified = performPlatformHardwareReset();
+        if (!hardwareResetVerified) {
+            CIRRUS_LOG("Platform hardware reset not asserted or verified; continuing with ACPI and I2C soft reset");
+        }
 
-    IOSleep(15);
-    if (mNativeSPI.bound())
-        detectNativeSPIAmplifiers();
-    else
-        detectAmplifiers();
+        IOSleep(15);
+        if (mNativeSPI.bound())
+            detectNativeSPIAmplifiers();
+        else
+            detectAmplifiers();
+    }
 
     if (!setupProbeTimer()) {
         CIRRUS_ERR("probe timer setup failed");
@@ -752,7 +768,8 @@ bool CirrusAudioFixup::start(IOService* provider) {
         publishDriverVerdict();
     } else {
         CIRRUS_LOG("CirrusAudioFixup starting FULL DRIVER FLOW");
-        bringUpAmplifiers();
+        if (!mPlatformIdentityPending)
+            bringUpAmplifiers();
         if (mProbeTimer) {
             mProbeTimer->setTimeoutMS(50);
         }
@@ -1714,6 +1731,57 @@ void CirrusAudioFixup::audioEventReceived(OSObject* owner, const cirrus::platfor
     self->runBackgroundMonitor();
 }
 
+// Missing board identity is a bounded boot dependency, not an unsupported board.
+// Revalidate existing authorization before any reset or AMP write; known failures
+// remain terminal. Calls are serialized on the service workloop.
+bool CirrusAudioFixup::retryPlatformIdentity() {
+    if (!mPlatformIdentityPending)
+        return false;
+    resolvePlatformProfile();
+    if (!mPlatformSubsystemId) {
+        if (playbackTimeMilliseconds() < mPlatformIdentityDeadlineMs) {
+            if (mProbeTimer)
+                mProbeTimer->setTimeoutMS(100);
+            return true;
+        }
+        mPlatformIdentityPending = false;
+        mAttachment.amplifier = "BOARD_IDENTITY_TIMEOUT";
+        setProperty("Cirrus_Board_Identity_Status", "HDA_PCI_IDENTITY_TIMEOUT");
+        recordAttachmentFailure("POLICY", "HDA_PCI_IDENTITY_TIMEOUT", kIOReturnTimeout);
+        publishDriverVerdict();
+        return true;
+    }
+    mPlatformIdentityPending = false;
+    setProperty("Cirrus_Board_Identity_Status", mPlatformAuthorized ? "VERIFIED" : "REJECTED");
+    CIRRUS_LOG("BOARD_IDENTITY_RESOLVED board=0x%08X authorized=%u", mPlatformSubsystemId, unsigned(mPlatformAuthorized));
+    if (!mPlatformAuthorized) {
+        mAttachment.amplifier = "UNSUPPORTED_BOARD";
+        recordAttachmentFailure("POLICY", "BOARD_NOT_AUTHORIZED", kIOReturnNotPermitted);
+        publishDriverVerdict();
+        return true;
+    }
+    teardownCommunication();
+    if (!setupCommunication(mProvider)) {
+        publishDriverVerdict();
+        return true;
+    }
+    if (!mPlatformAuthorized) {
+        publishDriverVerdict();
+        return true;
+    }
+    performPlatformHardwareReset();
+    IOSleep(15);
+    if (mNativeSPI.bound())
+        detectNativeSPIAmplifiers();
+    else
+        detectAmplifiers();
+    bringUpAmplifiers();
+    setupAmplifierInterrupt();
+    if (mProbeTimer)
+        mProbeTimer->setTimeoutMS(50);
+    return true;
+}
+
 // Poll driver-owned pending resources. Only Waiting lifecycles can retry;
 // silicon faults remain latched and peers retain the shared rollback policy.
 bool CirrusAudioFixup::retryBringUpResources() {
@@ -1728,6 +1796,10 @@ bool CirrusAudioFixup::retryBringUpResources() {
 }
 
 void CirrusAudioFixup::runBackgroundMonitor() {
+    if (mStopping || !mPowerAvailable || mNeedsReinitialization || mDebugPhaseHalted)
+        return;
+    if (retryPlatformIdentity())
+        return;
     // Diagnostic-only/failed attachments do not acquire HDA mappings or rearm
     // polling. Pending resources still have a bound Waiting runtime.
     if (!mPlatformAuthorized || !mAmplifierManager.bound() || mAmplifierManager.stage() == cirrus::core::AmplifierStage::Faulted ||
@@ -2061,6 +2133,10 @@ void CirrusAudioFixup::recordDiagnosticFailure(AmplifierState& amp, DiagnosticFa
 // A fault takes precedence over a deliberate debug halt. READY_DSP describes
 // the driver's verified state; speaker routing remains a separate check.
 void CirrusAudioFixup::publishDriverVerdict() {
+    if (mPlatformIdentityPending) {
+        setProperty("Cirrus_Driver_Verdict", "WAITING_BOARD_IDENTITY");
+        return;
+    }
     using cirrus::core::AmplifierStage;
     switch (mAmplifierManager.stage()) {
     case AmplifierStage::Ready:

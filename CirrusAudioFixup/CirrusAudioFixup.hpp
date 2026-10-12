@@ -141,6 +141,9 @@ private:
     IOService* mProvider{nullptr};
     cirrus::transport::NativeSPIHost mNativeSPI;
     bool setupCommunication(IOService* provider);
+    bool retryPlatformIdentity();
+    bool mPlatformIdentityPending{false};
+    uint64_t mPlatformIdentityDeadlineMs{0};
     bool preflightI2CIdentity(const cirrus::platform::AmplifierDriverRegistration*);
     size_t detectNativeSPIAmplifiers();
     size_t detectConfiguredI2CAmplifiers();

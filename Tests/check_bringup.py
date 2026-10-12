@@ -53,6 +53,7 @@ class CirrusAudioFixup {
 public:
     void suspendCommunication() {}
     bool resumeCommunication() { return true; }
+    bool mPlatformIdentityPending=false;
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     size_t mAmplifierCount{2};

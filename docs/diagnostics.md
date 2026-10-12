@@ -68,7 +68,7 @@ collector returns ownership to that user and grants owner read/write access
 are not modified. Direct root execution uses the logged-in console account.
 
 
-It prints an evidence directory, not an archive. Read `status.txt` and the raw files: an exit status of zero from `ioreg` still permits no matching service. Some optional NVRAM properties, registry planes or developer tools may be absent. Review boot arguments, calibration data and hardware identifiers before sharing. The directory is temporary; copy it to a persistent location before rebooting.
+It prints an evidence directory, not an archive. Read `status.txt` and the raw files: an exit status of zero from `ioreg` still permits no matching service. Some optional NVRAM properties, registry planes or developer tools may be absent. Review boot arguments, calibration data and hardware identifiers before sharing. The Desktop directory persists across reboot; retain it with the matching bundle identity and dSYM.
 
 To also identify the bundle being tested, pass its actual path as the sole argument. For a local Release build:
 

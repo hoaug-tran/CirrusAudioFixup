@@ -219,6 +219,49 @@ no pinned formatter config. No bundle was installed or loaded by this change.
 
 This is a schema boundary, not independent backend lifetime ownership. The service
 still allocates endpoint state, orchestrates firmware and supplies silicon helper
-methods. Next steps remain an explicit serialized platform contract, backend-owned
-state allocation and teardown/rebind/diagnostic lifetime coverage. Native I2C/MP2,
+methods. At that schema-only milestone, the next steps were an explicit serialized
+platform contract, backend-owned state allocation and lifetime coverage. The
+subsequent contract extraction is recorded below. Native I2C/MP2,
 new amplifiers and SoundWire remain subject to the existing evidence gates.
+
+## CS35L41 platform contract and lifetime audit (2026-10-12)
+
+The production CS35L41 backend now includes its own factory/contract header and
+compiles without `CirrusAudioFixup.hpp`. It borrows `Platform`, `State` and the
+runtime-owned context instead of casting to a private service struct. The service
+implements that contract through an embedded adapter; factory friendship and the
+nested backend class are removed. This internal source contract does not change
+the installed VoodooI2C ABI or establish its provenance.
+
+| Audited boundary | Result and regression |
+| --- | --- |
+| Construction | Null platform/state, wrong model, endpoint/channel mismatch and invalid binding reject without register I/O or state reset |
+| Identity | Failed read captures native `lastError()` before diagnostic callbacks; unknown ID after a successful read remains `NotFound`; unspecified/zero failure uses `NotReady` |
+| Context lifetime | Runtime copies temporary context metadata and destroys backend before context, adapter and register ports |
+| Teardown/rebind | Service clears borrowed adapter pointers only after runtime unbind; actual bring-up fixture checks cleared views and subsequent live-state rebind |
+| PM | Backend fixture exercises playback, suspend, reinitialize on resume and destruction while platform/state/port remain alive |
+| Cleanup failure | Initialization failure and separate shutdown failure survive runtime release; failed cleanup is not automatically retried |
+| DSP halt/reset | `DSPControl::halt` owns state invalidation and the existing RMW/RMW/1000-us-delay/readback sequence; reset is attempted after halt failure and readback remains conditional |
+
+All calls still require owner serialization. State identity and its address remain
+fixed while bound; platform resources stay accessible through shutdown and failure
+diagnostics. The contract follows the existing timer/command-gate design and
+Apple's [workloop and event-source lifetime guidance](https://developer.apple.com/library/archive/documentation/DeviceDrivers/Conceptual/IOKitFundamentals/HandlingEvents/HandlingEvents.html).
+It does not make synchronous firmware upload or provider transactions asynchronous.
+
+`Tests/check_cs35l41_backend.py` compiles the complete production backend as a
+separate translation unit against a non-IOService platform. Ordinary and ASan/UBSan
+runs cover the boundaries above, including DSP transfer faults and active-core
+readback. Existing bring-up/runtime/native-SPI fixtures now use the production
+platform adapter. The maintained runner includes the new suite: all 27 host suites
+plus the optional Windows payload audit pass. Debug/Release builds, plist/release
+metadata, x86_64, OpenCore vtables and binary/dSYM UUID gates pass. The new/changed
+chip files pass an explicit clang-format dry-run; no repository-wide formatting
+configuration was introduced.
+
+Independent allocation of chip state and migration of firmware, protection,
+monitoring and other silicon helpers remain open software work. The bridge still
+delegates those operations to the service. Register sequences, board authorization,
+firmware assets and matching personalities are unchanged. No new bundle was
+installed or loaded; controller/provider provenance, firmware licensing and target
+cold boot/playback/headphone/sleep-wake validation remain separate evidence gates.

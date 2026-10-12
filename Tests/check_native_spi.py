@@ -1,6 +1,7 @@
 """Production native SPI discovery, namespace lookup, ownership and PM failures."""
 from pathlib import Path
 import subprocess,tempfile
+from service_runtime_fixture import PLATFORM_ADAPTER
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=(ROOT/'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text()
 def owner_function(name):
@@ -13,8 +14,8 @@ with tempfile.TemporaryDirectory(prefix='cirrus-native-spi-') as directory:
  (p/'IOKit/IOLib.h').write_text('''#pragma once
 #include <cstdint>
 #include <cstddef>
-using IOReturn=int;
-constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,kIOReturnNotFound=-3,kIOReturnUnsupported=-4,kIOReturnNoMemory=-5,kIOReturnNotPermitted=-6,kIOReturnTimeout=-7;
+#include "Diagnostics/DiagnosticTypes.hpp"
+constexpr int kIOReturnBadArgument=-1,kIOReturnNotReady=-2,kIOReturnNotFound=-3,kIOReturnUnsupported=-4,kIOReturnNoMemory=-5,kIOReturnNotPermitted=-6,kIOReturnTimeout=-7;
 inline void IOSleep(unsigned){}
 ''')
  (p/'IOKit/IORegistryEntry.h').write_text(r'''
@@ -109,16 +110,17 @@ public:
 #include "Core/AmplifierDescriptors.hpp"
 #include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Devices/CS35L41/CS35L41Backend.hpp"
 #include "Transport/VoodooI2CController.hpp"
 #include <map>
 #include <cstdio>
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
 constexpr bool kOSBooleanFalse=false,kOSBooleanTrue=true;
-struct Amp {
+struct Amp : cirrus::devices::cs35l41::State {
  char endpointLabel[16]{};const char* name=nullptr;uint8_t address=0;cirrus::core::AudioChannel channel{};
  cirrus::core::RegisterIO* registerIO=nullptr;cirrus::core::BusEndpoint endpoint{};uint8_t endpointIndex=0;
- cirrus::core::AmplifierModel model{};bool present=false,playbackFaulted=false;uint32_t deviceId=0;
+ cirrus::core::AmplifierModel model{};
 };
 using AmplifierState=Amp;
 class CirrusAudioFixup:public IOService {
@@ -140,11 +142,26 @@ public:
  cirrus::transport::VoodooI2CController* mI2CController=nullptr;
  cirrus::transport::I2CRegisterBus* mI2CBuses[4]{};
  cirrus::core::RegisterMap* mI2CMaps[4]{};
- struct AmplifierBackendOwner{CirrusAudioFixup* owner;Amp* amp;};AmplifierBackendOwner mBackendOwners[4]{};
+'''+PLATFORM_ADAPTER+r'''
+ AmplifierBackendOwner mBackendOwners[4]{};
  cirrus::platform::AmplifierBinding mRuntimeBindings[4]{};
  cirrus::firmware::FirmwareBundle mRuntimeFirmware[4]{};
  cirrus::platform::BoardConfiguration mRuntimeBoard{};
- void recordDiagnosticFailure(Amp&,unsigned){}
+ template<class... Args> void recordDiagnosticFailure(Amp&,cirrus::diagnostics::DiagnosticFailure,Args...){}
+ // These tests use synthetic registered backends to audit resource ownership.
+ // The production platform adapter must not execute a CS35L41 helper here.
+ IOReturn initializeCS35L41Hardware(Amp&){assert(false);return kIOReturnUnsupported;}
+ IOReturn loadCS35L41Firmware(Amp&){assert(false);return kIOReturnUnsupported;}
+ IOReturn verifyCS35L41Ready(Amp&){assert(false);return kIOReturnUnsupported;}
+ IOReturn commitCS35L41Playback(Amp&){assert(false);return kIOReturnUnsupported;}
+ bool stopPlayback(Amp&){assert(false);return false;}
+ IOReturn shutdownCS35L41(Amp&){assert(false);return kIOReturnUnsupported;}
+ void captureCS35L41FailureSnapshot(Amp&,cirrus::diagnostics::DiagnosticFailure){assert(false);}
+ bool configureCS35L41Interrupt(Amp&,bool){assert(false);return false;}
+ bool checkProtectionStatus(Amp&){assert(false);return false;}
+ void monitorCS35L41(Amp&,const cirrus::core::PlaybackContext&){assert(false);}
+ bool validateCS35L41Playback(Amp&,const cirrus::core::PlaybackContext&){assert(false);return false;}
+ bool stopRuntimePlayback(Amp&){assert(false);return false;}
  bool bindAmplifierRuntime();void teardownAmplifierRuntime();
  size_t detectConfiguredI2CAmplifiers();
  ~CirrusAudioFixup(){teardownNativeSPI();}
@@ -165,7 +182,7 @@ public:
  bool bulkWrite(uint32_t r,const uint8_t* v,size_t n)override{return amp.registerIO->bulkWrite(r,v,n);}
  bool pollBit(uint32_t r,uint32_t m,uint32_t v,uint32_t t)override{return amp.registerIO->pollBit(r,m,v,t);}
 };
-constexpr unsigned DIAG_DEVICE_ID=1;
+using cirrus::diagnostics::DIAG_DEVICE_ID;
 '''+owner_function('bindAmplifierRuntime')+owner_function('teardownAmplifierRuntime')+owner_function('detectConfiguredI2CAmplifiers')+owner_function('setupNativeSPI')+owner_function('detectNativeSPIAmplifiers')+owner_function('teardownNativeSPI')+r'''
 using namespace cirrus::transport;
 std::vector<uint8_t> descriptor(const char* source,unsigned cs){

@@ -42,7 +42,7 @@ using namespace cirrus::devices::cs35l41;
 bool gCirrusDebug = false;
 '''
 
-preamble += '#include "Devices/CS35L41/State.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += '#include "Devices/CS35L41/CS35L41Backend.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
 mock = r'''
 namespace cirrus { namespace platform { namespace hda {
@@ -238,7 +238,11 @@ int main() {
           "zero boot identity defers upload without latching unsupported firmware");
     identityDelay.delayIdentity=false;
     identityDelay.teardownAmplifierRuntime();
+    check(!identityDelay.fixtureOwners[0].state() && !identityDelay.fixtureOwners[1].state(),
+          "teardown revokes platform views after backend release");
     identityDelay.bringUpAmplifiers();
+    check(identityDelay.fixtureOwners[0].state()==static_cast<cirrus::devices::cs35l41::State*>(&identityDelay.mAmplifiers[0]),
+          "rebind points the production adapter at the live chip state");
     check(identityDelay.uploads==2 && identityDelay.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
           "identity publication permits complete stereo bringup");
     CirrusAudioFixup ro; ro.readonly=true; ro.bringUpAmplifiers();

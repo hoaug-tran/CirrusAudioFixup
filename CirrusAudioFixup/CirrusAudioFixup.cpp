@@ -10,6 +10,7 @@
 #include "CirrusAudioFixup.hpp"
 
 #include "Devices/CS35L41/Resources/Firmware.hpp"
+#include "Devices/CS35L41/DSPControl.hpp"
 #include "Firmware/WMFW/WMFWUploader.hpp"
 #include "Firmware/WMFW/WMFWParser.hpp"
 
@@ -127,14 +128,14 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
             if(!mI2CMaps[i]){ret=kIOReturnNoMemory;break;}
             amp.registerIO=mI2CMaps[i];amp.endpointIndex=uint8_t(i);
         }
-        mBackendOwners[i]={this,&amp};
+        mBackendOwners[i].bind(this,&amp);
         mRuntimePorts[i]=new ServiceRegisterIO(this,amp);
         if(!mRuntimePorts[i]){ret=kIOReturnNoMemory;break;}
         if(mPlatformProfile->firmwareBundles) {
             if(index>=mPlatformProfile->firmwareBundleCount){ret=kIOReturnNotPermitted;break;}
             mRuntimeFirmware[i]=mPlatformProfile->firmwareBundles[index];
         } else mRuntimeFirmware[i]={{binding.siliconId,actual.subsystemVendor,actual.subsystemDevice,binding.speakerId,binding.channelIndex,binding.tuningResource},cirrus::firmware::FirmwareFormat::Deferred};
-        contexts[i]=new cirrus::platform::AmplifierBackendContext{*mRuntimePorts[i],amp.endpoint,mRuntimeBoard,actual,index,mRuntimeFirmware[i],mPlatformProfile->acpiHid,&mBackendOwners[i]};
+        contexts[i]=new cirrus::platform::AmplifierBackendContext{*mRuntimePorts[i],amp.endpoint,mRuntimeBoard,actual,index,mRuntimeFirmware[i],mPlatformProfile->acpiHid,static_cast<cirrus::devices::cs35l41::Platform*>(&mBackendOwners[i])};
         if(!contexts[i]){ret=kIOReturnNoMemory;break;}
     }
     if(ret==kIOReturnSuccess) {
@@ -153,6 +154,7 @@ void CirrusAudioFixup::teardownAmplifierRuntime() {
     IOReturn ret=mAmplifierRuntime.unbind();
     setProperty("Cirrus_Runtime_Release_Return",uint64_t(ret),32);
     if(ret!=kIOReturnSuccess)CIRRUS_ERR("amplifier runtime teardown incomplete: ret=0x%08X; retained failure evidence",ret);
+    for(auto& platform:mBackendOwners)platform.clear();
     for(auto*& port:mRuntimePorts){delete port;port=nullptr;}
     for(size_t i=0;i<kMaxAmplifiers;++i) {
         if(mI2CMaps[i])mAmplifiers[i].registerIO=nullptr;
@@ -3898,15 +3900,8 @@ static uint32_t calculateCrc32(const uint8_t* data, size_t length) {
 }
 
 bool CirrusAudioFixup::stopDSP(AmplifierState& amp) {
-    amp.dspAlive = false;
-    amp.monitorCount = 0;
-    bool halted = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl,
-                                     cirrus::devices::cs35l41::registers::kValHaloCoreEnable, 0);
-    bool reset = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kRegDsp1CoreSoftReset, 1, 1);
-    IODelay(1000);
-    uint32_t core = 0;
-    return halted && reset && readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &core) &&
-           !(core & cirrus::devices::cs35l41::registers::kValHaloCoreEnable);
+    ServiceRegisterIO io(this, amp);
+    return cirrus::devices::cs35l41::DSPControl::halt(io, amp, [](uint32_t delay) { IODelay(delay); });
 }
 
 // Select board and channel tuning, not just a compatible firmware container.

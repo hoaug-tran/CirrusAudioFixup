@@ -38,3 +38,12 @@ for field in ("playbackTransition", "shutdownTransition", "firmwareValidated", "
     assert re.search(r"\b" + field + r"\s*[{;]", state), field
     assert not re.search(r"\b" + field + r"\s*[{;]", service), field
 print("PASS CS35L41 state schema is independent of IOService and endpoint ownership")
+
+backend = (ROOT / "Devices/CS35L41/CS35L41Backend.cpp").read_text()
+assert '"CirrusAudioFixup.hpp"' not in backend
+assert "CirrusAudioFixup::" not in backend and "mOwner" not in backend
+assert "Platform& mPlatform" in backend and "State& mAmplifier" in backend
+assert "class CS35L41Backend;" not in service
+assert "friend cirrus::core::AmplifierLifecycleHooks*" not in service
+assert "struct AmplifierBackendOwner final : cirrus::devices::cs35l41::Platform" in service
+print("PASS standalone CS35L41 backend and explicit service platform adapter boundary")

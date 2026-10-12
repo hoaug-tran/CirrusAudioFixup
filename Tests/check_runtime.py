@@ -184,7 +184,7 @@ using namespace cirrus::devices::cs35l41;
 bool gCirrusDebug = false;
 '''
 
-preamble += '#include "Devices/CS35L41/State.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += '#include "Devices/CS35L41/CS35L41Backend.hpp"\n#include "Devices/CS35L41/DSPControl.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
 mock = r'''
 namespace cirrus { namespace platform { namespace hda {

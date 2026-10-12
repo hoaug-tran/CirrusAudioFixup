@@ -150,12 +150,26 @@ public:
  template<class... Args> void recordDiagnosticFailure(Amp&,cirrus::diagnostics::DiagnosticFailure,Args...){}
  // These tests use synthetic registered backends to audit resource ownership.
  // The production platform adapter must not execute a CS35L41 helper here.
- IOReturn initializeCS35L41Hardware(Amp&){assert(false);return kIOReturnUnsupported;}
- IOReturn loadCS35L41Firmware(Amp&){assert(false);return kIOReturnUnsupported;}
- IOReturn verifyCS35L41Ready(Amp&){assert(false);return kIOReturnUnsupported;}
+ bool initializeCS35L41Device(Amp&){assert(false);return false;}
+ bool initializeHardwareErrata(Amp&){assert(false);return false;}
+ bool applyPLL(Amp&){assert(false);return false;}
+ bool applyASP(Amp&){assert(false);return false;}
+ bool applyGPIO(Amp&){assert(false);return false;}
+ bool configureHardware(Amp&){assert(false);return false;}
+ bool stopDSP(Amp&){assert(false);return false;}
+ bool powerUpAmplifier(Amp&){assert(false);return false;}
+ bool verifyIdleConfiguration(Amp&){assert(false);return false;}
+ bool verifyDSPAlive(Amp&){assert(false);return false;}
+ void discoverFirmware(Amp&){assert(false);}
+ void initializeFirmware(Amp&,const char*){assert(false);}
+ void logASPSnapshot(Amp&){assert(false);}
+ bool stopAfterDebugStage(const char*){assert(false);return false;}
+ bool bootArgStrEquals(const char*,const char*){assert(false);return false;}
+ bool mDebugPhaseHalted=false;
+ void setDiagnosticStage(Amp&,cirrus::diagnostics::DriverStage){assert(false);}
+ void markDiagnosticSuccess(Amp&,cirrus::diagnostics::DriverStage){assert(false);}
  IOReturn commitCS35L41Playback(Amp&){assert(false);return kIOReturnUnsupported;}
  bool stopPlayback(Amp&){assert(false);return false;}
- IOReturn shutdownCS35L41(Amp&){assert(false);return kIOReturnUnsupported;}
  void captureCS35L41FailureSnapshot(Amp&,cirrus::diagnostics::DiagnosticFailure){assert(false);}
  bool configureCS35L41Interrupt(Amp&,bool){assert(false);return false;}
  bool checkProtectionStatus(Amp&){assert(false);return false;}

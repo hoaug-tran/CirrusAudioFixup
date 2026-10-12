@@ -114,11 +114,6 @@ public:
 
 private:
     void bringUpAmplifiers();
-    IOReturn initializeCS35L41Hardware(AmplifierState& amp);
-    IOReturn loadCS35L41Firmware(AmplifierState& amp);
-    IOReturn verifyCS35L41Ready(AmplifierState& amp);
-    IOReturn shutdownCS35L41(AmplifierState& amp);
-    bool stopCS35L41At(AmplifierState& amp,const char* phase);
     // Transitional adapter: no ownership transfer. Clear only after runtime
     // unbind has completed shutdown and destroyed every borrowing backend.
     struct AmplifierBackendOwner final : cirrus::devices::cs35l41::Platform {
@@ -131,23 +126,46 @@ private:
         cirrus::core::AudioChannel channel() const override { return amp->channel; }
         cirrus::core::AmplifierModel model() const override { return amp->model; }
         bool authorized() const override { return owner->mPlatformAuthorized; }
-        IOReturn initialize() override { return owner->initializeCS35L41Hardware(*amp); }
-        IOReturn loadFirmware() override { return owner->loadCS35L41Firmware(*amp); }
-        IOReturn verifyReady() override { return owner->verifyCS35L41Ready(*amp); }
+        const char* name() const override { return amp->name; }
+        bool perform(cirrus::devices::cs35l41::Operation operation) override {
+            using cirrus::devices::cs35l41::Operation;
+            switch (operation) {
+            case Operation::InitializeCodec: return owner->initializeCS35L41Device(*amp);
+            case Operation::ApplyErrata: return owner->initializeHardwareErrata(*amp);
+            case Operation::ConfigurePLL: return owner->applyPLL(*amp);
+            case Operation::ConfigureASP: return owner->applyASP(*amp);
+            case Operation::ConfigureGPIO: return owner->applyGPIO(*amp);
+            case Operation::ConfigureHardware: return owner->configureHardware(*amp);
+            case Operation::StopDSP: return owner->stopDSP(*amp);
+            case Operation::PowerUp: return owner->powerUpAmplifier(*amp);
+            case Operation::VerifyIdle: return owner->verifyIdleConfiguration(*amp);
+            case Operation::VerifyDSP: return owner->verifyDSPAlive(*amp);
+            }
+            return false;
+        }
+        bool bypassDSP() const override { return owner->bootArgEnabled("-cirrusnodsp"); }
+        bool stopAfterDebugStage(const char* phase) override { return owner->stopAfterDebugStage(phase); }
+        bool firmwarePhaseHalted() const override {
+            return owner->bootArgStrEquals("-cirrusphase", "firmware") && owner->mDebugPhaseHalted;
+        }
+        void discoverFirmware() override { owner->discoverFirmware(*amp); }
+        void initializeFirmware() override { owner->initializeFirmware(*amp, "5D.0"); }
+        void logASPSnapshot() override { owner->logASPSnapshot(*amp); }
+        void setDiagnosticStage(cirrus::diagnostics::DriverStage stage) override { owner->setDiagnosticStage(*amp, stage); }
+        void markDiagnosticSuccess(cirrus::diagnostics::DriverStage stage) override { owner->markDiagnosticSuccess(*amp, stage); }
+        void recordDiagnosticFailure(cirrus::diagnostics::DiagnosticFailure failure, uint32_t reg,
+            uint32_t expected, uint32_t actual, IOReturn result) override {
+            owner->recordDiagnosticFailure(*amp, failure, reg, expected, actual, result);
+        }
         IOReturn commitPlayback() override { return owner->commitCS35L41Playback(*amp); }
         bool stopPlayback() override { return owner->stopPlayback(*amp); }
-        IOReturn shutdown() override { return owner->shutdownCS35L41(*amp); }
         void captureDiagnostics() override { owner->captureCS35L41FailureSnapshot(*amp, amp->diagnostic.latestFailure); }
         bool configureInterrupt(bool enabled) override { return owner->configureCS35L41Interrupt(*amp, enabled); }
         bool checkProtection() override { return owner->checkProtectionStatus(*amp); }
         void monitor(const cirrus::core::PlaybackContext& context) override { owner->monitorCS35L41(*amp, context); }
         bool validatePlayback(const cirrus::core::PlaybackContext& context) override { return owner->validateCS35L41Playback(*amp, context); }
         void cancelPlayback() override { owner->stopRuntimePlayback(*amp); }
-        void recordIdentityFailure(uint32_t actual, IOReturn result) override {
-            owner->recordDiagnosticFailure(*amp, cirrus::diagnostics::DIAG_DEVICE_ID,
-                cirrus::devices::cs35l41::registers::kRegDeviceId,
-                cirrus::devices::cs35l41::registers::kValDeviceId, actual, result);
-        }
+
     };
     IOReturn commitCS35L41Playback(AmplifierState& amp);
     bool configureCS35L41Interrupt(AmplifierState& amp,bool enabled);

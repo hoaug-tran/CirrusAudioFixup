@@ -14,6 +14,7 @@ CPP = r'''
 #include "Platform/AmplifierRuntime.hpp"
 using namespace cirrus;
 using namespace devices::cs35l41;
+bool gCirrusDebug=false;
 
 struct Port final : core::RegisterIO {
     unsigned reads=0,writes=0;
@@ -37,7 +38,8 @@ struct Host final : Platform {
     core::BusEndpoint device{core::BusTransportType::I2C,"test-controller",0x40};
     core::AudioChannel routing=core::AudioChannel::Left;
     core::AmplifierModel silicon=core::AmplifierModel::CS35L41;
-    bool bound=true,allow=true;
+    bool bound=true,allow=true,hasFailure=false;
+    Operation failOperation=Operation::InitializeCodec;
     unsigned boots=0,loads=0,verifies=0,stops=0,shutdowns=0,snapshots=0,cancels=0,ticks=0,irqCalls=0;
     IOReturn initError=0,shutdownError=0,identityError=0;
     uint32_t identityActual=0;
@@ -47,25 +49,36 @@ struct Host final : Platform {
     core::AudioChannel channel() const override {return routing;}
     core::AmplifierModel model() const override {return silicon;}
     bool authorized() const override {return allow;}
-    IOReturn initialize() override {assert(bound);calls.push_back(1);++boots;chip.playbackFaulted=false;return initError;}
-    IOReturn loadFirmware() override {assert(bound);calls.push_back(2);++loads;chip.firmwareValidated=true;return 0;}
-    IOReturn verifyReady() override {assert(bound);calls.push_back(3);++verifies;chip.initialized=true;return 0;}
+    const char* name() const override {return "backend-fixture";}
+    bool bypassDSP() const override {return false;}
+    bool stopAfterDebugStage(const char*) override {return false;}
+    bool firmwarePhaseHalted() const override {return false;}
+    bool perform(Operation operation) override {
+        assert(bound);
+        switch(operation) {
+        case Operation::InitializeCodec: calls.push_back(1);++boots;chip.playbackFaulted=false;return !initError && (!hasFailure || failOperation!=operation);
+        case Operation::PowerUp: calls.push_back(3);++verifies;return !hasFailure || failOperation!=operation;
+        case Operation::StopDSP: ++shutdowns;return !shutdownError;
+        default: return !hasFailure || failOperation!=operation;
+        }
+    }
+    void discoverFirmware() override {static const uint8_t blob=1;chip.wmfwData=chip.binData=&blob;chip.wmfwSize=chip.binSize=1;}
+    void initializeFirmware() override {calls.push_back(2);++loads;chip.firmwareValidated=chip.dspAlive=true;chip.monitorCount=1;}
+    void logASPSnapshot() override {}
+    void setDiagnosticStage(diagnostics::DriverStage s) override {chip.diagnostic.stage=s;}
+    void markDiagnosticSuccess(diagnostics::DriverStage s) override {chip.diagnostic.lastGoodStage=s;}
     IOReturn commitPlayback() override {assert(bound);calls.push_back(4);chip.playbackActive=true;return 0;}
     bool stopPlayback() override {assert(bound);calls.push_back(5);++stops;chip.playbackActive=false;return true;}
-    IOReturn shutdown() override {
-        assert(bound);calls.push_back(6);++shutdowns;
-        chip.initialized=chip.firmwareValidated=chip.playbackActive=false;
-        return shutdownError;
-    }
     void captureDiagnostics() override {assert(bound);++snapshots;}
     bool configureInterrupt(bool) override {assert(bound);++irqCalls;return true;}
     bool checkProtection() override {assert(bound);++irqCalls;return true;}
     void monitor(const core::PlaybackContext&) override {assert(bound);++ticks;}
     bool validatePlayback(const core::PlaybackContext&) override {assert(bound);return true;}
     void cancelPlayback() override {assert(bound);++cancels;}
-    void recordIdentityFailure(uint32_t actual,IOReturn result) override {
+    void recordDiagnosticFailure(diagnostics::DiagnosticFailure failure,uint32_t,uint32_t,uint32_t actual,IOReturn result) override {
         assert(bound);identityActual=actual;identityError=result;
-        chip.diagnostic.firstFailure=diagnostics::DIAG_DEVICE_ID;
+        if(chip.diagnostic.firstFailure==diagnostics::DIAG_OK)chip.diagnostic.firstFailure=failure;
+        chip.diagnostic.latestFailure=failure;
         chip.diagnostic.ioReturn=result;
         // A diagnostic can change lastError; returned failure must remain original.
         port.error=-101;
@@ -81,7 +94,7 @@ struct Board {
         : binding{h.device,registers::kValDeviceId,0,1,"test-tuning","CLSA0100",2},
           manifest{{0x17aa,0x382b,"CLSA0100"},&binding,1,true,true,true},
           firmware{{registers::kValDeviceId,0x17aa,0x382b,1,0,"test-tuning"},firmware::FirmwareFormat::Deferred},
-          context{h.port,h.device,manifest,manifest.identity,0,firmware,"CLSA0100",static_cast<Platform*>(&h)} {}
+          context{h.port,h.device,manifest,manifest.identity,0,firmware,"CLSA0100",static_cast<Platform*>(&h)} {h.chip.present=true;}
 };
 
 bool access(uint32_t) {return true;}
@@ -191,14 +204,32 @@ int main() {
         bind(runtime,registry,b);assert(runtime.bringUp()==0 && h.boots==3);
         assert(runtime.unbind()==0 && h.shutdowns==3);h.bound=false;
     }
+    // Each migrated boot/readiness operation must fault in the actual backend,
+    // latch its original diagnostic and run exactly one shutdown transaction.
+    for(auto operation:{Operation::InitializeCodec,Operation::ApplyErrata,Operation::ConfigurePLL,
+                       Operation::ConfigureASP,Operation::ConfigureGPIO,Operation::ConfigureHardware,
+                       Operation::PowerUp,Operation::VerifyIdle,Operation::VerifyDSP}) {
+        Host h;Board b(h);h.hasFailure=true;h.failOperation=operation;
+        platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);
+        assert(runtime.bringUp()==kIOReturnNotReady && h.shutdowns==1 && h.chip.playbackFaulted);
+        assert(!h.chip.initialized && !h.chip.firmwareValidated && !h.chip.dspAlive && !h.chip.monitorCount);
+        assert(h.chip.diagnostic.firstFailure!=diagnostics::DIAG_OK);
+        const auto expectedStage=operation==Operation::PowerUp || operation==Operation::VerifyIdle || operation==Operation::VerifyDSP
+            ?core::AmplifierStage::Verify:core::AmplifierStage::Initialize;
+        assert(runtime.status(0)->firstFailureStage==expectedStage);
+        runtime.unbind();assert(h.shutdowns==1);
+        assert(runtime.releasedStatus(0)->firstFailure==kIOReturnNotReady && runtime.releasedStatus(0)->cleanupResult==0);
+        h.bound=false;
+    }
     {
         Host h;Board b(h);h.initError=-77;h.shutdownError=-88;
         platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);
-        assert(runtime.bringUp()==-77 && h.shutdowns==1 && h.chip.playbackFaulted);
+        assert(runtime.bringUp()==kIOReturnNotReady && h.shutdowns==1 && h.chip.playbackFaulted);
+        assert(h.chip.diagnostic.firstFailure==diagnostics::DIAG_DEVICE_ID && h.chip.diagnostic.latestFailure==diagnostics::DIAG_DSP_BOOT);
         runtime.captureDiagnostics(0);assert(h.snapshots==1);
         assert(runtime.unbind()!=0 && h.shutdowns==1);
         const auto* status=runtime.releasedStatus(0);
-        assert(status && status->firstFailure==-77 && status->cleanupResult==-88);
+        assert(status && status->firstFailure==kIOReturnNotReady && status->cleanupResult==kIOReturnNotReady);
         h.bound=false;runtime.unbind();assert(h.shutdowns==1);
     }
     {

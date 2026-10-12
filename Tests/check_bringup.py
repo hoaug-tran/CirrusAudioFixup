@@ -12,7 +12,7 @@ def function(name):
     start = re.search(r'(?:bool|void|IOReturn) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
     return SOURCE[start:SOURCE.index('\n}', start) + 2]
 
-names = ['bringUpAmplifiers', 'initializeCS35L41Hardware','loadCS35L41Firmware','verifyCS35L41Ready','shutdownCS35L41','stopCS35L41At', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
+names = ['bringUpAmplifiers', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
 amp = HEADER[HEADER.index('struct AmplifierState :'):HEADER.index('struct FirmwareImage;')]
 
 preamble = r'''
@@ -186,11 +186,6 @@ public:
     void handlePowerChange(bool powered);
     bool initializeCS35L41Device(CS35L41Amp&);
     void bringUpAmplifiers();
-    IOReturn initializeCS35L41Hardware(AmplifierState&);
-    IOReturn loadCS35L41Firmware(AmplifierState&);
-    IOReturn verifyCS35L41Ready(AmplifierState&);
-    IOReturn shutdownCS35L41(AmplifierState&);
-    bool stopCS35L41At(AmplifierState&,const char*);
     void monitorCS35L41(AmplifierState&,const cirrus::core::PlaybackContext&){}
     bool validateCS35L41Playback(AmplifierState&,const cirrus::core::PlaybackContext&){return true;}
     IOReturn commitCS35L41Playback(AmplifierState&){return 0;}

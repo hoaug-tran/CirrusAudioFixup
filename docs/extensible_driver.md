@@ -265,3 +265,46 @@ delegates those operations to the service. Register sequences, board authorizati
 firmware assets and matching personalities are unchanged. No new bundle was
 installed or loaded; controller/provider provenance, firmware licensing and target
 cold boot/playback/headphone/sleep-wake validation remain separate evidence gates.
+
+## Backend-owned lifecycle orchestration (2026-10-12)
+
+Initialization, firmware-stage sequencing, readiness verification and safe
+shutdown now execute in `CS35L41Backend.cpp`. The corresponding four service
+methods and its chip debug-disposition helper are removed. The backend owns
+readiness invalidation, stage progression, debug stops, deferred firmware identity,
+bypass policy sequencing and partial-initialization cleanup. The platform contract
+has no callbacks that return complete initialize/load/verify/shutdown outcomes.
+
+A chip-specific `Operation` enum temporarily delegates the existing lower silicon
+helpers; the service adapter also supplies firmware selection/upload, debug policy,
+logging and diagnostic publication. Each operation maps to the same helper as
+before. This is an intermediate boundary, not a new generic controller framework
+or proof that those helpers are already independent of the service.
+
+All four moved function bodies pass a non-whitespace parity comparison after
+mapping their owner/helper calls to the explicit contract. Register sequences,
+callback order, error recording, debug-phase gates and cleanup order are preserved.
+`Tests/check_bringup.py` executes the complete production backend and production
+service adapter, retaining the existing 11-stage faults, firmware delay, bypass,
+debug stops, cleanup failure and wake coverage. The standalone backend suite adds
+nine operation failure cases under ASan/UBSan, checks first versus cleanup failure
+and verifies that teardown does not retry an already-faulted cleanup.
+
+Runtime fault positions continue to measure playback transactions. Its fixture
+uses an explicit simulated boot wrapper, as it previously used mocked whole boot
+methods, and delegates all playback/status/diagnostic/IRQ hooks to the production
+backend. Full boot semantics are verified separately by the production bring-up
+and standalone backend suites. Native resource tests retain synthetic registered
+backends and assert that they do not execute chip operations.
+
+All 27 maintained host suites plus the optional Windows payload audit pass.
+Debug/Release builds, metadata/plists, x86_64, OpenCore vtables, binary/dSYM UUIDs,
+source-layout gates and the explicit chip-file formatter dry-run pass. No bundle
+was installed or loaded.
+
+State allocation still belongs to the service endpoint binding. Firmware parsing/
+upload, protection, monitoring, playback helpers and several silicon operations
+remain to migrate. Independent allocation must preserve diagnostic snapshots and
+borrowed firmware/register/platform lifetimes across teardown/rebind before that
+ownership milestone can be marked complete. Hardware/provider/license evidence
+gates remain unchanged.

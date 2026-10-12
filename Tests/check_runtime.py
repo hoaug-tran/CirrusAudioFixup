@@ -186,6 +186,55 @@ bool gCirrusDebug = false;
 
 preamble += '#include "Devices/CS35L41/CS35L41Backend.hpp"\n#include "Devices/CS35L41/DSPControl.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
+# Runtime fault positions exclude boot transactions. Preserve the existing
+# simulated boot boundary, while delegating every playback/PM diagnostic hook to
+# the production backend. Actual boot orchestration runs in check_bringup and
+# check_cs35l41_backend rather than being silently copied into this fixture.
+RUNTIME_WRAPPER = r'''
+class RuntimeFixtureHooks final : public cirrus::core::AmplifierLifecycleHooks {
+    cirrus::core::AmplifierLifecycleHooks* chip;
+    CirrusAudioFixup::AmplifierBackendOwner& platform;
+    IOReturn latch(IOReturn result) {
+        if(result!=kIOReturnSuccess)platform.amp->playbackFaulted=true;
+        return result;
+    }
+public:
+    RuntimeFixtureHooks(cirrus::core::AmplifierLifecycleHooks* backend, CirrusAudioFixup::AmplifierBackendOwner& p)
+        : chip(backend), platform(p) {}
+    ~RuntimeFixtureHooks() override { cirrus::devices::cs35l41::destroyBackend(chip); }
+    IOReturn identify() override { return chip->identify(); }
+    IOReturn authorizeBoard() override { return chip->authorizeBoard(); }
+    IOReturn initialize() override { return latch(platform.owner->initializeCS35L41Hardware(*platform.amp)); }
+    IOReturn loadFirmware() override { return latch(platform.owner->loadCS35L41Firmware(*platform.amp)); }
+    IOReturn verifyReady() override { return latch(platform.owner->verifyCS35L41Ready(*platform.amp)); }
+    IOReturn safeShutdown() override { return latch(platform.owner->shutdownCS35L41(*platform.amp)); }
+    IOReturn startPlayback() override { return chip->startPlayback(); }
+    IOReturn stopPlayback() override { return chip->stopPlayback(); }
+    void captureDiagnostics() override { chip->captureDiagnostics(); }
+    IOReturn configureInterrupt(bool enabled) override { return chip->configureInterrupt(enabled); }
+    IOReturn handleInterrupt() override { return chip->handleInterrupt(); }
+    bool managesPlaybackTransitions() const override { return chip->managesPlaybackTransitions(); }
+    IOReturn runtimeTick(const cirrus::core::PlaybackContext& c) override { return chip->runtimeTick(c); }
+    bool playbackNeedsPreparation() const override { return chip->playbackNeedsPreparation(); }
+    bool playbackStartCancelled() const override { return chip->playbackStartCancelled(); }
+    bool playbackPrepared() const override { return chip->playbackPrepared(); }
+    bool playbackPending() const override { return chip->playbackPending(); }
+    bool playbackFaulted() const override { return chip->playbackFaulted(); }
+    bool validatePlayback(const cirrus::core::PlaybackContext& c) override { return chip->validatePlayback(c); }
+    IOReturn cancelPlayback() override { return chip->cancelPlayback(); }
+    cirrus::core::ObservedPlayback observedPlayback() const override { return chip->observedPlayback(); }
+    cirrus::core::BringUpDisposition disposition() const override { return chip->disposition(); }
+};
+cirrus::core::AmplifierLifecycleHooks* createRuntimeFixture(const cirrus::platform::AmplifierBackendContext& c) {
+    auto* backend=cirrus::devices::cs35l41::createBackend(c);
+    if(!backend)return nullptr;
+    auto* p=static_cast<CirrusAudioFixup::AmplifierBackendOwner*>(static_cast<cirrus::devices::cs35l41::Platform*>(c.platformContext));
+    return new RuntimeFixtureHooks(backend,*p);
+}
+'''
+RUNTIME_BIND = BIND.replace('cirrus::devices::cs35l41::createBackend,cirrus::devices::cs35l41::destroyBackend',
+                            'createRuntimeFixture,cirrus::devices::cs35l41::destroyBackend')
+
 mock = r'''
 namespace cirrus { namespace platform { namespace hda {
 struct AudioEventState {
@@ -370,6 +419,9 @@ public:
     bool initializeHardwareErrata(CS35L41Amp&) { return false; }
     uint32_t calculateRegistersCRC32(CS35L41Amp&) { return 0; }
     void logPowerSnapshot(CS35L41Amp&) {}
+    void logASPSnapshot(CS35L41Amp&) {}
+    bool stopAfterDebugStage(const char*) {return false;}
+    bool bootArgStrEquals(const char*,const char*) {return false;}
     bool applyGPIO(CS35L41Amp&) { return false; }
     bool configureHardware(CS35L41Amp&) { return false; }
     bool identityAvailable=false;
@@ -1120,6 +1172,6 @@ with tempfile.TemporaryDirectory(prefix='cirrus-runtime-check-') as directory:
     (tmp / 'IOKit').mkdir()
     (tmp / 'IOKit/IOLib.h').write_text(IOLIB.replace('inline void IOSleep(unsigned){}','inline void IOSleep(unsigned);'))
     source = tmp / 'runtime.cpp'
-    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + PRODUCTION_BACKEND + BIND + functions + checks, encoding='utf-8')
+    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + PRODUCTION_BACKEND + RUNTIME_WRAPPER + RUNTIME_BIND + functions + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'runtime.exe')], check=True)
     subprocess.run([str(tmp / 'runtime.exe')], check=True)

@@ -12,6 +12,19 @@
 
 namespace cirrus::devices::cs35l41 {
 
+enum class Operation {
+    InitializeCodec,
+    ApplyErrata,
+    ConfigurePLL,
+    ConfigureASP,
+    ConfigureGPIO,
+    ConfigureHardware,
+    StopDSP,
+    PowerUp,
+    VerifyIdle,
+    VerifyDSP
+};
+
 class Platform {
 public:
     virtual ~Platform() = default;
@@ -20,19 +33,26 @@ public:
     virtual core::AudioChannel channel() const = 0;
     virtual core::AmplifierModel model() const = 0;
     virtual bool authorized() const = 0;
-    virtual IOReturn initialize() = 0;
-    virtual IOReturn loadFirmware() = 0;
-    virtual IOReturn verifyReady() = 0;
+    virtual const char* name() const = 0;
+    virtual bool perform(Operation) = 0;
+    virtual bool bypassDSP() const = 0;
+    virtual bool stopAfterDebugStage(const char*) = 0;
+    virtual bool firmwarePhaseHalted() const = 0;
+    virtual void discoverFirmware() = 0;
+    virtual void initializeFirmware() = 0;
+    virtual void logASPSnapshot() = 0;
+    virtual void setDiagnosticStage(diagnostics::DriverStage) = 0;
+    virtual void markDiagnosticSuccess(diagnostics::DriverStage) = 0;
+    virtual void recordDiagnosticFailure(diagnostics::DiagnosticFailure, uint32_t reg = 0, uint32_t expected = 0, uint32_t actual = 0,
+                                         IOReturn result = kIOReturnSuccess) = 0;
     virtual IOReturn commitPlayback() = 0;
     virtual bool stopPlayback() = 0;
-    virtual IOReturn shutdown() = 0;
     virtual void captureDiagnostics() = 0;
     virtual bool configureInterrupt(bool enabled) = 0;
     virtual bool checkProtection() = 0;
     virtual void monitor(const core::PlaybackContext&) = 0;
     virtual bool validatePlayback(const core::PlaybackContext&) = 0;
     virtual void cancelPlayback() = 0;
-    virtual void recordIdentityFailure(uint32_t actual, IOReturn result) = 0;
 };
 
 // platformContext must point to Platform (including any base-pointer adjustment).

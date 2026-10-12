@@ -47,3 +47,15 @@ assert "class CS35L41Backend;" not in service
 assert "friend cirrus::core::AmplifierLifecycleHooks*" not in service
 assert "struct AmplifierBackendOwner final : cirrus::devices::cs35l41::Platform" in service
 print("PASS standalone CS35L41 backend and explicit service platform adapter boundary")
+
+# Lifecycle orchestration must stay in the chip backend, rather than returning
+# to a service callback under a new name.
+contract = (ROOT / "Devices/CS35L41/CS35L41Backend.hpp").read_text()
+service_cpp = (ROOT / "CirrusAudioFixup.cpp").read_text()
+for name in ("initializeCS35L41Hardware", "loadCS35L41Firmware", "verifyCS35L41Ready", "shutdownCS35L41", "stopCS35L41At"):
+    assert name not in service and name not in service_cpp, name
+for name in ("initializeHardware", "loadFirmwareFlow", "verifyReadyFlow", "shutdownFlow"):
+    assert "IOReturn Backend::" + name + "()" in backend, name
+for name in ("initialize", "loadFirmware", "verifyReady", "shutdown"):
+    assert not re.search(r"virtual IOReturn " + name + r"\(", contract), name
+print("PASS CS35L41 initialization, firmware, readiness and shutdown orchestration are backend-owned")

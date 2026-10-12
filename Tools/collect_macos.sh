@@ -62,6 +62,8 @@ capture_shell() {
 
 capture system /usr/bin/sw_vers
 capture kernel /usr/bin/uname -a
+capture cpu /usr/sbin/sysctl machdep.cpu.vendor machdep.cpu.brand_string
+capture machine-model /usr/sbin/sysctl hw.model
 capture boot-time /usr/sbin/sysctl kern.boottime
 capture boot-args /usr/sbin/nvram boot-args
 

@@ -13,6 +13,7 @@
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/RegisterIO.hpp"
 #include "Devices/AmplifierBackends.hpp"
+#include "Diagnostics/AttachmentState.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include "Platform/AmplifierBackendRegistry.hpp"
@@ -139,12 +140,18 @@ private:
     // and its event sources are owned and removed before stop clears it.
     IOService* mProvider{nullptr};
     cirrus::transport::NativeSPIHost mNativeSPI;
-    bool setupNativeSPI(IOService* provider);
+    bool setupCommunication(IOService* provider);
+    bool preflightI2CIdentity(const cirrus::platform::AmplifierBackendDefinition*);
     size_t detectNativeSPIAmplifiers();
     size_t detectConfiguredI2CAmplifiers();
     void teardownNativeSPI();
     void suspendNativeTransport() {
         mNativeSPI.suspend();
+        if (mNativeSPI.bound())
+            mAttachment.communication = "SUSPENDED";
+        else if (mI2CController)
+            mAttachment.communication = "PROVIDER_PM_OWNED";
+        publishAttachmentStatus();
         if (mNativeSPI.bound())
             setProperty("Cirrus_SPI_Status", "SUSPENDED");
     }
@@ -159,6 +166,10 @@ private:
             setProperty("Cirrus_SPI_Failure_Index", uint64_t(failure.index), 32);
             setProperty("Cirrus_SPI_Failure_Source", failure.source);
             setProperty("Cirrus_SPI_Failure_Detail", uint64_t(failure.detail), 32);
+            mAttachment.communication = ret == kIOReturnSuccess ? (mPlatformAuthorized ? "READY" : "READ_ONLY") : "FAILED";
+            publishAttachmentStatus();
+            if (ret != kIOReturnSuccess)
+                recordAttachmentFailure("CONTROLLER_PM", failure.reason, ret, uint32_t(failure.index), "CONTROLLER_SLOT");
             if (ret != kIOReturnSuccess)
                 CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",
                            failure.reason, failure.index, failure.detail, ret);
@@ -247,6 +258,10 @@ private:
 
     bool bootArgEnabled(const char* name);
     bool bootArgStrEquals(const char* name, const char* expectedVal);
+    cirrus::diagnostics::AttachmentState mAttachment{};
+    void recordAttachmentFailure(const char* stage, const char* reason, IOReturn result, uint32_t index = 0,
+                                 const char* indexKind = "ENDPOINT");
+    void publishAttachmentStatus();
     void logProviderInfo(IOService* provider);
     void dumpProviderProperties(IOService* provider);
     void resolvePlatformProfile();

@@ -16,6 +16,26 @@ sudo /usr/bin/kmutil showloaded
 
 The controller query and audio-device list establish different facts: finding the controller does not prove that the codec route is programmed or that PCM reaches the amplifier. On Tahoe, follow the [host-stack requirements](../README.md#tahoe-restore-and-validate-the-host-audio-stack-first) before diagnosing amplifier playback.
 
+## Attachment layers and machine metadata
+
+Read `Cirrus_Communication_Status`, `Cirrus_Amplifier_Status`,
+`Cirrus_Attach_First_*`, `Cirrus_Attach_Latest_*` and typed index fields before
+interpreting a missing speaker as an AMP problem. The first attach failure survives
+later cleanup/PM failures. `COMMUNICATION`, `RESOURCE`, `AMPLIFIER`, `POLICY`,
+`BINDING`, `DEBUG_POLICY` and `CONTROLLER_PM` identify the failed boundary.
+
+`Cirrus_CPU_*`, `Cirrus_Machine_Model`, `Cirrus_Provider_*`, platform profile and
+PCI subsystem identify the captured machine/provider. CPU vendor does not choose
+an AMP, GPIO plan or controller. The collector also captures CPU/model metadata
+for older loaded bundles that do not publish the new schema. Compare the loaded
+UUID with the intended build; missing new fields may simply mean an older binary.
+
+`ATTACH` and `ATTACH_FAIL` are essential records. Verbose provider enumeration
+requires a Debug build or `-cirrusdbg`; phase acceptance is module-specific and
+published in `Cirrus_Debug_Phase`. A failed `start()` may leave no service node,
+so also inspect kernel failure records. See the [attachment matrix](attachment_matrix.md)
+for Intel/AMD, I2C/SPI and unsupported-controller/AMP combinations.
+
 ## Retained logs and live messages
 
 ```bash

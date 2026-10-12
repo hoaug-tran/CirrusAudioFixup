@@ -84,6 +84,8 @@ FIXTURE_SHIM+=r'''
     static void destroyFixtureBackend(cirrus::core::AmplifierLifecycleHooks* p){delete p;}
 '''
 FIELDS=r'''
+    cirrus::diagnostics::AttachmentState mAttachment{};
+    void publishAttachmentStatus(){}
     cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
     cirrus::platform::AmplifierBackendRegistry fixtureRegistry;
     cirrus::platform::BoardConfiguration fixtureBoard;

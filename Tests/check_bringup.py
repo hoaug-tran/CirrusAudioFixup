@@ -29,6 +29,7 @@ preamble = r'''
 #include <string>
 #include <map>
 #include "Diagnostics/DiagnosticTypes.hpp"
+#include "Diagnostics/AttachmentState.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Devices/CS35L41/CS35L41Device.hpp"
 #include "Devices/CS35L41/Playback.hpp"

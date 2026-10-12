@@ -71,6 +71,9 @@ fixture = r'''
 #include "Core/AmplifierDescriptors.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Platform/AmplifierBackendRegistry.hpp"
+#include "Diagnostics/AttachmentState.hpp"
+#include "Diagnostics/TraceTypes.hpp"
+using namespace cirrus::diagnostics;
 #include "Transport/I2CRegisterBus.hpp"
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
@@ -94,6 +97,7 @@ public:
         cirrus::core::BusEndpoint endpoint{};uint8_t endpointIndex=0;cirrus::core::RegisterIO* registerIO=nullptr;};
     struct Runtime{bool bound()const{return false;}}mAmplifierRuntime;
     size_t detectConfiguredI2CAmplifiers(){return 0;}
+    size_t expectedAmplifierCount()const{return mPlatformProfile->endpointCount;}
     static constexpr size_t kMaxAmplifiers=2;
     Amp mAmplifiers[2]{};size_t mAmplifierCount=0;
     bool mPlatformAuthorized=false,mProbingAmplifiers=false,legacy=false;
@@ -112,6 +116,10 @@ public:
         }();assert(mBackendRegistry.add(d));
     }
     ~CirrusAudioFixup(){for(auto* p:mI2CMaps)delete p;for(auto* p:mI2CBuses)delete p;}
+    cirrus::diagnostics::AttachmentState mAttachment{};
+    void recordTrace(cirrus::diagnostics::TraceSource,uint8_t,bool,bool,uint32_t,uint32_t,IOReturn){}
+    void recordAttachmentFailure(const char* s,const char* r,IOReturn e,uint32_t i=0){mAttachment.record(s,r,e,i);}
+    void publishAttachmentStatus(){}
     bool bootArgEnabled(const char*){return legacy;}
     template<class... T>void setProperty(T...){}
     size_t detectAmplifiers();

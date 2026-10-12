@@ -10,7 +10,7 @@ parser.add_argument("--audit", action="store_true", help="also test the optional
 args = parser.parse_args()
 # Explicit membership: a one-off experiment must never enter CI via a glob.
 suites = (
-    "reproduce_host", "check_registers", "check_transport", "check_diagnostics",
+    "reproduce_host", "check_registers", "check_transport", "check_diagnostics", "check_attachment",
     "check_extensible_core", "check_cs35l41_backend", "check_native_spi", "check_amd_spi", "check_amd_spi_lifecycle", "check_acpi_spi", "check_spi_transport", "check_intel_spi", "check_intel_spi_lifecycle", "check_hda", "check_calibration", "check_tuning", "check_bringup",
     "check_runtime", "check_audio_events", "check_firmware_identity",
     "check_architecture", "check_release", "check_build_policy", "check_tools",

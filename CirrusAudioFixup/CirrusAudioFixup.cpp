@@ -9,11 +9,13 @@
 
 #include "CirrusAudioFixup.hpp"
 #include "Diagnostics/FailureNames.hpp"
+#include "Support/CPUIdentity.hpp"
 
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/pci/IOPCIDevice.h>
 #include <libkern/OSAtomic.h>
 #include <libkern/c++/OSArray.h>
+#include <libkern/c++/OSData.h>
 #include <libkern/c++/OSDictionary.h>
 #include <libkern/c++/OSString.h>
 
@@ -87,9 +89,23 @@ bool CirrusAudioFixup::registerAmplifierBackends() { return cirrus::devices::reg
 cirrus::transport::I2CController* CirrusAudioFixup::createI2CController() {
     if (!mProvider)
         return nullptr;
-    if (mPlatformProfile && mPlatformProfile->i2cControllerFactory)
-        return mPlatformProfile->i2cControllerFactory(mProvider);
-    return new cirrus::transport::VoodooI2CController(mProvider);
+    if (mPlatformProfile && mPlatformProfile->i2cControllerFactory) {
+        auto* controller = mPlatformProfile->i2cControllerFactory(mProvider);
+        mAttachment.communication = controller ? "CREATED" : "FAILED";
+        if (!controller)
+            recordAttachmentFailure("COMMUNICATION", "I2C_FACTORY_REJECTED", kIOReturnNotReady);
+        return controller;
+    }
+    if (!mProvider->metaCast("VoodooI2CDeviceNub")) {
+        mAttachment.communication = "UNSUPPORTED";
+        recordAttachmentFailure("COMMUNICATION", "I2C_PROVIDER_ABI_UNAVAILABLE", kIOReturnUnsupported);
+        return nullptr;
+    }
+    auto* controller = new cirrus::transport::VoodooI2CController(mProvider);
+    mAttachment.communication = controller ? "CREATED" : "FAILED";
+    if (!controller)
+        recordAttachmentFailure("COMMUNICATION", "I2C_CONTROLLER_ALLOCATION_FAILED", kIOReturnNoMemory);
+    return controller;
 }
 
 bool CirrusAudioFixup::bindAmplifierRuntime() {
@@ -202,6 +218,8 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
         const auto& failure = mAmplifierRuntime.bindFailure();
         setProperty("Cirrus_Runtime_Bind_Reason", failure.reason);
         setProperty("Cirrus_Runtime_Bind_Index", uint64_t(failure.index), 32);
+        if (ret != kIOReturnSuccess)
+            recordAttachmentFailure("BINDING", failure.reason, ret, uint32_t(failure.index), "AMP_SLOT");
         if (ret != kIOReturnSuccess)
             CIRRUS_ERR("backend binding rejected: index=%lu reason=%s ret=0x%08X", failure.index, failure.reason, ret);
     } else
@@ -384,6 +402,7 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, pciSubsystemId);
     setProperty("Cirrus_Platform_PCI_SSID", uint64_t(pciSubsystemId), 32);
     setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
+    setProperty("Cirrus_Board_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
     setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
     setProperty("Cirrus_Platform_ACPI_HID", acpiHid ? acpiHid : "unknown");
     CIRRUS_LOG("platform profile selected: %s (hid=%s, endpoints=%lu)", mPlatformProfile->name, acpiHid ? acpiHid : "unknown",
@@ -392,33 +411,108 @@ void CirrusAudioFixup::resolvePlatformProfile() {
 }
 
 // ACPI SPI matching is deliberately opt-in until physical controller tests.
-bool CirrusAudioFixup::setupNativeSPI(IOService* provider) {
+bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     auto* acpi = OSDynamicCast(IOACPIPlatformDevice, provider);
     if (!acpi) {
         setProperty("Cirrus_Bus", "I2C");
+        const auto* expected =
+            mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->amplifiers &&
+                    mPlatformProfile->boardConfiguration->count
+                ? mBackendRegistry.find(mPlatformProfile->acpiHid, mPlatformProfile->boardConfiguration->amplifiers[0].siliconId,
+                                        cirrus::core::BusTransportType::I2C)
+                : mBackendRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel,
+                                             cirrus::core::BusTransportType::I2C);
+        mAttachment.amplifier = expected ? "REGISTERED_NOT_PROBED" : "UNSUPPORTED";
+        if (!mI2CController)
+            mI2CController = createI2CController();
+        if (!mI2CController)
+            return false;
+        if (!expected) {
+            mPlatformAuthorized = false;
+            setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+            recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_BACKEND", kIOReturnUnsupported);
+        }
+        if (expected && !preflightI2CIdentity(expected))
+            return false;
+        publishAttachmentStatus();
         return true;
+    }
+    OSObject* resources = nullptr;
+    const IOReturn resourceReturn = acpi->evaluateObject("_CRS", &resources);
+    auto* resourceData = OSDynamicCast(OSData, resources);
+    cirrus::transport::ACPISPIResources parsed{};
+    bool hasI2C = false;
+    const auto resourceKind = resourceReturn == kIOReturnSuccess && resourceData
+                                  ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
+                                                                             resourceData->getLength(), parsed, &hasI2C)
+                                  : cirrus::transport::ACPISPIResult::Malformed;
+    OSSafeReleaseNULL(resources);
+    if (resourceKind == cirrus::transport::ACPISPIResult::NoSPI && hasI2C) {
+        setProperty("Cirrus_Bus", "I2C");
+        const auto* expected =
+            mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->amplifiers &&
+                    mPlatformProfile->boardConfiguration->count
+                ? mBackendRegistry.find(mPlatformProfile->acpiHid, mPlatformProfile->boardConfiguration->amplifiers[0].siliconId,
+                                        cirrus::core::BusTransportType::I2C)
+                : mBackendRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel,
+                                             cirrus::core::BusTransportType::I2C);
+        mAttachment.amplifier = expected ? "REGISTERED_NOT_PROBED" : "UNSUPPORTED";
+        if (mPlatformProfile->i2cControllerFactory) {
+            if (!mI2CController)
+                mI2CController = createI2CController();
+            publishAttachmentStatus();
+            return mI2CController != nullptr;
+        }
+        mAttachment.communication = "UNSUPPORTED";
+        recordAttachmentFailure("COMMUNICATION", "NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE", kIOReturnUnsupported);
+        return false;
+    }
+    if (resourceKind != cirrus::transport::ACPISPIResult::Success || hasI2C) {
+        setProperty("Cirrus_Bus", "ACPI_UNRESOLVED");
+        mAttachment.communication = "RESOURCE_REJECTED";
+        recordAttachmentFailure("RESOURCE", hasI2C ? "MIXED_I2C_SPI_RESOURCES" : "ACPI_SERIAL_RESOURCE_REJECTED",
+                                resourceReturn != kIOReturnSuccess ? resourceReturn : kIOReturnUnsupported);
+        return false;
     }
     setProperty("Cirrus_Bus", "SPI");
     if (!bootArgEnabled("-cirrusspi")) {
         setProperty("Cirrus_SPI_Status", "REQUIRES_SPI_OPTION");
+        mAttachment.communication = "DISABLED_BY_POLICY";
+        recordAttachmentFailure("POLICY", "SPI_OPTION_REQUIRED", kIOReturnNotPermitted);
         CIRRUS_ERR("SPI attachment blocked: -cirrusspi is required");
         return false;
     }
     const cirrus::platform::AmplifierBackendDefinition* selected = nullptr;
-    if (mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->count) {
+    if (mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->amplifiers &&
+        mPlatformProfile->boardConfiguration->count) {
         const auto& first = mPlatformProfile->boardConfiguration->amplifiers[0];
         selected = mBackendRegistry.find(mPlatformProfile->acpiHid, first.siliconId, cirrus::core::BusTransportType::SPI);
     } else
         selected =
             mBackendRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel, cirrus::core::BusTransportType::SPI);
     if (!selected) {
-        setProperty("Cirrus_SPI_Status", "NO_REGISTERED_BACKEND");
-        return false;
+        mAttachment.amplifier = "UNSUPPORTED";
+        const auto factory =
+            mPlatformProfile->spiControllerFactory ? mPlatformProfile->spiControllerFactory : cirrus::transport::createNativeSPIBackend;
+        const IOReturn ret = mNativeSPI.bindControllers(acpi, this, factory);
+        mAttachment.communication = ret == kIOReturnSuccess ? "READY" : "FAILED";
+        if (ret != kIOReturnSuccess) {
+            const auto& failure = mNativeSPI.failure();
+            recordAttachmentFailure("COMMUNICATION", failure.reason, ret, uint32_t(failure.index));
+            return false;
+        }
+        mPlatformAuthorized = false;
+        setProperty("Cirrus_SPI_Status", "CONTROLLERS_ONLY_AMP_UNSUPPORTED");
+        setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+        recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_BACKEND", kIOReturnUnsupported);
+        return true;
     }
+    mAttachment.amplifier = "REGISTERED_NOT_PROBED";
     const auto format = *selected->format(cirrus::core::BusTransportType::SPI);
     IOReturn ret = mNativeSPI.bind(acpi, this, format,
                                    mPlatformProfile->spiControllerFactory ? mPlatformProfile->spiControllerFactory
                                                                           : cirrus::transport::createNativeSPIBackend);
+    const IOReturn controllerReturn = ret;
     bool writable = false;
     if (ret == kIOReturnSuccess && mPlatformAuthorized && mPlatformProfile->boardConfiguration) {
         cirrus::platform::BoardIdentity actual{uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId),
@@ -436,6 +530,11 @@ bool CirrusAudioFixup::setupNativeSPI(IOService* provider) {
     setProperty("Cirrus_SPI_Failure_Index", uint64_t(failure.index), 32);
     setProperty("Cirrus_SPI_Failure_Source", failure.source);
     setProperty("Cirrus_SPI_Failure_Detail", uint64_t(failure.detail), 32);
+    mAttachment.communication = controllerReturn == kIOReturnSuccess ? (writable ? "READY" : "READ_ONLY") : "FAILED";
+    publishAttachmentStatus();
+    if (ret != kIOReturnSuccess)
+        recordAttachmentFailure(controllerReturn == kIOReturnSuccess ? "POLICY" : "COMMUNICATION", failure.reason, ret,
+                                uint32_t(failure.index));
     if (ret != kIOReturnSuccess)
         CIRRUS_ERR("SPI bind rejected: reason=%s index=%lu source=%s detail=0x%08X ret=0x%08X", failure.reason, failure.index,
                    failure.source, failure.detail, ret);
@@ -470,11 +569,13 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                 if (endpoint.sameDevice(board.amplifiers[j].endpoint)) {
                     configuredBinding = &board.amplifiers[j];
                     const char* hid = configuredBinding->acpiHid ? configuredBinding->acpiHid : mPlatformProfile->acpiHid;
-                    if (!strcmp(hid, mPlatformProfile->acpiHid))
+                    if (hid && mPlatformProfile->acpiHid && !strcmp(hid, mPlatformProfile->acpiHid))
                         definition = mBackendRegistry.find(hid, configuredBinding->siliconId, cirrus::core::BusTransportType::SPI);
                     break;
                 }
             if (!definition) {
+                mAttachment.amplifier = "UNSUPPORTED";
+                recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_BACKEND", kIOReturnUnsupported, uint32_t(i));
                 CIRRUS_ERR("SPI endpoint has no matching registered backend: endpoint=%lu controller=%s CS=%u; no probe", i,
                            endpoint.controllerPath, endpoint.spiChipSelect);
                 continue;
@@ -488,18 +589,28 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         identityMask = definition->identityMask;
         uint32_t id = 0;
         const bool readable = io && io->read(identityRegister, &id);
+        const uint32_t rawId = id;
+        recordTrace(TRACE_PROBE, uint8_t(i), false, false, identityRegister, readable ? rawId : 0,
+                    io ? io->lastError() : kIOReturnNotReady);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_RawDeviceID", i);
+        setProperty(key, uint64_t(rawId), 32);
         id &= identityMask;
         snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Probe_Return", i);
         setProperty(key, uint64_t(io ? io->lastError() : kIOReturnNotReady), 32);
         snprintf(key, sizeof(key), "Cirrus_SPI_%lu_DeviceID", i);
         setProperty(key, uint64_t(id), 32);
         if (!readable) {
+            mAttachment.communication = "FAILED";
+            recordAttachmentFailure("COMMUNICATION", "SPI_IDENTITY_TRANSFER_FAILED", io ? io->lastError() : kIOReturnNotReady, uint32_t(i));
             CIRRUS_ERR("SPI identity read failed: endpoint=%lu controller=%s CS=%u reg=0x%08X ret=0x%08X", i, endpoint.controllerPath,
                        endpoint.spiChipSelect, identityRegister, io ? io->lastError() : kIOReturnNotReady);
             continue;
         }
         // Both manifest and legacy discovery use module-owned identity policy.
         if (id != (configuredBinding ? configuredBinding->siliconId : definition->siliconId)) {
+            mAttachment.communication = "READY";
+            mAttachment.amplifier = "IDENTITY_MISMATCH";
+            recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound, uint32_t(i));
             CIRRUS_ERR("SPI silicon unsupported/mismatched: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization", i,
                        endpoint.controllerPath, endpoint.spiChipSelect, id);
             continue;
@@ -528,6 +639,12 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                    endpoint.spiClockHz, endpoint.spiMode, id);
     }
     mProbingAmplifiers = false;
+    if (mAmplifierCount) {
+        mAttachment.amplifier = mAmplifierCount == expectedAmplifierCount() ? "DETECTED" : "PARTIAL";
+        mAttachment.communication =
+            !strcmp(mAttachment.latest.stage, "COMMUNICATION") && mAmplifierCount != expectedAmplifierCount() ? "PARTIAL" : "READY";
+    }
+    publishAttachmentStatus();
     setProperty("Cirrus_Detected_Amplifiers", uint64_t(mAmplifierCount), 32);
     setProperty("Cirrus_Amp_Discovery", mAmplifierCount ? (mPlatformAuthorized ? "DETECTED_AUTHORIZED" : "DETECTED_READ_ONLY") : "NONE");
     return mAmplifierCount;
@@ -549,14 +666,9 @@ bool CirrusAudioFixup::start(IOService* provider) {
     }
     gCirrusDebug = cirrus::support::kDefaultVerboseLogging || bootArgEnabled("-cirrusdbg");
 
-    IOLog("============================================================\n");
-    IOLog("  CirrusAudioFixup by Tran Kinh Hoang (hoaug-tran)\n");
-    IOLog("  Smart Amplifier Fixup for macOS\n");
-    IOLog("  If you paid for this, you have been scammed!\n");
-    IOLog("============================================================\n");
-
     setProperty("Author", "Tran Kinh Hoang (hoaugtr)");
     setProperty("Cirrus_Build_Configuration", cirrus::support::kBuildConfiguration);
+    setProperty("Cirrus_Debug_Enabled", gCirrusDebug ? kOSBooleanTrue : kOSBooleanFalse);
     setProperty("Cirrus_Audio_Event_Mode", "HDA_TIMER_FALLBACK");
     IOLog("CirrusAudioFixup: %s build; verbose logging %s\n", cirrus::support::kBuildConfiguration, gCirrusDebug ? "enabled" : "disabled");
     setProperty("CirrusReachedStart", kOSBooleanTrue);
@@ -573,19 +685,18 @@ bool CirrusAudioFixup::start(IOService* provider) {
     resolvePlatformProfile();
 
     if (!registerAmplifierBackends()) {
+        recordAttachmentFailure("REGISTRATION", "BACKEND_REGISTRY_REJECTED", kIOReturnBadArgument);
         mProvider = nullptr;
         super::stop(provider);
         return false;
     }
     char requestedPhase[32]{};
     if (PE_parse_boot_argn("-cirrusphase", requestedPhase, sizeof(requestedPhase))) {
-        bool valid = false;
-        for (size_t i = 0; i < mBackendRegistry.count(); ++i) {
-            const auto* d = mBackendRegistry.at(i);
-            if (!strcmp(d->acpiHid, mPlatformProfile->acpiHid) && d->validDebugPhase && d->validDebugPhase(requestedPhase))
-                valid = true;
-        }
+        requestedPhase[sizeof(requestedPhase) - 1] = 0;
+        setProperty("Cirrus_Debug_Phase", requestedPhase);
+        const bool valid = mBackendRegistry.acceptsDebugPhase(mPlatformProfile ? mPlatformProfile->acpiHid : nullptr, requestedPhase);
         if (!valid) {
+            recordAttachmentFailure("DEBUG_POLICY", "INVALID_DEBUG_PHASE", kIOReturnBadArgument);
             CIRRUS_ERR("Unsupported -cirrusphase=%s; initialization rejected", requestedPhase);
             mProvider = nullptr;
             super::stop(provider);
@@ -593,7 +704,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
         }
     }
 
-    if (!setupNativeSPI(provider)) {
+    if (!setupCommunication(provider)) {
         teardownNativeSPI();
         mProvider = nullptr;
         super::stop(provider);
@@ -871,6 +982,7 @@ bool CirrusAudioFixup::bootArgEnabled(const char* name) {
 bool CirrusAudioFixup::bootArgStrEquals(const char* name, const char* expectedVal) {
     char val[64] = {};
     if (PE_parse_boot_argn(name, val, sizeof(val))) {
+        val[sizeof(val) - 1] = 0;
         return strncmp(val, expectedVal, sizeof(val)) == 0;
     }
     return false;
@@ -882,6 +994,29 @@ void CirrusAudioFixup::logProviderInfo(IOService* provider) {
         return;
     }
 
+    const auto cpu = cirrus::support::readCPUIdentity();
+    setProperty("Cirrus_CPU_Vendor", cirrus::support::cpuVendorName(cpu.vendor));
+    setProperty("Cirrus_CPU_Vendor_ID", cpu.vendor);
+    setProperty("Cirrus_CPU_Brand", cpu.brand);
+    if (auto* root = IORegistryEntry::fromPath("IODeviceTree:/")) {
+        if (auto* data = OSDynamicCast(OSData, root->getProperty("model"))) {
+            char model[128]{};
+            const size_t length = data->getLength() < sizeof(model) - 1 ? data->getLength() : sizeof(model) - 1;
+            if (length && data->getBytesNoCopy()) {
+                memcpy(model, data->getBytesNoCopy(), length);
+                setProperty("Cirrus_Machine_Model", model);
+            }
+        }
+        root->release();
+    }
+    setProperty("Cirrus_Provider_Name", provider->getName());
+    setProperty("Cirrus_Provider_Class", provider->getMetaClass()->getClassName());
+    char providerPath[256]{};
+    int pathLength = sizeof(providerPath);
+    if (provider->getPath(providerPath, &pathLength, gIOServicePlane))
+        setProperty("Cirrus_Provider_Path", providerPath);
+    IOLog("CirrusAudioFixup: ATTACH cpu=%s brand=%s provider=%s class=%s path=%s\n", cirrus::support::cpuVendorName(cpu.vendor), cpu.brand,
+          provider->getName(), provider->getMetaClass()->getClassName(), providerPath);
     CIRRUS_LOG("provider name=%s class=%s", provider->getName(), provider->getMetaClass()->getClassName());
 
     OSObject* addrObj = provider->getProperty("i2cAddress");
@@ -901,6 +1036,8 @@ void CirrusAudioFixup::logProviderInfo(IOService* provider) {
 }
 
 void CirrusAudioFixup::dumpProviderProperties(IOService* provider) {
+    if (!gCirrusDebug)
+        return;
     if (!provider) {
         return;
     }
@@ -908,6 +1045,8 @@ void CirrusAudioFixup::dumpProviderProperties(IOService* provider) {
     CIRRUS_LOG("provider properties follow");
 
     OSDictionary* properties = provider->getPropertyTable();
+    if (!properties)
+        return;
     OSCollectionIterator* iterator = OSCollectionIterator::withCollection(properties);
     if (!iterator) {
         CIRRUS_ERR("property iterator failed");
@@ -1117,9 +1256,19 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         return mAmplifierCount;
     teardownAmplifierRuntime();
     mAmplifierCount = 0;
-    if (!mPlatformAuthorized || !mPlatformProfile || !mPlatformProfile->boardConfiguration)
+    if (!mPlatformAuthorized || !mPlatformProfile || !mPlatformProfile->boardConfiguration) {
+        recordAttachmentFailure("POLICY", "BOARD_NOT_AUTHORIZED", kIOReturnNotPermitted);
         return 0;
+    }
     const auto& board = *mPlatformProfile->boardConfiguration;
+    if (!board.amplifiers) {
+        recordAttachmentFailure("RESOURCE", "INVALID_BOARD_BINDINGS", kIOReturnBadArgument);
+        return 0;
+    }
+    const auto* expected =
+        board.count ? mBackendRegistry.find(mPlatformProfile->acpiHid, board.amplifiers[0].siliconId, cirrus::core::BusTransportType::I2C)
+                    : nullptr;
+    mAttachment.amplifier = expected ? "REGISTERED_NOT_PROBED" : "UNSUPPORTED";
     int length = sizeof(mRuntimeControllerPath);
     if (!mProvider->getPath(mRuntimeControllerPath, &length, gIOServicePlane))
         return 0;
@@ -1133,8 +1282,9 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
     for (size_t i = 0; i < board.count && mAmplifierCount < kMaxAmplifiers; ++i) {
         const auto& binding = board.amplifiers[i];
         const auto& endpoint = binding.endpoint;
-        if (endpoint.transport != cirrus::core::BusTransportType::I2C || endpoint.tenBitAddress ||
+        if (!endpoint.valid() || endpoint.transport != cirrus::core::BusTransportType::I2C || endpoint.tenBitAddress ||
             strcmp(endpoint.controllerPath, mRuntimeControllerPath)) {
+            recordAttachmentFailure("RESOURCE", "I2C_ENDPOINT_UNMATCHED", kIOReturnUnsupported, uint32_t(i));
             CIRRUS_ERR("I2C endpoint unsupported/unmatched: index=%lu controller=%s address=0x%X tenBit=%u bus=%u", i,
                        endpoint.controllerPath, unsigned(endpoint.i2cAddress), unsigned(endpoint.tenBitAddress),
                        unsigned(endpoint.transport));
@@ -1142,7 +1292,9 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         }
         const char* hid = binding.acpiHid ? binding.acpiHid : mPlatformProfile->acpiHid;
         const auto* backend = mBackendRegistry.find(hid, binding.siliconId, cirrus::core::BusTransportType::I2C);
-        if (!backend || strcmp(hid, mPlatformProfile->acpiHid)) {
+        if (!hid || !mPlatformProfile->acpiHid || !backend || strcmp(hid, mPlatformProfile->acpiHid)) {
+            mAttachment.amplifier = "UNSUPPORTED";
+            recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_BACKEND", kIOReturnUnsupported, uint32_t(i));
             CIRRUS_ERR("I2C backend unsupported: endpoint=%lu hid=%s silicon=0x%08X", i, hid, binding.siliconId);
             continue;
         }
@@ -1150,12 +1302,22 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         cirrus::core::RegisterMap map(bus, *backend->format(cirrus::core::BusTransportType::I2C), false);
         uint32_t id = 0;
         bool readable = map.read(backend->identityRegister, &id);
+        recordTrace(TRACE_PROBE, uint8_t(i), false, false, backend->identityRegister, readable ? id : 0, map.lastError());
         char key[64]{};
         snprintf(key, sizeof(key), "Cirrus_I2C_%lu_Probe_Return", i);
         setProperty(key, uint64_t(map.lastError()), 32);
         snprintf(key, sizeof(key), "Cirrus_I2C_%lu_DeviceID", i);
         setProperty(key, uint64_t(id), 32);
+        if (!readable) {
+            mAttachment.communication = map.lastError() == kIOReturnUnsupported ? "UNSUPPORTED" : "FAILED";
+            recordAttachmentFailure("COMMUNICATION", "I2C_IDENTITY_TRANSFER_FAILED", map.lastError(), uint32_t(i));
+        } else
+            mAttachment.communication = "READY";
         if (!readable || (id & backend->identityMask) != binding.siliconId) {
+            if (readable) {
+                mAttachment.amplifier = "IDENTITY_MISMATCH";
+                recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound, uint32_t(i));
+            }
             CIRRUS_ERR(
                 "I2C identity rejected: endpoint=%lu controller=%s address=0x%X actual=0x%08X expected=0x%08X mask=0x%08X ret=0x%08X", i,
                 endpoint.controllerPath, unsigned(endpoint.i2cAddress), id, binding.siliconId, backend->identityMask, map.lastError());
@@ -1185,6 +1347,12 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         amp.present = true;
         ++mAmplifierCount;
     }
+    if (mAmplifierCount) {
+        mAttachment.amplifier = mAmplifierCount == expectedAmplifierCount() ? "DETECTED" : "PARTIAL";
+        mAttachment.communication =
+            !strcmp(mAttachment.latest.stage, "COMMUNICATION") && mAmplifierCount != expectedAmplifierCount() ? "PARTIAL" : "READY";
+    }
+    publishAttachmentStatus();
     setProperty("Cirrus_Detected_Amplifiers", uint64_t(mAmplifierCount), 32);
     setProperty("Cirrus_Amp_Discovery", mAmplifierCount ? "DETECTED_CONFIGURED_I2C" : "NONE");
     return mAmplifierCount;
@@ -1205,8 +1373,20 @@ size_t CirrusAudioFixup::detectAmplifiers() {
     mAmplifierCount = 0;
     const auto& profile = mPlatformProfile ? *mPlatformProfile : cirrus::platform::defaultPlatformProfile();
     const auto* definition = mBackendRegistry.findModel(profile.acpiHid, profile.amplifierModel, cirrus::core::BusTransportType::I2C);
-    if (!definition || (!mPlatformAuthorized && !bootArgEnabled("-cirruslegacyprobe")))
+    if (!definition) {
+        mAttachment.amplifier = "UNSUPPORTED";
+        recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_BACKEND", kIOReturnUnsupported);
         return 0;
+    }
+    mAttachment.amplifier = "REGISTERED_NOT_PROBED";
+    if (!profile.endpoints || !profile.endpointCount) {
+        recordAttachmentFailure("RESOURCE", "INVALID_BOARD_BINDINGS", kIOReturnBadArgument);
+        return 0;
+    }
+    if (!mPlatformAuthorized && !bootArgEnabled("-cirruslegacyprobe")) {
+        recordAttachmentFailure("POLICY", "BOARD_NOT_AUTHORIZED", kIOReturnNotPermitted);
+        return 0;
+    }
     int pathLength = sizeof(mRuntimeControllerPath);
     if (!mProvider->getPath(mRuntimeControllerPath, &pathLength, gIOServicePlane))
         return 0;
@@ -1228,7 +1408,22 @@ size_t CirrusAudioFixup::detectAmplifiers() {
             break;
         }
         uint32_t id = 0;
-        if (!map->read(definition->identityRegister, &id) || (id & definition->identityMask) != definition->siliconId) {
+        const bool readable = map->read(definition->identityRegister, &id);
+        recordTrace(TRACE_PROBE, uint8_t(i), false, false, definition->identityRegister, readable ? id : 0, map->lastError());
+        char key[64]{};
+        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_Probe_Return", i);
+        setProperty(key, uint64_t(map->lastError()), 32);
+        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_DeviceID", i);
+        setProperty(key, uint64_t(id), 32);
+        if (!readable || (id & definition->identityMask) != definition->siliconId) {
+            if (!readable) {
+                mAttachment.communication = map->lastError() == kIOReturnUnsupported ? "UNSUPPORTED" : "FAILED";
+                recordAttachmentFailure("COMMUNICATION", "I2C_IDENTITY_TRANSFER_FAILED", map->lastError(), uint32_t(i));
+            } else {
+                mAttachment.communication = "READY";
+                mAttachment.amplifier = "IDENTITY_MISMATCH";
+                recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound, uint32_t(i));
+            }
             delete map;
             delete bus;
             continue;
@@ -1250,6 +1445,12 @@ size_t CirrusAudioFixup::detectAmplifiers() {
     }
     mProbingAmplifiers = false;
     setProperty("Cirrus_Discovery_Fallback", kOSBooleanFalse);
+    if (mAmplifierCount) {
+        mAttachment.amplifier = mAmplifierCount == expectedAmplifierCount() ? "DETECTED" : "PARTIAL";
+        mAttachment.communication =
+            !strcmp(mAttachment.latest.stage, "COMMUNICATION") && mAmplifierCount != expectedAmplifierCount() ? "PARTIAL" : "READY";
+    }
+    publishAttachmentStatus();
     setProperty("Cirrus_Detected_Amplifiers", uint64_t(mAmplifierCount), 32);
     setProperty("Cirrus_Amp_Discovery", mAmplifierCount ? "DETECTED" : "NONE");
     return mAmplifierCount;
@@ -1505,6 +1706,11 @@ bool CirrusAudioFixup::retryBringUpResources() {
 }
 
 void CirrusAudioFixup::runBackgroundMonitor() {
+    // Diagnostic-only/failed attachments do not acquire HDA mappings or rearm
+    // polling. Pending resources still have a bound Waiting runtime.
+    if (!mPlatformAuthorized || !mAmplifierRuntime.bound() || mAmplifierRuntime.stage() == cirrus::core::AmplifierStage::Faulted ||
+        mAmplifierRuntime.stage() == cirrus::core::AmplifierStage::Suspended)
+        return;
     if (mStopping || !mPowerAvailable || mNeedsReinitialization || mDebugPhaseHalted)
         return;
     if (retryBringUpResources())
@@ -1808,6 +2014,30 @@ void CirrusAudioFixup::recordDiagnosticFailure(AmplifierState& amp, DiagnosticFa
 // A fault takes precedence over a deliberate debug halt. READY_DSP describes
 // the driver's verified state; speaker routing remains a separate check.
 void CirrusAudioFixup::publishDriverVerdict() {
+    using cirrus::core::AmplifierStage;
+    switch (mAmplifierRuntime.stage()) {
+    case AmplifierStage::Ready:
+        mAttachment.amplifier = "READY";
+        break;
+    case AmplifierStage::Playing:
+        mAttachment.amplifier = "PLAYING";
+        break;
+    case AmplifierStage::Faulted:
+        mAttachment.amplifier = "FAULTED";
+        break;
+    case AmplifierStage::Waiting:
+        mAttachment.amplifier = "WAITING_RESOURCES";
+        break;
+    case AmplifierStage::DebugHalted:
+        mAttachment.amplifier = "DEBUG_HALTED";
+        break;
+    case AmplifierStage::Suspended:
+        mAttachment.amplifier = "SUSPENDED";
+        break;
+    default:
+        break;
+    }
+    publishAttachmentStatus();
     bool topologyComplete = mPlatformProfile && mAmplifierCount == expectedAmplifierCount();
     for (size_t i = 0; i < mAmplifierCount; ++i)
         topologyComplete &= mAmplifiers[i].present;
@@ -1832,6 +2062,9 @@ void CirrusAudioFixup::publishDriverVerdict() {
             readyVerdict = "READY_BACKENDS";
     }
     anyFaulted |= mAmplifierRuntime.stage() == cirrus::core::AmplifierStage::Faulted;
+    if (anyFaulted)
+        mAttachment.amplifier = "FAULTED";
+    publishAttachmentStatus();
     const char* verdict = !mPowerAvailable              ? "SUSPENDED"
                           : bootArgEnabled("-cirrusro") ? "READ_ONLY"
                           : !mPlatformAuthorized        ? "UNSUPPORTED_PLATFORM"
@@ -2169,4 +2402,95 @@ void CirrusAudioFixup::probeAmplifier(AmplifierState& amp) {
     cirrus::platform::AmplifierBackendContext context{io,      amp.endpoint, board, actual, 0, firmware, mPlatformProfile->acpiHid,
                                                       nullptr, nullptr,      &host};
     definition->inspect(context);
+}
+
+// Probe a known, non-destructive identity before any board reset. An absent
+// device may need the already-authorized board reset; an unsupported provider
+// function or a readable wrong silicon must never trigger that reset.
+bool CirrusAudioFixup::preflightI2CIdentity(const cirrus::platform::AmplifierBackendDefinition* definition) {
+    if (!mPlatformAuthorized || bootArgEnabled("-cirrusro") || !definition || !mI2CController)
+        return true;
+    const auto* board = mPlatformProfile->boardConfiguration;
+    if ((board && (!board->amplifiers || !board->count)) ||
+        (!board && (!mPlatformProfile->endpoints || !mPlatformProfile->endpointCount))) {
+        mAttachment.communication = "RESOURCE_REJECTED";
+        recordAttachmentFailure("RESOURCE", "INVALID_BOARD_BINDINGS", kIOReturnBadArgument);
+        return false;
+    }
+    const uint16_t address = board && board->amplifiers && board->count ? board->amplifiers[0].endpoint.i2cAddress
+                             : mPlatformProfile->endpointCount          ? mPlatformProfile->endpoints[0].address
+                                                                        : 0;
+    if (!address)
+        return true;
+    if (board && board->amplifiers && board->count) {
+        char path[256]{};
+        int length = sizeof(path);
+        const auto& endpoint = board->amplifiers[0].endpoint;
+        if (endpoint.transport != cirrus::core::BusTransportType::I2C || endpoint.tenBitAddress || !mProvider ||
+            !mProvider->getPath(path, &length, gIOServicePlane) || !endpoint.controllerPath || strcmp(path, endpoint.controllerPath)) {
+            mAttachment.communication = "RESOURCE_REJECTED";
+            recordAttachmentFailure("RESOURCE", "I2C_ENDPOINT_UNMATCHED", kIOReturnUnsupported);
+            return false;
+        }
+    }
+    cirrus::transport::I2CRegisterBus bus(mI2CController, {address, false});
+    cirrus::core::RegisterMap map(bus, *definition->format(cirrus::core::BusTransportType::I2C), false);
+    uint32_t id = 0;
+    const bool readable = map.read(definition->identityRegister, &id);
+    const auto result = map.lastError();
+    recordTrace(TRACE_PROBE, 0, false, false, definition->identityRegister, readable ? id : 0, result);
+    setProperty("Cirrus_I2C_Preflight_Return", uint64_t(result), 32);
+    setProperty("Cirrus_I2C_Preflight_DeviceID", uint64_t(id), 32);
+    if (!readable && result == kIOReturnUnsupported) {
+        mAttachment.communication = "UNSUPPORTED";
+        recordAttachmentFailure("COMMUNICATION", "I2C_ADDRESSED_FUNCTION_UNSUPPORTED", result);
+        return false;
+    }
+    if (readable && (id & definition->identityMask) != definition->siliconId) {
+        mAttachment.communication = "READY";
+        mAttachment.amplifier = "IDENTITY_MISMATCH";
+        mPlatformAuthorized = false;
+        setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+        recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound);
+    }
+    return true;
+}
+
+void CirrusAudioFixup::recordAttachmentFailure(const char* stage, const char* reason, IOReturn result, uint32_t index,
+                                               const char* indexKind) {
+    if (!stage)
+        stage = "UNKNOWN";
+    if (!reason)
+        reason = "UNSPECIFIED_FAILURE";
+    if (!indexKind)
+        indexKind = "UNKNOWN";
+    const bool publish = mAttachment.record(stage, reason, result, index, indexKind);
+    if (!publish)
+        return;
+    setProperty("Cirrus_Attach_First_Stage", mAttachment.first.stage);
+    setProperty("Cirrus_Attach_First_Reason", mAttachment.first.reason);
+    setProperty("Cirrus_Attach_First_Return", uint64_t(mAttachment.first.result), 32);
+    setProperty("Cirrus_Attach_First_Index_Kind", mAttachment.first.indexKind);
+    setProperty("Cirrus_Attach_Latest_Index_Kind", indexKind);
+    setProperty("Cirrus_Attach_First_Index", uint64_t(mAttachment.first.index), 32);
+    setProperty("Cirrus_Attach_Latest_Stage", mAttachment.latest.stage);
+    setProperty("Cirrus_Attach_Latest_Reason", mAttachment.latest.reason);
+    setProperty("Cirrus_Attach_Latest_Return", uint64_t(result), 32);
+    setProperty("Cirrus_Attach_Latest_Index", uint64_t(index), 32);
+    setProperty("Cirrus_Attach_Failure_Count", uint64_t(mAttachment.failureCount), 32);
+    char key[80]{};
+    snprintf(key, sizeof(key), "Cirrus_Attach_%s_%u_Stage", indexKind, index);
+    setProperty(key, stage);
+    snprintf(key, sizeof(key), "Cirrus_Attach_%s_%u_Reason", indexKind, index);
+    setProperty(key, reason);
+    snprintf(key, sizeof(key), "Cirrus_Attach_%s_%u_Return", indexKind, index);
+    setProperty(key, uint64_t(result), 32);
+    publishAttachmentStatus();
+    CIRRUS_ERR("ATTACH_FAIL stage=%s reason=%s index_kind=%s index=%u return=0x%08X profile=%s board=0x%08X comm=%s amp=%s first=%s", stage,
+               reason, indexKind, index, result, mPlatformProfile && mPlatformProfile->name ? mPlatformProfile->name : "unknown",
+               mPlatformSubsystemId, mAttachment.communication, mAttachment.amplifier, mAttachment.first.reason);
+}
+void CirrusAudioFixup::publishAttachmentStatus() {
+    setProperty("Cirrus_Communication_Status", mAttachment.communication);
+    setProperty("Cirrus_Amplifier_Status", mAttachment.amplifier);
 }

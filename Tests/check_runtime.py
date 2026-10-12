@@ -132,6 +132,7 @@ preamble = r'''
 #include <vector>
 #include <string>
 #include "Diagnostics/DiagnosticTypes.hpp"
+#include "Diagnostics/AttachmentState.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
 #include "Platform/AmplifierRuntime.hpp"
 #include "Platform/AmplifierHost.hpp"

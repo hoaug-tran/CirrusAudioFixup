@@ -95,6 +95,16 @@ public:
         }
         return found;
     }
+    bool acceptsDebugPhase(const char* hid, const char* phase) const {
+        if (!hid || !phase || !*phase)
+            return false;
+        for (size_t i = 0; i < mCount; ++i) {
+            const auto* d = mDefinitions[i];
+            if (!strcmp(d->acpiHid, hid) && d->validDebugPhase && d->validDebugPhase(phase))
+                return true;
+        }
+        return false;
+    }
     // Factory selection does not authorize power writes. The returned backend's
     // identify/authorizeBoard hooks still run before lifecycle initialization.
     core::AmplifierLifecycleHooks* create(const AmplifierBackendContext& context, const AmplifierBackendDefinition*& selected) const {

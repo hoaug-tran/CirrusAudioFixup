@@ -245,3 +245,22 @@ common `NativeSPIControllerOwner` contract. Synthetic independent communication
 owners cover shared targets, release ordering, resume rollback and selected
 factory rejection without fallback. Existing Intel/AMD engines and their
 physical evidence gates are unchanged.
+
+
+## Attachment/debug hardening — 2026-10-12
+
+The host Intel/AMD × I2C/SPI matrix now covers successful runtime/playback,
+unsupported controller/private ABI, absent AMP registration, wrong silicon and
+unsupported direct ACPI I2C. Bus selection follows validated resource type rather
+than ACPI class or CPU vendor. SPI controller-only inventory uses no invented AMP
+register format. I2C preflight blocks unsupported ABI/readable wrong silicon before
+board reset. Unknown HID/phase handling is null-safe and bounded.
+
+Attachment diagnostics separate communication, AMP, policy, binding and PM,
+preserve first/latest native returns, type indices and rate-limit repeats.
+CPU/provider/model metadata, debug flags, identity probe traces and raw SPI IDs
+are published. Failed/unbound diagnostic attachments no longer map HDA or rearm
+background polling. The source does not expand Info.plist matching, board
+allowlists, firmware resources or physical support claims. See
+[attachment matrix](attachment_matrix.md) for the complete contract and observed
+AMD/custom-I2C baseline on the older loaded bundle.

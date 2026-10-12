@@ -8,9 +8,19 @@ def owner_function(name):
  if name=='createI2CController':
   start=SOURCE.index('cirrus::transport::I2CController* CirrusAudioFixup::createI2CController(')
   return SOURCE[start:SOURCE.index('\n}',start)+2]
- start=SOURCE.index(('size_t' if name.startswith('detect') else 'bool' if name in ('setupNativeSPI','bindAmplifierRuntime') else 'void')+' CirrusAudioFixup::'+name+'(')
+ start=SOURCE.index(('size_t' if name.startswith('detect') else 'bool' if name in ('setupCommunication','preflightI2CIdentity','bindAmplifierRuntime') else 'void')+' CirrusAudioFixup::'+name+'(')
  return SOURCE[start:SOURCE.index('\n}',start)+2]
 
+HEADER=(ROOT/'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text()
+def power_wrapper(name):
+ import re
+ start=re.search(r'(?:void|bool) '+name+r'\(',HEADER).start();opening=HEADER.index('{',start);depth=0
+ for token in re.finditer(r'"(?:\\.|[^"\\])*"|//[^\n]*|[{}]',HEADER[opening:]):
+  if token.group()=='{':depth+=1
+  elif token.group()=='}':
+   depth-=1
+   if not depth:return HEADER[start:opening+token.end()]
+ raise ValueError(name)
 with tempfile.TemporaryDirectory(prefix='cirrus-native-spi-') as directory:
  p=Path(directory)
  for name in ('IOKit','Transport/Intel','Transport/AMD'):(p/name).mkdir(parents=True,exist_ok=True)
@@ -50,7 +60,7 @@ struct IORegistryEntry:OSObject {
 struct OSIterator {std::vector<IORegistryEntry*> list;size_t pos=0;OSIterator(std::vector<IORegistryEntry*> v):list(v){++iteratorLive;}virtual ~OSIterator(){--iteratorLive;}OSObject* getNextObject(){return pos<list.size()?list[pos++]:nullptr;}void release(){delete this;}};
 constexpr int kIORegistryIterateRecursively=1;
 struct IORegistryIterator:OSIterator {using OSIterator::OSIterator;static IORegistryIterator* iterateOver(IORegistryEntry*,const IORegistryPlane*,int){return iteratorFailure?nullptr:new IORegistryIterator(nodes);}};
-class IOService:public IORegistryEntry {public:static void* serviceMatching(const char*){return nullptr;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
+class IOService:public IORegistryEntry {public:bool addressedABI=true;void* metaCast(const char*){return addressedABI?this:nullptr;}static void* serviceMatching(const char*){return nullptr;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
 class IOACPIPlatformDevice:public IOService {public:
  OSData crs;OSString hid;unsigned status=3,power=0;bool rejectCRS=false;bool amd=false,hasPSC=true;
  int evaluateInteger(const char*,uint32_t* out){*out=power;return hasPSC?0:kIOReturnNotFound;}
@@ -90,7 +100,7 @@ public:
 #include "Transport/I2CRegisterBus.hpp"
 #include "IOKit/IORegistryEntry.h"
 inline std::vector<std::vector<uint8_t>> i2cWrites,i2cReads;
-inline uint32_t i2cProbeID=0x35a40;
+inline uint32_t i2cProbeID=0x35a40;inline IOReturn i2cResult=0;
 namespace cirrus::transport {
 class VoodooI2CController:public I2CController {
 public:
@@ -99,6 +109,7 @@ public:
  size_t maxReadBytes()const override{return 256;}
  IOReturn transfer(const I2CEndpoint&,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n)override {
   if(!n)i2cWrites.emplace_back(tx,tx+tn);else i2cReads.emplace_back(tx,tx+tn);
+  if(i2cResult)return i2cResult;
   for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(i2cProbeID>>(24-8*i)):0;
   return 0;
  }
@@ -111,6 +122,8 @@ public:
 #include "Transport/NativeSPIHost.hpp"
 #include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Platform/AmplifierHost.hpp"
+#include "Diagnostics/AttachmentState.hpp"
+using namespace cirrus::diagnostics;
 #include "Platform/PlatformProfile.hpp"
 #include "Core/AmplifierDescriptors.hpp"
 #include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
@@ -120,7 +133,7 @@ public:
 #include <map>
 #include <cstdio>
 #define CIRRUS_LOG(...) ((void)0)
-#define CIRRUS_ERR(...) ((void)0)
+#define CIRRUS_ERR(...) do{if(false)fprintf(stderr,__VA_ARGS__);}while(0)
 constexpr bool kOSBooleanFalse=false,kOSBooleanTrue=true;
 inline bool PE_parse_boot_argn(const char*,void*,int){return false;}
 struct Amp {
@@ -149,7 +162,7 @@ public:
  cirrus::transport::I2CController* mI2CController=nullptr;
  cirrus::transport::I2CRegisterBus* mI2CBuses[4]{};
  cirrus::core::RegisterMap* mI2CMaps[4]{};
-'''+PLATFORM_ADAPTER+r'''
+'''+PLATFORM_ADAPTER+power_wrapper('suspendNativeTransport')+power_wrapper('resumeNativeTransport')+r'''
  AmplifierBackendOwner mBackendOwners[4]{};
  cirrus::platform::AmplifierBinding mRuntimeBindings[4]{};
  cirrus::firmware::FirmwareBundle mRuntimeFirmware[4]{};
@@ -167,14 +180,21 @@ public:
  struct Events{bool unchanged(uint32_t){return true;}};Events* mAudioEvents=nullptr;
  bool synchronizeHdaStream(){return false;}
  bool mCapturingFailureSnapshot=false;
+ cirrus::diagnostics::AttachmentState mAttachment{};
+ unsigned attachmentTraces=0;
+ void recordTrace(cirrus::diagnostics::TraceSource,uint8_t,bool,bool,uint32_t,uint32_t,IOReturn){++attachmentTraces;}
+ void recordAttachmentFailure(const char*,const char*,IOReturn,uint32_t=0,const char* kind="ENDPOINT");
+ void publishAttachmentStatus();
  unsigned hostReports=0;
  void setDiagnosticStage(Amp&,cirrus::diagnostics::DriverStage){++hostReports;}
  void markDiagnosticSuccess(Amp&,cirrus::diagnostics::DriverStage){++hostReports;}
  cirrus::transport::I2CController* createI2CController();
  bool bindAmplifierRuntime();void teardownAmplifierRuntime();
+ size_t expectedAmplifierCount()const{return mPlatformProfile->boardConfiguration?mPlatformProfile->boardConfiguration->count:mPlatformProfile->endpointCount;}
  size_t detectConfiguredI2CAmplifiers();
  ~CirrusAudioFixup(){teardownNativeSPI();}
- bool setupNativeSPI(IOService*);
+ bool setupCommunication(IOService*);
+ bool preflightI2CIdentity(const cirrus::platform::AmplifierBackendDefinition*);
  size_t detectNativeSPIAmplifiers();void teardownNativeSPI();
 };
 '''+r'''
@@ -192,7 +212,7 @@ public:
  bool pollBit(uint32_t r,uint32_t m,uint32_t v,uint32_t t)override{return amp.registerIO->pollBit(r,m,v,t);}
 };
 using cirrus::diagnostics::DIAG_DEVICE_ID;
-'''+owner_function('createI2CController')+owner_function('bindAmplifierRuntime')+owner_function('teardownAmplifierRuntime')+owner_function('detectConfiguredI2CAmplifiers')+owner_function('setupNativeSPI')+owner_function('detectNativeSPIAmplifiers')+owner_function('teardownNativeSPI')+r'''
+'''+owner_function('preflightI2CIdentity')+owner_function('recordAttachmentFailure')+owner_function('publishAttachmentStatus')+owner_function('createI2CController')+owner_function('bindAmplifierRuntime')+owner_function('teardownAmplifierRuntime')+owner_function('detectConfiguredI2CAmplifiers')+owner_function('setupCommunication')+owner_function('detectNativeSPIAmplifiers')+owner_function('teardownNativeSPI')+r'''
 using namespace cirrus::transport;
 std::vector<uint8_t> descriptor(const char* source,unsigned cs){
  size_t length=21+strlen(source)+1;std::vector<uint8_t> d(length);
@@ -327,14 +347,14 @@ int main(){
  format.addressBytes=1;format.valueBytes=1;format.stride=1;format.paddingBytes=0;format.readFlag=0;format.maxRegister=255;
  assert(host.bind(&amp,&owner,format)==0&&!strcmp(host.failure().reason,"NONE"));uint8_t bytes[3]{};assert(host.registers(0)->bulkRead(1,bytes,3));
  host.shutdown();assert(!liveControllers&&!iteratorLive&&amp.crs.refs==1);
- CirrusAudioFixup gated;IOService i2c;
+ CirrusAudioFixup gated;IOService i2c;gated.mProvider=&i2c;
  cirrus::platform::AmplifierBackendDefinition legacyDefinition{"fixture-legacy-spi","CSC3551",0x35a40,2,{},cirrus::devices::cs35l41::CS35L41SPIRegisterIO::config(),createSPI,destroySPI,true,0,0xffffffffU,cirrus::core::AmplifierModel::CS35L41};
  legacyDefinition.spiFormat.readable=legacyDefinition.spiFormat.writable=[](uint32_t){return true;};
  assert(gated.mBackendRegistry.add(legacyDefinition));
- assert(gated.setupNativeSPI(&i2c)&&gated.strings["Cirrus_Bus"]=="I2C");
- assert(!gated.setupNativeSPI(&amp)&&!gated.mNativeSPI.bound());
- gated.flags["-cirrusspi"]=true;assert(gated.setupNativeSPI(&amp)&&!gated.mPlatformAuthorized);gated.teardownNativeSPI();
- gated.flags["-cirrusro"]=true;assert(gated.setupNativeSPI(&amp)&&!gated.mPlatformAuthorized);
+ assert(gated.setupCommunication(&i2c)&&gated.strings["Cirrus_Bus"]=="I2C");
+ assert(!gated.setupCommunication(&amp)&&!gated.mNativeSPI.bound());
+ gated.flags["-cirrusspi"]=true;assert(gated.setupCommunication(&amp)&&!gated.mPlatformAuthorized);gated.teardownNativeSPI();
+ gated.flags["-cirrusro"]=true;assert(gated.setupCommunication(&amp)&&!gated.mPlatformAuthorized);
  assert(gated.strings["Cirrus_SPI_Status"]=="BOUND_READ_ONLY");
  assert(!gated.mNativeSPI.registers(0)->write(0,1));gated.teardownNativeSPI();assert(!liveControllers);
 
@@ -362,14 +382,15 @@ int main(){
  CirrusAudioFixup customSPI;customSPI.mPlatformProfile=&customProfile;customSPI.flags["-cirrusspi"]=true;
  assert(customSPI.mBackendRegistry.add(legacyDefinition));resources(amp,{{"SPI0",0},{"SPI0",1},{"SPI1",2}});
  const auto originalIntelResumes=resumes;
- assert(customSPI.setupNativeSPI(&amp) && nativeCreates==2 && !liveControllers);
- customSPI.mNativeSPI.suspend();failNativeResume=true;
- assert(customSPI.mNativeSPI.resume()==kIOReturnNotReady && nativeResumes==1 && nativeSuspends==4);
+ assert(customSPI.setupCommunication(&amp) && nativeCreates==2 && !liveControllers);
+ customSPI.suspendNativeTransport();assert(!strcmp(customSPI.mAttachment.communication,"SUSPENDED"));failNativeResume=true;
+ assert(!customSPI.resumeNativeTransport() && nativeResumes==1 && nativeSuspends==4);
+ assert(!strcmp(customSPI.mAttachment.first.stage,"CONTROLLER_PM") && !strcmp(customSPI.mAttachment.first.indexKind,"CONTROLLER_SLOT") && customSPI.mAttachment.first.result==kIOReturnNotReady);
  assert(!strcmp(customSPI.mNativeSPI.failure().reason,"CUSTOM_OWNER_RESUME_FAILED") && resumes==originalIntelResumes);
- failNativeResume=false;assert(customSPI.mNativeSPI.resume()==0 && nativeResumes==3);
+ failNativeResume=false;assert(customSPI.resumeNativeTransport() && nativeResumes==3 && customSPI.mAttachment.first.result==kIOReturnNotReady);
  customSPI.teardownNativeSPI();assert(nativeCreates==nativeDestroys && a.refs==1 && b.refs==1);
  rejectNative=true;const auto createdBefore=nativeCreates;
- assert(!customSPI.setupNativeSPI(&amp) && nativeCreates==createdBefore && !liveControllers && !customSPI.mNativeSPI.bound());
+ assert(!customSPI.setupCommunication(&amp) && nativeCreates==createdBefore && !liveControllers && !customSPI.mNativeSPI.bound());
  assert(!strcmp(customSPI.mNativeSPI.failure().reason,"CUSTOM_OWNER_FACTORY_REJECTED") && customSPI.mNativeSPI.failure().detail==7);
  rejectNative=false;customSPI.teardownNativeSPI();assert(a.refs==1 && b.refs==1);
  // Full production native-controller -> register-map -> backend -> group path.
@@ -445,7 +466,7 @@ int main(){
  CirrusAudioFixup extension;extension.mProvider=&amp;extension.mPlatformProfile=&extensionProfile;extension.mPlatformSubsystemId=0x12345678;
  assert(extension.mBackendRegistry.add(d1)&&extension.mBackendRegistry.add(d2));extension.flags["-cirrusspi"]=true;
  before=writeTransfers;
- assert(extension.setupNativeSPI(&amp)&&extension.detectNativeSPIAmplifiers()==2&&writeTransfers==before);
+ assert(extension.setupCommunication(&amp)&&extension.detectNativeSPIAmplifiers()==2&&writeTransfers==before);
  assert(extension.mAmplifiers[0].deviceId==0x2222&&extension.mAmplifiers[1].deviceId==0x1111);
  assert(extension.mAmplifiers[0].model==cirrus::core::AmplifierModel::Unknown);
  assert(extension.bindAmplifierRuntime()&&writeTransfers==before);
@@ -477,14 +498,14 @@ int main(){
  CirrusAudioFixup shipping;shipping.mProvider=&amp;shipping.mPlatformProfile=&shipProfile;shipping.mPlatformSubsystemId=0x12345678;
  assert(shipping.mBackendRegistry.add(shipDefinition));shipping.flags["-cirrusspi"]=true;
  before=writeTransfers;
- assert(shipping.setupNativeSPI(&amp)&&shipping.mPlatformAuthorized&&shipping.detectNativeSPIAmplifiers()==2);
+ assert(shipping.setupCommunication(&amp)&&shipping.mPlatformAuthorized&&shipping.detectNativeSPIAmplifiers()==2);
  assert(shipping.mAmplifiers[0].channel==cirrus::core::AudioChannel::Right&&shipping.mAmplifiers[1].channel==cirrus::core::AudioChannel::Left);
  assert(shipping.bindAmplifierRuntime()&&writeTransfers==before);
  assert(shipping.mAmplifierRuntime.bringUp()==0&&shipping.mAmplifierRuntime.startPlayback()==0);
  shipping.teardownNativeSPI();assert(!shipping.mAmplifierRuntime.bound()&&!liveControllers&&backendsCreated==backendsDestroyed);
  CirrusAudioFixup verifiedReadOnly;verifiedReadOnly.mProvider=&amp;verifiedReadOnly.mPlatformProfile=&shipProfile;verifiedReadOnly.mPlatformSubsystemId=0x12345678;
  assert(verifiedReadOnly.mBackendRegistry.add(shipDefinition));verifiedReadOnly.flags["-cirrusspi"]=verifiedReadOnly.flags["-cirrusro"]=true;
- assert(verifiedReadOnly.setupNativeSPI(&amp)&&!verifiedReadOnly.mPlatformAuthorized);
+ assert(verifiedReadOnly.setupCommunication(&amp)&&!verifiedReadOnly.mPlatformAuthorized);
  before=writeTransfers;
  assert(!verifiedReadOnly.mNativeSPI.registers(0)->write(4,1)&&!verifiedReadOnly.bindAmplifierRuntime()&&writeTransfers==before);
  verifiedReadOnly.teardownNativeSPI();assert(!liveControllers);
@@ -540,6 +561,60 @@ int main(){
  const auto readsBefore=i2cReads.size();assert(!factoryRejected.createI2CController());assert(factoryRejected.detectConfiguredI2CAmplifiers()==0&&!factoryRejected.mI2CController);
  assert(!factoryRejected.bindAmplifierRuntime()&&i2cReads.size()==readsBefore&&i2cWrites.size()==i2cBefore);
  factoryRejected.teardownNativeSPI();rejectCustomController=false;
+
+ // Matrix: each CPU family uses the same AMP/runtime contract. SPI controller
+ // selection follows real provider resources (PCI vs ACPI), not a CPU switch.
+ fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=probeIDs[0]=0x35a40;
+ for(const char* cpu:{"INTEL","AMD"}){
+  const bool isIntel=!strcmp(cpu,"INTEL");pciNodes=isIntel?std::vector<IORegistryEntry*>{&pci}:std::vector<IORegistryEntry*>{};a.amd=!isIntel;
+  resources(amp,{{"SPI0",0}});
+  AmplifierBinding oneSPIBinding{{cirrus::core::BusTransportType::SPI,"\\_SB.SPI0",0,false,0,1000000,0},0x35a40,0,1,"tune-a","CSC3551"};
+  BoardConfiguration oneSPIBoard{{0x1234,0x5678,"CSC3551"},&oneSPIBinding,1,true,true,true};
+  cirrus::platform::PlatformProfile oneSPIProfile{"matrix-spi","CSC3551",cirrus::core::AmplifierModel::CS35L41,nullptr,0,nullptr,true,&oneSPIBoard,shipFirmware,1};
+  CirrusAudioFixup readySPI;readySPI.mPlatformProfile=&oneSPIProfile;readySPI.mPlatformSubsystemId=0x12345678;readySPI.flags["-cirrusspi"]=true;readySPI.setProperty("Cirrus_CPU_Vendor",cpu);
+  assert(readySPI.mBackendRegistry.add(shipDefinition));assert(readySPI.setupCommunication(&amp) && readySPI.detectNativeSPIAmplifiers()==1);
+  assert(readySPI.bindAmplifierRuntime() && readySPI.mAmplifierRuntime.bringUp()==0 && readySPI.mAmplifierRuntime.startPlayback()==0);
+  assert(!strcmp(readySPI.mAttachment.communication,"READY") && readySPI.mAttachment.failureCount==0);
+  readySPI.teardownNativeSPI();assert(!liveControllers);
+  CirrusAudioFixup unsupportedAMP;unsupportedAMP.mPlatformProfile=&oneSPIProfile;unsupportedAMP.flags["-cirrusspi"]=true;
+  auto writesBefore=writeTransfers;assert(unsupportedAMP.setupCommunication(&amp));
+  assert(unsupportedAMP.mNativeSPI.count()==1 && !unsupportedAMP.mNativeSPI.registers(0));
+  assert(!strcmp(unsupportedAMP.mAttachment.communication,"READY") && !strcmp(unsupportedAMP.mAttachment.amplifier,"UNSUPPORTED"));
+  assert(!strcmp(unsupportedAMP.mAttachment.first.stage,"AMPLIFIER") && writeTransfers==writesBefore && !unsupportedAMP.bindAmplifierRuntime());
+  assert(unsupportedAMP.mNativeSPI.configureAuthorized(readySPI.mBackendRegistry,oneSPIBoard,oneSPIBoard.identity,"CSC3551")==kIOReturnUnsupported);
+  unsupportedAMP.teardownNativeSPI();assert(!liveControllers);
+  CirrusAudioFixup unsupportedCommunication;unsupportedCommunication.mPlatformProfile=&oneSPIProfile;unsupportedCommunication.flags["-cirrusspi"]=true;
+  assert(unsupportedCommunication.mBackendRegistry.add(shipDefinition));if(isIntel)pci.supported=false;else a.amd=false;
+  assert(!unsupportedCommunication.setupCommunication(&amp));
+  assert(!strcmp(unsupportedCommunication.mAttachment.amplifier,"REGISTERED_NOT_PROBED"));
+  assert(!strcmp(unsupportedCommunication.mAttachment.first.stage,"COMMUNICATION") && unsupportedCommunication.mAttachment.first.result==kIOReturnUnsupported);
+  assert(!liveControllers && writeTransfers==writesBefore);pci.supported=true;a.amd=!isIntel;
+  CirrusAudioFixup readyI2C;readyI2C.mProvider=&i2cProvider;readyI2C.mPlatformProfile=&i2cProfile;readyI2C.mPlatformSubsystemId=0x12345678;readyI2C.setProperty("Cirrus_CPU_Vendor",cpu);
+  assert(readyI2C.mBackendRegistry.add(i2cDefinition));assert(readyI2C.setupCommunication(&i2cProvider) && readyI2C.detectConfiguredI2CAmplifiers()==1 && readyI2C.bindAmplifierRuntime());
+  assert(readyI2C.mAmplifierRuntime.bringUp()==0 && readyI2C.mAmplifierRuntime.startPlayback()==0);readyI2C.teardownNativeSPI();
+  CirrusAudioFixup unsupportedI2C;unsupportedI2C.mProvider=&i2cProvider;unsupportedI2C.mPlatformProfile=&i2cProfile;unsupportedI2C.mPlatformSubsystemId=0x12345678;
+  assert(unsupportedI2C.mBackendRegistry.add(i2cDefinition));i2cProvider.addressedABI=false;auto readsBefore=i2cReads.size();auto i2cWritesBefore=i2cWrites.size();
+  assert(unsupportedI2C.detectConfiguredI2CAmplifiers()==0 && i2cReads.size()==readsBefore && i2cWrites.size()==i2cWritesBefore);
+  assert(!strcmp(unsupportedI2C.mAttachment.first.reason,"I2C_PROVIDER_ABI_UNAVAILABLE") && !strcmp(unsupportedI2C.mAttachment.amplifier,"REGISTERED_NOT_PROBED"));
+  unsupportedI2C.teardownNativeSPI();i2cProvider.addressedABI=true;
+  CirrusAudioFixup wrongIdentity;wrongIdentity.mProvider=&i2cProvider;wrongIdentity.mPlatformProfile=&i2cProfile;wrongIdentity.mPlatformSubsystemId=0x12345678;
+  assert(wrongIdentity.mBackendRegistry.add(i2cDefinition));i2cProbeID=0xdead;
+  assert(wrongIdentity.detectConfiguredI2CAmplifiers()==0 && i2cWrites.size()==i2cWritesBefore);
+  assert(!strcmp(wrongIdentity.mAttachment.communication,"READY") && !strcmp(wrongIdentity.mAttachment.first.reason,"AMP_IDENTITY_MISMATCH"));wrongIdentity.teardownNativeSPI();i2cProbeID=0x35a40;
+  CirrusAudioFixup missingFunction;missingFunction.mProvider=&i2cProvider;missingFunction.mPlatformProfile=&i2cProfile;missingFunction.mPlatformSubsystemId=0x12345678;
+  assert(missingFunction.mBackendRegistry.add(i2cDefinition));i2cResult=kIOReturnUnsupported;
+  assert(!missingFunction.setupCommunication(&i2cProvider) && missingFunction.mAttachment.first.result==kIOReturnUnsupported);
+  assert(!strcmp(missingFunction.mAttachment.communication,"UNSUPPORTED") && i2cWrites.size()==i2cWritesBefore);missingFunction.teardownNativeSPI();i2cResult=0;
+ }
+ pciNodes={&pci};a.amd=false;
+ // Direct ACPI I2C must not be guessed as SPI; no controller/AMP traffic.
+ std::string source="SPI0";std::vector<uint8_t> i2cCRS(18+source.size()+1);i2cCRS[0]=0x8e;i2cCRS[1]=uint8_t(i2cCRS.size()-3);i2cCRS[3]=1;i2cCRS[5]=1;i2cCRS[6]=2;i2cCRS[9]=1;i2cCRS[10]=6;i2cCRS[16]=0x40;memcpy(i2cCRS.data()+18,source.c_str(),source.size()+1);i2cCRS.push_back(0x79);i2cCRS.push_back(0);
+ amp.crs.bytes=i2cCRS;CirrusAudioFixup acpiI2C;const auto busWrites=writeTransfers;
+ assert(!acpiI2C.setupCommunication(&amp) && acpiI2C.strings["Cirrus_Bus"]=="I2C" && writeTransfers==busWrites && !liveControllers);
+ assert(!strcmp(acpiI2C.mAttachment.first.reason,"NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE"));
+ auto mixedBus=descriptor("SPI0",0);mixedBus.insert(mixedBus.end(),i2cCRS.begin(),i2cCRS.end());amp.crs.bytes=mixedBus;
+ CirrusAudioFixup mixedResources;assert(!mixedResources.setupCommunication(&amp) && !strcmp(mixedResources.mAttachment.first.reason,"MIXED_I2C_SPI_RESOURCES") && !liveControllers);
+ puts("PASS Intel/AMD x I2C/SPI attachment/runtime matrix, unsupported controller/AMP separation, ACPI bus classification and no unsupported AMP writes");
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;
 }
 ''')

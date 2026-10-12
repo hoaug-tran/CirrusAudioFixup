@@ -76,6 +76,11 @@ struct Fixture {
 };
 int main(){
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
+    for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
+        Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;
+        f.binding.endpoint=f.context.endpoint=f.endpoint;f.bind();assert(f.runtime.bringUp()==0 && f.runtime.report(0).initialized);
+        assert(f.runtime.suspend()==0 && f.runtime.resume()==0);f.runtime.unbind();
+    }
     Fixture good;good.bind();assert(good.port.calls==0);assert(good.runtime.bringUp()==0);
     assert(good.runtime.report(0).initialized && !good.runtime.report(0).faulted);
     assert(!strcmp(good.runtime.report(0).readyVerdict,"READY_BYPASS_EXPLICIT"));

@@ -63,6 +63,16 @@ int main() {
     assert(parseACPISPIResources(d.data(),d.size(),out)==ACPISPIResult::Success);
     d.back()^=0x80;
     assert(parseACPISPIResources(d.data(),d.size(),out)==ACPISPIResult::Malformed);
+
+    // Bus classification is committed only after the complete template validates.
+    bool hasI2C=true;d=resource();end(d);
+    assert(parseACPISPIResources(d.data(),d.size(),out,&hasI2C)==ACPISPIResult::Success && !hasI2C);
+    std::vector<uint8_t> i2c(22,0);i2c[0]=0x8e;i2c[1]=19;i2c[3]=1;i2c[5]=1;i2c[6]=2;i2c[9]=1;i2c[10]=6;i2c[16]=0x40;i2c[18]='I';i2c[19]='2';i2c[20]='C';end(i2c);
+    assert(parseACPISPIResources(i2c.data(),i2c.size(),out,&hasI2C)==ACPISPIResult::NoSPI && hasI2C && out.count==0);
+    auto mixed=resource();mixed.insert(mixed.end(),i2c.begin(),i2c.end());
+    assert(parseACPISPIResources(mixed.data(),mixed.size(),out,&hasI2C)==ACPISPIResult::Success && hasI2C && out.count==1);
+    hasI2C=false;i2c[10]=255;
+    assert(parseACPISPIResources(i2c.data(),i2c.size(),out,&hasI2C)==ACPISPIResult::Malformed && !hasI2C && out.count==1);
     // Sweep arbitrary buffers for bounds/undefined behavior under sanitizers.
     uint32_t rng=1;
     for(size_t n=1;n<512;++n) { std::vector<uint8_t> random(n);

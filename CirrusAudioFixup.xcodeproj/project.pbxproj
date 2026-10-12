@@ -5,6 +5,8 @@
 	};
 	objectVersion = 56;
 	objects = {
+6A9F6AC950CEE5FC9E124C03 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AttachmentState.hpp";sourceTree = "<group>";};
+5563407EB45C332E7AEB7810 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CPUIdentity.hpp";sourceTree = "<group>";};
 467C05493D3366377B8B15BF = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AMD/AMDNativeSPIBackend.hpp";sourceTree = "<group>";};
 93CA90577209D745B0DFA6F1 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "IntelNativeSPIBackend.hpp";sourceTree = "<group>";};
 832F05729C9FF63F811668B8 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerFactory.hpp";sourceTree = "<group>";};
@@ -240,6 +242,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		710A73C9D4A075C03072C322 = {
 			isa = PBXGroup;
 			children = (
+                6A9F6AC950CEE5FC9E124C03,
                 1EC86071840BB16D5072B690,
                 AA98911D63E8F93259AEBE62,
 				F020B0C511BE7C8145385429,
@@ -362,6 +365,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		83460938A80237492B5B34EB = {
 			isa = PBXGroup;
 			children = (
+                5563407EB45C332E7AEB7810,
 				3E01BEE9F84F8DCFE4727EA6,
 				6B4DE6E3262E10D79F03D1BE,
 				F9963AE58EE1C4D8FCF9F098,

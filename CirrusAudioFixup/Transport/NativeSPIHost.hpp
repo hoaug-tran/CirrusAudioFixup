@@ -33,8 +33,20 @@ public:
     }
     IOReturn bind(IOACPIPlatformDevice* amplifier, IOService* owner, const core::RegisterMapConfig& format,
                   NativeSPIControllerFactory factory = createNativeSPIBackend) {
+        return bindImpl(amplifier, owner, &format, factory);
+    }
+    // Controller inventory without guessing an unsupported AMP's register format.
+    // No register buses/maps or AMP transfers are created in this mode.
+    IOReturn bindControllers(IOACPIPlatformDevice* amplifier, IOService* owner,
+                             NativeSPIControllerFactory factory = createNativeSPIBackend) {
+        return bindImpl(amplifier, owner, nullptr, factory);
+    }
+
+private:
+    IOReturn bindImpl(IOACPIPlatformDevice* amplifier, IOService* owner, const core::RegisterMapConfig* format,
+                      NativeSPIControllerFactory factory) {
         mFailure = {};
-        if (bound() || !amplifier || !owner || !factory || !core::RegisterMap::isValidConfig(format))
+        if (bound() || !amplifier || !owner || !factory || (format && !core::RegisterMap::isValidConfig(*format)))
             return fail("INVALID_BIND_ARGUMENT", kIOReturnBadArgument);
         // _STA present/enabled. Do not turn on a firmware-disabled device.
         if ((amplifier->getDeviceStatus() & 3) != 3)
@@ -109,6 +121,10 @@ public:
                 mBus[slot] = &mOwners[slot]->controller();
             } else
                 target->release();
+            if (!format) {
+                ++mCount;
+                continue;
+            }
             // No board write permission is inferred from _CRS or HID.
             mPorts[i] = new SPIRegisterBus(mBus[slot], r.endpoint);
             if (!mPorts[i]) {
@@ -116,7 +132,7 @@ public:
                 shutdown();
                 return mFailure.result;
             }
-            mRegisters[i] = new core::RegisterMap(*mPorts[i], format, false);
+            mRegisters[i] = new core::RegisterMap(*mPorts[i], *format, false);
             if (!mRegisters[i]) {
                 fail("REGISTER_MAP_ALLOCATION_FAILED", kIOReturnNoMemory, i, r.source);
                 shutdown();
@@ -126,6 +142,8 @@ public:
         }
         return kIOReturnSuccess;
     }
+
+public:
     // Call before lending register ports to clients. Replaces the read-only
     // discovery maps only after every endpoint has a verified board/backend.
     IOReturn configureAuthorized(const platform::AmplifierBackendRegistry& registry, const platform::BoardConfiguration& board,
@@ -150,6 +168,10 @@ public:
             const auto* definition = registry.find(deviceHid, binding->siliconId, core::BusTransportType::SPI);
             if (!definition) {
                 result = fail("NO_REGISTERED_SPI_BACKEND", kIOReturnUnsupported, i, e.controllerPath, binding->siliconId);
+                break;
+            }
+            if (!mPorts[i]) {
+                result = fail("REGISTER_FORMAT_UNAVAILABLE", kIOReturnUnsupported, i, e.controllerPath);
                 break;
             }
             prepared[i] = new core::RegisterMap(*mPorts[i], *definition->format(core::BusTransportType::SPI), allowWrites);

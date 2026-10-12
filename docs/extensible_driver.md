@@ -196,3 +196,29 @@ history without printing every periodic poll. Diagnostic register reads honor
 precious-register policy. Keep the first transfer error even when a diagnostic
 read or cleanup produces another error. These host-tested contracts do not
 establish controller ownership or physical speaker behavior on untested hardware.
+
+## CS35L41 state boundary (2026-10-12)
+
+`Devices/CS35L41/State.hpp` now defines the live silicon, firmware, protection,
+playback-transition and diagnostic state without including IOService, transport
+providers or platform bindings. The service endpoint binding inherits this state
+and retains endpoint labels, channels and borrowed register ports. Member defaults
+and register sequences are preserved. This internal C++ layout is not a provider
+ABI; all source consumers must rebuild together.
+
+The host bring-up and runtime fixtures include the production state header rather
+than copying its fields. Their existing fault, deferred identity, playback and PM
+coverage therefore exercises the separated state. Source-layout gates reject
+platform/transport includes and endpoint ownership fields in the chip schema.
+
+All 26 maintained host suites and the optional Windows payload audit pass.
+Debug and Release Xcode builds pass metadata, OpenCore vtable, x86_64 and
+binary/dSYM UUID checks. The new state header passes a clang-format dry-run
+with explicit LLVM/4-space/140-column/left-pointer settings; this checkout has
+no pinned formatter config. No bundle was installed or loaded by this change.
+
+This is a schema boundary, not independent backend lifetime ownership. The service
+still allocates endpoint state, orchestrates firmware and supplies silicon helper
+methods. Next steps remain an explicit serialized platform contract, backend-owned
+state allocation and teardown/rebind/diagnostic lifetime coverage. Native I2C/MP2,
+new amplifiers and SoundWire remain subject to the existing evidence gates.

@@ -23,7 +23,7 @@
 #include "Devices/CS35L41/CS35L41Device.hpp"
 #include "Devices/CS35L41/Hardware/OTPMap.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
-#include "Devices/CS35L41/Playback.hpp"
+#include "Devices/CS35L41/State.hpp"
 #include "Devices/CS35L41/Resources/Tuning.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/WMFW/WMFWUploader.hpp"
@@ -58,12 +58,10 @@ struct RegisterSequence {
     bool updateBits;
 };
 
-struct AmplifierState {
-    cirrus::core::BringUpDisposition bringUpDisposition{cirrus::core::BringUpDisposition::Continue};
+// Platform endpoint binding embeds chip state during the staged ownership
+// migration. Register ports and endpoint names borrow the service lifetime.
+struct AmplifierState : cirrus::devices::cs35l41::State {
     char endpointLabel[16]{};
-    cirrus::devices::cs35l41::PlaybackTransition playbackTransition{};
-    cirrus::devices::cs35l41::ShutdownTransition shutdownTransition{};
-    bool clockWaitAfterCleanup{false};
     // Identity and channel come from the silicon probe and board endpoint.
     // Do not infer routing or tuning from a display name or slave address.
     const char* name{nullptr};
@@ -74,57 +72,6 @@ struct AmplifierState {
     uint8_t endpointIndex{0};
     cirrus::core::AmplifierModel model{cirrus::core::AmplifierModel::Unknown};
     cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
-    bool present{false};
-    uint32_t deviceId{0};
-    uint32_t revisionId{0};
-
-    // Borrowed views into embedded resources; these pointers are never freed.
-    const uint8_t* wmfwData{nullptr};
-    size_t wmfwSize{0};
-    const uint8_t* binData{nullptr};
-    size_t binSize{0};
-    bool firmwareValidated{false};
-    bool firmwareIdentityPending{false};
-    uint64_t firmwareIdentityDeadlineMs{0};
-    // Reset by resource discovery on every cold start and wake. This is the
-    // board/channel tuning gain, independent of the host volume slider.
-    uint32_t tuningPcmGain{17};
-    uint32_t finalCrc{0};
-
-    unsigned int monitorCount{0};
-    bool initialized{false};
-    bool dspAlive{false};
-
-    uint32_t lastIrq1Status1{0};
-    uint32_t lastIrq1Status3{0};
-    uint32_t lastPowerManagementStatus{0};
-    uint32_t lastMailbox2{0};
-    uint32_t lastStreamArbitrationError{0};
-    uint32_t lastClockDetect{0};
-    uint32_t lastStreamArbitrationControl{0};
-
-    uint32_t lastTimestamp{0};
-    bool playbackActive{false};
-    bool playbackStartCancelled{false};
-    uint32_t playbackStableCount{0};
-
-    struct InterestingControl {
-        char name[64]{};
-        uint32_t address{0};
-    } diagnosticControls[14]{};
-    uint32_t diagnosticControlCount{0};
-    uint32_t firmwareIdVersion{0};
-    uint32_t monitorLogCountdown{0};
-    uint32_t haloStateRegister{0};
-    uint32_t haloHeartbeatRegister{0};
-    // Faults survive normal polling. Only the isolated PLL recovery path may
-    // clear this flag; first-failure evidence remains available afterwards.
-    bool playbackFaulted{false};
-    uint32_t cleanupAttempts{0};
-    uint32_t pllRetryCooldown{0};
-    uint32_t pllRecoveryAttempts{0};
-    bool pllRecoveryPending{false};
-    cirrus::diagnostics::DiagnosticState diagnostic{};
 };
 
 struct FirmwareImage;

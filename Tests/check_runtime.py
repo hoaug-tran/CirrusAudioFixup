@@ -17,7 +17,7 @@ names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendM
 names.extend(['configureCS35L41Interrupt','monitorCS35L41','validateCS35L41Playback','commitCS35L41Playback','snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryFirmwareIdentity'])
 functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierRuntime.bound() && bindAmplifierRuntime())mAmplifierRuntime.bringUp();')
 
-amp = HEADER[HEADER.index('struct AmplifierState {'):HEADER.index('struct FirmwareImage;')]
+amp = HEADER[HEADER.index('struct AmplifierState :'):HEADER.index('struct FirmwareImage;')]
 
 LEGACY_CONSTANTS = r'''
 #define CS35L41_SW_RESET 0x00000020
@@ -184,7 +184,7 @@ using namespace cirrus::devices::cs35l41;
 bool gCirrusDebug = false;
 '''
 
-preamble += amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += '#include "Devices/CS35L41/State.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
 mock = r'''
 namespace cirrus { namespace platform { namespace hda {

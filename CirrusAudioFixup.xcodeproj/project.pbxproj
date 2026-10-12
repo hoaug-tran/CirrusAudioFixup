@@ -159,6 +159,12 @@
 			path = "Playback.hpp";
 			sourceTree = "<group>";
 		};
+		EE9A377635384868BC5B5821 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "State.hpp";
+			sourceTree = "<group>";
+		};
 		5F18E3977620B1AFB2AEDD59 = {
 			isa = PBXGroup;
 			children = (
@@ -169,6 +175,7 @@
 				DBD8EDACAC2E17BAD75D5AC6,
 				51BA20FB9CD5C512B4FAB8A2,
 				4F64AC1335631EEC183C8179,
+				EE9A377635384868BC5B5821,
 			);
 			path = "CS35L41";
 			sourceTree = "<group>";

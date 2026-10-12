@@ -23,3 +23,18 @@ assert "class AmplifierBackendRegistry" in registry
 for obsolete in ("Transport/VoodooI2CTransport.hpp", "Transport/CS35L41SPITransport.hpp", "Platform/HDA/HDAController.cpp"):
     assert not (ROOT / obsolete).exists(), obsolete
 print("PASS source naming, quoted include resolution, controller/bus split and silicon framing boundary")
+
+# Chip state must compile through host lifecycle fixtures without IOService.
+state = (ROOT / "Devices/CS35L41/State.hpp").read_text()
+service = (ROOT / "CirrusAudioFixup.hpp").read_text()
+assert "struct State {" in state
+assert "struct AmplifierState : cirrus::devices::cs35l41::State" in service
+for include in re.findall(r'^#include "([^"]+)"', state, re.M):
+    assert not include.startswith(("Platform/", "Transport/")), include
+assert not re.search(r"#include [<\"](?:IOKit|CirrusAudioFixup)", state)
+for field in ("registerIO", "endpointLabel", "endpointIndex", "channel", "model"):
+    assert not re.search(r"\b" + field + r"\s*[{;]", state), field
+for field in ("playbackTransition", "shutdownTransition", "firmwareValidated", "diagnostic", "pllRecoveryAttempts"):
+    assert re.search(r"\b" + field + r"\s*[{;]", state), field
+    assert not re.search(r"\b" + field + r"\s*[{;]", service), field
+print("PASS CS35L41 state schema is independent of IOService and endpoint ownership")

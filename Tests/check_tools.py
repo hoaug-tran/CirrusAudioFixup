@@ -48,8 +48,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-tools-") as directory:
     imported = header.read_text(encoding='utf-8')
     assert 'SHA256:' in imported and 'l0_bincfg' in imported and 'r0_bincfg' in imported
     def compile_profile(expected_right):
-        declarations = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
-        resource = declarations[declarations.index('struct FirmwareResource {'):declarations.index('class CirrusAudioFixup :')]
+        declarations = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/Resources/ResourceSchema.hpp').read_text(encoding='utf-8')
+        resource = declarations[declarations.index('struct FirmwareResource {'):len(declarations)]
         cpp = tmp / 'profile.cpp'
         cpp.write_text('#include <cassert>\n#include <cstdint>\n#include <cstddef>\n'
                        '#include "Devices/CS35L41/Resources/Tuning.hpp"\n' + resource + imported + f'''

@@ -3,126 +3,201 @@
 // all callers before destruction; controller D0 precedes resume. No CPU/model
 // switch, board name, register width, reset sequence or transport framing here.
 #pragma once
-#include "Platform/AmplifierBackendRegistry.hpp"
 #include "Core/AmplifierGroup.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
 namespace cirrus::platform {
 class AmplifierRuntime {
 public:
-    static constexpr size_t kCapacity=core::AmplifierGroup::kCapacity;
-    struct BindFailure{const char* reason{"NONE"};size_t index{0};IOReturn result{kIOReturnSuccess};};
-    const BindFailure& bindFailure() const {return mBindFailure;}
-    explicit AmplifierRuntime(bool resumePlaybackAutomatically=true):mResumeAutomatically(resumePlaybackAutomatically){}
-    ~AmplifierRuntime(){unbind();}
-    AmplifierRuntime(const AmplifierRuntime&)=delete;
-    AmplifierRuntime& operator=(const AmplifierRuntime&)=delete;
-    bool bound() const {return mGroup!=nullptr;}
-    size_t count() const {return mCount;}
-    core::AmplifierStage stage() const {return mGroup?mGroup->stage():core::AmplifierStage::Detached;}
-    IOReturn lastReleaseResult() const {return mReleaseResult;}
+    static constexpr size_t kCapacity = core::AmplifierGroup::kCapacity;
+    struct BindFailure {
+        const char* reason{"NONE"};
+        size_t index{0};
+        IOReturn result{kIOReturnSuccess};
+    };
+    const BindFailure& bindFailure() const { return mBindFailure; }
+    explicit AmplifierRuntime(bool resumePlaybackAutomatically = true) : mResumeAutomatically(resumePlaybackAutomatically) {}
+    ~AmplifierRuntime() { unbind(); }
+    AmplifierRuntime(const AmplifierRuntime&) = delete;
+    AmplifierRuntime& operator=(const AmplifierRuntime&) = delete;
+    bool bound() const { return mGroup != nullptr; }
+    size_t count() const { return mCount; }
+    core::AmplifierStage stage() const { return mGroup ? mGroup->stage() : core::AmplifierStage::Detached; }
+    IOReturn lastReleaseResult() const { return mReleaseResult; }
     const core::AmplifierLifecycleStatus* status(size_t i) const {
-        if(i>=mCount)return nullptr;
+        if (i >= mCount)
+            return nullptr;
         return &mSlots[i].lifecycle->status();
     }
-    const AmplifierBackendDefinition* backend(size_t i) const {return i<mCount?mSlots[i].definition:nullptr;}
-    IOReturn bind(const AmplifierBackendRegistry& registry,const AmplifierBackendContext* contexts,size_t count) {
-        if(!contexts)return rejectBind("NULL_CONTEXTS",kIOReturnBadArgument);
-        return bindContexts(registry,count,[&](size_t i)->const AmplifierBackendContext&{return contexts[i];});
+    core::AmplifierReport report(size_t i) const { return i < mCount ? mSlots[i].hooks->report() : core::AmplifierReport{}; }
+    IOReturn retryBringUp(uint64_t nowMs) {
+        if (!mGroup || stage() != core::AmplifierStage::Waiting)
+            return kIOReturnNotReady;
+        bool waiting = false;
+        for (size_t i = 0; i < mCount; ++i)
+            if (mSlots[i].lifecycle->status().stage == core::AmplifierStage::Waiting) {
+                IOReturn ret = mSlots[i].hooks->prepareBringUpRetry(nowMs);
+                if (ret == kIOReturnNotReady)
+                    waiting = true;
+                else if (ret != kIOReturnSuccess)
+                    return mGroup->failRuntime(mSlots[i].lifecycle->reportRuntimeFailure(ret));
+            }
+        if (waiting)
+            return kIOReturnNotReady;
+        IOReturn ret = mGroup->detach();
+        return ret == kIOReturnSuccess ? mGroup->bringUp() : ret;
     }
-    IOReturn bind(const AmplifierBackendRegistry& registry,const AmplifierBackendContext* const* contexts,size_t count) {
-        if(!contexts || count>kCapacity)return rejectBind("INVALID_CONTEXT_ARRAY",kIOReturnBadArgument);
-        for(size_t i=0;i<count;++i)if(!contexts[i])return rejectBind("NULL_MEMBER_CONTEXT",kIOReturnBadArgument,i);
-        return bindContexts(registry,count,[&](size_t i)->const AmplifierBackendContext&{return *contexts[i];});
+    const AmplifierBackendDefinition* backend(size_t i) const { return i < mCount ? mSlots[i].definition : nullptr; }
+    IOReturn bind(const AmplifierBackendRegistry& registry, const AmplifierBackendContext* contexts, size_t count) {
+        if (!contexts)
+            return rejectBind("NULL_CONTEXTS", kIOReturnBadArgument);
+        return bindContexts(registry, count, [&](size_t i) -> const AmplifierBackendContext& { return contexts[i]; });
     }
+    IOReturn bind(const AmplifierBackendRegistry& registry, const AmplifierBackendContext* const* contexts, size_t count) {
+        if (!contexts || count > kCapacity)
+            return rejectBind("INVALID_CONTEXT_ARRAY", kIOReturnBadArgument);
+        for (size_t i = 0; i < count; ++i)
+            if (!contexts[i])
+                return rejectBind("NULL_MEMBER_CONTEXT", kIOReturnBadArgument, i);
+        return bindContexts(registry, count, [&](size_t i) -> const AmplifierBackendContext& { return *contexts[i]; });
+    }
+
 private:
-    template<class ContextAt>
-    IOReturn bindContexts(const AmplifierBackendRegistry& registry,size_t count,ContextAt contextAt) {
-        mBindFailure={};
-        if(bound() || !count || count>kCapacity)return rejectBind("INVALID_RUNTIME_STATE_OR_COUNT",kIOReturnBadArgument);
-        const auto& board=contextAt(0).board;
-        if(board.count!=count || !board.permits(contextAt(0).actualBoard))return rejectBind("BOARD_IDENTITY_OR_COUNT_REJECTED",kIOReturnNotPermitted);
+    template <class ContextAt> IOReturn bindContexts(const AmplifierBackendRegistry& registry, size_t count, ContextAt contextAt) {
+        mBindFailure = {};
+        if (bound() || !count || count > kCapacity)
+            return rejectBind("INVALID_RUNTIME_STATE_OR_COUNT", kIOReturnBadArgument);
+        const auto& board = contextAt(0).board;
+        if (board.count != count || !board.permits(contextAt(0).actualBoard))
+            return rejectBind("BOARD_IDENTITY_OR_COUNT_REJECTED", kIOReturnNotPermitted);
         // Validate the complete topology before calling any factory. Contexts
         // may arrive in any order but cover each manifest binding exactly once.
-        for(size_t i=0;i<count;++i) {
-            const auto& c=contextAt(i);
-            if(&c.board!=&board || !board.permits(c.actualBoard) || c.bindingIndex>=count ||
-               !c.endpoint.sameDevice(board.amplifiers[c.bindingIndex].endpoint))return rejectBind("MEMBER_BOARD_OR_ENDPOINT_MISMATCH",kIOReturnNotPermitted,i);
-            for(size_t j=0;j<i;++j)
-                if(c.bindingIndex==contextAt(j).bindingIndex || &c.io==&contextAt(j).io || c.endpoint.sameDevice(contextAt(j).endpoint))return rejectBind("DUPLICATE_BINDING_ENDPOINT_OR_PORT",kIOReturnBadArgument,i);
+        for (size_t i = 0; i < count; ++i) {
+            const auto& c = contextAt(i);
+            if (&c.board != &board || !board.permits(c.actualBoard) || c.bindingIndex >= count ||
+                !c.endpoint.sameDevice(board.amplifiers[c.bindingIndex].endpoint))
+                return rejectBind("MEMBER_BOARD_OR_ENDPOINT_MISMATCH", kIOReturnNotPermitted, i);
+            for (size_t j = 0; j < i; ++j)
+                if (c.bindingIndex == contextAt(j).bindingIndex || &c.io == &contextAt(j).io ||
+                    c.endpoint.sameDevice(contextAt(j).endpoint))
+                    return rejectBind("DUPLICATE_BINDING_ENDPOINT_OR_PORT", kIOReturnBadArgument, i);
         }
-        mGroup=new core::AmplifierGroup;
-        if(!mGroup)return rejectBind("GROUP_ALLOCATION_FAILED",kIOReturnNoMemory);
+        mGroup = new core::AmplifierGroup;
+        if (!mGroup)
+            return rejectBind("GROUP_ALLOCATION_FAILED", kIOReturnNoMemory);
         core::AmplifierLifecycle* members[kCapacity]{};
-        for(size_t i=0;i<count;++i) {
-            auto& slot=mSlots[i];
+        for (size_t i = 0; i < count; ++i) {
+            auto& slot = mSlots[i];
             ++mCount; // Own partial slot state from this point onward.
-            slot.context=new AmplifierBackendContext(contextAt(i));
-            if(!slot.context){releaseUninitialized();return rejectBind("CONTEXT_ALLOCATION_FAILED",kIOReturnNoMemory,i);}
-            slot.hooks=registry.create(*slot.context,slot.definition);
-            if(!slot.hooks){releaseUninitialized();return rejectBind("BACKEND_FIRMWARE_OR_FACTORY_REJECTED",kIOReturnNotPermitted,i);}
-            slot.lifecycle=new core::AmplifierLifecycle(*slot.hooks);
-            if(!slot.lifecycle){releaseUninitialized();return rejectBind("LIFECYCLE_ALLOCATION_FAILED",kIOReturnNoMemory,i);}
-            members[i]=slot.lifecycle;
+            slot.context = new AmplifierBackendContext(contextAt(i));
+            if (!slot.context) {
+                releaseUninitialized();
+                return rejectBind("CONTEXT_ALLOCATION_FAILED", kIOReturnNoMemory, i);
+            }
+            slot.hooks = registry.create(*slot.context, slot.definition);
+            if (!slot.hooks) {
+                releaseUninitialized();
+                return rejectBind("BACKEND_FIRMWARE_OR_FACTORY_REJECTED", kIOReturnNotPermitted, i);
+            }
+            slot.lifecycle = new core::AmplifierLifecycle(*slot.hooks);
+            if (!slot.lifecycle) {
+                releaseUninitialized();
+                return rejectBind("LIFECYCLE_ALLOCATION_FAILED", kIOReturnNoMemory, i);
+            }
+            members[i] = slot.lifecycle;
         }
-        if(!mGroup->configure(members,count,mResumeAutomatically)){releaseUninitialized();return rejectBind("GROUP_CONFIGURATION_FAILED",kIOReturnBadArgument);}
+        if (!mGroup->configure(members, count, mResumeAutomatically)) {
+            releaseUninitialized();
+            return rejectBind("GROUP_CONFIGURATION_FAILED", kIOReturnBadArgument);
+        }
         return kIOReturnSuccess;
     }
+
 public:
-    IOReturn runtimeTick(size_t i,const core::PlaybackContext& context) {
-        if(i>=mCount)return kIOReturnBadArgument;
-        if(stage()!=core::AmplifierStage::Ready && stage()!=core::AmplifierStage::Playing)return kIOReturnNotReady;
-        auto& slot=mSlots[i];IOReturn result=slot.hooks->runtimeTick(context);
-        if(result==kIOReturnSuccess && !slot.hooks->managesPlaybackTransitions() && !context.hasAudio &&
-           slot.lifecycle->status().stage==core::AmplifierStage::Playing)result=slot.lifecycle->stopPlayback();
-        return result==kIOReturnSuccess?result:mGroup->failRuntime(slot.lifecycle->reportRuntimeFailure(result));
+    IOReturn runtimeTick(size_t i, const core::PlaybackContext& context) {
+        if (i >= mCount)
+            return kIOReturnBadArgument;
+        if (stage() != core::AmplifierStage::Ready && stage() != core::AmplifierStage::Playing)
+            return kIOReturnNotReady;
+        auto& slot = mSlots[i];
+        IOReturn result = slot.hooks->runtimeTick(context);
+        if (result == kIOReturnSuccess && !slot.hooks->managesPlaybackTransitions() && !context.hasAudio &&
+            slot.lifecycle->status().stage == core::AmplifierStage::Playing)
+            result = slot.lifecycle->stopPlayback();
+        return result == kIOReturnSuccess ? result : mGroup->failRuntime(slot.lifecycle->reportRuntimeFailure(result));
     }
-    bool playbackNeedsPreparation(size_t i) const {return i<mCount && mSlots[i].hooks->playbackNeedsPreparation();}
-    bool playbackPrepared(size_t i) const {return i<mCount && mSlots[i].hooks->playbackPrepared();}
-    bool playbackPending(size_t i) const {return i<mCount && mSlots[i].hooks->playbackPending();}
-    bool playbackFaulted(size_t i) const {return i<mCount && mSlots[i].hooks->playbackFaulted();}
-    bool validatePlayback(size_t i,const core::PlaybackContext& context){return i<mCount && mSlots[i].hooks->validatePlayback(context);}
+    bool playbackNeedsPreparation(size_t i) const { return i < mCount && mSlots[i].hooks->playbackNeedsPreparation(); }
+    bool playbackPrepared(size_t i) const { return i < mCount && mSlots[i].hooks->playbackPrepared(); }
+    bool playbackPending(size_t i) const { return i < mCount && mSlots[i].hooks->playbackPending(); }
+    bool playbackFaulted(size_t i) const { return i < mCount && mSlots[i].hooks->playbackFaulted(); }
+    bool validatePlayback(size_t i, const core::PlaybackContext& context) {
+        return i < mCount && mSlots[i].hooks->validatePlayback(context);
+    }
     IOReturn cancelPlayback(size_t i) {
-        if(i>=mCount)return kIOReturnBadArgument;
-        auto& slot=mSlots[i];auto current=slot.lifecycle->status().stage;
-        if(current!=core::AmplifierStage::Ready && current!=core::AmplifierStage::Playing)return kIOReturnNotReady;
-        IOReturn result=slot.hooks->managesPlaybackTransitions()?slot.hooks->cancelPlayback():slot.lifecycle->stopPlayback();
-        return result==kIOReturnSuccess?result:mGroup->failRuntime(slot.lifecycle->reportRuntimeFailure(result));
+        if (i >= mCount)
+            return kIOReturnBadArgument;
+        auto& slot = mSlots[i];
+        auto current = slot.lifecycle->status().stage;
+        if (current != core::AmplifierStage::Ready && current != core::AmplifierStage::Playing)
+            return kIOReturnNotReady;
+        IOReturn result = slot.hooks->managesPlaybackTransitions() ? slot.hooks->cancelPlayback() : slot.lifecycle->stopPlayback();
+        return result == kIOReturnSuccess ? result : mGroup->failRuntime(slot.lifecycle->reportRuntimeFailure(result));
     }
-    void captureDiagnostics(size_t i){if(i<mCount)mSlots[i].hooks->captureDiagnostics();}
-    IOReturn configureInterrupt(size_t i,bool enabled){return i<mCount?mSlots[i].hooks->configureInterrupt(enabled):kIOReturnBadArgument;}
-    IOReturn handleInterrupt(size_t i){return i<mCount?mSlots[i].hooks->handleInterrupt():kIOReturnBadArgument;}
-    void refreshPlaybackState(){if(mGroup)mGroup->refreshPlaybackState();}
-    IOReturn bringUp(){return mGroup?mGroup->bringUp():kIOReturnNotReady;}
-    IOReturn startPlayback(){return mGroup?mGroup->startPlayback():kIOReturnNotReady;}
-    IOReturn stopPlayback(){return mGroup?mGroup->stopPlayback():kIOReturnNotReady;}
-    IOReturn suspend(){return mGroup?mGroup->suspend():kIOReturnNotReady;}
-    IOReturn resume(){return mGroup?mGroup->resume():kIOReturnNotReady;}
+    void captureDiagnostics(size_t i) {
+        if (i < mCount)
+            mSlots[i].hooks->captureDiagnostics();
+    }
+    IOReturn configureInterrupt(size_t i, bool enabled) {
+        return i < mCount ? mSlots[i].hooks->configureInterrupt(enabled) : kIOReturnBadArgument;
+    }
+    IOReturn handleInterrupt(size_t i) { return i < mCount ? mSlots[i].hooks->handleInterrupt() : kIOReturnBadArgument; }
+    void refreshPlaybackState() {
+        if (mGroup)
+            mGroup->refreshPlaybackState();
+    }
+    IOReturn bringUp() { return mGroup ? mGroup->bringUp() : kIOReturnNotReady; }
+    IOReturn startPlayback() { return mGroup ? mGroup->startPlayback() : kIOReturnNotReady; }
+    IOReturn stopPlayback() { return mGroup ? mGroup->stopPlayback() : kIOReturnNotReady; }
+    IOReturn suspend() { return mGroup ? mGroup->suspend() : kIOReturnNotReady; }
+    IOReturn resume() { return mGroup ? mGroup->resume() : kIOReturnNotReady; }
     // Only after confirmed reset/power removal; never use this to suppress a
     // failed shutdown while the hardware may still be powered.
-    void powerLost(){if(mGroup)mGroup->powerLost();}
-    IOReturn unbind() {
-        if(!mGroup)return mReleaseResult;
-        mReleaseResult=mGroup->detach();
-        // Cleanup results are retained before releasing backend-owned objects.
-        for(size_t i=0;i<mCount;++i)mReleased[i]=mSlots[i].lifecycle->status();
-        mReleasedCount=mCount;
-        releaseUninitialized();return mReleaseResult;
+    void powerLost() {
+        if (mGroup)
+            mGroup->powerLost();
     }
-    const core::AmplifierLifecycleStatus* releasedStatus(size_t i) const {return i<mReleasedCount?&mReleased[i]:nullptr;}
+    IOReturn unbind() {
+        if (!mGroup)
+            return mReleaseResult;
+        mReleaseResult = mGroup->detach();
+        // Cleanup results are retained before releasing backend-owned objects.
+        for (size_t i = 0; i < mCount; ++i)
+            mReleased[i] = mSlots[i].lifecycle->status();
+        mReleasedCount = mCount;
+        releaseUninitialized();
+        return mReleaseResult;
+    }
+    const core::AmplifierLifecycleStatus* releasedStatus(size_t i) const { return i < mReleasedCount ? &mReleased[i] : nullptr; }
+
 private:
     // Constructors/factories must not perform power or firmware writes. This
     // path is also used when binding fails before lifecycle identification.
     void releaseUninitialized() {
-        delete mGroup;mGroup=nullptr;
-        for(size_t i=mCount;i>0;--i) {
-            auto& slot=mSlots[i-1];
+        delete mGroup;
+        mGroup = nullptr;
+        for (size_t i = mCount; i > 0; --i) {
+            auto& slot = mSlots[i - 1];
             delete slot.lifecycle;
-            if(slot.hooks)slot.definition->destroy(slot.hooks);
+            if (slot.hooks)
+                slot.definition->destroy(slot.hooks);
             delete slot.context;
-            slot={};
+            slot = {};
         }
-        mCount=0;
+        mCount = 0;
     }
-    IOReturn rejectBind(const char* reason,IOReturn result,size_t index=0){mBindFailure={reason,index,result};return result;}
+    IOReturn rejectBind(const char* reason, IOReturn result, size_t index = 0) {
+        mBindFailure = {reason, index, result};
+        return result;
+    }
     BindFailure mBindFailure{};
     struct Slot {
         AmplifierBackendContext* context{nullptr};
@@ -132,7 +207,7 @@ private:
     };
     core::AmplifierGroup* mGroup{nullptr};
     Slot mSlots[kCapacity]{};
-    size_t mCount{0},mReleasedCount{0};
+    size_t mCount{0}, mReleasedCount{0};
     core::AmplifierLifecycleStatus mReleased[kCapacity]{};
     bool mResumeAutomatically{true};
     IOReturn mReleaseResult{kIOReturnSuccess};

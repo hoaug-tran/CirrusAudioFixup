@@ -1,9 +1,10 @@
+from production_source_fixture import source as production_source, chip_state
 from pathlib import Path
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-source = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text()
+source = production_source()
 start = source.index('    uint32_t codecSSID = 0;')
 end = source.index('    uint32_t ssid = 0;', start)
 lookup = source[start:end]

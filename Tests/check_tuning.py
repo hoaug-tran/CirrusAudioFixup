@@ -1,3 +1,4 @@
+from production_source_fixture import source as production_source, chip_state
 """Check embedded tuning parsing against explicit layout and malformed cases."""
 from pathlib import Path
 import importlib.util
@@ -6,7 +7,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-driver = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
+driver = production_source()
 assert 'tuning::parse(tuningData, tuningSize, tuning)' in driver
 assert 'tuning::encodeGain(amp.tuningPcmGain)' in driver
 for forbidden in ('OSKextRequestResource(', 'vnode_open(', 'vn_rdwr('):

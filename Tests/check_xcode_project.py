@@ -38,6 +38,7 @@ for identifier in target['buildPhases']:
         compiled.update(references[objects[item]['fileRef']] for item in phase['files'])
 assert compiled == {ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp',
                     ROOT / 'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp',
+                    ROOT / 'CirrusAudioFixup/Devices/CS35L41/CS35L41Driver.cpp',
                     ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEventSource.cpp',
                     ROOT / 'CirrusAudioFixup/Transport/Intel/IntelLPSSSPIController.cpp',
                     ROOT / 'CirrusAudioFixup/Transport/AMD/AMDSPIController.cpp'}

@@ -1,8 +1,8 @@
 //
 // CS35L41Device.hpp
 // CS35L41 identification, reset and register configuration.
-// Keep silicon-specific sequences here. The IOService owns board policy,
-// firmware selection and the verified playback and power-down sequences.
+// The independent CS35L41Driver owns firmware, playback and shutdown.
+// Platform authorization remains with the borrowed host contract.
 // See LICENSE for distribution terms.
 //
 
@@ -37,13 +37,14 @@ private:
     bool mDspAlive{false};
 
 public:
-    CS35L41Device(const char* name, uint8_t address) : mName(name) { mEndpoint.i2cAddress=address; }
+    CS35L41Device(const char* name, uint8_t address) : mName(name) { mEndpoint.i2cAddress = address; }
     CS35L41Device(const char* name, core::BusEndpoint endpoint) : mName(name), mEndpoint(endpoint) {}
 
     const char* name() const override { return mName; }
     uint8_t address() const override {
-        return mEndpoint.transport==core::BusTransportType::I2C && !mEndpoint.tenBitAddress && mEndpoint.i2cAddress<=0x7f ?
-            uint8_t(mEndpoint.i2cAddress) : 0xff;
+        return mEndpoint.transport == core::BusTransportType::I2C && !mEndpoint.tenBitAddress && mEndpoint.i2cAddress <= 0x7f
+                   ? uint8_t(mEndpoint.i2cAddress)
+                   : 0xff;
     }
     core::BusEndpoint endpoint() const override { return mEndpoint; }
     uint32_t deviceId() const { return mDeviceId; }
@@ -190,7 +191,8 @@ public:
             return false;
 
         for (size_t memIdx = 0; memIdx < 80; memIdx++) {
-            otpMem[memIdx] = (otpRawBuf[memIdx * 4] << 24) | (otpRawBuf[memIdx * 4 + 1] << 16) | (otpRawBuf[memIdx * 4 + 2] << 8) | (otpRawBuf[memIdx * 4 + 3]);
+            otpMem[memIdx] = (otpRawBuf[memIdx * 4] << 24) | (otpRawBuf[memIdx * 4 + 1] << 16) | (otpRawBuf[memIdx * 4 + 2] << 8) |
+                             (otpRawBuf[memIdx * 4 + 3]);
         }
 
         otpMap = otpMapMatch->map;
@@ -219,7 +221,8 @@ public:
             }
 
             if (otpMap[elemIdx].reg != 0) {
-                if (!io.updateBits(otpMap[elemIdx].reg, support::genMask(otpMap[elemIdx].shift + otpMap[elemIdx].size - 1, otpMap[elemIdx].shift),
+                if (!io.updateBits(otpMap[elemIdx].reg,
+                                   support::genMask(otpMap[elemIdx].shift + otpMap[elemIdx].size - 1, otpMap[elemIdx].shift),
                                    otpVal << otpMap[elemIdx].shift)) {
                     return false;
                 }

@@ -1,274 +1,119 @@
-"""Compile the production CS35L41 backend without IOService; audit its bridge lifetime."""
-from pathlib import Path
-import subprocess
-import tempfile
-from service_runtime_fixture import IOLIB
+"""Link the complete independent production driver and factory; audit ownership.
 
-ROOT = Path(__file__).resolve().parents[1]
-CPP = r'''
-#include <cassert>
-#include <vector>
+Only kernel resources and bus responses are fake. Real silicon, firmware lookup,
+errata, OTP, idle checks, shutdown and lifecycle methods execute unchanged.
+"""
+from pathlib import Path
+import subprocess,tempfile
+from driver_kernel_fixture import install
+ROOT=Path(__file__).resolve().parents[1]
+CPP=r'''
 #include "Devices/CS35L41/CS35L41Backend.hpp"
+#include "Devices/CS35L41/CS35L41Driver.hpp"
 #include "Devices/AmplifierBackends.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-#include "Devices/CS35L41/DSPControl.hpp"
 #include "Platform/AmplifierRuntime.hpp"
+#include <cassert>
+#include <type_traits>
 using namespace cirrus;
 using namespace devices::cs35l41;
 bool gCirrusDebug=false;
-
-struct Port final : core::RegisterIO {
-    unsigned reads=0,writes=0;
-    bool readOK=true;
-    uint32_t id=registers::kValDeviceId;
-    int32_t error=-99;
-    int32_t lastError() const override { return error; }
-    bool read(uint32_t reg,uint32_t* value) override {
-        assert(reg==registers::kRegDeviceId);++reads;*value=id;return readOK;
-    }
-    bool write(uint32_t,uint32_t) override {++writes;return true;}
-    bool updateBits(uint32_t,uint32_t,uint32_t) override {++writes;return true;}
-    bool bulkRead(uint32_t,uint8_t*,size_t) override {++reads;return true;}
-    bool bulkWrite(uint32_t,const uint8_t*,size_t) override {++writes;return true;}
-    bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t) override {++reads;return true;}
+struct Port:core::RegisterIO {
+    std::map<uint32_t,uint32_t> values;
+    unsigned calls=0,failAt=0,reads=0,writes=0,diagnosticReads=0;
+    int error=0;
+    bool alive=true;
+    std::vector<diagnostics::TraceSource> sources;
+    Port(){values[0]=registers::kValDeviceId;values[4]=0xb2;values[0x10]=3;values[0x1001c]=2;values[0x10098]=2;}
+    bool step(){assert(alive);error=++calls==failAt?-99:0;return error==0;}
+    int32_t lastError()const override{return error;}
+    bool read(uint32_t r,uint32_t* v)override{++reads;if(!step())return false;*v=values[r];return true;}
+    bool write(uint32_t r,uint32_t v)override{++writes;if(!step())return false;if(r==0x10010 || r==0x10018 || r==0x1001c)values[r]&=~v;else values[r]=v;if(r==0x20)values[0x1001c]=2;return true;}
+    bool updateBits(uint32_t r,uint32_t m,uint32_t v)override{uint32_t old=0;return read(r,&old) && write(r,(old&~m)|(v&m));}
+    bool bulkRead(uint32_t,uint8_t* p,size_t n)override{if(!step())return false;memset(p,0,n);return true;}
+    bool bulkWrite(uint32_t,const uint8_t*,size_t)override{return step();}
+    bool pollBit(uint32_t r,uint32_t m,uint32_t v,uint32_t)override{uint32_t old=0;return read(r,&old) && (old&m)==v;}
+    bool readWithTrace(uint32_t r,uint32_t* p,diagnostics::TraceSource s)override{sources.push_back(s);if(s==diagnostics::TRACE_DUMP)++diagnosticReads;return read(r,p);}
+    bool writeWithTrace(uint32_t r,uint32_t v,diagnostics::TraceSource s)override{sources.push_back(s);return write(r,v);}
+    bool bulkReadWithTrace(uint32_t r,uint8_t* p,size_t n,diagnostics::TraceSource s)override{sources.push_back(s);return bulkRead(r,p,n);}
 };
-
-struct Host final : Platform {
-    State chip{};
-    Port port;
-    core::BusEndpoint device{core::BusTransportType::I2C,"test-controller",0x40};
-    core::AudioChannel routing=core::AudioChannel::Left;
-    core::AmplifierModel silicon=core::AmplifierModel::CS35L41;
-    bool bound=true,allow=true,hasFailure=false;
-    Operation failOperation=Operation::InitializeCodec;
-    unsigned boots=0,loads=0,verifies=0,stops=0,shutdowns=0,snapshots=0,cancels=0,ticks=0,irqCalls=0;
-    IOReturn initError=0,shutdownError=0,identityError=0;
-    uint32_t identityActual=0;
-    std::vector<int> calls;
-    State* state() const override {return bound?const_cast<State*>(&chip):nullptr;}
-    core::BusEndpoint endpoint() const override {return device;}
-    core::AudioChannel channel() const override {return routing;}
-    core::AmplifierModel model() const override {return silicon;}
-    bool authorized() const override {return allow;}
-    const char* name() const override {return "backend-fixture";}
-    bool bypassDSP() const override {return false;}
-    bool stopAfterDebugStage(const char*) override {return false;}
-    bool firmwarePhaseHalted() const override {return false;}
-    bool perform(Operation operation) override {
-        assert(bound);
-        switch(operation) {
-        case Operation::InitializeCodec: calls.push_back(1);++boots;chip.playbackFaulted=false;return !initError && (!hasFailure || failOperation!=operation);
-        case Operation::PowerUp: calls.push_back(3);++verifies;return !hasFailure || failOperation!=operation;
-        case Operation::StopDSP: ++shutdowns;return !shutdownError;
-        default: return !hasFailure || failOperation!=operation;
-        }
+struct Host:platform::AmplifierHost {
+    diagnostics::DiagnosticState diag{};
+    bool alive=true,allow=true,bypass=true,capturing=false;
+    std::string phase;std::map<std::string,std::string> properties;
+    unsigned captures=0,publications=0;
+    bool authorized()const override{assert(alive);return allow;}
+    const char* name()const override{return "owned-driver";}
+    bool supportsResources()const override{return alive;}
+    const diagnostics::DiagnosticState& diagnostics()const override{return diag;}
+    bool bootArgEnabled(const char* s)const override{return bypass && !strcmp(s,"-cirrusnodsp");}
+    bool bootArgStrEquals(const char* s,const char* v)const override{return !strcmp(s,"-cirrusphase") && phase==v;}
+    bool stopAfterDebugStage(const char* s)override{return phase==s;}
+    bool debugHalted()const override{return !phase.empty();}
+    void setDiagnosticStage(cirrus::diagnostics::DriverStage s)override{assert(alive);diag.stage=s;}
+    void markDiagnosticSuccess(cirrus::diagnostics::DriverStage s)override{diag.stage=diag.lastGoodStage=s;}
+    void recordDiagnosticFailure(cirrus::diagnostics::DiagnosticFailure f,uint32_t r,uint32_t e,uint32_t a,IOReturn ret,bool)override{
+        assert(alive);if(diag.firstFailure==cirrus::diagnostics::DIAG_OK)diag.firstFailure=f;
+        diag.latestFailure=f;diag.failureCount++;diag.reg=r;diag.expected=e;diag.actual=a;diag.ioReturn=ret;
     }
-    void discoverFirmware() override {static const uint8_t blob=1;chip.wmfwData=chip.binData=&blob;chip.wmfwSize=chip.binSize=1;}
-    void initializeFirmware() override {calls.push_back(2);++loads;chip.firmwareValidated=chip.dspAlive=true;chip.monitorCount=1;}
-    void logASPSnapshot() override {}
-    void setDiagnosticStage(diagnostics::DriverStage s) override {chip.diagnostic.stage=s;}
-    void markDiagnosticSuccess(diagnostics::DriverStage s) override {chip.diagnostic.lastGoodStage=s;}
-    IOReturn commitPlayback() override {assert(bound);calls.push_back(4);chip.playbackActive=true;return 0;}
-    bool stopPlayback() override {assert(bound);calls.push_back(5);++stops;chip.playbackActive=false;return true;}
-    void captureDiagnostics() override {assert(bound);++snapshots;}
-    bool configureInterrupt(bool) override {assert(bound);++irqCalls;return true;}
-    bool checkProtection() override {assert(bound);++irqCalls;return true;}
-    void monitor(const core::PlaybackContext&) override {assert(bound);++ticks;}
-    bool validatePlayback(const core::PlaybackContext&) override {assert(bound);return true;}
-    void cancelPlayback() override {assert(bound);++cancels;}
-    void recordDiagnosticFailure(diagnostics::DiagnosticFailure failure,uint32_t,uint32_t,uint32_t actual,IOReturn result) override {
-        assert(bound);identityActual=actual;identityError=result;
-        if(chip.diagnostic.firstFailure==diagnostics::DIAG_OK)chip.diagnostic.firstFailure=failure;
-        chip.diagnostic.latestFailure=failure;
-        chip.diagnostic.ioReturn=result;
-        // A diagnostic can change lastError; returned failure must remain original.
-        port.error=-101;
-    }
+    void publish(const char* key,const char* value)override{assert(alive);properties[key]=value;++publications;}
+    void publish(const char* key,OSObject* value)override{assert(alive);if(auto* s=dynamic_cast<OSString*>(value))properties[key]=s->value;++publications;}
+    void publishVerdict()override{assert(alive);}
+    void beginDiagnosticCapture()override{assert(!capturing);capturing=true;++captures;}
+    void endDiagnosticCapture()override{assert(capturing);capturing=false;}
 };
-
-struct Board {
-    platform::AmplifierBinding binding;
-    platform::BoardConfiguration manifest;
-    firmware::FirmwareBundle firmware;
-    platform::AmplifierBackendContext context;
-    explicit Board(Host& h)
-        : binding{h.device,registers::kValDeviceId,0,1,"test-tuning","CLSA0100",2},
-          manifest{{0x17aa,0x382b,"CLSA0100"},&binding,1,true,true,true},
-          firmware{{registers::kValDeviceId,0x17aa,0x382b,1,0,"test-tuning"},firmware::FirmwareFormat::Deferred},
-          context{h.port,h.device,manifest,manifest.identity,0,firmware,"CLSA0100",static_cast<Platform*>(&h),kPlatformContract,static_cast<platform::AmplifierHost*>(&h)} {h.chip.present=true;}
+struct Fixture {
+    Port port;Host host;
+    core::BusEndpoint endpoint{core::BusTransportType::I2C,"owned-controller",0x40};
+    platform::AmplifierBinding binding{endpoint,0x35a40,0,1,"owned-driver","CLSA0100",2};
+    platform::BoardConfiguration board{{0x17aa,0x382b,"CLSA0100"},&binding,1,true,true,true};
+    firmware::FirmwareBundle assets{{0x35a40,0x17aa,0x382b,1,0,"owned-driver"},firmware::FirmwareFormat::Deferred};
+    platform::AmplifierBackendContext context{port,endpoint,board,board.identity,0,assets,"CLSA0100",nullptr,nullptr,&host};
+    platform::AmplifierBackendRegistry registry;
+    platform::AmplifierRuntime runtime{false};
+    Fixture(){assert(devices::registerBackends(registry));}
+    ~Fixture(){runtime.unbind();host.alive=port.alive=false;}
+    void bind(){assert(runtime.bind(registry,&context,1)==0);}
 };
+int main(){
+    static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
+    Fixture good;good.bind();assert(good.port.calls==0);assert(good.runtime.bringUp()==0);
+    assert(good.runtime.report(0).initialized && !good.runtime.report(0).faulted);
+    assert(!strcmp(good.runtime.report(0).readyVerdict,"READY_BYPASS_EXPLICIT"));
+    const unsigned total=good.port.calls;assert(total>100);
+    good.runtime.captureDiagnostics(0);assert(good.host.captures==1 && !good.host.capturing && good.port.diagnosticReads>0);
+    assert(good.runtime.suspend()==0 && !good.runtime.report(0).initialized);
+    assert(good.runtime.resume()==0 && good.runtime.report(0).initialized);
+    assert(good.runtime.unbind()==0);const auto after=good.port.calls;assert(good.runtime.unbind()==0 && good.port.calls==after);
+    good.bind();assert(good.runtime.report(0).managed && !good.runtime.report(0).initialized);assert(good.runtime.bringUp()==0);
+    for(unsigned at=1;at<=total;++at){
+        Fixture f;f.port.failAt=at;f.bind();auto result=f.runtime.bringUp();
+        if(result){assert(f.runtime.stage()==core::AmplifierStage::Faulted);assert(!f.runtime.report(0).initialized);assert(f.runtime.status(0)->firstFailure!=0);}
+        f.runtime.unbind();const auto ended=f.port.calls;f.runtime.unbind();assert(f.port.calls==ended);
+    }
+    Fixture identity;identity.port.failAt=1;identity.bind();assert(identity.runtime.bringUp()==-99);assert(identity.host.diag.ioReturn==-99);
+    Fixture unknown;unknown.port.values[0]=0x35a41;unknown.bind();assert(unknown.runtime.bringUp()==kIOReturnNotFound && unknown.port.writes==0);
+    Fixture deny;deny.host.allow=false;deny.bind();assert(deny.runtime.bringUp()==kIOReturnNotPermitted && deny.port.writes==0);
+    for(const char* phase:{"probe","otp","errata","clock","asp","gpio","platform","firmware","dsp"}){
+        Fixture f;f.host.phase=phase;f.bind();assert(f.runtime.bringUp()==kIOReturnNotReady);assert(f.runtime.stage()==core::AmplifierStage::DebugHalted);assert(!f.runtime.report(0).initialized);
+    }
+    Fixture wait;wait.host.bypass=false;wait.bind();assert(wait.runtime.bringUp()==kIOReturnNotReady);assert(wait.runtime.stage()==core::AmplifierStage::Waiting);
+    const auto before=wait.port.writes;const auto deadline=fixtureTimeMs+30001;
+    assert(wait.runtime.retryBringUp(fixtureTimeMs)==kIOReturnNotReady && wait.port.writes==before);
+    assert(wait.runtime.retryBringUp(deadline)==kIOReturnTimeout && wait.runtime.stage()==core::AmplifierStage::Faulted);
+    assert(wait.host.properties["Cirrus_Phase5A_Status_owned-driver"]=="CODEC_IDENTITY_TIMEOUT");
+    Fixture bad;bad.context.host=nullptr;assert(!createBackend(bad.context) && bad.port.calls==0);
+    bad.context.host=&bad.host;bad.binding.channelIndex=2;assert(!createBackend(bad.context) && bad.port.calls==0);
+    bad.binding.channelIndex=0;bad.binding.siliconId=0x35a41;assert(!createBackend(bad.context) && bad.port.calls==0);
+    bad.binding.siliconId=0x35a40;bad.binding.endpoint.i2cAddress=0x41;assert(!createBackend(bad.context) && bad.port.calls==0);
+    bad.binding.endpoint=bad.endpoint;bad.context.bindingIndex=1;assert(!createBackend(bad.context) && bad.port.calls==0);
+    bad.context.bindingIndex=0;bad.board.wiringVerified=false;assert(!createBackend(bad.context) && bad.port.calls==0);
+    bad.board.wiringVerified=true;bad.board.amplifiers=nullptr;assert(!createBackend(bad.context) && bad.port.calls==0);
 
-bool access(uint32_t) {return true;}
-const platform::AmplifierBackendDefinition& definition() {
-    static const auto d=[] {
-        core::RegisterMapConfig f;f.readable=access;f.writable=access;
-        return platform::AmplifierBackendDefinition{"cs35l41-test","CLSA0100",registers::kValDeviceId,1,f,{},createBackend,destroyBackend,true,0,0xffffffffU,core::AmplifierModel::CS35L41,kPlatformContract};
-    }();
-    return d;
-}
-void bind(platform::AmplifierRuntime& runtime,platform::AmplifierBackendRegistry& registry,Board& board) {
-    const platform::AmplifierBackendContext* contexts[]={&board.context};
-    assert(runtime.bind(registry,contexts,1)==0);
-}
-
-
-struct HaltPort final : core::RegisterIO {
-    struct Operation {uint32_t reg,mask,value;};
-    std::vector<Operation> operations;
-    unsigned failAt=0;
-    bool active=false;
-    bool read(uint32_t reg,uint32_t* value) override {
-        operations.push_back({reg,0,0});*value=active?registers::kValHaloCoreEnable:0;
-        return operations.size()!=failAt;
-    }
-    bool updateBits(uint32_t reg,uint32_t mask,uint32_t value) override {
-        operations.push_back({reg,mask,value});return operations.size()!=failAt;
-    }
-    bool write(uint32_t,uint32_t) override {assert(false);return false;}
-    bool bulkRead(uint32_t,uint8_t*,size_t) override {assert(false);return false;}
-    bool bulkWrite(uint32_t,const uint8_t*,size_t) override {assert(false);return false;}
-    bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t) override {assert(false);return false;}
-};
-unsigned delayCalls=0;
-void delay(uint32_t duration) {assert(duration==1000);++delayCalls;}
-
-int main() {
-    for(unsigned failure=0;failure<4;++failure) {
-        HaltPort io;State state;state.dspAlive=true;state.monitorCount=17;io.failAt=failure;delayCalls=0;
-        assert(DSPControl::halt(io,state,delay)==(failure==0));
-        assert(!state.dspAlive && !state.monitorCount && delayCalls==1);
-        assert(io.operations.size()==(failure==1 || failure==2 ? 2U:3U));
-        assert(io.operations[0].reg==registers::kRegDsp1CcmCoreControl &&
-               io.operations[0].mask==registers::kValHaloCoreEnable && io.operations[0].value==0);
-        assert(io.operations[1].reg==registers::kRegDsp1CoreSoftReset && io.operations[1].mask==1 && io.operations[1].value==1);
-        if(io.operations.size()==3)assert(io.operations[2].reg==registers::kRegDsp1CcmCoreControl);
-    }
-    {
-        HaltPort io;State state;io.active=true;assert(!DSPControl::halt(io,state,delay));
-        const auto count=io.operations.size();assert(!DSPControl::halt(io,state,nullptr));assert(io.operations.size()==count);
-    }
-
-    // A rejected factory must neither probe nor mutate chip state.
-    for(unsigned mode=0;mode<12;++mode) {
-        Host h;Board b(h);h.chip.finalCrc=0xabcdef;
-        switch(mode) {
-        case 0:b.context.platformContext=nullptr;break;
-        case 1:h.bound=false;break;
-        case 2:h.device.i2cAddress=0x41;break;
-        case 3:h.routing=core::AudioChannel::Right;break;
-        case 4:h.routing=core::AudioChannel::LeftTweeter;break;
-        case 5:h.silicon=core::AmplifierModel::CS35L56;break;
-        case 6:b.context.bindingIndex=1;break;
-        case 7:b.manifest.amplifiers=nullptr;break;
-        case 8:b.binding.siliconId=0x56;break;
-        case 9:b.context.host=nullptr;break;
-        case 10:b.context.platformContract="other-chip";break;
-        case 11:b.context.platformContract=nullptr;break;
-        }
-        assert(createBackend(b.context)==nullptr);
-        platform::AmplifierBackendRegistry rejectedRegistry;assert(rejectedRegistry.add(definition()));
-        const platform::AmplifierBackendDefinition* selected=nullptr;
-        assert(!rejectedRegistry.create(b.context,selected)&&!selected);
-        assert(!h.port.reads && !h.port.writes && !h.boots && h.chip.finalCrc==0xabcdef);
-    }
-    // Transport failure differs from successful read of an unknown device.
-    for(int error:{-99,-1,0}) {
-        Host h;Board b(h);h.port.readOK=false;h.port.error=error;
-        auto* backend=createBackend(b.context);assert(backend);
-        const auto expected=error==-99?-99:kIOReturnNotReady;
-        assert(backend->identify()==expected && h.identityError==expected && h.chip.diagnostic.ioReturn==expected);
-        assert(h.port.error==-101 && h.chip.playbackFaulted && !h.boots && !h.port.writes);
-        destroyBackend(backend);
-    }
-    {
-        Host h;Board b(h);h.port.id=0x56;
-        auto* backend=createBackend(b.context);assert(backend);
-        assert(backend->identify()==kIOReturnNotFound && h.identityActual==0x56);
-        assert(!h.port.writes && !h.boots);destroyBackend(backend);
-    }
-    {
-        platform::AmplifierBackendRegistry shipping;assert(devices::registerBackends(shipping));
-        for(const char* hid:{"CLSA0100","CLSA0101","CSC3551"}) {
-            for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}) {
-                const auto* d=shipping.find(hid,registers::kValDeviceId,bus);assert(d);
-                assert(d->model==core::AmplifierModel::CS35L41 && !strcmp(d->platformContract,kPlatformContract));
-                assert(d->format(bus)->addressBytes==4 && d->format(bus)->valueBytes==4);
-                assert(d->format(bus)->paddingBytes==(bus==core::BusTransportType::SPI?2:0));
-            }
-        }
-        assert(!shipping.find("TESTAMP",0x3333,core::BusTransportType::I2C));
-    }
-    platform::AmplifierBackendRegistry registry;assert(registry.add(definition()));
-    {
-        Host h;Board b(h);platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);
-        h.allow=false;assert(runtime.bringUp()==kIOReturnNotPermitted);
-        assert(!h.boots && !h.shutdowns && !h.port.writes);
-        runtime.unbind();h.bound=false;
-    }
-    {
-        Host h;Board b(h);platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);
-        // Runtime copied the context; the temporary owner's object can change.
-        b.context.platformContext=nullptr;
-        assert(runtime.bringUp()==0 && h.calls==std::vector<int>({1,2,3}));
-        assert(runtime.configureInterrupt(0,true)==0 && runtime.handleInterrupt(0)==0 && h.irqCalls==2);
-        runtime.captureDiagnostics(0);assert(h.snapshots==1);
-        assert(runtime.startPlayback()==0 && h.chip.playbackActive);
-        assert(runtime.suspend()==0 && h.shutdowns==1 && !h.chip.initialized);
-        assert(runtime.resume()==0 && h.boots==2 && !h.chip.playbackActive);
-        assert(runtime.unbind()==0 && h.shutdowns==2 && !h.chip.initialized);
-        assert(runtime.releasedStatus(0)->cleanupResult==0);
-        h.bound=false;const auto shutdowns=h.shutdowns;
-        assert(runtime.unbind()==0 && h.shutdowns==shutdowns);
-        h.bound=true;b.context.platformContext=static_cast<Platform*>(&h);
-        bind(runtime,registry,b);assert(runtime.bringUp()==0 && h.boots==3);
-        assert(runtime.unbind()==0 && h.shutdowns==3);h.bound=false;
-    }
-    // Each migrated boot/readiness operation must fault in the actual backend,
-    // latch its original diagnostic and run exactly one shutdown transaction.
-    for(auto operation:{Operation::InitializeCodec,Operation::ApplyErrata,Operation::ConfigurePLL,
-                       Operation::ConfigureASP,Operation::ConfigureGPIO,Operation::ConfigureHardware,
-                       Operation::PowerUp,Operation::VerifyIdle,Operation::VerifyDSP}) {
-        Host h;Board b(h);h.hasFailure=true;h.failOperation=operation;
-        platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);
-        assert(runtime.bringUp()==kIOReturnNotReady && h.shutdowns==1 && h.chip.playbackFaulted);
-        assert(!h.chip.initialized && !h.chip.firmwareValidated && !h.chip.dspAlive && !h.chip.monitorCount);
-        assert(h.chip.diagnostic.firstFailure!=diagnostics::DIAG_OK);
-        const auto expectedStage=operation==Operation::PowerUp || operation==Operation::VerifyIdle || operation==Operation::VerifyDSP
-            ?core::AmplifierStage::Verify:core::AmplifierStage::Initialize;
-        assert(runtime.status(0)->firstFailureStage==expectedStage);
-        runtime.unbind();assert(h.shutdowns==1);
-        assert(runtime.releasedStatus(0)->firstFailure==kIOReturnNotReady && runtime.releasedStatus(0)->cleanupResult==0);
-        h.bound=false;
-    }
-    {
-        Host h;Board b(h);h.initError=-77;h.shutdownError=-88;
-        platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);
-        assert(runtime.bringUp()==kIOReturnNotReady && h.shutdowns==1 && h.chip.playbackFaulted);
-        assert(h.chip.diagnostic.firstFailure==diagnostics::DIAG_DEVICE_ID && h.chip.diagnostic.latestFailure==diagnostics::DIAG_DSP_BOOT);
-        runtime.captureDiagnostics(0);assert(h.snapshots==1);
-        assert(runtime.unbind()!=0 && h.shutdowns==1);
-        const auto* status=runtime.releasedStatus(0);
-        assert(status && status->firstFailure==kIOReturnNotReady && status->cleanupResult==kIOReturnNotReady);
-        h.bound=false;runtime.unbind();assert(h.shutdowns==1);
-    }
-    {
-        Host h;Board b(h);
-        {platform::AmplifierRuntime runtime(false);bind(runtime,registry,b);assert(runtime.bringUp()==0);}
-        assert(h.shutdowns==1 && !h.chip.initialized);h.bound=false;
-    }
+    printf("PASS complete owned CS35L41 driver: %u transfer fault positions, reset/OTP/errata/idle, native identity errors, wait timeout, debug phases, PM and teardown/rebind\n",total);
 }
 '''
-with tempfile.TemporaryDirectory(prefix='cirrus-cs35l41-backend-') as directory:
-    tmp = Path(directory)
-    (tmp / 'IOKit').mkdir()
-    (tmp / 'IOKit/IOLib.h').write_text(IOLIB)
-    (tmp / 'backend.cpp').write_text(CPP)
-    for sanitizer in (False, True):
-        binary = tmp / ('sanitized' if sanitizer else 'ordinary')
-        command = ['g++', '-std=c++17', '-O1', '-g', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'),
-                   str(tmp / 'backend.cpp'), str(ROOT / 'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp'), '-o', str(binary)]
-        if sanitizer:
-            command += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
-        subprocess.run(command, check=True)
-        subprocess.run([str(binary)], check=True)
-print('PASS independent CS35L41 backend: factory rejection, identity errors, DSP halt/reset fault sweep, PM, cleanup evidence and teardown/rebind lifetime (ASan/UBSan)')
+with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
+    p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
+    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp'),str(ROOT/'CirrusAudioFixup/Devices/CS35L41/CS35L41Driver.cpp'),'-o',str(p/'driver')],check=True)
+        subprocess.run([str(p/'driver')],check=True)

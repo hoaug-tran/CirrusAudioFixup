@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "Diagnostics/TraceTypes.hpp"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -19,15 +20,6 @@ constexpr int kIOReturnSuccess = 0;
 #endif
 
 namespace cirrus::diagnostics {
-
-enum class TraceSource : uint32_t { Probe = 0, Dump, Consistency, Firmware, Playback, Other };
-
-inline constexpr TraceSource TRACE_PROBE = TraceSource::Probe;
-inline constexpr TraceSource TRACE_DUMP = TraceSource::Dump;
-inline constexpr TraceSource TRACE_CONSISTENCY = TraceSource::Consistency;
-inline constexpr TraceSource TRACE_FIRMWARE = TraceSource::Firmware;
-inline constexpr TraceSource TRACE_PLAYBACK = TraceSource::Playback;
-inline constexpr TraceSource TRACE_OTHER = TraceSource::Other;
 
 enum class DriverStage : uint32_t {
     None = 0,

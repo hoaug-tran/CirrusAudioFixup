@@ -27,7 +27,7 @@ inline void IOSleep(unsigned){}
 #include <vector>
 #include <string>
 #include <cassert>
-struct OSObject {unsigned refs=1;virtual ~OSObject()=default;void retain(){++refs;}void release(){assert(refs);--refs;}};
+class OSObject {public:unsigned refs=1;virtual ~OSObject()=default;void retain(){++refs;}void release(){assert(refs);--refs;}};
 #define OSDynamicCast(type,obj) dynamic_cast<type*>(obj)
 #define OSSafeReleaseNULL(obj) do{if(obj){obj->release();obj=nullptr;}}while(0)
 struct OSString:OSObject {std::string value;const char* getCStringNoCopy(){return value.c_str();}};
@@ -51,13 +51,13 @@ struct OSIterator {std::vector<IORegistryEntry*> list;size_t pos=0;OSIterator(st
 constexpr int kIORegistryIterateRecursively=1;
 struct IORegistryIterator:OSIterator {using OSIterator::OSIterator;static IORegistryIterator* iterateOver(IORegistryEntry*,const IORegistryPlane*,int){return iteratorFailure?nullptr:new IORegistryIterator(nodes);}};
 class IOService:public IORegistryEntry {public:static void* serviceMatching(const char*){return nullptr;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
-struct IOACPIPlatformDevice:IOService {
+class IOACPIPlatformDevice:public IOService {public:
  OSData crs;OSString hid;unsigned status=3,power=0;bool rejectCRS=false;bool amd=false,hasPSC=true;
  int evaluateInteger(const char*,uint32_t* out){*out=power;return hasPSC?0:kIOReturnNotFound;}
  unsigned getDeviceStatus(){return status;}
  int evaluateObject(const char* method,OSObject** out){if(!strcmp(method,"_HID")){if(hid.value.empty())return kIOReturnNotFound;hid.retain();*out=&hid;return 0;}if(rejectCRS)return kIOReturnNotFound;crs.retain();*out=&crs;return 0;}
 };
-struct IOPCIDevice:IOService {uint16_t configRead16(unsigned offset){return offset?0x7aaa:0x8086;}IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
+class IOPCIDevice:public IOService {public:uint16_t configRead16(unsigned offset){return offset?0x7aaa:0x8086;}IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
 inline unsigned liveControllers=0,suspends=0,resumes=0;
 inline bool resumeFailure=false;
 inline uint32_t probeIDs[4]{};
@@ -110,6 +110,7 @@ public:
 #include <cassert>
 #include "Transport/NativeSPIHost.hpp"
 #include "Platform/NativeSPIAmplifierRuntime.hpp"
+#include "Platform/AmplifierHost.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Core/AmplifierDescriptors.hpp"
 #include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
@@ -121,7 +122,9 @@ public:
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
 constexpr bool kOSBooleanFalse=false,kOSBooleanTrue=true;
-struct Amp : cirrus::devices::cs35l41::State {
+inline bool PE_parse_boot_argn(const char*,void*,int){return false;}
+struct Amp {
+ bool present=false,initialized=false,playbackFaulted=false;uint32_t deviceId=0,revisionId=0;cirrus::diagnostics::DiagnosticState diagnostic{};
  char endpointLabel[16]{};const char* name=nullptr;uint8_t address=0;cirrus::core::AudioChannel channel{};
  cirrus::core::RegisterIO* registerIO=nullptr;cirrus::core::BusEndpoint endpoint{};uint8_t endpointIndex=0;
  cirrus::core::AmplifierModel model{};
@@ -153,34 +156,20 @@ public:
  cirrus::platform::BoardConfiguration mRuntimeBoard{};
  template<class... Args> void recordDiagnosticFailure(Amp&,cirrus::diagnostics::DiagnosticFailure,Args...){}
  // These tests use synthetic registered backends to audit resource ownership.
- // The production platform adapter must not execute a CS35L41 helper here.
- bool initializeCS35L41Device(Amp&){assert(false);return false;}
- bool initializeHardwareErrata(Amp&){assert(false);return false;}
- bool applyPLL(Amp&){assert(false);return false;}
- bool applyASP(Amp&){assert(false);return false;}
- bool applyGPIO(Amp&){assert(false);return false;}
- bool configureHardware(Amp&){assert(false);return false;}
- bool stopDSP(Amp&){assert(false);return false;}
- bool powerUpAmplifier(Amp&){assert(false);return false;}
- bool verifyIdleConfiguration(Amp&){assert(false);return false;}
- bool verifyDSPAlive(Amp&){assert(false);return false;}
- void discoverFirmware(Amp&){assert(false);}
- void initializeFirmware(Amp&,const char*){assert(false);}
- void logASPSnapshot(Amp&){assert(false);}
+ // No chip state or silicon callbacks exist in this generic service fixture.
  bool stopAfterDebugStage(const char*){assert(false);return false;}
  bool bootArgStrEquals(const char*,const char*){assert(false);return false;}
  bool mDebugPhaseHalted=false;
+ void removeProperty(const char*){}
+ void publishDriverVerdict(){}
+ IOService* audioController(){return nullptr;}
+ cirrus::platform::hda::HDAStreamState mHdaState{};
+ struct Events{bool unchanged(uint32_t){return true;}};Events* mAudioEvents=nullptr;
+ bool synchronizeHdaStream(){return false;}
+ bool mCapturingFailureSnapshot=false;
  unsigned hostReports=0;
  void setDiagnosticStage(Amp&,cirrus::diagnostics::DriverStage){++hostReports;}
  void markDiagnosticSuccess(Amp&,cirrus::diagnostics::DriverStage){++hostReports;}
- IOReturn commitCS35L41Playback(Amp&){assert(false);return kIOReturnUnsupported;}
- bool stopPlayback(Amp&){assert(false);return false;}
- void captureCS35L41FailureSnapshot(Amp&,cirrus::diagnostics::DiagnosticFailure){assert(false);}
- bool configureCS35L41Interrupt(Amp&,bool){assert(false);return false;}
- bool checkProtectionStatus(Amp&){assert(false);return false;}
- void monitorCS35L41(Amp&,const cirrus::core::PlaybackContext&){assert(false);}
- bool validateCS35L41Playback(Amp&,const cirrus::core::PlaybackContext&){assert(false);return false;}
- bool stopRuntimePlayback(Amp&){assert(false);return false;}
  cirrus::transport::I2CController* createI2CController();
  bool bindAmplifierRuntime();void teardownAmplifierRuntime();
  size_t detectConfiguredI2CAmplifiers();
@@ -237,6 +226,29 @@ struct SPIHooks:cirrus::core::AmplifierLifecycleHooks {
 };
 cirrus::core::AmplifierLifecycleHooks* createSPI(const cirrus::platform::AmplifierBackendContext& c){return rejectFactory?nullptr:new SPIHooks(c);}
 void destroySPI(cirrus::core::AmplifierLifecycleHooks* h){delete h;}
+// Independent communication owner: no Intel/AMD base class or register knowledge.
+unsigned nativeCreates=0,nativeDestroys=0,nativeSuspends=0,nativeResumes=0;
+bool rejectNative=false,failNativeResume=false;
+class FixtureNativeSPI final : public cirrus::transport::NativeSPIControllerOwner,public cirrus::transport::SPIController {
+ bool active=true;
+public:
+ FixtureNativeSPI(){++nativeCreates;}~FixtureNativeSPI(){++nativeDestroys;}
+ cirrus::transport::SPIController& controller()override{return *this;}
+ void suspend()override{active=false;++nativeSuspends;}
+ IOReturn resume(cirrus::transport::NativeSPIControllerFailure& failure)override{++nativeResumes;active=!failNativeResume;failure={"CUSTOM_OWNER_RESUME_FAILED",active?0:kIOReturnNotReady,0};return failure.result;}
+ size_t maxTransferBytes()const override{return 262;}
+ IOReturn exchange(const cirrus::transport::SPIEndpoint&,const uint8_t*,uint8_t*,size_t)override{return kIOReturnUnsupported;}
+ IOReturn command(const cirrus::transport::SPIEndpoint& endpoint,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n)override{
+  if(!active)return kIOReturnNotReady;
+  if(n)for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[endpoint.chipSelect]>>(24-8*i)):0;
+  else {++writeTransfers;writes.emplace_back(tx,tx+tn);}return 0;
+ }
+};
+cirrus::transport::NativeSPIControllerOwner* createCustomSPI(IOACPIPlatformDevice*,IOPCIDevice*,IOService*,cirrus::transport::NativeSPIControllerFailure& failure){
+ if(rejectNative){failure={"CUSTOM_OWNER_FACTORY_REJECTED",kIOReturnUnsupported,7};return nullptr;}
+ return new FixtureNativeSPI;
+}
+
 
 // Independently implemented provider-backed communication: no Voodoo subclass
 // and no AMP knowledge. The same service/map/backend lifecycle consumes it.
@@ -316,6 +328,9 @@ int main(){
  assert(host.bind(&amp,&owner,format)==0&&!strcmp(host.failure().reason,"NONE"));uint8_t bytes[3]{};assert(host.registers(0)->bulkRead(1,bytes,3));
  host.shutdown();assert(!liveControllers&&!iteratorLive&&amp.crs.refs==1);
  CirrusAudioFixup gated;IOService i2c;
+ cirrus::platform::AmplifierBackendDefinition legacyDefinition{"fixture-legacy-spi","CSC3551",0x35a40,2,{},cirrus::devices::cs35l41::CS35L41SPIRegisterIO::config(),createSPI,destroySPI,true,0,0xffffffffU,cirrus::core::AmplifierModel::CS35L41};
+ legacyDefinition.spiFormat.readable=legacyDefinition.spiFormat.writable=[](uint32_t){return true;};
+ assert(gated.mBackendRegistry.add(legacyDefinition));
  assert(gated.setupNativeSPI(&i2c)&&gated.strings["Cirrus_Bus"]=="I2C");
  assert(!gated.setupNativeSPI(&amp)&&!gated.mNativeSPI.bound());
  gated.flags["-cirrusspi"]=true;assert(gated.setupNativeSPI(&amp)&&!gated.mPlatformAuthorized);gated.teardownNativeSPI();
@@ -329,7 +344,7 @@ int main(){
  assert(host.bind(&amp,&owner,format)==0&&host.count()==ACPISPIResources::kMaxEndpoints&&liveControllers==1);host.shutdown();
  assert(!liveControllers&&a.refs==1);
  // Actual shipping discovery must preserve resource identity after a failed probe.
- CirrusAudioFixup service;format={};format.paddingBytes=2;format.readFlag=0x80;
+ CirrusAudioFixup service;assert(service.mBackendRegistry.add(legacyDefinition));format={};format.paddingBytes=2;format.readFlag=0x80;
  resources(amp,{{"SPI0",1},{"SPI0",0},{"SPI1",2}});
  probeIDs[0]=probeIDs[2]=0x35a40;probeIDs[1]=0xdead;
  assert(service.mNativeSPI.bind(&amp,&service,format)==0);
@@ -340,6 +355,23 @@ int main(){
  assert(service.mAmplifiers[1].endpointIndex==2&&!strcmp(service.mAmplifiers[1].name,"spi2"));
  assert(service.numbers["Cirrus_SPI_0_DeviceID"]==0xdead&&service.numbers["Cirrus_SPI_Resource_Count"]==3);
  service.teardownNativeSPI();assert(!service.mAmplifiers[0].registerIO&&!liveControllers&&!iteratorLive);
+
+ // Platform-selected native owner factory shares targets, owns PM and does not
+ // fall back to built-in controllers after rejection. No host silicon branch.
+ auto customProfile=*gated.mPlatformProfile;customProfile.spiControllerFactory=createCustomSPI;
+ CirrusAudioFixup customSPI;customSPI.mPlatformProfile=&customProfile;customSPI.flags["-cirrusspi"]=true;
+ assert(customSPI.mBackendRegistry.add(legacyDefinition));resources(amp,{{"SPI0",0},{"SPI0",1},{"SPI1",2}});
+ const auto originalIntelResumes=resumes;
+ assert(customSPI.setupNativeSPI(&amp) && nativeCreates==2 && !liveControllers);
+ customSPI.mNativeSPI.suspend();failNativeResume=true;
+ assert(customSPI.mNativeSPI.resume()==kIOReturnNotReady && nativeResumes==1 && nativeSuspends==4);
+ assert(!strcmp(customSPI.mNativeSPI.failure().reason,"CUSTOM_OWNER_RESUME_FAILED") && resumes==originalIntelResumes);
+ failNativeResume=false;assert(customSPI.mNativeSPI.resume()==0 && nativeResumes==3);
+ customSPI.teardownNativeSPI();assert(nativeCreates==nativeDestroys && a.refs==1 && b.refs==1);
+ rejectNative=true;const auto createdBefore=nativeCreates;
+ assert(!customSPI.setupNativeSPI(&amp) && nativeCreates==createdBefore && !liveControllers && !customSPI.mNativeSPI.bound());
+ assert(!strcmp(customSPI.mNativeSPI.failure().reason,"CUSTOM_OWNER_FACTORY_REJECTED") && customSPI.mNativeSPI.failure().detail==7);
+ rejectNative=false;customSPI.teardownNativeSPI();assert(a.refs==1 && b.refs==1);
  // Full production native-controller -> register-map -> backend -> group path.
  using namespace cirrus::platform;
  resources(amp,{{"SPI1",2},{"SPI0",0}});amp.hid.value="TESTAMP";

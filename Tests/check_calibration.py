@@ -1,13 +1,18 @@
+from production_source_fixture import source as production_source, chip_state
 import re
 from pathlib import Path
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
+SOURCE = production_source()
 start = re.search(r'struct\s+cs35l41_amp_cal_data\s*\{', SOURCE).start()
-end = start + re.search(r'\nvoid\s+CirrusAudioFixup::scheduleReadOnlyProbe', SOURCE[start:]).start()
-calibration = SOURCE[start:end]
+struct_end=SOURCE.index('} __attribute__((packed));',SOURCE.index('struct cs35l41_amp_efi_data',start))+len('} __attribute__((packed));')
+method_start=SOURCE.index('bool CirrusAudioFixup::applyCalibration(')
+method_end=SOURCE.index('\n}',method_start)+2
+crc_start=SOURCE.index('static uint32_t crc32Le(')
+crc_end=SOURCE.index('\n}',crc_start)+2
+calibration=SOURCE[crc_start:crc_end]+SOURCE[start:struct_end]+SOURCE[method_start:method_end]
 gate_start = re.search(r'if\s*\(!applyCalibration\(amp,\s*image\)\)', SOURCE).start()
 m_boot = re.search(r'bool\s+booted\s*=\s*bringUpDSP\(amp\);', SOURCE[gate_start:])
 gate_end = gate_start + m_boot.end()

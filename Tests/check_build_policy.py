@@ -47,9 +47,11 @@ driver = (ROOT / "CirrusAudioFixup/CirrusAudioFixup.cpp").read_text(encoding="ut
 assert driver.count('kDefaultVerboseLogging || bootArgEnabled("-cirrusdbg")') == 2
 assert 'setProperty("Cirrus_Build_Configuration"' in driver
 backend = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp').read_text()
-assert 'mAmplifierRuntime.bringUp()' in driver and 'cs35l41::createBackend' in backend
+assert 'mAmplifierRuntime.bringUp()' in driver and 'createBackend(' in backend
 assert 'switch (amp.model)' not in driver
 
+from production_source_fixture import source as production_source
+driver=production_source()
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
 source_flags = set(re.findall(r'"(-cirrus[a-z0-9]+)"', driver))
 documented_flags = set(re.findall(r'^\| `(-cirrus[a-z0-9]+)(?:=[^`]*)?`', readme, re.M))

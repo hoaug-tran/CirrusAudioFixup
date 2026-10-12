@@ -3,6 +3,7 @@
 #pragma once
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
+#include <stddef.h>
 
 #ifndef VOODOO_I2C_TRANSFER_TO_ADDRESS
 #define VOODOO_I2C_TRANSFER_TO_ADDRESS "VoodooI2CTransferToAddress"
@@ -18,11 +19,21 @@ struct VoodooI2CAddressedTransfer {
     uint16_t readLength;
 };
 
+// Binary evidence for the loaded 2.9.1 custom nub (UUID/hash recorded in
+// docs/provider_abi_evidence.md). Never pack or reorder this private ABI.
+#if UINTPTR_MAX == UINT64_MAX
+static_assert(sizeof(VoodooI2CAddressedTransfer) == 40 && alignof(VoodooI2CAddressedTransfer) == 8, "custom provider request ABI");
+static_assert(offsetof(VoodooI2CAddressedTransfer, address) == 0 && offsetof(VoodooI2CAddressedTransfer, writeBuffer) == 8 &&
+                  offsetof(VoodooI2CAddressedTransfer, writeLength) == 16 && offsetof(VoodooI2CAddressedTransfer, readBuffer) == 24 &&
+                  offsetof(VoodooI2CAddressedTransfer, readLength) == 32,
+              "custom provider request field offsets");
+#endif
+
 namespace cirrus::transport {
 class VoodooI2CProvider final {
 public:
-    VoodooI2CProvider(IOService* provider,uint8_t targetAddress):mProvider(provider),mTargetAddress(targetAddress) {}
-    IOReturn lastReturn() const {return mLastReturn;}
+    VoodooI2CProvider(IOService* provider, uint8_t targetAddress) : mProvider(provider), mTargetAddress(targetAddress) {}
+    IOReturn lastReturn() const { return mLastReturn; }
     bool transfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
         if (mTargetAddress > 0x7F || (writeLen && !writeBuf) || (readLen && !readBuf) || (!writeLen && !readLen)) {
             mLastReturn = kIOReturnBadArgument;

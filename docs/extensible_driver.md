@@ -2,6 +2,13 @@
 
 The goal is to add a silicon backend, controller backend and verified board data independently. A CPU vendor, an ACPI HID, a successful build or a register-format definition does not authorize amplifier power writes or establish playback support.
 
+## Current software boundary (2026-10-12)
+
+The independent production AMP ownership migration is complete. CS35L41 now
+follows the same module contract intended for a new AMP. The implementation
+history below records earlier transitional milestones; their bridge/state TODOs
+are superseded by the final ownership section at the end.
+
 ## Implemented layers
 
 | Layer | Implementation | Responsibility |
@@ -50,8 +57,9 @@ The IOService owns a persistent `AmplifierRuntime`, selects definitions from
 `Devices/AmplifierBackends.hpp` and dispatches bring-up, firmware, grouped playback,
 interrupt handling, diagnostics and suspend/resume through backend hooks.
 `Devices/CS35L41/CS35L41Backend.hpp` declares the implemented production factory;
-its concrete backend delegates the existing CS35L41 silicon sequences to owner
-helpers. CS35L41 register/firmware logic remains specific to that backend.
+its concrete `CS35L41Driver` owns live state, firmware/calibration, silicon,
+protection, monitoring and playback. It uses only common host/register/board/asset
+contracts. The service retains generic endpoint metadata and diagnostic publication.
 There is no common model-switch dispatch and no placeholder AMP support.
 
 I2C uses an owned VoodooI2C controller adapter and one backend-formatted
@@ -365,7 +373,7 @@ source/Xcode gates, metadata/plists, x86_64, vtables and binary/dSYM UUIDs pass.
 The host/CS35L41 files pass the explicit formatter dry-run. No bundle is installed
 or loaded by this change.
 
-### Remaining work toward the target
+### Remaining work at that milestone (superseded by completion below)
 
 The production CS35L41 implementation still borrows service-allocated chip state
 and delegates silicon/firmware/monitoring helpers through its explicitly marked
@@ -381,3 +389,83 @@ Native I2C/MP2 and new silicon still need their specifications, provider/resourc
 contracts, firmware provenance/licenses and board validation. SoundWire requires
 its own stream/controller subsystem. Preserve evidence gates while migrating the
 current AMP to the same independent contract expected of future implementations.
+
+## Completed independent production ownership (2026-10-12)
+
+`CS35L41Driver` now owns `DeviceState` by value. It owns the complete four-stage
+lifecycle and 42 silicon/firmware/calibration/protection/diagnostic/playback
+methods previously implemented as service members. The firmware resource schema
+also belongs to the AMP module. There is no chip-state pointer borrowed from the
+service and no `Operation` bridge calling service hardware methods.
+
+The service's endpoint record contains routing/identity metadata, a borrowed
+register port and generic diagnostic state. `AmplifierHost` supplies authorization,
+boot arguments, property publication, retained audio-controller access, HDA/route
+observations and diagnostic capture guards. Kernel registry/resource lookup stays
+inside the chip implementation where firmware selection needs it; the driver is
+not an IOService and does not depend on `CirrusAudioFixup`.
+
+All discovery, including legacy I2C/SPI, uses registered module identity/access/
+framing metadata. Read-only identity maps are released before writable binding.
+The service performs no address/value encoding and infers no channel from an
+address/display label. Module callbacks supply read-only inspection and accepted
+debug phases. No descriptor-table edit or silicon service branch is required for
+a registered AMP. Provider-backed communication adapters implement the common
+controller interface and are selected by verified platform data.
+
+`AmplifierReport` lets service publication aggregate chip readiness without
+reading DSP/firmware fields. Waiting lifecycle resources use the generic runtime
+retry hook. Polling performs resource discovery only; completion detaches and
+re-enters group initialization on the same driver instances, retaining context,
+state/diagnostic lifetimes. Retry failure preserves the original fault and rolls
+back peers. Suspend/wake and release still use the existing lifecycle safety
+policy.
+
+Validation covers the full production driver linked with fake kernel resources,
+225 transfer fault positions, OTP/errata/idle, exact native identity failures,
+firmware identity timeout, every debug phase, PM, diagnostic tracing and repeated
+teardown/rebind, both normally and under ASan/UBSan. Detailed maintained suites
+retain parser/upload/calibration/runtime fault sweeps using actual method bodies.
+Synthetic AMP/controller fixtures execute production service discovery/binding
+with IDs absent from the central descriptor table and generic endpoint storage.
+Generic resource retry tests cover a waiting member with a ready peer, no factory
+reallocation, retry failure and retained cleanup evidence.
+
+The formatter configuration is pinned in `.clang-format`; modified/new source
+files use it. Full host audit (27 maintained suites plus optional Windows audit), Debug/Release,
+plist/metadata, vtable, x86_64 and binary/dSYM UUID gates passed. No new bundle was
+installed or loaded.
+
+This completes software framework ownership. It does not establish native
+DesignWare/MP2, CS35L56, SoundWire or a new physical board. Those need resource/PM/
+arbitration/stream contracts, firmware provenance/licenses and target validation.
+The custom loaded provider's binary ABI now has concrete UUID/hash/disassembly
+evidence in [provider ABI evidence](provider_abi_evidence.md); fork source revision
+and distribution provenance remain unresolved. Existing embedded firmware bytes
+and repository licensing are unchanged. Physical cold boot, playback, headphone
+switching, sleep/wake and speaker identity remain separate validation tasks.
+
+
+### Completed native communication ownership boundary
+
+Native SPI also uses a replaceable `NativeSPIControllerOwner` contract rather than
+concrete Intel/AMD pointers in `NativeSPIHost`. The owner supplies its transaction
+port, suspend/resume and failure evidence. Platform data selects an optional
+`spiControllerFactory`; the shipping composition selects the existing Intel/AMD
+modules. A selected failure cannot fall back to another controller. The host
+retains ACPI targets, resolves resources, shares one owner per target and releases
+maps/buses before owners/targets. AMD D0 checks and Intel identity validation remain
+module policy with the same underlying engines and register behavior.
+
+An independent synthetic SPI owner executes production service setup and host
+resource/PM paths under normal and sanitizer runs. It has no Intel/AMD base class,
+uses three resources on two controller targets, shares owners correctly, handles
+resume rollback and fails selected factory creation without built-in fallback.
+This makes both AMP and communication ownership extensible through module
+implementations and verified platform data. It adds no physical controller IDs.
+
+
+Final bundle verification: Debug UUID `2E32A0FB-B690-3F39-A580-5B06CE074F49`.
+Both configurations pass their matching binary/dSYM UUID and x86_64 gates. The
+SDK 15.5 kmod startup objects still emit the existing deployment-floor 11.0 linker
+warnings; this does not establish physical compatibility across macOS releases.

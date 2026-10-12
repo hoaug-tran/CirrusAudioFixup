@@ -1,7 +1,7 @@
 // CS35L41 live silicon, firmware and playback state. No IOService or provider
 // ownership belongs here. Embedded firmware views are borrowed and never freed.
-// The serialized owner currently embeds this state in its endpoint binding;
-// independent backend allocation and platform callbacks remain a later step.
+// Each backend instance owns this state; platform ports and immutable firmware
+// views remain borrowed until shutdown and backend destruction complete.
 #pragma once
 
 #include "Core/AmplifierLifecycle.hpp"

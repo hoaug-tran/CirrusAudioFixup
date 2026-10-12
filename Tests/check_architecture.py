@@ -64,31 +64,56 @@ print("PASS supported silicon registry and declared platform profiles (not disco
 # Execute discovery itself: legacy mode permits reads, never invented devices.
 start = SOURCE.index("size_t CirrusAudioFixup::detectAmplifiers()")
 detect = SOURCE[start:SOURCE.index("\n}", start) + 2]
-fixture = r'''#include <cassert>
+fixture = r'''
+#include <cassert>
 #include <cstdint>
-#include <cstddef>
+#include <cstring>
 #include "Core/AmplifierDescriptors.hpp"
 #include "Platform/PlatformProfile.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Transport/I2CRegisterBus.hpp"
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
-constexpr bool kOSBooleanTrue=true, kOSBooleanFalse=false;
+constexpr bool kOSBooleanTrue=true,kOSBooleanFalse=false;
+struct Provider {bool getPath(char* out,int*,const void*){strcpy(out,"fixture-controller");return true;}};
+const void* gIOServicePlane=nullptr;
+struct Controller:cirrus::transport::I2CController {
+    unsigned responsive=0,reads=0;
+    size_t maxWriteBytes()const override{return 256;}
+    size_t maxReadBytes()const override{return 256;}
+    IOReturn transfer(const cirrus::transport::I2CEndpoint& e,const uint8_t*,size_t,uint8_t* p,size_t n)override{
+        assert(n==4);++reads;if(!(responsive&(1u<<(e.address-0x40))))return kIOReturnNotReady;
+        const uint32_t id=0x35a40;for(unsigned i=0;i<4;++i)p[i]=uint8_t(id>>(24-8*i));return 0;
+    }
+};
 class CirrusAudioFixup {
 public:
-    struct Amp { bool present=false; const char* name=nullptr; uint8_t address=0; uint32_t deviceId=0;
+    struct Amp {bool present=false;const char* name=nullptr;uint8_t address=0;uint32_t deviceId=0;
         cirrus::core::AmplifierModel model=cirrus::core::AmplifierModel::CS35L41;
-        cirrus::core::AudioChannel channel=cirrus::core::AudioChannel::Left; };
+        cirrus::core::AudioChannel channel=cirrus::core::AudioChannel::Left;
+        cirrus::core::BusEndpoint endpoint{};uint8_t endpointIndex=0;cirrus::core::RegisterIO* registerIO=nullptr;};
+    struct Runtime{bool bound()const{return false;}}mAmplifierRuntime;
     size_t detectConfiguredI2CAmplifiers(){return 0;}
     static constexpr size_t kMaxAmplifiers=2;
-    Amp mAmplifiers[2]; size_t mAmplifierCount=0;
+    Amp mAmplifiers[2]{};size_t mAmplifierCount=0;
     bool mPlatformAuthorized=false,mProbingAmplifiers=false,legacy=false;
-    unsigned responsive=0,reads=0;
+    Controller controller;unsigned& responsive=controller.responsive;unsigned& reads=controller.reads;
+    Provider provider;Provider* mProvider=&provider;char mRuntimeControllerPath[256]{};
+    cirrus::transport::I2CController* mI2CController=&controller;
+    cirrus::transport::I2CRegisterBus* mI2CBuses[2]{};cirrus::core::RegisterMap* mI2CMaps[2]{};
+    cirrus::transport::I2CController* createI2CController(){return nullptr;}
+    cirrus::platform::AmplifierBackendRegistry mBackendRegistry;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
-    bool bootArgEnabled(const char*) { return legacy; }
-    template<class... T> void setProperty(T...) {}
-    bool transferToAddress(uint8_t address,uint8_t*,size_t,uint8_t* data,size_t) {
-        ++reads; if(!(responsive & (1u << (address-0x40)))) return false;
-        data[0]=0; data[1]=3; data[2]=0x5A; data[3]=0x40; return true;
+    CirrusAudioFixup(){
+        static const cirrus::platform::AmplifierBackendDefinition d=[](){
+            cirrus::core::RegisterMapConfig f;f.readable=[](uint32_t){return true;};f.writable=f.readable;
+            cirrus::platform::AmplifierBackendDefinition r{"fixture","CLSA0100",0x35a40,1,f,{},[](const cirrus::platform::AmplifierBackendContext&)->cirrus::core::AmplifierLifecycleHooks*{return nullptr;},[](cirrus::core::AmplifierLifecycleHooks*){}};
+            r.model=cirrus::core::AmplifierModel::CS35L41;return r;
+        }();assert(mBackendRegistry.add(d));
     }
+    ~CirrusAudioFixup(){for(auto* p:mI2CMaps)delete p;for(auto* p:mI2CBuses)delete p;}
+    bool bootArgEnabled(const char*){return legacy;}
+    template<class... T>void setProperty(T...){}
     size_t detectAmplifiers();
 };
 ''' + detect + r'''
@@ -106,6 +131,8 @@ int main() {
 with tempfile.TemporaryDirectory(prefix="cirrus-discovery-check-") as directory:
     tmp=Path(directory); source=tmp / "discovery.cpp"; binary=tmp / "discovery.exe"
     source.write_text(fixture)
-    subprocess.run(["g++","-std=c++17","-I",str(ROOT / "CirrusAudioFixup"),str(source),"-o",str(binary)],check=True)
+    from driver_kernel_fixture import install
+    install(tmp)
+    subprocess.run(["g++","-std=c++17","-I",str(tmp),"-I",str(ROOT / "CirrusAudioFixup"),str(source),"-o",str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
 print("PASS production discovery: unknown board, legacy read-only discovery, no phantom endpoints and channel identity")

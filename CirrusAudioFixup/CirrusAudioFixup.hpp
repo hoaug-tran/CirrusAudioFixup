@@ -1,42 +1,35 @@
 //
 // CirrusAudioFixup.hpp
-// IOService lifecycle, per-amplifier state and diagnostic ownership.
-// The workloop serializes playback, sleep and stop. Firmware pointers borrow
-// immutable resource data; cached IOKit objects carry explicit retain/release.
+// IOService lifecycle, endpoint resources and generic diagnostic publication.
+// The workloop serializes playback, sleep and stop. Backend-owned chip state
+// is destroyed before borrowed ports/hosts; IOKit objects use retain/release.
 // See LICENSE for distribution terms.
 //
 
 #pragma once
 #include "Transport/I2CRegisterBus.hpp"
 
-#include "Core/AmplifierDescriptors.hpp"
-#include "Devices/AmplifierBackends.hpp"
-#include "Core/RegisterIO.hpp"
-#include "Core/AmplifierLifecycle.hpp"
 #include "Core/AmplifierGroup.hpp"
-#include "Platform/BoardConfiguration.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
-#include "Platform/AmplifierRuntime.hpp"
-#include "Platform/NativeSPIAmplifierRuntime.hpp"
-#include "Firmware/FirmwareBundle.hpp"
-#include "Transport/VoodooI2CController.hpp"
-#include "Devices/CS35L41/CS35L41Device.hpp"
-#include "Devices/CS35L41/Hardware/OTPMap.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-#include "Devices/CS35L41/State.hpp"
-#include "Devices/CS35L41/Resources/Tuning.hpp"
+#include "Core/AmplifierLifecycle.hpp"
+#include "Core/RegisterIO.hpp"
+#include "Devices/AmplifierBackends.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
-#include "Firmware/WMFW/WMFWUploader.hpp"
+#include "Firmware/FirmwareBundle.hpp"
+#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierHost.hpp"
+#include "Platform/AmplifierRuntime.hpp"
+#include "Platform/BoardConfiguration.hpp"
+#include "Platform/HDA/AudioEventSource.hpp"
 #include "Platform/HDA/HDAStreamState.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
-#include "Platform/HDA/AudioEventSource.hpp"
+#include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
-#include "Transport/VoodooI2CProvider.hpp"
-#include "Devices/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Transport/ACPISPIResources.hpp"
 #include "Transport/NativeSPIHost.hpp"
+#include "Transport/VoodooI2CController.hpp"
+#include "Transport/VoodooI2CProvider.hpp"
 
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOInterruptEventSource.h>
@@ -49,63 +42,29 @@
 #include <libkern/c++/OSCollectionIterator.h>
 
 #include <os/log.h>
+#include <pexpert/pexpert.h>
 
-struct RegisterSequence {
-    uint32_t reg;
-    uint32_t mask;
-    uint32_t value;
-    uint32_t delayUs;
-    bool updateBits;
-};
-
-// Platform endpoint binding embeds chip state during the staged ownership
-// migration. Register ports and endpoint names borrow the service lifetime.
-struct AmplifierState : cirrus::devices::cs35l41::State {
+// Endpoint metadata and host diagnostics only. Silicon state belongs to backend.
+struct AmplifierState {
     char endpointLabel[16]{};
-    // Identity and channel come from the silicon probe and board endpoint.
-    // Do not infer routing or tuning from a display name or slave address.
     const char* name{nullptr};
     uint8_t address{0};
-    // Borrowed native register port; null selects the legacy addressed I2C ABI.
     cirrus::core::RegisterIO* registerIO{nullptr};
     cirrus::core::BusEndpoint endpoint{};
     uint8_t endpointIndex{0};
     cirrus::core::AmplifierModel model{cirrus::core::AmplifierModel::Unknown};
     cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
-};
-
-struct FirmwareImage;
-
-struct FirmwareResource {
-    uint32_t subsystemVendor;
-    uint32_t subsystemDevice;
-    uint32_t spkid;
-    const char* fwName;
-    const char* binName;
-    const uint8_t* wmfw;
-    size_t wmfwSize;
-    const uint8_t* bin;
-    size_t binSize;
-    const uint8_t* binRight;
-    size_t binRightSize;
-    bool isDummy;
-    // Optional companions belong to the same board/speaker entry as its BIN.
-    // Absence on one channel uses the Linux default, never the other channel.
-    const uint8_t* tuningLeft{nullptr};
-    size_t tuningLeftSize{0};
-    const uint8_t* tuningRight{nullptr};
-    size_t tuningRightSize{0};
-    const char* tuningLeftName{nullptr};
-    const char* tuningRightName{nullptr};
+    bool present{false}, initialized{false}, playbackFaulted{false};
+    uint32_t deviceId{0}, revisionId{0};
+    cirrus::diagnostics::DiagnosticState diagnostic{};
 };
 
 class CirrusAudioFixup : public IOService {
     friend class ServiceRegisterIO;
 
-    OSDeclareDefaultStructors(CirrusAudioFixup)
+OSDeclareDefaultStructors(CirrusAudioFixup)
 
-public:
-    bool init(OSDictionary* properties = nullptr) override;
+    public : bool init(OSDictionary* properties = nullptr) override;
     IOService* probe(IOService* provider, SInt32* score) override;
     bool start(IOService* provider) override;
     void stop(IOService* provider) override;
@@ -114,63 +73,51 @@ public:
 
 private:
     void bringUpAmplifiers();
-    // Transitional adapter: no ownership transfer. Clear only after runtime
-    // unbind has completed shutdown and destroyed every borrowing backend.
-    struct AmplifierBackendOwner final : cirrus::devices::cs35l41::Platform {
+    // Borrowed serialized host facilities; cleared after backend destruction.
+    struct AmplifierBackendOwner final : cirrus::platform::AmplifierHost {
         CirrusAudioFixup* owner{nullptr};
         AmplifierState* amp{nullptr};
-        void bind(CirrusAudioFixup* service, AmplifierState* endpoint) { owner = service; amp = endpoint; }
-        void clear() { owner = nullptr; amp = nullptr; }
-        cirrus::devices::cs35l41::State* state() const override { return owner && amp ? amp : nullptr; }
-        cirrus::core::BusEndpoint endpoint() const override { return amp->endpoint; }
-        cirrus::core::AudioChannel channel() const override { return amp->channel; }
-        cirrus::core::AmplifierModel model() const override { return amp->model; }
-        bool authorized() const override { return owner->mPlatformAuthorized; }
+        void bind(CirrusAudioFixup* service, AmplifierState* endpoint) {
+            owner = service;
+            amp = endpoint;
+        }
+        void clear() {
+            owner = nullptr;
+            amp = nullptr;
+        }
+        bool authorized() const override { return owner && owner->mPlatformAuthorized; }
         const char* name() const override { return amp->name; }
-        bool perform(cirrus::devices::cs35l41::Operation operation) override {
-            using cirrus::devices::cs35l41::Operation;
-            switch (operation) {
-            case Operation::InitializeCodec: return owner->initializeCS35L41Device(*amp);
-            case Operation::ApplyErrata: return owner->initializeHardwareErrata(*amp);
-            case Operation::ConfigurePLL: return owner->applyPLL(*amp);
-            case Operation::ConfigureASP: return owner->applyASP(*amp);
-            case Operation::ConfigureGPIO: return owner->applyGPIO(*amp);
-            case Operation::ConfigureHardware: return owner->configureHardware(*amp);
-            case Operation::StopDSP: return owner->stopDSP(*amp);
-            case Operation::PowerUp: return owner->powerUpAmplifier(*amp);
-            case Operation::VerifyIdle: return owner->verifyIdleConfiguration(*amp);
-            case Operation::VerifyDSP: return owner->verifyDSPAlive(*amp);
-            }
-            return false;
-        }
-        bool bypassDSP() const override { return owner->bootArgEnabled("-cirrusnodsp"); }
-        bool stopAfterDebugStage(const char* phase) override { return owner->stopAfterDebugStage(phase); }
-        bool firmwarePhaseHalted() const override {
-            return owner->bootArgStrEquals("-cirrusphase", "firmware") && owner->mDebugPhaseHalted;
-        }
-        void discoverFirmware() override { owner->discoverFirmware(*amp); }
-        void initializeFirmware() override { owner->initializeFirmware(*amp, "5D.0"); }
-        void logASPSnapshot() override { owner->logASPSnapshot(*amp); }
+        bool supportsResources() const override { return owner && amp; }
+        uint8_t endpointIndex() const override { return amp->endpointIndex; }
+        const cirrus::diagnostics::DiagnosticState& diagnostics() const override { return amp->diagnostic; }
         void setDiagnosticStage(cirrus::diagnostics::DriverStage stage) override { owner->setDiagnosticStage(*amp, stage); }
         void markDiagnosticSuccess(cirrus::diagnostics::DriverStage stage) override { owner->markDiagnosticSuccess(*amp, stage); }
-        void recordDiagnosticFailure(cirrus::diagnostics::DiagnosticFailure failure, uint32_t reg,
-            uint32_t expected, uint32_t actual, IOReturn result) override {
-            owner->recordDiagnosticFailure(*amp, failure, reg, expected, actual, result);
+        void recordDiagnosticFailure(cirrus::diagnostics::DiagnosticFailure failure, uint32_t reg, uint32_t expected, uint32_t actual,
+                                     IOReturn result, bool capture = true) override {
+            owner->recordDiagnosticFailure(*amp, failure, reg, expected, actual, result, capture);
         }
-        IOReturn commitPlayback() override { return owner->commitCS35L41Playback(*amp); }
-        bool stopPlayback() override { return owner->stopPlayback(*amp); }
-        void captureDiagnostics() override { owner->captureCS35L41FailureSnapshot(*amp, amp->diagnostic.latestFailure); }
-        bool configureInterrupt(bool enabled) override { return owner->configureCS35L41Interrupt(*amp, enabled); }
-        bool checkProtection() override { return owner->checkProtectionStatus(*amp); }
-        void monitor(const cirrus::core::PlaybackContext& context) override { owner->monitorCS35L41(*amp, context); }
-        bool validatePlayback(const cirrus::core::PlaybackContext& context) override { return owner->validateCS35L41Playback(*amp, context); }
-        void cancelPlayback() override { owner->stopRuntimePlayback(*amp); }
-
+        bool bootArgEnabled(const char* name) const override { return owner->bootArgEnabled(name); }
+        bool bootArgStrEquals(const char* name, const char* value) const override { return owner->bootArgStrEquals(name, value); }
+        bool parseBootArgument(const char* name, void* value, size_t size) const override {
+            return PE_parse_boot_argn(name, value, int(size));
+        }
+        bool stopAfterDebugStage(const char* phase) override { return owner->stopAfterDebugStage(phase); }
+        bool debugHalted() const override { return owner->mDebugPhaseHalted; }
+        void publish(const char* key, const char* value) override { owner->setProperty(key, value); }
+        void publish(const char* key, uint64_t value, unsigned bits) override { owner->setProperty(key, value, bits); }
+        void publish(const char* key, OSObject* value) override { owner->setProperty(key, value); }
+        void remove(const char* key) override { owner->removeProperty(key); }
+        void publishVerdict() override { owner->publishDriverVerdict(); }
+        IOService* audioController() override { return owner->audioController(); }
+        cirrus::platform::hda::HDAStreamState streamObservation() const override { return owner->mHdaState; }
+        bool hasRouteEvents() const override { return owner->mAudioEvents != nullptr; }
+        bool routeUnchanged(uint32_t generation) const override {
+            return owner->mAudioEvents && owner->mAudioEvents->unchanged(generation);
+        }
+        bool synchronizeRoute() override { return owner->synchronizeHdaStream(); }
+        void beginDiagnosticCapture() override { owner->mCapturingFailureSnapshot = true; }
+        void endDiagnosticCapture() override { owner->mCapturingFailureSnapshot = false; }
     };
-    IOReturn commitCS35L41Playback(AmplifierState& amp);
-    bool configureCS35L41Interrupt(AmplifierState& amp,bool enabled);
-    bool validateCS35L41Playback(AmplifierState& amp,const cirrus::core::PlaybackContext&);
-    void monitorCS35L41(AmplifierState& amp,const cirrus::core::PlaybackContext&);
     char mRuntimeControllerPath[256]{};
     bool bindAmplifierRuntime();
     void teardownAmplifierRuntime();
@@ -178,7 +125,7 @@ private:
     cirrus::transport::I2CController* createI2CController();
 
     void runBackgroundMonitor();
-    bool retryFirmwareIdentity();
+    bool retryBringUpResources();
     bool setupAudioEvents();
     void teardownAudioEvents();
     static void audioEventReceived(OSObject* owner, const cirrus::platform::hda::AudioEventState& state);
@@ -198,19 +145,23 @@ private:
     void teardownNativeSPI();
     void suspendNativeTransport() {
         mNativeSPI.suspend();
-        if (mNativeSPI.bound()) setProperty("Cirrus_SPI_Status", "SUSPENDED");
+        if (mNativeSPI.bound())
+            setProperty("Cirrus_SPI_Status", "SUSPENDED");
     }
     bool resumeNativeTransport() {
         IOReturn ret = mNativeSPI.resume();
         if (mNativeSPI.bound()) {
             setProperty("Cirrus_SPI_Wake_Return", uint64_t(ret), 32);
-            setProperty("Cirrus_SPI_Status",ret==kIOReturnSuccess?(mPlatformAuthorized?"BOUND_AUTHORIZED":"BOUND_READ_ONLY"):"WAKE_FAILED");
-            const auto& failure=mNativeSPI.failure();
-            setProperty("Cirrus_SPI_Failure_Reason",failure.reason);
-            setProperty("Cirrus_SPI_Failure_Index",uint64_t(failure.index),32);
-            setProperty("Cirrus_SPI_Failure_Source",failure.source);
-            setProperty("Cirrus_SPI_Failure_Detail",uint64_t(failure.detail),32);
-            if(ret!=kIOReturnSuccess)CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",failure.reason,failure.index,failure.detail,ret);
+            setProperty("Cirrus_SPI_Status",
+                        ret == kIOReturnSuccess ? (mPlatformAuthorized ? "BOUND_AUTHORIZED" : "BOUND_READ_ONLY") : "WAKE_FAILED");
+            const auto& failure = mNativeSPI.failure();
+            setProperty("Cirrus_SPI_Failure_Reason", failure.reason);
+            setProperty("Cirrus_SPI_Failure_Index", uint64_t(failure.index), 32);
+            setProperty("Cirrus_SPI_Failure_Source", failure.source);
+            setProperty("Cirrus_SPI_Failure_Detail", uint64_t(failure.detail), 32);
+            if (ret != kIOReturnSuccess)
+                CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",
+                           failure.reason, failure.index, failure.detail, ret);
         }
         return ret == kIOReturnSuccess;
     }
@@ -254,7 +205,9 @@ private:
     AmplifierState mAmplifiers[kMaxAmplifiers]{};
     const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
     size_t expectedAmplifierCount() const {
-        return mPlatformProfile?(mPlatformProfile->boardConfiguration?mPlatformProfile->boardConfiguration->count:mPlatformProfile->endpointCount):0;
+        return mPlatformProfile
+                   ? (mPlatformProfile->boardConfiguration ? mPlatformProfile->boardConfiguration->count : mPlatformProfile->endpointCount)
+                   : 0;
     }
     bool mPlatformAuthorized{false};
     uint32_t mPlatformSubsystemId{0};
@@ -288,7 +241,6 @@ private:
                                  uint32_t expected = 0, uint32_t actual = 0, IOReturn ioReturn = kIOReturnSuccess,
                                  bool captureSnapshot = true);
     void captureFailureSnapshot(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure);
-    void captureCS35L41FailureSnapshot(AmplifierState& amp,cirrus::diagnostics::DiagnosticFailure failure);
     void publishDriverVerdict();
     static const char* stageName(cirrus::diagnostics::DriverStage stage);
     static const char* failureName(cirrus::diagnostics::DiagnosticFailure failure);
@@ -301,12 +253,10 @@ private:
     bool setupProbeTimer();
     void scheduleReadOnlyProbe(uint32_t delayMs);
     void runReadOnlyProbe();
-    void probeAmplifier(AmplifierState& amp);
+    void probeAmplifier(AmplifierState&);
     size_t detectAmplifiers();
 
     bool mProbingAmplifiers{false};
-
-    bool transferToAddress(uint8_t address, uint8_t* writeBuffer, uint16_t writeLength, uint8_t* readBuffer, uint16_t readLength);
 
 public:
     bool bulkWrite(AmplifierState& amp, uint32_t reg, const uint8_t* data, size_t length,
@@ -324,79 +274,15 @@ private:
     bool pollRegisterBit(AmplifierState& amp, uint32_t reg, uint32_t mask, uint32_t targetVal, uint32_t timeoutMs,
                          cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
 
-    bool sendMailboxCommand(AmplifierState& amp, uint32_t command, uint32_t expectedStatus);
-
-    void logASPSnapshot(AmplifierState& amp);
-    void logDSPSnapshot(AmplifierState& amp);
-    void logDSPBootReport(AmplifierState& amp);
-    void logPowerSnapshot(AmplifierState& amp);
-    void snapshotPlayback(AmplifierState& amp);
-    void snapshotDiagnostics(AmplifierState& amp, const char* stage);
-
-    bool initializeCS35L41Device(AmplifierState& amp);
-
-    bool unlockTestKey(AmplifierState& amp);
-    bool lockTestKey(AmplifierState& amp);
-
-    bool applyErrataPatch(AmplifierState& amp);
-
-    bool unpackOTP(AmplifierState& amp);
-
-    bool initializeHardwareErrata(AmplifierState& amp);
-    void dumpAllRegisters(AmplifierState& amp);
-    bool configureHardware(AmplifierState& amp);
-
     bool synchronizeHdaStream();
     bool synchronizeHdaCodec() { return synchronizeHdaStream(); }
     bool performPlatformHardwareReset();
     static bool supportedHdaFormat(uint16_t format);
 
-    void discoverFirmware(AmplifierState& amp);
-
-    bool bringUpDSP(AmplifierState& amp);
-    bool bootDsp(AmplifierState& amp) { return bringUpDSP(amp); }
-
     void startBringUp() { bringUpAmplifiers(); }
-    bool resetAndInitCodec(AmplifierState& amp) { return initializeCS35L41Device(amp); }
-    bool loadOtpCalibration(AmplifierState& amp) { return unpackOTP(amp); }
-
-    bool stopPlayback(AmplifierState& amp);
-    bool stopRuntimePlayback(AmplifierState& amp);
-    bool checkProtectionStatus(AmplifierState& amp);
-    bool verifyDSPAlive(AmplifierState& amp);
-
-    void uploadFirmware(AmplifierState& amp, const char* phaseArg);
-    bool parseDSPAlgorithms(AmplifierState& amp, FirmwareImage& outImage);
-    bool stopDSP(AmplifierState& amp);
-
-    bool applyCalibration(AmplifierState& amp, const FirmwareImage* image);
-    void initializeFirmware(AmplifierState& amp, const char* phaseArg);
-    void dumpASPRegisters(AmplifierState& amp);
-
-    bool powerUpAmplifier(AmplifierState& amp);
-    bool verifyIdleConfiguration(AmplifierState& amp);
 
     IOService* audioController();
     IOService* getAudioController();
-
-    void testRegisterConsistency(AmplifierState& amp);
-    void runTimeBasedFSMCheck(AmplifierState& amp);
-
-    uint32_t calculateRegistersCRC32(AmplifierState& amp);
-
-    void snapshotRegisters(AmplifierState& amp, uint32_t* snapshot);
-    void compareRegisterSnapshots(AmplifierState& amp, const uint32_t* oldSnapshot, const uint32_t* newSnapshot);
-
-    bool applyRegisterSequence(AmplifierState& amp, const RegisterSequence* sequence, size_t count);
-
-    bool applyPLL(AmplifierState& amp);
-    bool configurePll(AmplifierState& amp) { return applyPLL(amp); }
-
-    bool applyASP(AmplifierState& amp);
-    bool configureAsp(AmplifierState& amp) { return applyASP(amp); }
-
-    bool applyGPIO(AmplifierState& amp);
-    bool configureGpio(AmplifierState& amp) { return applyGPIO(amp); }
 
     static void probeTimerFired(OSObject* owner, IOTimerEventSource* sender);
 };

@@ -64,11 +64,13 @@ AmplifierLifecycleHooks* factory(const cirrus::platform::AmplifierBackendContext
 void destroy(AmplifierLifecycleHooks* hooks){assert(hooks==&instance);++destroyed;}
 unsigned heapCreated=0,heapDestroyed=0,heapCleanup=0;
 int failFactory=-1,failFirmware=-1,failTick=-1;bool waitFirmware=false;
+bool resourceReady=false;IOReturn retryError=0;unsigned resourcePolls=0;
 struct HeapHooks:Hooks {
  const cirrus::platform::AmplifierBackendContext* metadata;
  IOReturn identify() override {assert(metadata->actualDeviceHid&&metadata->bindingIndex<2);return Hooks::identify();}
  HeapHooks(const cirrus::platform::AmplifierBackendContext& context):metadata(&context){++heapCreated;if(int(context.bindingIndex)==failFirmware)failure=4;if(waitFirmware&&context.bindingIndex==1)pause=BringUpDisposition::Wait;}
  ~HeapHooks() override {++heapDestroyed;}
+ IOReturn prepareBringUpRetry(uint64_t)override{++resourcePolls;if(retryError)return retryError;if(!resourceReady)return kIOReturnNotReady;pause=BringUpDisposition::Continue;return 0;}
  IOReturn runtimeTick(const PlaybackContext&) override {return int(metadata->bindingIndex)==failTick?-300:0;}
  IOReturn safeShutdown() override {++heapCleanup;return Hooks::safeShutdown();}
 };
@@ -262,7 +264,17 @@ int main(){
  assert(runtime.releasedStatus(1)->firstFailure==-104&&heapCreated==heapDestroyed);failFirmware=-1;
  waitFirmware=true;assert(runtime.bind(multiRegistry,contexts,2)==0&&runtime.bringUp()==kIOReturnNotReady);
  assert(runtime.stage()==AmplifierStage::Waiting&&runtime.startPlayback()==kIOReturnNotReady);
+ const auto waitingCreated=heapCreated,waitingCleanups=heapCleanup;
+ assert(runtime.retryBringUp(1)==kIOReturnNotReady && heapCreated==waitingCreated && heapCleanup==waitingCleanups);
+ resourceReady=true;assert(runtime.retryBringUp(2)==0 && runtime.stage()==AmplifierStage::Ready);
+ assert(heapCreated==waitingCreated && resourcePolls==2);resourceReady=false;
  assert(runtime.unbind()==0&&heapCreated==heapDestroyed);waitFirmware=false;
+ waitFirmware=true;assert(runtime.bind(multiRegistry,contexts,2)==0 && runtime.bringUp()==kIOReturnNotReady);
+ retryError=-333;assert(runtime.retryBringUp(3)==-333 && runtime.stage()==AmplifierStage::Faulted);
+ assert(runtime.status(1)->firstFailure==-333 && runtime.status(0)->stage==AmplifierStage::Detached);
+ const auto failedCleanup=heapCleanup;assert(runtime.retryBringUp(4)==kIOReturnNotReady && heapCleanup==failedCleanup);
+ assert(runtime.unbind()==kIOReturnNotReady && heapCreated==heapDestroyed);retryError=0;waitFirmware=false;
+
  {
   AmplifierRuntime automatic;assert(automatic.bind(multiRegistry,contexts,2)==0&&automatic.bringUp()==0);
  }

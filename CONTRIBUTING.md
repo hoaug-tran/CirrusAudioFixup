@@ -97,14 +97,29 @@ Adding a register-controlled AMP should require its `Devices/<Model>` backend,
 registry definition and verified board/firmware data. It should not require a
 silicon branch, new register sequence or descriptor allowlist in the service.
 Each backend owns its implementation and state; `AmplifierHost` supplies common
-board authorization and diagnostic publication. Backend-specific private contexts
-must declare their contract explicitly. The CS35L41 service bridge is transitional
-migration scaffolding, not the template for a new AMP.
+board authorization, boot/resource policy, route observations and diagnostic
+publication. The production CS35L41 driver owns its live state, firmware parsing,
+silicon operations, protection and playback helpers. Its factory consumes only
+`RegisterIO`, `AmplifierHost`, board bindings and immutable asset views. No
+service-member callback or service cast is part of the AMP template.
+
+AMP factories and destructors perform no hardware I/O. The serialized runtime calls
+safe shutdown before destroying drivers, then releases host/port/map/controller
+resources. A backend can report readiness and pending resources through
+`AmplifierReport` and `prepareBringUpRetry`; pending polling must not reset hardware.
+Resource completion re-enters group bring-up using the same owned driver objects.
+Original diagnostics and cleanup failures must survive teardown/rebind. Traced
+register views preserve operation sources and precious-register diagnostic policy.
 
 A provider-backed communication adapter implements the existing controller
 transaction contract and is selected by verified platform data. AMP code consumes
 `RegisterIO`; it must not learn provider ABI, CPU vendor or bus framing. Factory
-failure does not silently select another communication implementation. Native
+failure does not silently select another communication implementation.
+Native SPI modules implement `NativeSPIControllerOwner` and return their owned
+transaction port and PM methods through a `spiControllerFactory`. The host retains
+ACPI targets, shares one owner per target and releases register maps/buses before
+owners. Intel/AMD binding and D0 policy stay in their modules; new owners do not
+require a controller branch in `NativeSPIHost`. Native
 MMIO/DMA owners still need resource, arbitration and PM contracts; SoundWire needs
 its separate stream/controller subsystem. Host fixture extensions are not shipping
 hardware support.

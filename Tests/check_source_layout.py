@@ -28,13 +28,13 @@ print("PASS source naming, quoted include resolution, controller/bus split and s
 state = (ROOT / "Devices/CS35L41/State.hpp").read_text()
 service = (ROOT / "CirrusAudioFixup.hpp").read_text()
 assert "struct State {" in state
-assert "struct AmplifierState : cirrus::devices::cs35l41::State" in service
+assert "struct AmplifierState {" in service and "cs35l41::State" not in service
 for include in re.findall(r'^#include "([^"]+)"', state, re.M):
     assert not include.startswith(("Platform/", "Transport/")), include
 assert not re.search(r"#include [<\"](?:IOKit|CirrusAudioFixup)", state)
 for field in ("registerIO", "endpointLabel", "endpointIndex", "channel", "model"):
     assert not re.search(r"\b" + field + r"\s*[{;]", state), field
-for field in ("playbackTransition", "shutdownTransition", "firmwareValidated", "diagnostic", "pllRecoveryAttempts"):
+for field in ("playbackTransition", "shutdownTransition", "firmwareValidated", "pllRecoveryAttempts"):
     assert re.search(r"\b" + field + r"\s*[{;]", state), field
     assert not re.search(r"\b" + field + r"\s*[{;]", service), field
 print("PASS CS35L41 state schema is independent of IOService and endpoint ownership")
@@ -42,23 +42,25 @@ print("PASS CS35L41 state schema is independent of IOService and endpoint owners
 backend = (ROOT / "Devices/CS35L41/CS35L41Backend.cpp").read_text()
 assert '"CirrusAudioFixup.hpp"' not in backend
 assert "CirrusAudioFixup::" not in backend and "mOwner" not in backend
-assert "Platform& mPlatform" in backend and "State& mAmplifier" in backend
-assert "class CS35L41Backend;" not in service
-assert "friend cirrus::core::AmplifierLifecycleHooks*" not in service
-assert "struct AmplifierBackendOwner final : cirrus::devices::cs35l41::Platform" in service
-print("PASS standalone CS35L41 backend and explicit service platform adapter boundary")
-
-# Lifecycle orchestration must stay in the chip backend, rather than returning
-# to a service callback under a new name.
-contract = (ROOT / "Devices/CS35L41/CS35L41Backend.hpp").read_text()
-service_cpp = (ROOT / "CirrusAudioFixup.cpp").read_text()
-for name in ("initializeCS35L41Hardware", "loadCS35L41Firmware", "verifyCS35L41Ready", "shutdownCS35L41", "stopCS35L41At"):
-    assert name not in service and name not in service_cpp, name
-for name in ("initializeHardware", "loadFirmwareFlow", "verifyReadyFlow", "shutdownFlow"):
-    assert "IOReturn Backend::" + name + "()" in backend, name
-for name in ("initialize", "loadFirmware", "verifyReady", "shutdown"):
-    assert not re.search(r"virtual IOReturn " + name + r"\(", contract), name
-print("PASS CS35L41 initialization, firmware, readiness and shutdown orchestration are backend-owned")
+owned_header=(ROOT / "Devices/CS35L41/CS35L41Driver.hpp").read_text()
+owned_cpp=(ROOT / "Devices/CS35L41/CS35L41Driver.cpp").read_text()
+service_cpp=(ROOT / "CirrusAudioFixup.cpp").read_text()
+assert "DeviceState mAmplifier" in owned_header and "State& mAmplifier" not in owned_header
+assert "class CS35L41Driver final : public core::AmplifierLifecycleHooks" in owned_header
+assert "CirrusAudioFixup" not in owned_header and "CirrusAudioFixup::" not in owned_cpp
+assert "struct AmplifierBackendOwner final : cirrus::platform::AmplifierHost" in service
+assert "platformContext" not in owned_cpp and "static_cast<Platform" not in backend
+assert "Operation::" not in service and "cs35l41::" not in service_cpp
+for name in ("initializeHardware", "loadFirmwareFlow", "verifyReadyFlow", "shutdownFlow",
+             "discoverFirmware", "applyCalibration", "monitorCS35L41", "sendMailboxCommand",
+             "unpackOTP", "applyErrataPatch", "stopDSP", "verifyIdleConfiguration"):
+    assert "CS35L41Driver::"+name+"(" in owned_cpp,name
+    assert "CirrusAudioFixup::"+name+"(" not in service_cpp,name
+    assert not re.search(r"\b"+name+r"\(",service),name
+for field in ("wmfwData","firmwareIdentityPending","dspAlive","playbackTransition","pllRecoveryAttempts"):
+    assert field not in service and field not in service_cpp,field
+assert "transferToAddress" not in service_cpp and "writeBE32" not in service_cpp
+print("PASS complete chip-owned state/firmware/silicon/runtime with generic host and register contracts")
 
 # Framework target: ordinary backends and provider-backed communication adapters
 # must not need a descriptor/model branch in manifest-backed discovery.
@@ -70,7 +72,7 @@ assert "findAmplifierById" not in configured_i2c
 assert "backend->model" in configured_i2c and "backend->identityMask" in configured_i2c
 assert "cirrus::transport::I2CController* mI2CController" in service
 assert "i2cControllerFactory" in (ROOT / "Platform/PlatformProfile.hpp").read_text()
-assert "definition->platformContract?static_cast" in service_cpp
+assert "definition->platformContract?static_cast" not in service_cpp
 print("PASS registry-owned discovery, generic amplifier host and replaceable I2C communication owner")
 
 composition = (ROOT / "Devices/AmplifierBackends.hpp").read_text()
@@ -78,3 +80,12 @@ assert "cs35l41::registerBackends(registry)" in composition
 assert "0x35a40" not in composition and "RegisterFormat" not in composition and "RegisterAccess" not in composition
 assert "kBackendDefinitions" in (ROOT / "Devices/CS35L41/Definition.hpp").read_text()
 print("PASS AMP-owned registration/framing/access metadata and shared module composition")
+
+# Communication ownership is a module contract as well as a transaction port.
+native_host=(ROOT / "Transport/NativeSPIHost.hpp").read_text()
+assert "mOwners" in native_host and "NativeSPIControllerFactory factory" in native_host
+assert "mIntel" not in native_host and "mAMD" not in native_host
+assert "IntelLPSSSPIController" not in native_host and "AMDSPIController" not in native_host
+assert 'evaluateInteger("_PSC"' not in native_host
+assert "spiControllerFactory" in (ROOT / "Platform/PlatformProfile.hpp").read_text()
+print("PASS generic native communication ownership/factory/PM with module-owned Intel/AMD policy")

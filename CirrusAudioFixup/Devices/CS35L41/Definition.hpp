@@ -17,11 +17,11 @@ constexpr core::RegisterMapConfig cs35l41RegisterFormat(bool spi) {
 }
 inline constexpr platform::AmplifierBackendDefinition kBackendDefinitions[] = {
     {"cs35l41-clsa0100", "CLSA0100", registers::kValDeviceId, 3, cs35l41RegisterFormat(false), cs35l41RegisterFormat(true), createBackend,
-     destroyBackend, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, kPlatformContract},
+     destroyBackend, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectBackend, validDebugPhase},
     {"cs35l41-clsa0101", "CLSA0101", registers::kValDeviceId, 3, cs35l41RegisterFormat(false), cs35l41RegisterFormat(true), createBackend,
-     destroyBackend, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, kPlatformContract},
+     destroyBackend, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectBackend, validDebugPhase},
     {"cs35l41-csc3551", "CSC3551", registers::kValDeviceId, 3, cs35l41RegisterFormat(false), cs35l41RegisterFormat(true), createBackend,
-     destroyBackend, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, kPlatformContract},
+     destroyBackend, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectBackend, validDebugPhase},
 };
 inline bool registerBackends(platform::AmplifierBackendRegistry& registry) {
     for (const auto& definition : kBackendDefinitions)

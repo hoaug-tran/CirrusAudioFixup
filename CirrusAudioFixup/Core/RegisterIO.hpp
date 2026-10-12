@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "Diagnostics/TraceTypes.hpp"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -24,9 +25,21 @@ public:
     virtual bool read(uint32_t reg, uint32_t* value) = 0;
 
     // Backends with precious/clear-on-read registers override diagnostic reads.
-    virtual bool readForDiagnostic(uint32_t reg,uint32_t* value){return read(reg,value);}
-    virtual bool bulkReadForDiagnostic(uint32_t reg,uint8_t* data,size_t length){return bulkRead(reg,data,length);}
+    virtual bool readForDiagnostic(uint32_t reg, uint32_t* value) { return read(reg, value); }
+    virtual bool bulkReadForDiagnostic(uint32_t reg, uint8_t* data, size_t length) { return bulkRead(reg, data, length); }
     virtual bool write(uint32_t reg, uint32_t value) = 0;
+    // Optional traced views keep operation provenance when an independent chip
+    // driver borrows the service port. Native transports need no tracing policy.
+    virtual bool readWithTrace(uint32_t reg, uint32_t* value, diagnostics::TraceSource source) {
+        return source == diagnostics::TRACE_DUMP ? readForDiagnostic(reg, value) : read(reg, value);
+    }
+    virtual bool writeWithTrace(uint32_t reg, uint32_t value, diagnostics::TraceSource) { return write(reg, value); }
+    virtual bool bulkReadWithTrace(uint32_t reg, uint8_t* data, size_t n, diagnostics::TraceSource source) {
+        return source == diagnostics::TRACE_DUMP ? bulkReadForDiagnostic(reg, data, n) : bulkRead(reg, data, n);
+    }
+    virtual bool bulkWriteWithTrace(uint32_t reg, const uint8_t* data, size_t n, diagnostics::TraceSource) {
+        return bulkWrite(reg, data, n);
+    }
 
     virtual bool updateBits(uint32_t reg, uint32_t mask, uint32_t value) = 0;
 

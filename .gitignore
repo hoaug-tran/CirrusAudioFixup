@@ -11,7 +11,6 @@ desktop.ini
 __pycache__/
 *.pyc
 .vscode/
-.clang-format
 .editorconfig
 /MacKernelSDK
 /Lilu

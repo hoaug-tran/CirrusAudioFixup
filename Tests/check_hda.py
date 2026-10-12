@@ -1,3 +1,4 @@
+from production_source_fixture import method
 from pathlib import Path
 import re
 import subprocess
@@ -7,8 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
 
 def function(name):
-    start = re.search(r'(?:bool|void) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
-    return SOURCE[start:SOURCE.index('\n}', start) + 2]
+    return method(SOURCE,'CirrusAudioFixup',name)
 
 preamble = r'''
 #include <cstdint>

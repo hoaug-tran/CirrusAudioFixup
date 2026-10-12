@@ -166,15 +166,15 @@ instruction addresses and limits of the disassembly findings.
 - Investigate the reported first microphone-activation pop using timestamped
   pre/post snapshots. Its origin is not established; do not raise gain or alter
   codec power sequencing solely from that report.
-- Split the CS35L41 firmware/monitor/playback lifecycle into a complete backend
-  before adding another model. Keep the current board profile disabled on
-  unverified wiring, boost circuits or speaker tuning.
+- The CS35L41 firmware/monitor/playback lifecycle now belongs to its independent
+  driver. Keep new board profiles disabled on unverified wiring, boost circuits
+  or speaker tuning.
 - Measure worst-case workloop occupancy and event latency on hardware. Runtime
   start/stop now use a state machine and elapsed-time deadlines. Firmware
   initialization, PM quiesce and the synchronous I2C provider remain possible
   sources of latency. See [runtime transition design](runtime_transition_design.md).
-- Consolidate the unused namespaced WMFWUploadPlan.hpp declarations with the active
-  WMFWUploader.hpp types before making that interface public.
+- WMFWUploadPlan.hpp now supplies namespaced production types through compatibility
+  aliases consumed by WMFWUploader.hpp; no parallel unused schema remains.
 
 Do not use READY_DSP or an HDA RUN bit as proof of audible output or measured
 speaker calibration. Preserve both the original failure and later cleanup results.
@@ -220,3 +220,28 @@ dSYM UUID and OpenCore vtable checks. The Release binary SHA-256 is
 The verified bundle was copied to EFI after backing up the working bundle under
 `build/LoadDebug/hardening/CirrusAudioFixup.before-hardening.kext`. The installed
 binary matches the built hash; reboot/load and hardware validation are pending.
+
+
+## Framework ownership completion — 2026-10-12
+
+Independent production CS35L41 ownership is complete: owned live state, lifecycle,
+firmware/calibration, silicon helpers and playback/monitoring are in its driver.
+The IOService uses generic host, register and lifecycle contracts. Legacy and
+manifest discovery consume registry-owned metadata. No software ownership TODO
+remains from the earlier bridge milestone. See the final section of
+[extensible driver](extensible_driver.md) for implementation and verification.
+
+Read-only inspection established matching loaded/archive custom VoodooI2C UUIDs
+and the addressed-transfer field offsets and dispatch behavior. Compile-time ABI
+assertions pin that layout. See [provider evidence](provider_abi_evidence.md).
+Source fork/revision, firmware redistribution licensing, native controller and
+new-AMP contracts, target speaker identity and physical validation remain open;
+these are evidence requirements, not completed support claims. No provider code
+or firmware bytes were imported and no bundle was deployed for this refactor.
+
+
+Native SPI controller ownership/PM has also moved to module factories and the
+common `NativeSPIControllerOwner` contract. Synthetic independent communication
+owners cover shared targets, release ordering, resume rollback and selected
+factory rejection without fallback. Existing Intel/AMD engines and their
+physical evidence gates are unchanged.

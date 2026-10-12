@@ -1,3 +1,5 @@
+from production_source_fixture import method
+from production_source_fixture import source as production_source, chip_state
 from pathlib import Path
 import re
 import subprocess
@@ -5,18 +7,19 @@ import tempfile
 from service_runtime_fixture import PRODUCTION_BACKEND,FIELDS,BIND,IOLIB
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp').read_text(encoding='utf-8')
+SOURCE = production_source()
 HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
 
 def function(name):
-    start = re.search(r'(?:bool|void|IOReturn) CirrusAudioFixup::' + name + r'\(', SOURCE).start()
-    return SOURCE[start:SOURCE.index('\n}', start) + 2]
+    return method(SOURCE,'CirrusAudioFixup',name)
 
 names = ['bringUpAmplifiers', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
-amp = HEADER[HEADER.index('struct AmplifierState :'):HEADER.index('struct FirmwareImage;')]
+amp = chip_state()
 
 preamble = r'''
 #include "Platform/AmplifierRuntime.hpp"
+#include "Platform/AmplifierHost.hpp"
+#include "Devices/CS35L41/State.hpp"
 #include <cassert>
 #include "Platform/PlatformProfile.hpp"
 #include <cstdint>
@@ -45,19 +48,6 @@ bool gCirrusDebug = false;
 preamble += '#include "Devices/CS35L41/CS35L41Backend.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
 mock = r'''
-namespace cirrus { namespace platform { namespace hda {
-struct HDAStreamState {
-    bool observed{false};
-    bool streamActive{false};
-    bool converterPrepared{false};
-    bool topologyLogged{false};
-    uint8_t lastDescriptor{0xFF};
-    uint8_t lastStreamTag{0};
-    uint16_t lastFormat{0};
-    uint32_t missCount{0};
-};
-}}}
-
 class CirrusAudioFixup {
 public:
     void suspendNativeTransport() {}

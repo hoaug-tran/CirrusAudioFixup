@@ -5,6 +5,18 @@
 	};
 	objectVersion = 56;
 	objects = {
+467C05493D3366377B8B15BF = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AMD/AMDNativeSPIBackend.hpp";sourceTree = "<group>";};
+93CA90577209D745B0DFA6F1 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "IntelNativeSPIBackend.hpp";sourceTree = "<group>";};
+832F05729C9FF63F811668B8 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerFactory.hpp";sourceTree = "<group>";};
+5C656742B026D7B45E031029 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerOwner.hpp";sourceTree = "<group>";};
+520E5B62235CBEFCA0A2F70F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIBackends.hpp";sourceTree = "<group>";};
+1EC86071840BB16D5072B690 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "TraceTypes.hpp";sourceTree = "<group>";};
+AA98911D63E8F93259AEBE62 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "FailureNames.hpp";sourceTree = "<group>";};
+53E69E8522D6B7A0D86DBC2F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "ResourceSchema.hpp";sourceTree = "<group>";};
+271EC16674AE80213B2E6986 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "DeviceState.hpp";sourceTree = "<group>";};
+4DC6A45D6438AA59D3DCAA71 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41Driver.hpp";sourceTree = "<group>";};
+ABCD61000000000000000001 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41Driver.cpp";sourceTree = "<group>";};
+ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD61000000000000000001;};
         AECFDA71B41745F7BD246B9B = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41Backend.cpp";sourceTree = "<group>";};
         8A9A66A1329F44D390D8B6B8 = {isa = PBXBuildFile;fileRef = AECFDA71B41745F7BD246B9B;};
         28FCF60355DB403CA8D56264 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "I2CRegisterBus.hpp";sourceTree = "<group>";};
@@ -141,6 +153,7 @@
 		DBD8EDACAC2E17BAD75D5AC6 = {
 			isa = PBXGroup;
 			children = (
+                53E69E8522D6B7A0D86DBC2F,
 				9725FD599984B55A6E6D7EDF,
 				A03263A4BA55A2FF07FC04D6,
 			);
@@ -186,6 +199,9 @@
 		5F18E3977620B1AFB2AEDD59 = {
 			isa = PBXGroup;
 			children = (
+                271EC16674AE80213B2E6986,
+                4DC6A45D6438AA59D3DCAA71,
+                ABCD61000000000000000001,
                 AECFDA71B41745F7BD246B9B,
                 CAFE51000000000000000002,
                 5471378CA53C475A884BD29A,
@@ -224,6 +240,8 @@
 		710A73C9D4A075C03072C322 = {
 			isa = PBXGroup;
 			children = (
+                1EC86071840BB16D5072B690,
+                AA98911D63E8F93259AEBE62,
 				F020B0C511BE7C8145385429,
 				E0605EA1EB37F708C4FAA377,
 			);
@@ -464,7 +482,8 @@
 		};
 		CAFE51000000000000000006 = {
             isa = PBXGroup;
-            children = (CAFE51000000000000000003, CAFE51000000000000000004, CAFE51000000000000000005);
+            children = (
+                93CA90577209D745B0DFA6F1,CAFE51000000000000000003, CAFE51000000000000000004, CAFE51000000000000000005);
             path = Intel;
             sourceTree = "<group>";
         };
@@ -475,6 +494,10 @@
 		D1C35C0E3D90A9BEF84D6F6D = {
 			isa = PBXGroup;
 			children = (
+                467C05493D3366377B8B15BF,
+                832F05729C9FF63F811668B8,
+                5C656742B026D7B45E031029,
+                520E5B62235CBEFCA0A2F70F,
                 28FCF60355DB403CA8D56264,
                 1FB54EE34BAE0041B4906A8F,
                 906368FCA2EB8FE548BD7705,
@@ -893,6 +916,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                ABCD61000000000000000002,
                 8A9A66A1329F44D390D8B6B8,
 				CAFE00000011 ,
 				CAFE00000012 ,

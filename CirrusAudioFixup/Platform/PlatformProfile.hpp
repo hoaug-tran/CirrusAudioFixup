@@ -7,17 +7,20 @@
 //
 
 #pragma once
+#include "Transport/NativeSPIControllerFactory.hpp"
 
 #include "Core/AudioTypes.hpp"
-#include "Platform/BoardConfiguration.hpp"
 #include "Firmware/FirmwareBundle.hpp"
+#include "Platform/BoardConfiguration.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 class IOService;
-namespace cirrus::transport { class I2CController; }
+namespace cirrus::transport {
+class I2CController;
+}
 
 namespace cirrus::platform {
 
@@ -40,9 +43,9 @@ struct InterruptWiring {
     const char* name;
     uint32_t providerIndex;
     bool acpiNative;
-    uint32_t gpioPin,gpioIRQ;
+    uint32_t gpioPin, gpioIRQ;
 };
-static constexpr InterruptWiring kLegionProtectionIRQ={"GPIO84_PROTECTION_WITH_POLLING_BACKUP",0,false,84,3};
+static constexpr InterruptWiring kLegionProtectionIRQ = {"GPIO84_PROTECTION_WITH_POLLING_BACKUP", 0, false, 84, 3};
 struct PlatformProfile {
     const char* name;
     const char* acpiHid;
@@ -60,6 +63,7 @@ struct PlatformProfile {
     // The provider owns PM; native MMIO/DMA owners require a separate PM/resource
     // contract and evidence before this entry may enable a board.
     transport::I2CController* (*i2cControllerFactory)(IOService*){nullptr};
+    transport::NativeSPIControllerFactory spiControllerFactory{nullptr};
 };
 
 // Only endpoints with verified routing and per-speaker tuning may initialize.
@@ -73,51 +77,49 @@ static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
 };
 
 static constexpr PlatformProfile kPlatformProfiles[] = {
-    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true,nullptr,nullptr,0,&kLegionProtectionIRQ},
+    {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true, nullptr,
+     nullptr, 0, &kLegionProtectionIRQ},
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
     {"generic-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
 };
 
-static constexpr PlatformProfile kSafeUnknownPlatform = {"unrecognized-fail-closed",
-                                                         nullptr,
-                                                         core::AmplifierModel::CS35L41,
-                                                         kCs35l41StereoEndpoints,
-                                                         2,
-                                                         nullptr,
-                                                         false};
+static constexpr PlatformProfile kSafeUnknownPlatform = {
+    "unrecognized-fail-closed", nullptr, core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false};
 
-inline const PlatformProfile* findPlatformProfileIn(const PlatformProfile* profiles,size_t count,const char* acpiHid,uint32_t subsystemId) {
-    if(!profiles || !acpiHid)return nullptr;
-    const PlatformProfile* fallback=nullptr;
-    for(size_t i=0;i<count;++i) {
-        const auto& profile=profiles[i];
-        if(!profile.acpiHid || strcmp(profile.acpiHid,acpiHid))continue;
-        if(profile.boardConfiguration) {
-            BoardIdentity actual{uint16_t(subsystemId>>16),uint16_t(subsystemId),acpiHid};
-            if(profile.boardConfiguration->permits(actual))return &profile;
-        } else if(!fallback)fallback=&profile;
+inline const PlatformProfile* findPlatformProfileIn(const PlatformProfile* profiles, size_t count, const char* acpiHid,
+                                                    uint32_t subsystemId) {
+    if (!profiles || !acpiHid)
+        return nullptr;
+    const PlatformProfile* fallback = nullptr;
+    for (size_t i = 0; i < count; ++i) {
+        const auto& profile = profiles[i];
+        if (!profile.acpiHid || strcmp(profile.acpiHid, acpiHid))
+            continue;
+        if (profile.boardConfiguration) {
+            BoardIdentity actual{uint16_t(subsystemId >> 16), uint16_t(subsystemId), acpiHid};
+            if (profile.boardConfiguration->permits(actual))
+                return &profile;
+        } else if (!fallback)
+            fallback = &profile;
     }
     return fallback;
 }
-inline const PlatformProfile* findPlatformProfile(const char* acpiHid,uint32_t subsystemId=0) {
-    return findPlatformProfileIn(kPlatformProfiles,sizeof(kPlatformProfiles)/sizeof(kPlatformProfiles[0]),acpiHid,subsystemId);
+inline const PlatformProfile* findPlatformProfile(const char* acpiHid, uint32_t subsystemId = 0) {
+    return findPlatformProfileIn(kPlatformProfiles, sizeof(kPlatformProfiles) / sizeof(kPlatformProfiles[0]), acpiHid, subsystemId);
 }
 
 // PCI subsystem identity is available before the codec publishes its SSID.
 // This allowlist authorizes reference reset wiring, not generic CS35L41 support.
 inline bool permitsHardwareInitialization(const PlatformProfile& profile, uint32_t pciSubsystemId) {
-    if(profile.boardConfiguration) {
-        BoardIdentity actual{uint16_t(pciSubsystemId>>16),uint16_t(pciSubsystemId),profile.acpiHid};
+    if (profile.boardConfiguration) {
+        BoardIdentity actual{uint16_t(pciSubsystemId >> 16), uint16_t(pciSubsystemId), profile.acpiHid};
         return profile.allowAutomaticInitialization && profile.boardConfiguration->permits(actual);
     }
-    return profile.allowAutomaticInitialization && profile.acpiHid &&
-           strcmp(profile.acpiHid, "CLSA0100") == 0 &&
+    return profile.allowAutomaticInitialization && profile.acpiHid && strcmp(profile.acpiHid, "CLSA0100") == 0 &&
            (pciSubsystemId == 0x17AA382B || pciSubsystemId == 0x17AA3847);
 }
 
-inline const PlatformProfile& defaultPlatformProfile() {
-    return kSafeUnknownPlatform;
-}
+inline const PlatformProfile& defaultPlatformProfile() { return kSafeUnknownPlatform; }
 
 // End of the board profile definitions.
 }

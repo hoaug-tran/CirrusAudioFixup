@@ -1,3 +1,24 @@
+# Corrected board-identity retry build — 2026-10-13
+
+The first test boot loaded the October 12 Debug bundle but stayed silent because
+HDA PCI identity was absent at early service attachment. The corrected Debug
+bundle from commit `e0b46ee` is now installed into the same EFI path.
+
+- Expected new UUID: `B0FF6C51-3DDC-3E0D-899B-03743BD14534`.
+- Executable SHA-256: `cd53c2f093a9e39f856706309bf8c9fb431f72d0448438cd500766005db7d990`.
+- Backup and preserved failing logs:
+  `build/EFIDeployment/20261013-013712-e0b46ee-Debug`.
+- Config, boot arguments, NVRAM and other kexts remain unchanged.
+- Debug now prints `Author: Tran Kinh Hoang (hoaugtr)` and distinguishes
+  BOARD_IDENTITY_WAIT / BOARD_IDENTITY_RESOLVED from policy rejection.
+- The current kernel still runs UUID `6670947A-557E-3938-8046-AFD36E3CC12A`;
+  the corrected bundle needs another boot. Audible output is not yet confirmed.
+
+Use this new UUID for the next boot checks. The October 12 deployment record below
+is historical. The new backup contains the silent test version; the original
+known-working pre-refactor bundle remains backed up in
+`build/EFIDeployment/20261012-235422-7a8c46e-Debug/CirrusAudioFixup.before.kext`.
+
 # Verified EFI Debug deployment — 2026-10-12
 
 The Debug bundle built from source commit `7a8c46e` is installed at

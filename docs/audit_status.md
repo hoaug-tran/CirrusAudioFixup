@@ -377,3 +377,14 @@ restored for Debug or `-cirrusdbg`; quiet Release remains free of routine banner
 Regression executes the production retry for identity at 21 s, no early reset,
 once-only bringup, unsupported identity, deadline, factory failure, preflight
 identity rejection and both transport discovery branches under ASan/UBSan.
+
+Full maintained suite and optional Windows audit passed, with final targeted
+attachment/bringup checks and normal/ASan/UBSan retry coverage. Debug/Release,
+formatter, metadata, vtables, x86_64 and matching dSYM UUID gates passed. Corrected
+Debug source commit `e0b46ee` is installed in EFI with exact file-hash verification,
+UUID `B0FF6C51-3DDC-3E0D-899B-03743BD14534`, executable SHA-256
+`cd53c2f093a9e39f856706309bf8c9fb431f72d0448438cd500766005db7d990`.
+Backup/config/failing logs are under
+`build/EFIDeployment/20261013-013712-e0b46ee-Debug`. Config/NVRAM are unchanged;
+no live reload or reboot occurred. Corrected-build output remains unverified until
+another boot. The original known-working backup is retained separately.

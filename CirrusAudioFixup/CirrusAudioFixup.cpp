@@ -86,6 +86,16 @@ static uint64_t playbackTimeMilliseconds() {
 
 bool CirrusAudioFixup::registerAmplifierBackends(){return cirrus::devices::registerBackends(mBackendRegistry);}
 
+// Controller construction is selected by verified platform data, independently
+// of the AMP definition. A selected factory failure must never choose another
+// provider ABI. The returned controller is owned until all ports are released.
+cirrus::transport::I2CController* CirrusAudioFixup::createI2CController() {
+    if(!mProvider)return nullptr;
+    if(mPlatformProfile && mPlatformProfile->i2cControllerFactory)
+        return mPlatformProfile->i2cControllerFactory(mProvider);
+    return new cirrus::transport::VoodooI2CController(mProvider);
+}
+
 bool CirrusAudioFixup::bindAmplifierRuntime() {
     if(mAmplifierRuntime.bound())return true;
     if(bootArgEnabled("-cirrusro"))return false;
@@ -95,7 +105,7 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
         int length=sizeof(mRuntimeControllerPath);
         if(!mProvider->getPath(mRuntimeControllerPath,&length,gIOServicePlane))return false;
         for(size_t i=0;i<mAmplifierCount;++i)mAmplifiers[i].endpoint={cirrus::core::BusTransportType::I2C,mRuntimeControllerPath,mAmplifiers[i].address};
-        mI2CController=new cirrus::transport::VoodooI2CController(mProvider);
+        if(!mI2CController)mI2CController=createI2CController();
         if(!mI2CController)return false;
     }
     if(mPlatformProfile->boardConfiguration)mRuntimeBoard=*mPlatformProfile->boardConfiguration;
@@ -128,6 +138,11 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
             if(!mI2CMaps[i]){ret=kIOReturnNoMemory;break;}
             amp.registerIO=mI2CMaps[i];amp.endpointIndex=uint8_t(i);
         }
+        // Only the definition requesting this legacy bridge receives its typed
+        // context. Independent backends always receive the common host services.
+        if(definition->platformContract && strcmp(definition->platformContract,cirrus::devices::cs35l41::kPlatformContract)) {
+            ret=kIOReturnUnsupported;break;
+        }
         mBackendOwners[i].bind(this,&amp);
         mRuntimePorts[i]=new ServiceRegisterIO(this,amp);
         if(!mRuntimePorts[i]){ret=kIOReturnNoMemory;break;}
@@ -135,7 +150,9 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
             if(index>=mPlatformProfile->firmwareBundleCount){ret=kIOReturnNotPermitted;break;}
             mRuntimeFirmware[i]=mPlatformProfile->firmwareBundles[index];
         } else mRuntimeFirmware[i]={{binding.siliconId,actual.subsystemVendor,actual.subsystemDevice,binding.speakerId,binding.channelIndex,binding.tuningResource},cirrus::firmware::FirmwareFormat::Deferred};
-        contexts[i]=new cirrus::platform::AmplifierBackendContext{*mRuntimePorts[i],amp.endpoint,mRuntimeBoard,actual,index,mRuntimeFirmware[i],mPlatformProfile->acpiHid,static_cast<cirrus::devices::cs35l41::Platform*>(&mBackendOwners[i])};
+        contexts[i]=new cirrus::platform::AmplifierBackendContext{*mRuntimePorts[i],amp.endpoint,mRuntimeBoard,actual,index,mRuntimeFirmware[i],mPlatformProfile->acpiHid,
+            definition->platformContract?static_cast<cirrus::devices::cs35l41::Platform*>(&mBackendOwners[i]):nullptr,
+            definition->platformContract,static_cast<cirrus::platform::AmplifierHost*>(&mBackendOwners[i])};
         if(!contexts[i]){ret=kIOReturnNoMemory;break;}
     }
     if(ret==kIOReturnSuccess) {
@@ -374,12 +391,22 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         setProperty(key, uint64_t(endpoint.spiMode), 32);
         auto* io = mNativeSPI.registers(i);
         uint32_t identityRegister=0,identityMask=0xffffffffU;
+        const cirrus::platform::AmplifierBackendDefinition* definition=nullptr;
+        const cirrus::platform::AmplifierBinding* configuredBinding=nullptr;
         if(mPlatformProfile->boardConfiguration) {
             const auto& board=*mPlatformProfile->boardConfiguration;
             for(size_t j=0;j<board.count;++j)if(endpoint.sameDevice(board.amplifiers[j].endpoint)) {
-                const auto* backend=mBackendRegistry.find(mPlatformProfile->acpiHid,board.amplifiers[j].siliconId,cirrus::core::BusTransportType::SPI);
-                if(backend){identityRegister=backend->identityRegister;identityMask=backend->identityMask;}
+                configuredBinding=&board.amplifiers[j];
+                const char* hid=configuredBinding->acpiHid?configuredBinding->acpiHid:mPlatformProfile->acpiHid;
+                if(!strcmp(hid,mPlatformProfile->acpiHid))
+                    definition=mBackendRegistry.find(hid,configuredBinding->siliconId,cirrus::core::BusTransportType::SPI);
+                break;
             }
+            if(!definition) {
+                CIRRUS_ERR("SPI endpoint has no matching registered backend: endpoint=%lu controller=%s CS=%u; no probe",i,endpoint.controllerPath,endpoint.spiChipSelect);
+                continue;
+            }
+            identityRegister=definition->identityRegister;identityMask=definition->identityMask;
         }
         uint32_t id=0;
         const bool readable=io && io->read(identityRegister,&id);
@@ -392,9 +419,12 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
             CIRRUS_ERR("SPI identity read failed: endpoint=%lu controller=%s CS=%u reg=0x%08X ret=0x%08X",i,endpoint.controllerPath,endpoint.spiChipSelect,identityRegister,io?io->lastError():kIOReturnNotReady);
             continue;
         }
-        const auto* descriptor = cirrus::core::findAmplifierById(id);
-        if(!descriptor) {
-            CIRRUS_ERR("SPI silicon unsupported: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization",i,endpoint.controllerPath,endpoint.spiChipSelect,id);
+        // Manifest-backed discovery uses the registered backend's identity and
+        // format. The legacy descriptor scan is discovery-only when no manifest
+        // exists; it cannot authorize an unverified board or a new backend.
+        const auto* descriptor = configuredBinding?nullptr:cirrus::core::findAmplifierById(id);
+        if(configuredBinding ? id!=configuredBinding->siliconId : !descriptor) {
+            CIRRUS_ERR("SPI silicon unsupported/mismatched: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization",i,endpoint.controllerPath,endpoint.spiChipSelect,id);
             continue;
         }
         auto& amp = mAmplifiers[mAmplifierCount++];
@@ -406,7 +436,7 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         amp.registerIO = io;
         amp.endpoint = endpoint;
         amp.endpointIndex = uint8_t(i);
-        amp.model = descriptor->model;
+        amp.model = definition?definition->model:descriptor->model;
         amp.present = true;
         amp.deviceId = id;
         if(mPlatformProfile->boardConfiguration) {
@@ -1413,17 +1443,20 @@ void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* send
 // An ACPI HID describes the provider, not the amplifier silicon. Check DEVID
 // against the registry before using the endpoint's channel and tuning.
 size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
+    // Live backends borrow endpoint state/ports. Rediscovery must not replace
+    // them; an unbound rescan releases old discovery ports before opening anew.
+    if(mAmplifierRuntime.bound())return mAmplifierCount;
+    teardownAmplifierRuntime();
     mAmplifierCount=0;
     if(!mPlatformAuthorized || !mPlatformProfile || !mPlatformProfile->boardConfiguration)return 0;
     const auto& board=*mPlatformProfile->boardConfiguration;
     int length=sizeof(mRuntimeControllerPath);
     if(!mProvider->getPath(mRuntimeControllerPath,&length,gIOServicePlane))return 0;
     const bool readOnly=bootArgEnabled("-cirrusro");
-    if(readOnly) {
-        mI2CController=new cirrus::transport::VoodooI2CController(mProvider);
-        if(!mI2CController)return 0;
-    }
-    cirrus::transport::VoodooI2CController controller(mProvider);
+    // Retain the same communication owner from read-only identity discovery
+    // through runtime binding; do not double-open a provider/controller.
+    if(!mI2CController)mI2CController=createI2CController();
+    if(!mI2CController)return 0;
     for(size_t i=0;i<board.count && mAmplifierCount<kMaxAmplifiers;++i) {
         const auto& binding=board.amplifiers[i];
         const auto& endpoint=binding.endpoint;
@@ -1437,7 +1470,7 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         if(!backend || strcmp(hid,mPlatformProfile->acpiHid)) {
             CIRRUS_ERR("I2C backend unsupported: endpoint=%lu hid=%s silicon=0x%08X",i,hid,binding.siliconId);continue;
         }
-        cirrus::transport::I2CRegisterBus bus(&controller,{endpoint.i2cAddress,endpoint.tenBitAddress});
+        cirrus::transport::I2CRegisterBus bus(mI2CController,{endpoint.i2cAddress,endpoint.tenBitAddress});
         cirrus::core::RegisterMap map(bus,*backend->format(cirrus::core::BusTransportType::I2C),false);
         uint32_t id=0;
         bool readable=map.read(backend->identityRegister,&id);
@@ -1447,8 +1480,6 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         if(!readable || (id&backend->identityMask)!=binding.siliconId) {
             CIRRUS_ERR("I2C identity rejected: endpoint=%lu controller=%s address=0x%X actual=0x%08X expected=0x%08X mask=0x%08X ret=0x%08X",i,endpoint.controllerPath,unsigned(endpoint.i2cAddress),id,binding.siliconId,backend->identityMask,map.lastError());continue;
         }
-        const auto* descriptor=cirrus::core::findAmplifierById(binding.siliconId);
-        if(!descriptor){CIRRUS_ERR("I2C silicon unregistered: endpoint=%lu DEVID=0x%08X",i,binding.siliconId);continue;}
         auto& amp=mAmplifiers[mAmplifierCount];amp={};
         snprintf(amp.endpointLabel,sizeof(amp.endpointLabel),"i2c%lu",i);amp.name=amp.endpointLabel;
         amp.endpoint=endpoint;amp.address=uint8_t(endpoint.i2cAddress);amp.endpointIndex=uint8_t(mAmplifierCount);
@@ -1460,7 +1491,7 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
             if(!mI2CMaps[mAmplifierCount])break;
             amp.registerIO=mI2CMaps[mAmplifierCount];
         }
-        amp.model=descriptor->model;amp.deviceId=binding.siliconId;amp.present=true;++mAmplifierCount;
+        amp.model=backend->model;amp.deviceId=binding.siliconId;amp.present=true;++mAmplifierCount;
     }
     setProperty("Cirrus_Detected_Amplifiers",uint64_t(mAmplifierCount),32);
     setProperty("Cirrus_Amp_Discovery",mAmplifierCount?"DETECTED_CONFIGURED_I2C":"NONE");

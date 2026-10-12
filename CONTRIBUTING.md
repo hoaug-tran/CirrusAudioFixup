@@ -91,6 +91,24 @@ registers as universal. `AmplifierModel` describes speaker AMP silicon, distinct
 from the Realtek HDA codec. `AmplifierDevice` retains register-level helpers;
 shipping lifecycle ownership lives in `AmplifierRuntime` and backend hooks.
 
+### Framework target
+
+Adding a register-controlled AMP should require its `Devices/<Model>` backend,
+registry definition and verified board/firmware data. It should not require a
+silicon branch, new register sequence or descriptor allowlist in the service.
+Each backend owns its implementation and state; `AmplifierHost` supplies common
+board authorization and diagnostic publication. Backend-specific private contexts
+must declare their contract explicitly. The CS35L41 service bridge is transitional
+migration scaffolding, not the template for a new AMP.
+
+A provider-backed communication adapter implements the existing controller
+transaction contract and is selected by verified platform data. AMP code consumes
+`RegisterIO`; it must not learn provider ABI, CPU vendor or bus framing. Factory
+failure does not silently select another communication implementation. Native
+MMIO/DMA owners still need resource, arbitration and PM contracts; SoundWire needs
+its separate stream/controller subsystem. Host fixture extensions are not shipping
+hardware support.
+
 IOKit entry classes keep their established globally scoped names because
 `OSMetaClass`, personalities and loader symbols use those identities. Keep
 boot arguments, IORegistry property keys and the custom VoodooI2C request ABI

@@ -16,6 +16,9 @@
 #include <stdint.h>
 #include <string.h>
 
+class IOService;
+namespace cirrus::transport { class I2CController; }
+
 namespace cirrus::platform {
 
 struct AmplifierEndpoint {
@@ -52,6 +55,11 @@ struct PlatformProfile {
     const firmware::FirmwareBundle* firmwareBundles{nullptr};
     size_t firmwareBundleCount{0};
     const InterruptWiring* interruptWiring{nullptr};
+    // Optional provider-backed communication adapter. Returns an owned object
+    // implementing the same combined-read/bounds contract as the default ABI.
+    // The provider owns PM; native MMIO/DMA owners require a separate PM/resource
+    // contract and evidence before this entry may enable a board.
+    transport::I2CController* (*i2cControllerFactory)(IOService*){nullptr};
 };
 
 // Only endpoints with verified routing and per-speaker tuning may initialize.

@@ -9,6 +9,7 @@
 #include "Firmware/FirmwareBundle.hpp"
 #include <string.h>
 namespace cirrus::platform {
+class AmplifierHost;
 struct AmplifierBackendContext {
     core::RegisterIO& io;
     core::BusEndpoint endpoint;
@@ -18,6 +19,10 @@ struct AmplifierBackendContext {
     const firmware::FirmwareBundle& firmware;
     const char* actualDeviceHid{nullptr};
     void* platformContext{nullptr};
+    // Optional backend-specific bridge, negotiated by its definition. New
+    // independent backends use host/io/board/firmware without a service cast.
+    const char* platformContract{nullptr};
+    AmplifierHost* host{nullptr};
 };
 struct AmplifierBackendDefinition {
     const char* name;
@@ -30,6 +35,10 @@ struct AmplifierBackendDefinition {
     void (*destroy)(core::AmplifierLifecycleHooks*);
     bool supportsDeferredFirmware{false};
     uint32_t identityRegister{0},identityMask{0xffffffffU};
+    // Optional diagnostic/legacy model tag. Registration plus read-only identity
+    // determines discovery; a central descriptor enum must not admit/reject it.
+    core::AmplifierModel model{core::AmplifierModel::Unknown};
+    const char* platformContract{nullptr};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if(bus==core::BusTransportType::I2C && (transportMask&1))return &i2cFormat;
         if(bus==core::BusTransportType::SPI && (transportMask&2))return &spiFormat;
@@ -42,7 +51,7 @@ public:
     bool add(const AmplifierBackendDefinition& definition) {
         if(mCount==kCapacity || !definition.name || !*definition.name || !definition.acpiHid ||
             !*definition.acpiHid || !definition.siliconId || !definition.transportMask ||
-            (definition.transportMask&~3U) || !definition.identityMask || !definition.create || !definition.destroy ||
+            (definition.transportMask&~3U) || (definition.platformContract && !*definition.platformContract) || !definition.identityMask || !definition.create || !definition.destroy ||
             ((definition.transportMask&1) && (!core::RegisterMap::isValidConfig(definition.i2cFormat) || !definition.i2cFormat.readable || !definition.i2cFormat.writable)) ||
             ((definition.transportMask&2) && (!core::RegisterMap::isValidConfig(definition.spiFormat) || !definition.spiFormat.readable || !definition.spiFormat.writable)))return false;
         for(size_t i=0;i<mCount;++i) {
@@ -75,6 +84,8 @@ public:
         if(binding.acpiHid && (!context.actualDeviceHid || strcmp(deviceHid,context.actualDeviceHid)))return nullptr;
         if(context.actualDeviceHid && strcmp(deviceHid,context.actualDeviceHid))return nullptr;
         const auto* definition=find(deviceHid,binding.siliconId,context.endpoint.transport);
+        if(definition && definition->platformContract &&
+            (!context.platformContext || !context.platformContract || strcmp(definition->platformContract,context.platformContract)))return nullptr;
         if(!definition || (context.firmware.format==firmware::FirmwareFormat::Deferred && !definition->supportsDeferredFirmware))return nullptr;
         auto* instance=definition->create(context);
         if(instance)selected=definition;

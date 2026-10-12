@@ -175,6 +175,7 @@ private:
     bool bindAmplifierRuntime();
     void teardownAmplifierRuntime();
     bool registerAmplifierBackends();
+    cirrus::transport::I2CController* createI2CController();
 
     void runBackgroundMonitor();
     bool retryFirmwareIdentity();
@@ -260,7 +261,7 @@ private:
     cirrus::platform::AmplifierBackendRegistry mBackendRegistry;
     cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
     cirrus::core::RegisterIO* mRuntimePorts[kMaxAmplifiers]{};
-    cirrus::transport::VoodooI2CController* mI2CController{nullptr};
+    cirrus::transport::I2CController* mI2CController{nullptr};
     cirrus::transport::I2CRegisterBus* mI2CBuses[kMaxAmplifiers]{};
     cirrus::core::RegisterMap* mI2CMaps[kMaxAmplifiers]{};
     AmplifierBackendOwner mBackendOwners[kMaxAmplifiers]{};

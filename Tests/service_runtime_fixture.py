@@ -38,7 +38,7 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
         fixtureBindings[i]={amp.endpoint,0x35a40,uint32_t(amp.channel),1,amp.name,"CLSA0100",2};
         fixtureFirmware[i]={{0x35a40,0x17aa,0x382b,1,uint32_t(amp.channel),amp.name},cirrus::firmware::FirmwareFormat::Deferred};
         fixtureOwners[i].bind(this,&amp);fixturePorts[i]=new ServiceRegisterIO(this,amp);
-        contexts[i]=new cirrus::platform::AmplifierBackendContext{*fixturePorts[i],amp.endpoint,fixtureBoard,fixtureBoard.identity,i,fixtureFirmware[i],"CLSA0100",static_cast<cirrus::devices::cs35l41::Platform*>(&fixtureOwners[i])};
+        contexts[i]=new cirrus::platform::AmplifierBackendContext{*fixturePorts[i],amp.endpoint,fixtureBoard,fixtureBoard.identity,i,fixtureFirmware[i],"CLSA0100",static_cast<cirrus::devices::cs35l41::Platform*>(&fixtureOwners[i]),cirrus::devices::cs35l41::kPlatformContract,static_cast<cirrus::platform::AmplifierHost*>(&fixtureOwners[i])};
     }
     auto result=mAmplifierRuntime.bind(fixtureRegistry,contexts,count);
     for(auto* context:contexts)delete context;

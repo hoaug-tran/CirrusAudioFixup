@@ -9,6 +9,7 @@
 #include "Core/AudioTypes.hpp"
 #include "Devices/CS35L41/State.hpp"
 #include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierHost.hpp"
 
 namespace cirrus::devices::cs35l41 {
 
@@ -25,15 +26,16 @@ enum class Operation {
     VerifyDSP
 };
 
-class Platform {
+inline constexpr const char* kPlatformContract = "cs35l41-service-bridge-v1";
+
+// Temporary silicon helper bridge; ordinary backends need only AmplifierHost.
+class Platform : public platform::AmplifierHost {
 public:
     virtual ~Platform() = default;
     virtual State* state() const = 0;
     virtual core::BusEndpoint endpoint() const = 0;
     virtual core::AudioChannel channel() const = 0;
     virtual core::AmplifierModel model() const = 0;
-    virtual bool authorized() const = 0;
-    virtual const char* name() const = 0;
     virtual bool perform(Operation) = 0;
     virtual bool bypassDSP() const = 0;
     virtual bool stopAfterDebugStage(const char*) = 0;
@@ -41,10 +43,6 @@ public:
     virtual void discoverFirmware() = 0;
     virtual void initializeFirmware() = 0;
     virtual void logASPSnapshot() = 0;
-    virtual void setDiagnosticStage(diagnostics::DriverStage) = 0;
-    virtual void markDiagnosticSuccess(diagnostics::DriverStage) = 0;
-    virtual void recordDiagnosticFailure(diagnostics::DiagnosticFailure, uint32_t reg = 0, uint32_t expected = 0, uint32_t actual = 0,
-                                         IOReturn result = kIOReturnSuccess) = 0;
     virtual IOReturn commitPlayback() = 0;
     virtual bool stopPlayback() = 0;
     virtual void captureDiagnostics() = 0;

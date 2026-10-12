@@ -308,3 +308,76 @@ remain to migrate. Independent allocation must preserve diagnostic snapshots and
 borrowed firmware/register/platform lifetimes across teardown/rebind before that
 ownership milestone can be marked complete. Hardware/provider/license evidence
 gates remain unchanged.
+
+## Framework extension target and service integration (2026-10-12)
+
+The target is one shared owner/runtime with independently implemented
+communication and AMP backends. An ordinary AMP extension supplies its backend,
+registry definition and verified board/firmware data, without adding a silicon
+branch to the service. Communication adapters implement the existing controller
+transaction interface; AMP code consumes `RegisterIO`. This target is now an
+explicit contributor rule in `CONTRIBUTING.md`.
+
+### Implemented extension boundaries
+
+- CS35L41 registration, identity, access policy and bus framing now live in its
+  own `Devices/CS35L41/Definition.hpp`. `Devices/AmplifierBackends.hpp` composes
+  module registration without defining silicon data. A new AMP follows that
+  same self-contained module shape.
+- Manifest-backed I2C/SPI discovery uses the registry definition's identity
+  register, mask, format and optional model tag. It does not require another
+  allowlist entry in `Core/AmplifierDescriptors.hpp`. A successful read must match
+  the manifest's expected silicon; a missing registration or mismatched ID rejects
+  that endpoint. Unconfigured legacy scans retain their narrow read-only behavior.
+- `Platform/AmplifierHost.hpp` supplies common authorization, endpoint labels and
+  diagnostic publication without chip/firmware-format dependencies. Every service
+  context receives this borrowed host. Backends retain their own register, firmware,
+  lifecycle and playback implementations.
+- A backend-specific private context requires a declared `platformContract`.
+  Independent definitions request none and receive a null private context from
+  the service. CS35L41 explicitly requests its temporary service bridge; registry
+  and factory reject absent/wrong contracts before casting it. Unknown requested
+  contracts fail instead of receiving the CS35L41 bridge by default.
+- `PlatformProfile::i2cControllerFactory` permits an independently implemented
+  provider-backed communication adapter. The service owns the abstract
+  `I2CController` rather than the Voodoo concrete type and retains one controller
+  from identity discovery through binding. A selected factory failure does not
+  fall back to another provider ABI. The default custom Voodoo adapter is retained.
+- Rediscovery cannot replace ports/state while a runtime is bound. An unbound
+  read-only rescan releases earlier discovery resources before constructing new
+  ones. Controller release follows backend/port/map/bus release.
+
+### Concrete extension evidence
+
+The production service discovery/binder is exercised with fixture AMP IDs
+`0x1111`, `0x2222` and `0x3333`, all absent from the descriptor table. SPI fixtures
+use different framing and reversed resource order. The I2C fixture uses a masked
+vendor identity at register `0x10`, one-byte addresses and a completely independent
+`I2CController` implementation. Their factories consume the common host, perform
+initialization/firmware/playback through their own hooks, publish diagnostics and
+complete suspend/resume/teardown without invoking a CS35L41 helper. Tests also
+cover missing registration, identity mismatch, factory failure, stable controller
+ownership while bound and repeated read-only discovery under ASan/UBSan.
+
+These fixture IDs/controllers are not registered in the shipping device table.
+All 27 maintained suites plus the optional Windows audit, Debug/Release builds,
+source/Xcode gates, metadata/plists, x86_64, vtables and binary/dSYM UUIDs pass.
+The host/CS35L41 files pass the explicit formatter dry-run. No bundle is installed
+or loaded by this change.
+
+### Remaining work toward the target
+
+The production CS35L41 implementation still borrows service-allocated chip state
+and delegates silicon/firmware/monitoring helpers through its explicitly marked
+bridge. Moving those responsibilities into the AMP backend and replacing the
+service's inherited CS35L41 storage with generic endpoint/status data remain open.
+Generic deferred-firmware/resource/route capabilities must also be completed where
+an independent production backend needs them; existing CS-specific retry behavior
+is not a universal contract.
+
+The optional I2C factory is scoped to provider-backed adapters whose provider owns
+PM. It does not establish a native MMIO/DMA power/arbitration/cancellation owner.
+Native I2C/MP2 and new silicon still need their specifications, provider/resource
+contracts, firmware provenance/licenses and board validation. SoundWire requires
+its own stream/controller subsystem. Preserve evidence gates while migrating the
+current AMP to the same independent contract expected of future implementations.

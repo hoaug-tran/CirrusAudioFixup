@@ -158,11 +158,12 @@ struct OSString {
 };
 struct Timer { unsigned scheduled=0,cancelled=0,lastDelay=0; void setTimeoutMS(unsigned delay) { ++scheduled; lastDelay=delay; } void cancelTimeout() { ++cancelled; } };
 struct VoodooI2CAddressedTransfer { UInt8 address; UInt8* writeBuffer; UInt16 writeLength; UInt8* readBuffer; UInt16 readLength; };
-struct Provider {
+class IOService {
+public:
     unsigned calls=0;
     int callPlatformFunction(const char*,bool,void*,void*,void*,void*) { ++calls; return 0; }
 };
-using IOService=Provider;
+using Provider=IOService;
 namespace cirrus::transport {
 class VoodooI2CProvider {
     IOService* provider;

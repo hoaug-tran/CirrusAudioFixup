@@ -9,6 +9,7 @@ CPP = r'''
 #include <cassert>
 #include <vector>
 #include "Devices/CS35L41/CS35L41Backend.hpp"
+#include "Devices/AmplifierBackends.hpp"
 #include "Devices/CS35L41/Hardware/Registers.hpp"
 #include "Devices/CS35L41/DSPControl.hpp"
 #include "Platform/AmplifierRuntime.hpp"
@@ -94,14 +95,14 @@ struct Board {
         : binding{h.device,registers::kValDeviceId,0,1,"test-tuning","CLSA0100",2},
           manifest{{0x17aa,0x382b,"CLSA0100"},&binding,1,true,true,true},
           firmware{{registers::kValDeviceId,0x17aa,0x382b,1,0,"test-tuning"},firmware::FirmwareFormat::Deferred},
-          context{h.port,h.device,manifest,manifest.identity,0,firmware,"CLSA0100",static_cast<Platform*>(&h)} {h.chip.present=true;}
+          context{h.port,h.device,manifest,manifest.identity,0,firmware,"CLSA0100",static_cast<Platform*>(&h),kPlatformContract,static_cast<platform::AmplifierHost*>(&h)} {h.chip.present=true;}
 };
 
 bool access(uint32_t) {return true;}
 const platform::AmplifierBackendDefinition& definition() {
     static const auto d=[] {
         core::RegisterMapConfig f;f.readable=access;f.writable=access;
-        return platform::AmplifierBackendDefinition{"cs35l41-test","CLSA0100",registers::kValDeviceId,1,f,{},createBackend,destroyBackend,true};
+        return platform::AmplifierBackendDefinition{"cs35l41-test","CLSA0100",registers::kValDeviceId,1,f,{},createBackend,destroyBackend,true,0,0xffffffffU,core::AmplifierModel::CS35L41,kPlatformContract};
     }();
     return d;
 }
@@ -148,7 +149,7 @@ int main() {
     }
 
     // A rejected factory must neither probe nor mutate chip state.
-    for(unsigned mode=0;mode<9;++mode) {
+    for(unsigned mode=0;mode<12;++mode) {
         Host h;Board b(h);h.chip.finalCrc=0xabcdef;
         switch(mode) {
         case 0:b.context.platformContext=nullptr;break;
@@ -160,8 +161,14 @@ int main() {
         case 6:b.context.bindingIndex=1;break;
         case 7:b.manifest.amplifiers=nullptr;break;
         case 8:b.binding.siliconId=0x56;break;
+        case 9:b.context.host=nullptr;break;
+        case 10:b.context.platformContract="other-chip";break;
+        case 11:b.context.platformContract=nullptr;break;
         }
         assert(createBackend(b.context)==nullptr);
+        platform::AmplifierBackendRegistry rejectedRegistry;assert(rejectedRegistry.add(definition()));
+        const platform::AmplifierBackendDefinition* selected=nullptr;
+        assert(!rejectedRegistry.create(b.context,selected)&&!selected);
         assert(!h.port.reads && !h.port.writes && !h.boots && h.chip.finalCrc==0xabcdef);
     }
     // Transport failure differs from successful read of an unknown device.
@@ -178,6 +185,18 @@ int main() {
         auto* backend=createBackend(b.context);assert(backend);
         assert(backend->identify()==kIOReturnNotFound && h.identityActual==0x56);
         assert(!h.port.writes && !h.boots);destroyBackend(backend);
+    }
+    {
+        platform::AmplifierBackendRegistry shipping;assert(devices::registerBackends(shipping));
+        for(const char* hid:{"CLSA0100","CLSA0101","CSC3551"}) {
+            for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}) {
+                const auto* d=shipping.find(hid,registers::kValDeviceId,bus);assert(d);
+                assert(d->model==core::AmplifierModel::CS35L41 && !strcmp(d->platformContract,kPlatformContract));
+                assert(d->format(bus)->addressBytes==4 && d->format(bus)->valueBytes==4);
+                assert(d->format(bus)->paddingBytes==(bus==core::BusTransportType::SPI?2:0));
+            }
+        }
+        assert(!shipping.find("TESTAMP",0x3333,core::BusTransportType::I2C));
     }
     platform::AmplifierBackendRegistry registry;assert(registry.add(definition()));
     {

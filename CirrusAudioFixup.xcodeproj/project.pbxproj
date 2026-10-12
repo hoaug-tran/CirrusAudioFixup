@@ -171,6 +171,18 @@
 			path = "DSPControl.hpp";
 			sourceTree = "<group>";
 		};
+		6BC1167998E24F78B83A3E27 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "AmplifierHost.hpp";
+			sourceTree = "<group>";
+		};
+		DF8B927CD2204E1381A49C5E = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = "Definition.hpp";
+			sourceTree = "<group>";
+		};
 		5F18E3977620B1AFB2AEDD59 = {
 			isa = PBXGroup;
 			children = (
@@ -182,6 +194,7 @@
 				51BA20FB9CD5C512B4FAB8A2,
 				4F64AC1335631EEC183C8179,
 				EE9A377635384868BC5B5821,
+				DF8B927CD2204E1381A49C5E,
 				B1CA410D7F1B4C648A2DD7F6,
 			);
 			path = "CS35L41";
@@ -299,6 +312,7 @@
 		75BA5000D0C47D62AB5DD68C = {
 			isa = PBXGroup;
 			children = (
+				6BC1167998E24F78B83A3E27,
                 B71011000000000000000001,
                 A6ACBB061A579B59A193BA93,
                 0AE7D65E29CF3F41FCDAB433,

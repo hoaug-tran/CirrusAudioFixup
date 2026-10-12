@@ -22,18 +22,18 @@ public:
             const auto error = mContext.io.lastError();
             const IOReturn result = error == kIOReturnSuccess || error == -1 ? kIOReturnNotReady : error;
             mAmplifier.playbackFaulted = true;
-            mPlatform.recordDiagnosticFailure(DIAG_DEVICE_ID, registers::kRegDeviceId, registers::kValDeviceId, id, result);
+            mContext.host->recordDiagnosticFailure(DIAG_DEVICE_ID, registers::kRegDeviceId, registers::kValDeviceId, id, result);
             return result;
         }
         if (id != registers::kValDeviceId) {
             mAmplifier.playbackFaulted = true;
-            mPlatform.recordDiagnosticFailure(DIAG_DEVICE_ID, registers::kRegDeviceId, registers::kValDeviceId, id, kIOReturnNotFound);
+            mContext.host->recordDiagnosticFailure(DIAG_DEVICE_ID, registers::kRegDeviceId, registers::kValDeviceId, id, kIOReturnNotFound);
             return kIOReturnNotFound;
         }
         return kIOReturnSuccess;
     }
     IOReturn authorizeBoard() override {
-        return mPlatform.authorized() && mContext.board.permits(mContext.actualBoard) &&
+        return mContext.host->authorized() && mContext.board.permits(mContext.actualBoard) &&
                        (mPlatform.channel() == cirrus::core::AudioChannel::Left || mPlatform.channel() == cirrus::core::AudioChannel::Right)
                    ? kIOReturnSuccess
                    : kIOReturnNotPermitted;
@@ -135,69 +135,69 @@ IOReturn Backend::initializeHardware() {
     amp.haloStateRegister = amp.haloHeartbeatRegister = 0;
     amp.diagnosticControlCount = amp.firmwareIdVersion = 0;
     if (mPlatform.channel() != cirrus::core::AudioChannel::Left && mPlatform.channel() != cirrus::core::AudioChannel::Right) {
-        mPlatform.recordDiagnosticFailure(DIAG_DEVICE_ID);
+        mContext.host->recordDiagnosticFailure(DIAG_DEVICE_ID);
         return kIOReturnNotPermitted;
     }
     if (stopAt("probe"))
         return kIOReturnSuccess;
 
-    mPlatform.setDiagnosticStage(STAGE_PROBE);
+    mContext.host->setDiagnosticStage(STAGE_PROBE);
 
     if (!mPlatform.perform(Operation::InitializeCodec)) {
-        CIRRUS_ERR("failed to initialize codec for %s", mPlatform.name());
+        CIRRUS_ERR("failed to initialize codec for %s", mContext.host->name());
         if (amp.diagnostic.latestFailure == DIAG_OK)
-            mPlatform.recordDiagnosticFailure(DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
-                                              cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
+            mContext.host->recordDiagnosticFailure(DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
+                                                   cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_OTP_BOOT);
+    mContext.host->markDiagnosticSuccess(STAGE_OTP_BOOT);
     if (stopAt("otp"))
         return kIOReturnSuccess;
 
-    mPlatform.setDiagnosticStage(STAGE_ERRATA);
+    mContext.host->setDiagnosticStage(STAGE_ERRATA);
     if (!mPlatform.perform(Operation::ApplyErrata)) {
-        CIRRUS_ERR("failed to apply hardware errata for %s", mPlatform.name());
-        mPlatform.recordDiagnosticFailure(DIAG_ERRATA);
+        CIRRUS_ERR("failed to apply hardware errata for %s", mContext.host->name());
+        mContext.host->recordDiagnosticFailure(DIAG_ERRATA);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_ERRATA);
+    mContext.host->markDiagnosticSuccess(STAGE_ERRATA);
     if (stopAt("errata"))
         return kIOReturnSuccess;
 
-    mPlatform.setDiagnosticStage(STAGE_CLOCK);
+    mContext.host->setDiagnosticStage(STAGE_CLOCK);
     if (!mPlatform.perform(Operation::ConfigurePLL)) {
-        mPlatform.recordDiagnosticFailure(DIAG_PLL_CONFIG, cirrus::devices::cs35l41::registers::kRegPllClockControl);
+        mContext.host->recordDiagnosticFailure(DIAG_PLL_CONFIG, cirrus::devices::cs35l41::registers::kRegPllClockControl);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_CLOCK);
+    mContext.host->markDiagnosticSuccess(STAGE_CLOCK);
     if (stopAt("clock"))
         return kIOReturnSuccess;
 
-    mPlatform.setDiagnosticStage(STAGE_ASP);
+    mContext.host->setDiagnosticStage(STAGE_ASP);
     if (!mPlatform.perform(Operation::ConfigureASP)) {
-        mPlatform.recordDiagnosticFailure(DIAG_ASP_CONFIG, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, 0x20200200);
+        mContext.host->recordDiagnosticFailure(DIAG_ASP_CONFIG, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, 0x20200200);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_ASP);
+    mContext.host->markDiagnosticSuccess(STAGE_ASP);
     if (stopAt("asp"))
         return kIOReturnSuccess;
 
-    mPlatform.setDiagnosticStage(STAGE_GPIO);
+    mContext.host->setDiagnosticStage(STAGE_GPIO);
     if (!mPlatform.perform(Operation::ConfigureGPIO)) {
-        mPlatform.recordDiagnosticFailure(DIAG_GPIO_CONFIG, cirrus::devices::cs35l41::registers::kRegGpioPadControl, 0x02000000);
+        mContext.host->recordDiagnosticFailure(DIAG_GPIO_CONFIG, cirrus::devices::cs35l41::registers::kRegGpioPadControl, 0x02000000);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_GPIO);
+    mContext.host->markDiagnosticSuccess(STAGE_GPIO);
     if (stopAt("gpio"))
         return kIOReturnSuccess;
 
-    mPlatform.setDiagnosticStage(STAGE_PLATFORM);
+    mContext.host->setDiagnosticStage(STAGE_PLATFORM);
     if (!mPlatform.perform(Operation::ConfigureHardware)) {
-        CIRRUS_ERR("platform hardware configuration failed for %s", mPlatform.name());
-        mPlatform.recordDiagnosticFailure(DIAG_PLATFORM_CONFIG);
+        CIRRUS_ERR("platform hardware configuration failed for %s", mContext.host->name());
+        mContext.host->recordDiagnosticFailure(DIAG_PLATFORM_CONFIG);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_PLATFORM);
+    mContext.host->markDiagnosticSuccess(STAGE_PLATFORM);
     if (stopAt("platform"))
         return kIOReturnSuccess;
 
@@ -210,22 +210,22 @@ IOReturn Backend::loadFirmwareFlow() {
 
     if (bypass) {
         if (!mPlatform.perform(Operation::StopDSP)) {
-            mPlatform.recordDiagnosticFailure(DIAG_DSP_BOOT);
+            mContext.host->recordDiagnosticFailure(DIAG_DSP_BOOT);
             return kIOReturnNotReady;
         }
     } else {
-        mPlatform.setDiagnosticStage(STAGE_FIRMWARE_DISCOVERY);
+        mContext.host->setDiagnosticStage(STAGE_FIRMWARE_DISCOVERY);
         mPlatform.discoverFirmware();
         if (amp.firmwareIdentityPending) {
             amp.bringUpDisposition = cirrus::core::BringUpDisposition::Wait;
             return kIOReturnSuccess;
         }
         if (!amp.wmfwData || amp.wmfwSize == 0 || !amp.binData || amp.binSize == 0) {
-            mPlatform.recordDiagnosticFailure(DIAG_FIRMWARE_MISSING, 0, 1, 0);
+            mContext.host->recordDiagnosticFailure(DIAG_FIRMWARE_MISSING, 0, 1, 0);
             return kIOReturnNotReady;
         }
-        mPlatform.markDiagnosticSuccess(STAGE_FIRMWARE_DISCOVERY);
-        mPlatform.setDiagnosticStage(STAGE_FIRMWARE_UPLOAD);
+        mContext.host->markDiagnosticSuccess(STAGE_FIRMWARE_DISCOVERY);
+        mContext.host->setDiagnosticStage(STAGE_FIRMWARE_UPLOAD);
         mPlatform.initializeFirmware();
         if (mPlatform.firmwarePhaseHalted() && amp.firmwareValidated && !amp.playbackFaulted) {
             amp.bringUpDisposition = cirrus::core::BringUpDisposition::DebugHalt;
@@ -233,17 +233,17 @@ IOReturn Backend::loadFirmwareFlow() {
         }
         if (amp.playbackFaulted || !amp.firmwareValidated || !amp.dspAlive || amp.monitorCount != 1) {
             if (amp.diagnostic.latestFailure == DIAG_OK)
-                mPlatform.recordDiagnosticFailure(DIAG_DSP_BOOT);
+                mContext.host->recordDiagnosticFailure(DIAG_DSP_BOOT);
             return kIOReturnNotReady;
         }
-        mPlatform.markDiagnosticSuccess(STAGE_DSP_BOOT);
+        mContext.host->markDiagnosticSuccess(STAGE_DSP_BOOT);
     }
 
     if ((bypass && stopAt("firmware")) || stopAt("dsp")) {
         // Firmware initialization includes DSP boot; explicitly halt it before returning.
         if (!mPlatform.perform(Operation::StopDSP)) {
             amp.playbackFaulted = true;
-            mPlatform.recordDiagnosticFailure(DIAG_DSP_BOOT);
+            mContext.host->recordDiagnosticFailure(DIAG_DSP_BOOT);
             return kIOReturnNotReady;
         }
         return kIOReturnSuccess;
@@ -256,21 +256,21 @@ IOReturn Backend::verifyReadyFlow() {
     auto& amp = mAmplifier;
     const bool bypass = mPlatform.bypassDSP();
 
-    mPlatform.setDiagnosticStage(STAGE_IDLE_VERIFY);
+    mContext.host->setDiagnosticStage(STAGE_IDLE_VERIFY);
     if (!mPlatform.perform(Operation::PowerUp)) {
-        mPlatform.recordDiagnosticFailure(DIAG_IDLE_ROLLBACK);
+        mContext.host->recordDiagnosticFailure(DIAG_IDLE_ROLLBACK);
         return kIOReturnNotReady;
     }
     if (!mPlatform.perform(Operation::VerifyIdle)) {
-        CIRRUS_ERR("idle hardware verification failed for %s", mPlatform.name());
-        mPlatform.recordDiagnosticFailure(DIAG_IDLE_INVARIANT);
+        CIRRUS_ERR("idle hardware verification failed for %s", mContext.host->name());
+        mContext.host->recordDiagnosticFailure(DIAG_IDLE_INVARIANT);
         return kIOReturnNotReady;
     }
     if (!bypass && !mPlatform.perform(Operation::VerifyDSP)) {
-        mPlatform.recordDiagnosticFailure(DIAG_DSP_BOOT);
+        mContext.host->recordDiagnosticFailure(DIAG_DSP_BOOT);
         return kIOReturnNotReady;
     }
-    mPlatform.markDiagnosticSuccess(STAGE_SAFE_IDLE);
+    mContext.host->markDiagnosticSuccess(STAGE_SAFE_IDLE);
     mPlatform.logASPSnapshot();
 
     amp.initialized = true;
@@ -286,11 +286,11 @@ IOReturn Backend::shutdownFlow() {
     if (amp.present) {
         if (!mPlatform.stopPlayback()) {
             clean = false;
-            mPlatform.recordDiagnosticFailure(DIAG_IDLE_ROLLBACK);
+            mContext.host->recordDiagnosticFailure(DIAG_IDLE_ROLLBACK);
         }
         if (!mPlatform.perform(Operation::StopDSP)) {
             clean = false;
-            mPlatform.recordDiagnosticFailure(DIAG_DSP_BOOT);
+            mContext.host->recordDiagnosticFailure(DIAG_DSP_BOOT);
         }
     }
     amp.dspAlive = false;
@@ -303,8 +303,12 @@ IOReturn Backend::shutdownFlow() {
 }
 
 cirrus::core::AmplifierLifecycleHooks* cirrus::devices::cs35l41::createBackend(const cirrus::platform::AmplifierBackendContext& context) {
+    if (!context.host || !context.platformContract || strcmp(context.platformContract, kPlatformContract))
+        return nullptr;
     auto* platform = static_cast<Platform*>(context.platformContext);
     if (!platform || !platform->state() || !context.board.amplifiers || context.bindingIndex >= context.board.count)
+        return nullptr;
+    if (context.host != static_cast<cirrus::platform::AmplifierHost*>(platform))
         return nullptr;
     const auto& binding = context.board.amplifiers[context.bindingIndex];
     if (platform->model() != core::AmplifierModel::CS35L41 || binding.siliconId != registers::kValDeviceId ||

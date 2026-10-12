@@ -59,3 +59,22 @@ for name in ("initializeHardware", "loadFirmwareFlow", "verifyReadyFlow", "shutd
 for name in ("initialize", "loadFirmware", "verifyReady", "shutdown"):
     assert not re.search(r"virtual IOReturn " + name + r"\(", contract), name
 print("PASS CS35L41 initialization, firmware, readiness and shutdown orchestration are backend-owned")
+
+# Framework target: ordinary backends and provider-backed communication adapters
+# must not need a descriptor/model branch in manifest-backed discovery.
+host = (ROOT / "Platform/AmplifierHost.hpp").read_text()
+assert "Devices/" not in host and "CS35L41" not in host and "WMFW" not in host
+assert "AmplifierHost* host" in registry and "const char* platformContract" in registry
+configured_i2c = service_cpp.split("size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {", 1)[1].split("\n}", 1)[0]
+assert "findAmplifierById" not in configured_i2c
+assert "backend->model" in configured_i2c and "backend->identityMask" in configured_i2c
+assert "cirrus::transport::I2CController* mI2CController" in service
+assert "i2cControllerFactory" in (ROOT / "Platform/PlatformProfile.hpp").read_text()
+assert "definition->platformContract?static_cast" in service_cpp
+print("PASS registry-owned discovery, generic amplifier host and replaceable I2C communication owner")
+
+composition = (ROOT / "Devices/AmplifierBackends.hpp").read_text()
+assert "cs35l41::registerBackends(registry)" in composition
+assert "0x35a40" not in composition and "RegisterFormat" not in composition and "RegisterAccess" not in composition
+assert "kBackendDefinitions" in (ROOT / "Devices/CS35L41/Definition.hpp").read_text()
+print("PASS AMP-owned registration/framing/access metadata and shared module composition")

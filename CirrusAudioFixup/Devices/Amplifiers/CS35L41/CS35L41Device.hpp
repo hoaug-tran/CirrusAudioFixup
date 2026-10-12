@@ -10,9 +10,9 @@
 
 #include "Core/AmplifierDevice.hpp"
 #include "Core/RegisterIO.hpp"
-#include "Devices/CS35L41/Hardware/Errata.hpp"
-#include "Devices/CS35L41/Hardware/OTPMap.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Errata.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/OTPMap.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
 #if defined(__APPLE__) && (defined(KERNEL) || defined(_KERNEL) || defined(__KERNEL__))
@@ -21,7 +21,7 @@
 inline void IODelay(unsigned) {}
 #endif
 
-namespace cirrus::devices::cs35l41 {
+namespace cirrus::devices::amplifiers::cs35l41 {
 
 constexpr uint8_t kI2cAddressLeft = 0x40;
 constexpr uint8_t kI2cAddressRight = 0x41;

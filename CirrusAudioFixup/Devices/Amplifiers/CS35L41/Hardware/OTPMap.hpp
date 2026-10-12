@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "Devices/CS35L41/Hardware/Errata.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Errata.hpp"
 #include "Support/BitUtils.hpp"
 
 #include <stdint.h>

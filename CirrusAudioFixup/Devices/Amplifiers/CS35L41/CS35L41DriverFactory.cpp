@@ -1,9 +1,9 @@
 // CS35L41 module factory: no service cast, helper callbacks or borrowed chip state.
-#include "Devices/CS35L41/CS35L41Backend.hpp"
-#include "Devices/CS35L41/CS35L41Driver.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-namespace cirrus::devices::cs35l41 {
-core::AmplifierLifecycleHooks* createBackend(const platform::AmplifierBackendContext& c) {
+#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
+namespace cirrus::devices::amplifiers::cs35l41 {
+core::AmplifierLifecycleHooks* createDriver(const platform::AmplifierDriverContext& c) {
     if (!c.host || !c.host->supportsResources() || !c.board.amplifiers || c.bindingIndex >= c.board.count ||
         !c.board.permits(c.actualBoard))
         return nullptr;
@@ -13,8 +13,8 @@ core::AmplifierLifecycleHooks* createBackend(const platform::AmplifierBackendCon
         return nullptr;
     return new CS35L41Driver(c);
 }
-void destroyBackend(core::AmplifierLifecycleHooks* backend) { delete backend; }
-void inspectBackend(const platform::AmplifierBackendContext& c) {
+void destroyDriver(core::AmplifierLifecycleHooks* driver) { delete driver; }
+void inspectDevice(const platform::AmplifierDriverContext& c) {
     if (c.host && c.host->supportsResources() && c.board.amplifiers && c.bindingIndex < c.board.count) {
         CS35L41Driver driver(c);
         driver.inspect();

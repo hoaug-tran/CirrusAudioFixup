@@ -139,7 +139,7 @@ def audit(header, roots, drivers):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--header", type=Path, default=Path(__file__).resolve().parents[1] /
-                        "CirrusAudioFixup/Devices/CS35L41/Resources/Firmware.hpp")
+                        "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Firmware.hpp")
     parser.add_argument("--packages", type=Path, nargs="+", required=True)
     parser.add_argument("--driver", type=Path, action="append", default=[])
     parser.add_argument("--nahimic", type=Path, action="append", default=[],

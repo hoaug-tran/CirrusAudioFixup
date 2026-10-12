@@ -8,14 +8,14 @@ import subprocess,tempfile
 from driver_kernel_fixture import install
 ROOT=Path(__file__).resolve().parents[1]
 CPP=r'''
-#include "Devices/CS35L41/CS35L41Backend.hpp"
-#include "Devices/CS35L41/CS35L41Driver.hpp"
-#include "Devices/AmplifierBackends.hpp"
-#include "Platform/AmplifierRuntime.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
+#include "Devices/AmplifierDrivers.hpp"
+#include "Platform/AmplifierManager.hpp"
 #include <cassert>
 #include <type_traits>
 using namespace cirrus;
-using namespace devices::cs35l41;
+using namespace devices::amplifiers::cs35l41;
 bool gCirrusDebug=false;
 struct Port:core::RegisterIO {
     std::map<uint32_t,uint32_t> values;
@@ -67,10 +67,10 @@ struct Fixture {
     platform::AmplifierBinding binding{endpoint,0x35a40,0,1,"owned-driver","CLSA0100",2};
     platform::BoardConfiguration board{{0x17aa,0x382b,"CLSA0100"},&binding,1,true,true,true};
     firmware::FirmwareBundle assets{{0x35a40,0x17aa,0x382b,1,0,"owned-driver"},firmware::FirmwareFormat::Deferred};
-    platform::AmplifierBackendContext context{port,endpoint,board,board.identity,0,assets,"CLSA0100",nullptr,nullptr,&host};
-    platform::AmplifierBackendRegistry registry;
-    platform::AmplifierRuntime runtime{false};
-    Fixture(){assert(devices::registerBackends(registry));}
+    platform::AmplifierDriverContext context{port,endpoint,board,board.identity,0,assets,"CLSA0100",nullptr,nullptr,&host};
+    platform::AmplifierDriverRegistry registry;
+    platform::AmplifierManager runtime{false};
+    Fixture(){assert(devices::registerDrivers(registry));}
     ~Fixture(){runtime.unbind();host.alive=port.alive=false;}
     void bind(){assert(runtime.bind(registry,&context,1)==0);}
 };
@@ -106,13 +106,13 @@ int main(){
     assert(wait.runtime.retryBringUp(fixtureTimeMs)==kIOReturnNotReady && wait.port.writes==before);
     assert(wait.runtime.retryBringUp(deadline)==kIOReturnTimeout && wait.runtime.stage()==core::AmplifierStage::Faulted);
     assert(wait.host.properties["Cirrus_Phase5A_Status_owned-driver"]=="CODEC_IDENTITY_TIMEOUT");
-    Fixture bad;bad.context.host=nullptr;assert(!createBackend(bad.context) && bad.port.calls==0);
-    bad.context.host=&bad.host;bad.binding.channelIndex=2;assert(!createBackend(bad.context) && bad.port.calls==0);
-    bad.binding.channelIndex=0;bad.binding.siliconId=0x35a41;assert(!createBackend(bad.context) && bad.port.calls==0);
-    bad.binding.siliconId=0x35a40;bad.binding.endpoint.i2cAddress=0x41;assert(!createBackend(bad.context) && bad.port.calls==0);
-    bad.binding.endpoint=bad.endpoint;bad.context.bindingIndex=1;assert(!createBackend(bad.context) && bad.port.calls==0);
-    bad.context.bindingIndex=0;bad.board.wiringVerified=false;assert(!createBackend(bad.context) && bad.port.calls==0);
-    bad.board.wiringVerified=true;bad.board.amplifiers=nullptr;assert(!createBackend(bad.context) && bad.port.calls==0);
+    Fixture bad;bad.context.host=nullptr;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.context.host=&bad.host;bad.binding.channelIndex=2;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.binding.channelIndex=0;bad.binding.siliconId=0x35a41;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.binding.siliconId=0x35a40;bad.binding.endpoint.i2cAddress=0x41;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.binding.endpoint=bad.endpoint;bad.context.bindingIndex=1;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.context.bindingIndex=0;bad.board.wiringVerified=false;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.board.wiringVerified=true;bad.board.amplifiers=nullptr;assert(!createDriver(bad.context) && bad.port.calls==0);
 
     printf("PASS complete owned CS35L41 driver: %u transfer fault positions, reset/OTP/errata/idle, native identity errors, wait timeout, debug phases, PM and teardown/rebind\n",total);
 }
@@ -120,5 +120,5 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
     for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
-        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp'),str(ROOT/'CirrusAudioFixup/Devices/CS35L41/CS35L41Driver.cpp'),'-o',str(p/'driver')],check=True)
+        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41Driver.cpp'),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

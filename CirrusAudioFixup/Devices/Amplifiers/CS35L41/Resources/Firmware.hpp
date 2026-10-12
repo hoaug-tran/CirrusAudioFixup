@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "Devices/CS35L41/Resources/ResourceSchema.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp"
 #include <IOKit/IOLib.h>
 
 const uint8_t cs35l41_dsp1_spk_prot_17aa382b_wmfw[] = {

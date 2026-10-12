@@ -2,7 +2,7 @@
 // AmplifierDescriptors.hpp
 // Silicon identities accepted by this driver.
 // An enum value is not hardware support. Add an entry only after its device
-// backend and power, DSP and speaker-tuning paths have been implemented.
+// driver and power, DSP and speaker-tuning paths have been implemented.
 // See LICENSE for distribution terms.
 //
 

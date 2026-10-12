@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-from service_runtime_fixture import PRODUCTION_BACKEND,FIELDS,BIND,IOLIB
+from service_runtime_fixture import PRODUCTION_DRIVER,FIELDS,BIND,IOLIB
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = production_source()
@@ -17,9 +17,9 @@ names = ['bringUpAmplifiers', 'initializeCS35L41Device', 'handlePowerChange', 'p
 amp = chip_state()
 
 preamble = r'''
-#include "Platform/AmplifierRuntime.hpp"
+#include "Platform/AmplifierManager.hpp"
 #include "Platform/AmplifierHost.hpp"
-#include "Devices/CS35L41/State.hpp"
+#include "Devices/Amplifiers/CS35L41/SiliconState.hpp"
 #include <cassert>
 #include "Platform/PlatformProfile.hpp"
 #include <cstdint>
@@ -30,9 +30,9 @@ preamble = r'''
 #include <map>
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Diagnostics/AttachmentState.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-#include "Devices/CS35L41/CS35L41Device.hpp"
-#include "Devices/CS35L41/Playback.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Device.hpp"
+#include "Devices/Amplifiers/CS35L41/Playback.hpp"
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t;
 using IOReturn=int;
 struct Timer { void enable() {} void disable() {} void cancelTimeout() {} void setTimeoutMS(unsigned) {} };
@@ -42,17 +42,17 @@ struct OSString {
     void release() { delete this; }
 };
 using namespace cirrus::diagnostics;
-using namespace cirrus::devices::cs35l41;
+using namespace cirrus::devices::amplifiers::cs35l41;
 bool gCirrusDebug = false;
 '''
 
-preamble += '#include "Devices/CS35L41/CS35L41Backend.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += '#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
 mock = r'''
 class CirrusAudioFixup {
 public:
-    void suspendNativeTransport() {}
-    bool resumeNativeTransport() { return true; }
+    void suspendCommunication() {}
+    bool resumeCommunication() { return true; }
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     size_t mAmplifierCount{2};
@@ -223,18 +223,18 @@ int main() {
           identityDelay.uploads==0 && identityDelay.properties["Cirrus_Driver_Verdict"]=="WAITING_FOR_CODEC_IDENTITY",
           "zero boot identity defers upload without latching unsupported firmware");
     identityDelay.delayIdentity=false;
-    identityDelay.teardownAmplifierRuntime();
+    identityDelay.releaseAmplifierDrivers();
     check(!identityDelay.fixtureOwners[0].state() && !identityDelay.fixtureOwners[1].state(),
-          "teardown revokes platform views after backend release");
+          "teardown revokes platform views after driver release");
     identityDelay.bringUpAmplifiers();
-    check(identityDelay.fixtureOwners[0].state()==static_cast<cirrus::devices::cs35l41::State*>(&identityDelay.mAmplifiers[0]),
+    check(identityDelay.fixtureOwners[0].state()==static_cast<cirrus::devices::amplifiers::cs35l41::SiliconState*>(&identityDelay.mAmplifiers[0]),
           "rebind points the production adapter at the live chip state");
     check(identityDelay.uploads==2 && identityDelay.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
           "identity publication permits complete stereo bringup");
     CirrusAudioFixup ro; ro.readonly=true; ro.bringUpAmplifiers();
     check(ro.io==0 && ro.uploads==0,"readonly flow never writes hardware");
     CirrusAudioFixup unknown; unknown.mAmplifiers[0].model=cirrus::core::AmplifierModel::CS35L56; unknown.bringUpAmplifiers();
-    check(unknown.resets[0]==0 && unknown.mAmplifiers[0].playbackFaulted,"unsupported backend rejected before reset");
+    check(unknown.resets[0]==0 && unknown.mAmplifiers[0].playbackFaulted,"unsupported driver rejected before reset");
     CirrusAudioFixup codec;
     check(codec.initializeCS35L41Device(codec.mAmplifiers[0]),"normal OTP boot");
     for(unsigned i=1;i<=codec.io;++i) {
@@ -318,6 +318,6 @@ with tempfile.TemporaryDirectory(prefix='cirrus-bringup-check-') as directory:
     (tmp / 'IOKit').mkdir()
     (tmp / 'IOKit/IOLib.h').write_text(IOLIB)
     source = tmp / 'bringup.cpp'
-    source.write_text(preamble + mock + PRODUCTION_BACKEND + BIND + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
+    source.write_text(preamble + mock + PRODUCTION_DRIVER + BIND + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'bringup.exe')], check=True)
     subprocess.run([str(tmp / 'bringup.exe')], check=True)

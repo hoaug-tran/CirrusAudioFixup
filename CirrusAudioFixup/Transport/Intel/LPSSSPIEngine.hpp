@@ -4,8 +4,8 @@
 // uses an injected register window so FIFO behavior can be tested on the host.
 #pragma once
 
-#include "Transport/SPIController.hpp"
 #include "LPSSSPIProfiles.hpp"
+#include "Transport/SPIController.hpp"
 
 namespace cirrus::transport::intel {
 
@@ -48,7 +48,8 @@ public:
         if (mInitialized)
             return kIOReturnBusy;
         mProfile = profile;
-        if (!mProfile.rootClockHz) return kIOReturnBadArgument;
+        if (!mProfile.rootClockHz)
+            return kIOReturnBadArgument;
         uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
         uint32_t status = mWindow.read32(kStatus);
         if (caps == 0xffffffffU || status == 0xffffffffU || ((caps >> 4) & 0xf) != 2)
@@ -88,14 +89,16 @@ public:
     }
 
     void markOffline() { mOnline = false; }
-    void abandon() { mInitialized = mOnline = mTouched = false; mSelectCount = 0; }
+    void abandon() {
+        mInitialized = mOnline = mTouched = false;
+        mSelectCount = 0;
+    }
 
     IOReturn resume() {
         if (!mInitialized)
             return kIOReturnNotReady;
         uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
-        if (caps == 0xffffffffU || ((caps >> 4) & 0xf) != 2 ||
-            ((caps >> 9) & 0xf) != ((1U << mSelectCount) - 1))
+        if (caps == 0xffffffffU || ((caps >> 4) & 0xf) != 2 || ((caps >> 9) & 0xf) != ((1U << mSelectCount) - 1))
             return kIOReturnUnsupported;
         mOnline = true;
         return kIOReturnSuccess;
@@ -121,8 +124,7 @@ public:
     IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
         if (!online())
             return kIOReturnNotReady;
-        if (!tx || !length || length > kMaxFrameBytes || !endpoint.clockHz ||
-            endpoint.mode > 3 || endpoint.chipSelect >= mSelectCount)
+        if (!tx || !length || length > kMaxFrameBytes || !endpoint.clockHz || endpoint.mode > 3 || endpoint.chipSelect >= mSelectCount)
             return kIOReturnBadArgument;
         uint32_t status = mWindow.read32(kStatus);
         if (status == 0xffffffffU) {
@@ -165,8 +167,7 @@ public:
         if (mProfile.forceClockGate)
             mWindow.write32(kClockGate, (gate & ~3U) | 3U);
         mWindow.write32(kControl0, mWindow.read32(kControl0) & ~kEnabled);
-        uint32_t inactive = (mWindow.read32(kChipSelect) & ~mProfile.selectMask) |
-                            (endpoint.chipSelect << 8) | 3U;
+        uint32_t inactive = (mWindow.read32(kChipSelect) & ~mProfile.selectMask) | (endpoint.chipSelect << 8) | 3U;
         mWindow.write32(kChipSelect, inactive);
         // CS selection is latched; wait at least two input clock cycles before
         // assertion, allowing a slow fractional input clock as well.
@@ -177,8 +178,7 @@ public:
         mWindow.write32(kStatus, kOverrun | kTimeoutStatus | kBitError);
         // Motorola master, eight bits, no IRQ or DMA service requests.
         uint32_t cr0 = (static_cast<uint32_t>(divisor - 1) << 8) | 7U;
-        uint32_t cr1 = ((endpoint.mode & 2) ? (1U << 3) : 0) |
-                       ((endpoint.mode & 1) ? (1U << 4) : 0);
+        uint32_t cr1 = ((endpoint.mode & 2) ? (1U << 3) : 0) | ((endpoint.mode & 1) ? (1U << 4) : 0);
         mWindow.write32(kControl1, cr1);
         mWindow.write32(0x28, 0);
         mWindow.write32(0x2c, 0);

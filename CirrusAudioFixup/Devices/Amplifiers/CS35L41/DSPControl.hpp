@@ -3,14 +3,14 @@
 #pragma once
 
 #include "Core/RegisterIO.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-#include "Devices/CS35L41/State.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
+#include "Devices/Amplifiers/CS35L41/SiliconState.hpp"
 
-namespace cirrus::devices::cs35l41 {
+namespace cirrus::devices::amplifiers::cs35l41 {
 
 class DSPControl {
 public:
-    static bool halt(core::RegisterIO& io, State& state, void (*delayUs)(uint32_t)) {
+    static bool halt(core::RegisterIO& io, SiliconState& state, void (*delayUs)(uint32_t)) {
         // Invalidate cached readiness before touching hardware. Always attempt
         // reset after halt failure; readback is useful only if both succeeded.
         if (!delayUs)

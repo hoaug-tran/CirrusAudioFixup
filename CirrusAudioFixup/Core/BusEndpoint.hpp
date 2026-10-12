@@ -13,15 +13,19 @@ struct BusEndpoint {
     uint32_t spiClockHz{0};
     uint8_t spiMode{0};
     bool valid() const {
-        if(!controllerPath || !*controllerPath)return false;
-        if(transport==BusTransportType::I2C)return i2cAddress<=(tenBitAddress?0x3ff:0x7f);
-        if(transport==BusTransportType::SPI)return spiClockHz && spiMode<=3;
+        if (!controllerPath || !*controllerPath)
+            return false;
+        if (transport == BusTransportType::I2C)
+            return i2cAddress <= (tenBitAddress ? 0x3ff : 0x7f);
+        if (transport == BusTransportType::SPI)
+            return spiClockHz && spiMode <= 3;
         return false; // SoundWire needs its own discovery/transaction contract.
     }
     bool sameDevice(const BusEndpoint& other) const {
-        if(!valid() || !other.valid() || transport!=other.transport || strcmp(controllerPath,other.controllerPath))return false;
-        return transport==BusTransportType::I2C ?
-            i2cAddress==other.i2cAddress && tenBitAddress==other.tenBitAddress : spiChipSelect==other.spiChipSelect;
+        if (!valid() || !other.valid() || transport != other.transport || strcmp(controllerPath, other.controllerPath))
+            return false;
+        return transport == BusTransportType::I2C ? i2cAddress == other.i2cAddress && tenBitAddress == other.tenBitAddress
+                                                  : spiChipSelect == other.spiChipSelect;
     }
 };
 }

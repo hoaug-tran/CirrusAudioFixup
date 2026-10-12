@@ -3,7 +3,7 @@
 #include "Transport/Intel/IntelLPSSSPIController.hpp"
 #include "Transport/NativeSPIControllerOwner.hpp"
 namespace cirrus::transport::intel {
-class IntelNativeSPIBackend final : public NativeSPIControllerOwner {
+class IntelSPIControllerOwner final : public NativeSPIControllerOwner {
     IntelLPSSSPIController mController;
 
 public:
@@ -16,17 +16,17 @@ public:
         return result;
     }
 };
-inline NativeSPIControllerOwner* createNativeSPIBackend(IOACPIPlatformDevice*, IOPCIDevice* pci, IOService* owner,
-                                                        NativeSPIControllerFailure& failure) {
+inline NativeSPIControllerOwner* createNativeSPIController(IOACPIPlatformDevice*, IOPCIDevice* pci, IOService* owner,
+                                                           NativeSPIControllerFailure& failure) {
     failure.detail = pci ? (uint32_t(pci->configRead16(0)) << 16) | pci->configRead16(2) : 0;
-    auto* backend = new IntelNativeSPIBackend;
-    const auto result = backend ? backend->bind(pci, owner) : kIOReturnNoMemory;
+    auto* driver = new IntelSPIControllerOwner;
+    const auto result = driver ? driver->bind(pci, owner) : kIOReturnNoMemory;
     failure.result = result;
     failure.reason = result == kIOReturnUnsupported ? "INTEL_CONTROLLER_ID_UNSUPPORTED" : "INTEL_CONTROLLER_BIND_FAILED";
     if (result != kIOReturnSuccess) {
-        delete backend;
+        delete driver;
         return nullptr;
     }
-    return backend;
+    return driver;
 }
 }

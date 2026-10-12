@@ -2,8 +2,8 @@
 // do not put its silicon IDs, register policy or framing in the shared service.
 #pragma once
 
-#include "Devices/CS35L41/Definition.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41DriverRegistration.hpp"
 
 namespace cirrus::devices {
-inline bool registerBackends(platform::AmplifierBackendRegistry& registry) { return cs35l41::registerBackends(registry); }
+inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) { return amplifiers::cs35l41::registerDrivers(registry); }
 }

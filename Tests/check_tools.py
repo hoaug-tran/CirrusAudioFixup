@@ -48,16 +48,16 @@ with tempfile.TemporaryDirectory(prefix="cirrus-tools-") as directory:
     imported = header.read_text(encoding='utf-8')
     assert 'SHA256:' in imported and 'l0_bincfg' in imported and 'r0_bincfg' in imported
     def compile_profile(expected_right):
-        declarations = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/Resources/ResourceSchema.hpp').read_text(encoding='utf-8')
+        declarations = (ROOT / 'CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp').read_text(encoding='utf-8')
         resource = declarations[declarations.index('struct FirmwareResource {'):len(declarations)]
         cpp = tmp / 'profile.cpp'
         cpp.write_text('#include <cassert>\n#include <cstdint>\n#include <cstddef>\n'
-                       '#include "Devices/CS35L41/Resources/Tuning.hpp"\n' + resource + imported + f'''
+                       '#include "Devices/Amplifiers/CS35L41/Resources/Tuning.hpp"\n' + resource + imported + f'''
 int main() {{
     const auto& resource=cs35l41Firmware[0];
-    cirrus::devices::cs35l41::tuning::Parameters left, right;
-    assert(cirrus::devices::cs35l41::tuning::parse(resource.tuningLeft,resource.tuningLeftSize,left));
-    assert(cirrus::devices::cs35l41::tuning::parse(resource.tuningRight,resource.tuningRightSize,right));
+    cirrus::devices::amplifiers::cs35l41::tuning::Parameters left, right;
+    assert(cirrus::devices::amplifiers::cs35l41::tuning::parse(resource.tuningLeft,resource.tuningLeftSize,left));
+    assert(cirrus::devices::amplifiers::cs35l41::tuning::parse(resource.tuningRight,resource.tuningRightSize,right));
     assert(left.pcmGain==14 && left.overridden);
     assert(right.pcmGain=={expected_right});
     assert(right.overridden=={str(expected_right != 17).lower()});

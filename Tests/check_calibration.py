@@ -84,7 +84,7 @@ struct CS35L41Amp {
     bool firmwareValidated=false,playbackFaulted=false;
 };
 using AmplifierState = CS35L41Amp;
-namespace cirrus { namespace devices { namespace cs35l41 { namespace registers { constexpr uint8_t kI2cAddressRight = 0x41; } } } }
+namespace cirrus::devices::amplifiers::cs35l41::registers { constexpr uint8_t kI2cAddressRight = 0x41; }
 unsigned freedImages=0;
 void IOFree(void*,size_t) { ++freedImages; }
 class CirrusAudioFixup {

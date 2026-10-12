@@ -1,4 +1,4 @@
-// Statically linked backend definitions; no runtime executable/plugin loading.
+// Statically linked driver definitions; no runtime executable/plugin loading.
 // Definitions and context assets outlive created instances. The creator owns
 // the instance and calls its matching destroy callback after joining all users.
 #pragma once
@@ -10,7 +10,7 @@
 #include <string.h>
 namespace cirrus::platform {
 class AmplifierHost;
-struct AmplifierBackendContext {
+struct AmplifierDriverContext {
     core::RegisterIO& io;
     core::BusEndpoint endpoint;
     const BoardConfiguration& board;
@@ -19,19 +19,19 @@ struct AmplifierBackendContext {
     const firmware::FirmwareBundle& firmware;
     const char* actualDeviceHid{nullptr};
     void* platformContext{nullptr};
-    // Optional backend-specific bridge, negotiated by its definition. New
-    // independent backends use host/io/board/firmware without a service cast.
+    // Optional driver-specific bridge, negotiated by its definition. New
+    // independent drivers use host/io/board/firmware without a service cast.
     const char* platformContract{nullptr};
     AmplifierHost* host{nullptr};
 };
-struct AmplifierBackendDefinition {
+struct AmplifierDriverRegistration {
     const char* name;
     const char* acpiHid;
     uint32_t siliconId;
     uint8_t transportMask; // Bit 0 I2C, bit 1 SPI. No implicit SoundWire support.
     core::RegisterMapConfig i2cFormat;
     core::RegisterMapConfig spiFormat;
-    core::AmplifierLifecycleHooks* (*create)(const AmplifierBackendContext&);
+    core::AmplifierLifecycleHooks* (*create)(const AmplifierDriverContext&);
     void (*destroy)(core::AmplifierLifecycleHooks*);
     bool supportsDeferredFirmware{false};
     uint32_t identityRegister{0}, identityMask{0xffffffffU};
@@ -39,7 +39,7 @@ struct AmplifierBackendDefinition {
     // determines discovery; a central descriptor enum must not admit/reject it.
     core::AmplifierModel model{core::AmplifierModel::Unknown};
     const char* platformContract{nullptr};
-    void (*inspect)(const AmplifierBackendContext&){nullptr};
+    void (*inspect)(const AmplifierDriverContext&){nullptr};
     bool (*validDebugPhase)(const char*){nullptr};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if (bus == core::BusTransportType::I2C && (transportMask & 1))
@@ -49,12 +49,12 @@ struct AmplifierBackendDefinition {
         return nullptr;
     }
 };
-class AmplifierBackendRegistry {
+class AmplifierDriverRegistry {
 public:
     static constexpr size_t kCapacity = 32;
     size_t count() const { return mCount; }
-    const AmplifierBackendDefinition* at(size_t i) const { return i < mCount ? mDefinitions[i] : nullptr; }
-    bool add(const AmplifierBackendDefinition& definition) {
+    const AmplifierDriverRegistration* at(size_t i) const { return i < mCount ? mDefinitions[i] : nullptr; }
+    bool add(const AmplifierDriverRegistration& definition) {
         if (mCount == kCapacity || !definition.name || !*definition.name || !definition.acpiHid || !*definition.acpiHid ||
             !definition.siliconId || !definition.transportMask || (definition.transportMask & ~3U) ||
             (definition.platformContract && !*definition.platformContract) || !definition.identityMask || !definition.create ||
@@ -73,7 +73,7 @@ public:
         mDefinitions[mCount++] = &definition;
         return true;
     }
-    const AmplifierBackendDefinition* find(const char* hid, uint32_t siliconId, core::BusTransportType bus) const {
+    const AmplifierDriverRegistration* find(const char* hid, uint32_t siliconId, core::BusTransportType bus) const {
         if (!hid)
             return nullptr;
         for (size_t i = 0; i < mCount; ++i) {
@@ -83,8 +83,8 @@ public:
         }
         return nullptr;
     }
-    const AmplifierBackendDefinition* findModel(const char* hid, core::AmplifierModel model, core::BusTransportType bus) const {
-        const AmplifierBackendDefinition* found = nullptr;
+    const AmplifierDriverRegistration* findModel(const char* hid, core::AmplifierModel model, core::BusTransportType bus) const {
+        const AmplifierDriverRegistration* found = nullptr;
         for (size_t i = 0; i < mCount; ++i) {
             const auto* d = mDefinitions[i];
             if (hid && !strcmp(d->acpiHid, hid) && d->model == model && d->format(bus)) {
@@ -105,9 +105,9 @@ public:
         }
         return false;
     }
-    // Factory selection does not authorize power writes. The returned backend's
+    // Factory selection does not authorize power writes. The returned driver's
     // identify/authorizeBoard hooks still run before lifecycle initialization.
-    core::AmplifierLifecycleHooks* create(const AmplifierBackendContext& context, const AmplifierBackendDefinition*& selected) const {
+    core::AmplifierLifecycleHooks* create(const AmplifierDriverContext& context, const AmplifierDriverRegistration*& selected) const {
         if (!context.board.permits(context.actualBoard) || context.bindingIndex >= context.board.count ||
             !context.endpoint.sameDevice(context.board.amplifiers[context.bindingIndex].endpoint))
             return nullptr;
@@ -141,7 +141,7 @@ public:
     }
 
 private:
-    const AmplifierBackendDefinition* mDefinitions[kCapacity]{};
+    const AmplifierDriverRegistration* mDefinitions[kCapacity]{};
     size_t mCount{0};
 };
 }

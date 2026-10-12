@@ -57,8 +57,8 @@ for index, (data, valid_expected, gain) in enumerate(cases):
     }}''')
 source = '''
 #include <cassert>
-#include "Devices/CS35L41/Resources/Tuning.hpp"
-using namespace cirrus::devices::cs35l41::tuning;
+#include "Devices/Amplifiers/CS35L41/Resources/Tuning.hpp"
+using namespace cirrus::devices::amplifiers::cs35l41::tuning;
 int main() {
     Parameters result;
     assert(parse(nullptr,0,result) && result.pcmGain==17 && !result.overridden);

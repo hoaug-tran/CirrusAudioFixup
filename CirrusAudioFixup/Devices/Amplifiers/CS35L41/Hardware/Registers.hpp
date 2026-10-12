@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace cirrus::devices::cs35l41::registers {
+namespace cirrus::devices::amplifiers::cs35l41::registers {
 
 constexpr uint32_t kRegDeviceId = 0x00000000;
 constexpr uint32_t kRegRevisionId = 0x00000004;

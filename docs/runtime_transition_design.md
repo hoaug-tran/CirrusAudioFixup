@@ -6,7 +6,7 @@ latency measurement or a macOS hardware support declaration.
 ## Ownership and execution
 
 The service owns HDA observation, route generations, IOKit power state and
-the stereo barrier. `Devices/CS35L41/Playback.hpp` owns the chip-specific
+the stereo barrier. `Devices/Amplifiers/CS35L41/Playback.hpp` owns the chip-specific
 runtime register phases. It receives a register-access adapter and monotonic
 clock; it does not inspect CoreAudio, allocate memory or sleep.
 
@@ -82,7 +82,7 @@ guarantee end-to-end audio switching within a specific duration.
 | Coordinated stereo preparation | Implemented readiness barrier and pair rollback | Physical stereo timing and switching latency |
 | IRQ, faults and sleep/hibernate | Existing masked status checks and synchronous sleep/wake retained | Opt-in reference protection IRQ with polling backup; runtime hibernate/regcache parity is not implemented |
 | Windows analysis | Mailbox helper and direct callers inspected | Full caller semantics, tuning selection, volume ramp, calibration and IRQ/hibernate reconstruction remain incomplete |
-| Backend separation | Runtime register phases extracted and unsupported models rejected | Firmware discovery/upload/boot and several helpers remain service-owned |
+| Driver separation | Runtime register phases extracted and unsupported models rejected | Firmware discovery/upload/boot and several helpers remain service-owned |
 | Target verification | Local Debug/Release bundles and prior Debug target playback | New bundle boot, timing comparison, sleep/wake and wider OS/board matrix |
 
 The current host is macOS. Local Xcode Debug and Release bundles are checked
@@ -136,7 +136,7 @@ not a completed P3 item.
 
 ## Regression coverage
 
-Runtime tests execute production callback bodies and the actual backend.
+Runtime tests execute production callback bodies and the actual driver.
 They cover each cancellation phase, independent left/right register maps,
 a delayed right endpoint, a failed second commit, elapsed PUP/PDN deadlines,
 late I2C mailbox responses, unsupported-model rejection and idle without I2C.

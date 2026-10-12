@@ -21,8 +21,7 @@ public:
     void suspend();
     IOReturn resume();
     size_t maxTransferBytes() const override { return LPSSSPIEngine::kMaxFrameBytes; }
-    IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx,
-                      uint8_t* rx, size_t length) override;
+    IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) override;
 
 private:
     class MMIOWindow final : public RegisterWindow {

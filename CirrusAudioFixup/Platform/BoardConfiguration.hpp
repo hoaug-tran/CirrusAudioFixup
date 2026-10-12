@@ -1,4 +1,4 @@
-// Transport-neutral board manifest for future backends. This does not infer
+// Transport-neutral board manifest for future drivers. This does not infer
 // reset, boost, ASP routing or tuning from a silicon ID or a subsystem vendor.
 #pragma once
 #include "Core/BusEndpoint.hpp"
@@ -26,15 +26,19 @@ struct BoardConfiguration {
     bool powerVerified{false};
     bool tuningVerified{false};
     bool permits(const BoardIdentity& actual) const {
-        if(!wiringVerified || !powerVerified || !tuningVerified || !identity.subsystemVendor ||
-            !identity.subsystemDevice ||
-            identity.subsystemVendor!=actual.subsystemVendor || identity.subsystemDevice!=actual.subsystemDevice ||
-            (identity.acpiHid && (!*identity.acpiHid || !actual.acpiHid || strcmp(identity.acpiHid,actual.acpiHid))) ||
-            !amplifiers || !count || count>16)return false;
-        for(size_t i=0;i<count;++i) {
-            const auto& a=amplifiers[i];
-            if(!a.endpoint.valid() || !a.siliconId || !a.tuningResource || !*a.tuningResource || (a.acpiHid && !*a.acpiHid) || (!identity.acpiHid && !a.acpiHid))return false;
-            for(size_t j=0;j<i;++j)if(a.endpoint.sameDevice(amplifiers[j].endpoint))return false;
+        if (!wiringVerified || !powerVerified || !tuningVerified || !identity.subsystemVendor || !identity.subsystemDevice ||
+            identity.subsystemVendor != actual.subsystemVendor || identity.subsystemDevice != actual.subsystemDevice ||
+            (identity.acpiHid && (!*identity.acpiHid || !actual.acpiHid || strcmp(identity.acpiHid, actual.acpiHid))) || !amplifiers ||
+            !count || count > 16)
+            return false;
+        for (size_t i = 0; i < count; ++i) {
+            const auto& a = amplifiers[i];
+            if (!a.endpoint.valid() || !a.siliconId || !a.tuningResource || !*a.tuningResource || (a.acpiHid && !*a.acpiHid) ||
+                (!identity.acpiHid && !a.acpiHid))
+                return false;
+            for (size_t j = 0; j < i; ++j)
+                if (a.endpoint.sameDevice(amplifiers[j].endpoint))
+                    return false;
         }
         return true;
     }

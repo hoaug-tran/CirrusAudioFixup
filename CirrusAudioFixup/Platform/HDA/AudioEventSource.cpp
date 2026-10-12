@@ -6,10 +6,10 @@
 //
 
 #define PRODUCT_NAME CirrusAudioFixup
-#include <Headers/kern_api.hpp>
 #include "AudioEventSource.hpp"
-#include <libkern/c++/OSNumber.h>
+#include <Headers/kern_api.hpp>
 #include <IOKit/IORegistryEntry.h>
+#include <libkern/c++/OSNumber.h>
 
 bool ADDPR(debugEnabled) = false;
 uint32_t ADDPR(debugPrintDelay) = 0;
@@ -21,9 +21,7 @@ using cirrus::platform::hda::AudioEventState;
 // provider. Lilu closes its registration window before late device matching;
 // this service only anchors early loading and never touches the amplifier.
 class CirrusAudioBootstrap : public IOService {
-    OSDeclareDefaultStructors(CirrusAudioBootstrap)
-public:
-    bool start(IOService* provider) override {
+OSDeclareDefaultStructors(CirrusAudioBootstrap) public : bool start(IOService* provider) override {
         if (checkKernelArgument("-cirrusoff"))
             return false;
         return IOService::start(provider);
@@ -32,92 +30,92 @@ public:
 
 OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
 
-namespace {
-constexpr uint32_t kSelectorType = 0x736C6374;
-constexpr uint32_t kOutputControl = 0x6F757470;
-constexpr uint32_t kInternalSpeaker = 0x6973706B;
-constexpr uint32_t kHeadphones = 0x6864706E;
-constexpr uint32_t kEngineRunning = 1;
-IOLock* listenersLock = nullptr;
-AudioEventSource* listeners[4]{};
-bool controlHook = false;
-bool engineHook = false;
-bool registered = false;
-mach_vm_address_t originalUpdateValue = 0;
-mach_vm_address_t originalSetState = 0;
-const char* audioPaths[] = {"/System/Library/Extensions/IOAudioFamily.kext/Contents/MacOS/IOAudioFamily"};
-KernelPatcher::KextInfo audioInfo[] = {{"com.apple.iokit.IOAudioFamily", audioPaths, 1, {true}, {}, 0}};
+    namespace {
+    constexpr uint32_t kSelectorType = 0x736C6374;
+    constexpr uint32_t kOutputControl = 0x6F757470;
+    constexpr uint32_t kInternalSpeaker = 0x6973706B;
+    constexpr uint32_t kHeadphones = 0x6864706E;
+    constexpr uint32_t kEngineRunning = 1;
+    IOLock* listenersLock = nullptr;
+    AudioEventSource* listeners[4]{};
+    bool controlHook = false;
+    bool engineHook = false;
+    bool registered = false;
+    mach_vm_address_t originalUpdateValue = 0;
+    mach_vm_address_t originalSetState = 0;
+    const char* audioPaths[] = {"/System/Library/Extensions/IOAudioFamily.kext/Contents/MacOS/IOAudioFamily"};
+    KernelPatcher::KextInfo audioInfo[] = {{"com.apple.iokit.IOAudioFamily", audioPaths, 1, {true}, {}, 0}};
 
-bool readNumber(IORegistryEntry* entry, const char* key, uint32_t& value) {
-    // Registry values can be replaced on another thread. A retained property
-    // keeps the old OSNumber alive until this observation has finished.
-    auto* property = entry->copyProperty(key);
-    auto* number = OSDynamicCast(OSNumber, property);
-    if (number)
-        value = number->unsigned32BitValue();
-    if (property)
-        property->release();
-    return number != nullptr;
-}
-
-// Retain listeners while holding the list lock, then drop it before registry
-// inspection or notification. Teardown removes a listener before releasing its
-// event source; an in-flight observer therefore always owns a live reference.
-void publish(IOService* sender, bool route, uint32_t value) {
-    AudioEventSource* targets[4]{};
-    if (!listenersLock)
-        return;
-    IOLockLock(listenersLock);
-    for (size_t i = 0; i < 4; ++i) {
-        targets[i] = listeners[i];
-        if (targets[i])
-            targets[i]->retain();
+    bool readNumber(IORegistryEntry * entry, const char* key, uint32_t& value) {
+        // Registry values can be replaced on another thread. A retained property
+        // keeps the old OSNumber alive until this observation has finished.
+        auto* property = entry->copyProperty(key);
+        auto* number = OSDynamicCast(OSNumber, property);
+        if (number)
+            value = number->unsigned32BitValue();
+        if (property)
+            property->release();
+        return number != nullptr;
     }
-    IOLockUnlock(listenersLock);
-    for (auto* target : targets) {
-        if (target) {
-            target->observe(sender, route, value);
-            target->release();
+
+    // Retain listeners while holding the list lock, then drop it before registry
+    // inspection or notification. Teardown removes a listener before releasing its
+    // event source; an in-flight observer therefore always owns a live reference.
+    void publish(IOService * sender, bool route, uint32_t value) {
+        AudioEventSource* targets[4]{};
+        if (!listenersLock)
+            return;
+        IOLockLock(listenersLock);
+        for (size_t i = 0; i < 4; ++i) {
+            targets[i] = listeners[i];
+            if (targets[i])
+                targets[i]->retain();
+        }
+        IOLockUnlock(listenersLock);
+        for (auto* target : targets) {
+            if (target) {
+                target->observe(sender, route, value);
+                target->release();
+            }
         }
     }
-}
 
-IOReturn updateValue(IOService* control, OSObject* value) {
-    auto result = reinterpret_cast<IOReturn (*)(IOService*, OSObject*)>(originalUpdateValue)(control, value);
-    if (result != kIOReturnSuccess)
+    IOReturn updateValue(IOService * control, OSObject * value) {
+        auto result = reinterpret_cast<IOReturn (*)(IOService*, OSObject*)>(originalUpdateValue)(control, value);
+        if (result != kIOReturnSuccess)
+            return result;
+        uint32_t type = 0, subtype = 0, usage = 0;
+        auto* number = OSDynamicCast(OSNumber, value);
+        // FourCC values are IOAudioTypes.h ABI constants. Only an output selector
+        // can change the speaker route; volume and microphone controls are ignored.
+        if (number && readNumber(control, "IOAudioControlType", type) && type == kSelectorType &&
+            readNumber(control, "IOAudioControlSubType", subtype) && subtype == kOutputControl &&
+            readNumber(control, "IOAudioControlUsage", usage) && usage == kOutputControl)
+            publish(control, true, number->unsigned32BitValue());
         return result;
-    uint32_t type = 0, subtype = 0, usage = 0;
-    auto* number = OSDynamicCast(OSNumber, value);
-    // FourCC values are IOAudioTypes.h ABI constants. Only an output selector
-    // can change the speaker route; volume and microphone controls are ignored.
-    if (number && readNumber(control, "IOAudioControlType", type) && type == kSelectorType &&
-        readNumber(control, "IOAudioControlSubType", subtype) && subtype == kOutputControl &&
-        readNumber(control, "IOAudioControlUsage", usage) && usage == kOutputControl)
-        publish(control, true, number->unsigned32BitValue());
-    return result;
-}
+    }
 
-uint32_t setState(IOService* engine, uint32_t state) {
-    auto previous = reinterpret_cast<uint32_t (*)(IOService*, uint32_t)>(originalSetState)(engine, state);
-    publish(engine, false, state);
-    return previous;
-}
+    uint32_t setState(IOService * engine, uint32_t state) {
+        auto previous = reinterpret_cast<uint32_t (*)(IOService*, uint32_t)>(originalSetState)(engine, state);
+        publish(engine, false, state);
+        return previous;
+    }
 
-void loaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
-    if (index != audioInfo[0].loadIndex)
-        return;
-    // These signatures come from IOAudioFamily source and the kernel SDK,
-    // rather than private AppleHDA class layouts or guessed vtable offsets.
-    KernelPatcher::RouteRequest controlRequest("__ZN14IOAudioControl11updateValueEP8OSObject", updateValue, originalUpdateValue);
-    if (!__atomic_load_n(&controlHook, __ATOMIC_ACQUIRE))
-        __atomic_store_n(&controlHook, patcher.routeMultiple(index, &controlRequest, 1, address, size), __ATOMIC_RELEASE);
-    patcher.clearError();
-    KernelPatcher::RouteRequest engineRequest("__ZN13IOAudioEngine8setStateE19_IOAudioEngineState", setState, originalSetState);
-    if (!__atomic_load_n(&engineHook, __ATOMIC_ACQUIRE))
-        __atomic_store_n(&engineHook, patcher.routeMultiple(index, &engineRequest, 1, address, size), __ATOMIC_RELEASE);
-    patcher.clearError();
-    IOLog("CirrusAudioFixup: IOAudioFamily event hooks: output=%d engine=%d\n", controlHook, engineHook);
-}
+    void loaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
+        if (index != audioInfo[0].loadIndex)
+            return;
+        // These signatures come from IOAudioFamily source and the kernel SDK,
+        // rather than private AppleHDA class layouts or guessed vtable offsets.
+        KernelPatcher::RouteRequest controlRequest("__ZN14IOAudioControl11updateValueEP8OSObject", updateValue, originalUpdateValue);
+        if (!__atomic_load_n(&controlHook, __ATOMIC_ACQUIRE))
+            __atomic_store_n(&controlHook, patcher.routeMultiple(index, &controlRequest, 1, address, size), __ATOMIC_RELEASE);
+        patcher.clearError();
+        KernelPatcher::RouteRequest engineRequest("__ZN13IOAudioEngine8setStateE19_IOAudioEngineState", setState, originalSetState);
+        if (!__atomic_load_n(&engineHook, __ATOMIC_ACQUIRE))
+            __atomic_store_n(&engineHook, patcher.routeMultiple(index, &engineRequest, 1, address, size), __ATOMIC_RELEASE);
+        patcher.clearError();
+        IOLog("CirrusAudioFixup: IOAudioFamily event hooks: output=%d engine=%d\n", controlHook, engineHook);
+    }
 }
 
 extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup_start(kmod_info_t*, void*) {
@@ -150,7 +148,7 @@ extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup
 
 OSDefineMetaClassAndStructors(CirrusAudioEventSource, IOEventSource)
 
-bool CirrusAudioEventSource::hooksReady() {
+    bool CirrusAudioEventSource::hooksReady() {
     return __atomic_load_n(&controlHook, __ATOMIC_ACQUIRE) && __atomic_load_n(&engineHook, __ATOMIC_ACQUIRE);
 }
 
@@ -307,8 +305,8 @@ void CirrusAudioEventSource::observe(IOService* sender, bool route, uint32_t val
         next.engineKnown = true;
         next.engineRunning = value == kEngineRunning;
     }
-    if (next.routeKnown != mState.routeKnown || next.speakers != mState.speakers ||
-        next.engineKnown != mState.engineKnown || next.engineRunning != mState.engineRunning) {
+    if (next.routeKnown != mState.routeKnown || next.speakers != mState.speakers || next.engineKnown != mState.engineKnown ||
+        next.engineRunning != mState.engineRunning) {
         next.generation = mState.generation + 1;
         mState = next;
         mPending = true;
@@ -326,9 +324,7 @@ AudioEventState CirrusAudioEventSource::snapshot() {
     return state;
 }
 
-bool CirrusAudioEventSource::unchanged(uint32_t generation) {
-    return snapshot().generation == generation;
-}
+bool CirrusAudioEventSource::unchanged(uint32_t generation) { return snapshot().generation == generation; }
 
 bool CirrusAudioEventSource::checkForWork() {
     IOLockLock(mMailboxLock);

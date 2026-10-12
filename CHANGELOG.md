@@ -41,7 +41,7 @@
 - Reject invalid right-channel tuning during validation and no longer silently substitute left tuning for an explicitly missing right-channel file.
 
 ### Validation
-- Host regressions cover stage stops, unsupported backends, HDA cache ownership, and playback fault handling.
+- Host regressions cover stage stops, unsupported drivers, HDA cache ownership, and playback fault handling.
 - Target macOS build and physical playback/sleep-wake validation are required before tagging this version.
 
 ## [1.0.0] - 2026-10-07

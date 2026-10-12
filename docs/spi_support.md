@@ -2,14 +2,14 @@
 
 Branch: `feat/cs35l41-spi-support`. Board integrations: [ASUS issue #2](https://github.com/hoaug-tran/CirrusAudioFixup/issues/2), [HP issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
 
-The transport layer is independent of CPU and board. Native backends currently
+The transport layer is independent of CPU and board. Native drivers currently
 implement Intel LPSS SPT/BXT/CNL PCI controller families and AMD AMDI0061/
 AMDI0062 ACPI command controllers. The Intel identity table contains all 86
 SPI IDs in Linux v6.12 intel-lpss-pci.c, with family-specific clock and CS
 behavior; 7AAA is one entry, not a special gate. This is not support for every
 SPI controller ever used on Intel/AMD systems.
 
-The I2C personality uses VoodooI2C through backend-formatted register maps.
+The I2C personality uses VoodooI2C through driver-formatted register maps.
 The opt-in ACPI SPI personality resolves `_CRS` sources and binds native
 controllers. Both buses use the shipping registered amplifier runtime for
 bring-up, firmware, group playback and PM. Unknown boards remain read-only;
@@ -17,16 +17,16 @@ writable operation requires exact verified board and firmware bindings.
 No writable ASUS/HP profile is shipped, and physical SPI playback is untested.
 A CPU vendor does not identify a controller or supply board tuning.
 
-| Backend | Source support | Limits / remaining work |
+| Driver | Source support | Limits / remaining work |
 | --- | --- | --- |
 | Intel LPSS SPT | PCI/MMIO owner + PIO | One native CS, 120 MHz root; hardware untested |
 | Intel LPSS BXT | PCI/MMIO owner + PIO | Capabilities/native CS, 100 MHz root; hardware untested |
 | Intel LPSS CNL/TGL | PCI/MMIO owner + PIO | Capabilities/native CS, 120/100 MHz root; hardware untested |
 | AMD AMDI0061/0062 | ACPI/MMIO owner + command FIFO | Mode 0, 64-byte frames, 0.8–100 MHz; hardware untested |
-| Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/backends |
-| Other controllers, external GPIO CS | Not implemented | Need documented register backend and ownership/power behavior |
+| Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/drivers |
+| Other controllers, external GPIO CS | Not implemented | Need documented register driver and ownership/power behavior |
 | ACPI SPI IOService discovery | Implemented, opt-in | `-cirrusspi`; use `-cirrusro` for forced read-only discovery; hardware untested |
-| SPI amplifier lifecycle/playback | Connected to shipping backend runtime | Writable board profiles, firmware, power resources and physical validation required; no ASUS/HP enablement shipped |
+| SPI amplifier lifecycle/playback | Connected to shipping driver runtime | Writable board profiles, firmware, power resources and physical validation required; no ASUS/HP enablement shipped |
 
 ## Research and base selection
 
@@ -91,7 +91,7 @@ active-high CS, DMA/IRQ acceleration or arbitrary Intel SPI generations.
 An IOLock serializes frames; the enclosing driver must also serialize complete
 register read-modify-write operations. Bind/shutdown cannot race client calls.
 
-## AMD command backend
+## AMD command driver
 
 `Transport/AMD/AMDSPIEngine.hpp` supports AMD AMDI0061 (V1) and AMDI0062 (V2)
 register layouts. `AMDSPIController.{hpp,cpp}` supplies exclusive ACPI provider
@@ -104,7 +104,7 @@ hardware command. `SPIController::command()` represents this separately from
 simultaneous full-duplex `exchange()`. Intel uses the default bounded bridge;
 AMD implements command directly and rejects full-duplex exchange. CS35L41
 reads send the six-byte address/padding header before receiving payload, so
-both backends use the same register/firmware logic. The AMD frame limit reduces
+both drivers use the same register/firmware logic. The AMD frame limit reduces
 CS35L41 firmware chunks automatically to 56 payload bytes.
 
 AMD supports only mode 0, four native chip selections, at most 64 wire bytes,
@@ -113,7 +113,7 @@ V1/V2 opcode and trigger registers differ. The engine waits for completion on
 writes too; a two-second timeout marks it offline without changing chip select
 on a possibly running command. Recovery requires owner-managed hardware power/
 reset. Generic CS polarity/GPIO switching and arbitrary AMD PCI controllers
-are not implied by these ACPI backends.
+are not implied by these ACPI drivers.
 
 Reference: [AMD SPI registers and command semantics](https://github.com/torvalds/linux/blob/v6.12/drivers/spi/spi-amd.c).
 
@@ -133,7 +133,7 @@ and [serial resource conversion](https://github.com/acpica/acpica/blob/master/so
 
 ## CS35L41 register implementation
 
-`Devices/CS35L41/CS35L41SPIRegisterIO.hpp` configures the shared `Core/RegisterMap.hpp` engine behind `core::RegisterIO` (see [extensible driver foundation](extensible_driver.md)):
+`Devices/Amplifiers/CS35L41/CS35L41SPIRegisterIO.hpp` configures the shared `Core/RegisterMap.hpp` engine behind `core::RegisterIO` (see [extensible driver foundation](extensible_driver.md)):
 
 - Scalar read/write, updateBits, bulk read/write and polling.
 - Six-byte header: 32-bit BE register address plus 16 zero padding bits.
@@ -156,7 +156,7 @@ the service lifetime, `pci` already in D0 and `endpoint` parsed from real ACPI:
 IOReturn result = controller.bind(pci, this);
 if (result != kIOReturnSuccess)
     return false;
-cirrus::devices::cs35l41::CS35L41SPIRegisterIO io(&controller, endpoint);
+cirrus::devices::amplifiers::cs35l41::CS35L41SPIRegisterIO io(&controller, endpoint);
 uint32_t deviceId = 0;
 if (!io.read(0, &deviceId)) {
     controller.shutdown();
@@ -176,7 +176,7 @@ and playback sequences can be reused behind a SPI adapter when validated for
 the exact silicon and board. The byte framing changes inside the adapter.
 
 This does not establish identical HP and Lenovo boards. The service now owns
-typed endpoints and registered backends; GPIO reset, ASP routing, firmware and
+typed endpoints and registered drivers; GPIO reset, ASP routing, firmware and
 subsystem authorization still require verified board data. HP needs its own
 profile and physical validation before automatic full-driver flow. Upstream
 103C89C6 uses internal boost (1 uH, 4500 mA, 24 uF), two amps and Right/Left
@@ -210,7 +210,7 @@ Maintained regressions:
 - `check_spi_transport.py`: production CS35L41 framing, limits and errors.
 - `check_intel_spi.py`: production PIO register engine and complete CS35L41
   read/write/firmware-chunk path through a FIFO model. Existing silicon probe,
-  PLL, ASP and GPIO methods execute through the SPI backend in the model.
+  PLL, ASP and GPIO methods execute through the SPI driver in the model.
 - `check_intel_spi_lifecycle.py`: production PCI owner against IOKit mocks,
   including ownership, D0/BAR failures, suspend, release and repeat bind.
 
@@ -232,7 +232,7 @@ plus chip-select bindings, and rolls back all owned resources after partial fail
 Register format is supplied by the silicon caller. The host uses generic
 `SPIRegisterBus` and `RegisterMap`, so adding a new amplifier does not require
 changing the controller owner. Discovery begins with read-only maps. Verified
-board binding selects each backend format and authorizes writes unless
+board binding selects each driver format and authorizes writes unless
 `-cirrusro` is set; no boot argument bypasses board verification. Speaker channels
 come from verified endpoint bindings, never ACPI resource order. Published properties
 include bind return, canonical controller path, chip-select, clock, mode and count.
@@ -241,7 +241,7 @@ Service suspend stops clients before suspending controllers; resume checks every
 controller and suspends the group again on any failure. It does not force AML D0
 or claim to coordinate every external controller power parent. Native AMD attachment
 requires a working `_PSC` reporting D0; absence is rejected by this runtime owner
-rather than inheriting the lower-level backend's owner-supplied D0 assumption. Stop removes event
+rather than inheriting the lower-level driver's owner-supplied D0 assumption. Stop removes event
 sources before releasing register maps and controllers. PCI exclusivity and D0
 checks remain mandatory. No native driver match is made on CPU vendor alone.
 
@@ -254,17 +254,17 @@ verifying that native accesses bypass I2C frames, preserve errors and honor slee
 
 ## Registered SPI amplifier executor
 
-`NativeSPIAmplifierRuntime` connects native Intel/AMD controller ownership to
-`AmplifierBackendRegistry` and `AmplifierRuntime`. Up to 16 resolved ACPI endpoints may use
+`SPIAmplifierManager` connects native Intel/AMD controller ownership to
+`AmplifierDriverRegistry` and `AmplifierManager`. Up to 16 resolved ACPI endpoints may use
 different silicon register formats. A verified manifest plus actual provider HID,
-exact endpoint/mode/clock matching and firmware identity precede binding; backend
+exact endpoint/mode/clock matching and firmware identity precede binding; driver
 identity and authorization precede initialization. Bind does not write amplifier
 registers. The executor supports firmware, grouped playback, shutdown-before-
 controller-suspend, controller-resume-before-bring-up and explicit confirmed
-power-loss recovery. Failure evidence survives backend teardown.
+power-loss recovery. Failure evidence survives driver teardown.
 
-The shipping IOService now binds its production CS35L41 backend through the
-owned `AmplifierRuntime` using native SPI ports. Its existing firmware parser,
+The shipping IOService now binds its production CS35L41 driver through the
+owned `AmplifierManager` using native SPI ports. Its existing firmware parser,
 calibration and power sequences execute through those ports. The standalone
 executor remains available for other owners. Tests exercise actual service
 binding on both buses, registry dispatch, reversed channel ordering, read-only

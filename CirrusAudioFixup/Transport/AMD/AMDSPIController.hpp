@@ -14,16 +14,17 @@ public:
     IOReturn resume();
     void shutdown();
     size_t maxTransferBytes() const override { return 64; }
-    IOReturn exchange(const SPIEndpoint&,const uint8_t*,uint8_t*,size_t) override { return kIOReturnUnsupported; }
-    IOReturn command(const SPIEndpoint&,const uint8_t*,size_t,uint8_t*,size_t) override;
+    IOReturn exchange(const SPIEndpoint&, const uint8_t*, uint8_t*, size_t) override { return kIOReturnUnsupported; }
+    IOReturn command(const SPIEndpoint&, const uint8_t*, size_t, uint8_t*, size_t) override;
+
 private:
     class MMIOWindow final : public RegisterWindow {
     public:
         volatile uint8_t* base{nullptr};
         uint8_t read8(uint32_t) override;
-        void write8(uint32_t,uint8_t) override;
+        void write8(uint32_t, uint8_t) override;
         uint32_t read32(uint32_t) override;
-        void write32(uint32_t,uint32_t) override;
+        void write32(uint32_t, uint32_t) override;
         uint64_t nowUs() override;
         void delayUs(uint32_t us) override { IODelay(us); }
     };

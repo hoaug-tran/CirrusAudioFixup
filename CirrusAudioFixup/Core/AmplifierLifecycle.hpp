@@ -1,6 +1,6 @@
-// Common lifecycle ordering for future silicon backends. Owner serializes all
+// Common lifecycle ordering for future silicon drivers. Owner serializes all
 // calls on a sleepable workloop and guarantees controller/platform lifetime.
-// Firmware formats, calibration, reset, boost and HDA routing stay in backend
+// Firmware formats, calibration, reset, boost and HDA routing stay in driver
 // and board/resource providers; no generic register cache is replayed on wake.
 #pragma once
 #include <IOKit/IOLib.h>
@@ -63,7 +63,7 @@ public:
     virtual IOReturn identify() = 0;       // Read-only and reject unknown silicon.
     virtual IOReturn authorizeBoard() = 0; // Exact wiring/resource/tuning validation.
     virtual IOReturn initialize() = 0;
-    virtual IOReturn loadFirmware() = 0; // No-DSP backends explicitly return success.
+    virtual IOReturn loadFirmware() = 0; // No-DSP drivers explicitly return success.
     virtual IOReturn verifyReady() = 0;
     virtual IOReturn startPlayback() = 0; // Includes board route and ready checks.
     virtual IOReturn stopPlayback() = 0;
@@ -227,7 +227,7 @@ private:
     bool mHardwareTouched{false}, mResumePlayback{false};
 };
 // Synchronous owner adapter: callback references never escape this call.
-// Playback remains unavailable until a persistent backend owns those hooks.
+// Playback remains unavailable until a persistent driver owns those hooks.
 template <class Initialize, class Firmware, class Verify, class Cleanup, class Disposition>
 AmplifierLifecycleStatus runAmplifierBringUp(Initialize& initialize, Firmware& firmware, Verify& verify, Cleanup& cleanup,
                                              Disposition& disposition) {

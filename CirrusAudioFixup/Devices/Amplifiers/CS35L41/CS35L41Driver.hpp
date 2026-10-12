@@ -1,18 +1,18 @@
 // Independent CS35L41 implementation and owned live state.
 // Host/register/board/asset views outlive this driver through shutdown.
 #pragma once
-#include "Devices/CS35L41/DeviceState.hpp"
-#include "Devices/CS35L41/Resources/ResourceSchema.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Devices/Amplifiers/CS35L41/DeviceState.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp"
+#include "Platform/AmplifierDriverRegistry.hpp"
 #include "Platform/AmplifierHost.hpp"
 #include "Platform/HDA/HDAStreamState.hpp"
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
 struct FirmwareImage;
-namespace cirrus::devices::cs35l41 {
+namespace cirrus::devices::amplifiers::cs35l41 {
 class CS35L41Driver final : public core::AmplifierLifecycleHooks {
 public:
-    explicit CS35L41Driver(const platform::AmplifierBackendContext&);
+    explicit CS35L41Driver(const platform::AmplifierDriverContext&);
     core::BringUpDisposition disposition() const override { return mAmplifier.bringUpDisposition; }
     IOReturn identify() override;
     IOReturn authorizeBoard() override;
@@ -48,7 +48,7 @@ private:
         uint32_t reg, mask, value, delayUs;
         bool updateBits;
     };
-    const platform::AmplifierBackendContext& mContext;
+    const platform::AmplifierDriverContext& mContext;
     platform::AmplifierHost& mHost;
     DeviceState mAmplifier{};
     platform::hda::HDAStreamState mHdaState{};

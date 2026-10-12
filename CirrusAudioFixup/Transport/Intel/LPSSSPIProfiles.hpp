@@ -12,7 +12,8 @@ struct LPSSSPIProfile {
     uint32_t selectMask;
 };
 inline bool lookupLPSSSPIProfile(uint16_t vendor, uint16_t device, LPSSSPIProfile& result) {
-    if (vendor != 0x8086) return false;
+    if (vendor != 0x8086)
+        return false;
     switch (device) {
     case 0x9d29:
     case 0x9d2a:
@@ -22,7 +23,8 @@ inline bool lookupLPSSSPIProfile(uint16_t vendor, uint16_t device, LPSSSPIProfil
     case 0xa2aa:
     case 0xa3a9:
     case 0xa3aa:
-        result = {LPSSSPIFamily::SunrisePoint, 120000000, false, false, 0}; return true;
+        result = {LPSSSPIFamily::SunrisePoint, 120000000, false, false, 0};
+        return true;
     case 0x0ac2:
     case 0x0ac4:
     case 0x0ac6:
@@ -39,7 +41,8 @@ inline bool lookupLPSSSPIProfile(uint16_t vendor, uint16_t device, LPSSSPIProfil
     case 0x5ac4:
     case 0x5ac6:
     case 0x98aa:
-        result = {LPSSSPIFamily::Broxton, 100000000, true, true, 0x300}; return true;
+        result = {LPSSSPIFamily::Broxton, 100000000, true, true, 0x300};
+        return true;
     case 0x02aa:
     case 0x02ab:
     case 0x02fb:
@@ -65,7 +68,8 @@ inline bool lookupLPSSSPIProfile(uint16_t vendor, uint16_t device, LPSSSPIProfil
     case 0xa32a:
     case 0xa32b:
     case 0xa37b:
-        result = {LPSSSPIFamily::CannonLake, 120000000, true, true, 0x300}; return true;
+        result = {LPSSSPIFamily::CannonLake, 120000000, true, true, 0x300};
+        return true;
     case 0x43aa:
     case 0x43ab:
     case 0x43fb:
@@ -103,8 +107,10 @@ inline bool lookupLPSSSPIProfile(uint16_t vendor, uint16_t device, LPSSSPIProfil
     case 0xe427:
     case 0xe430:
     case 0xe446:
-        result = {LPSSSPIFamily::CannonLake, 100000000, true, true, 0x300}; return true;
-    default: return false;
+        result = {LPSSSPIFamily::CannonLake, 100000000, true, true, 0x300};
+        return true;
+    default:
+        return false;
     }
 }
 }

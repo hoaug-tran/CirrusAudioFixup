@@ -1,19 +1,19 @@
 // CS35L41 live silicon, firmware and playback state. No IOService or provider
 // ownership belongs here. Embedded firmware views are borrowed and never freed.
-// Each backend instance owns this state; platform ports and immutable firmware
-// views remain borrowed until shutdown and backend destruction complete.
+// Each driver instance owns this state; platform ports and immutable firmware
+// views remain borrowed until shutdown and driver destruction complete.
 #pragma once
 
 #include "Core/AmplifierLifecycle.hpp"
-#include "Devices/CS35L41/Playback.hpp"
+#include "Devices/Amplifiers/CS35L41/Playback.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 
-namespace cirrus::devices::cs35l41 {
+namespace cirrus::devices::amplifiers::cs35l41 {
 
-struct State {
+struct SiliconState {
     cirrus::core::BringUpDisposition bringUpDisposition{cirrus::core::BringUpDisposition::Continue};
-    cirrus::devices::cs35l41::PlaybackTransition playbackTransition{};
-    cirrus::devices::cs35l41::ShutdownTransition shutdownTransition{};
+    cirrus::devices::amplifiers::cs35l41::PlaybackTransition playbackTransition{};
+    cirrus::devices::amplifiers::cs35l41::ShutdownTransition shutdownTransition{};
     bool clockWaitAfterCleanup{false};
     bool present{false};
     uint32_t deviceId{0};

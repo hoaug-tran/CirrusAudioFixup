@@ -60,7 +60,7 @@ slider position; acoustic levels need to be matched first.
 | Protection | Required protection checks and latched faults stay active in Debug and Release | Hardware IRQ delivery and Linux automatic protection-release behavior are not fully reproduced |
 | Protection IRQ | Opt-in reference GPIO84 shared IRQ, GPIO2 open-drain, paired fault cleanup and polling fallback | macOS interrupt delivery and repeated suspend ordering remain unverified; default polling remains enabled |
 | Power management | Serialized sleep/wake cleanup and software reinitialization | Linux runtime autosuspend, hibernate and regcache restoration are not equivalent implementations here |
-| Hardware support | CS35L41 stereo profile with initialization and runtime model gates; playback sequences live in its backend | Firmware lifecycle remains service-owned; other amplifiers still require complete backends and validation |
+| Hardware support | CS35L41 stereo profile with initialization and runtime model gates; playback sequences live in its driver | Firmware lifecycle remains service-owned; other amplifiers still require complete drivers and validation |
 | Formats | 48 kHz stereo format gate | Broader sample rates and channel configurations are not supported |
 | Packaging | Pinned SDK/Lilu, Debug/Release policy, metadata, symbol and vtable checks in Xcode/CI | Local macOS Debug/Release bundles build; fixed Debug loads and plays on the current machine. This does not establish the wider OS/board matrix |
 

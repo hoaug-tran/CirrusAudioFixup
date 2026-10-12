@@ -61,7 +61,7 @@ a faster end-to-end transition is not claimed until the new bundle is booted.
 
 `WMFWFormat.hpp` and `WMFWUploadPlan.hpp` are now the canonical production types.
 Parser and uploader consume them instead of defining incompatible duplicates.
-This closes the duplicate-type cleanup; further service/backend extraction is
+This closes the duplicate-type cleanup; further service/driver extraction is
 still open. IRQ provider forwarding has been reviewed against the supplied custom
 VoodooI2C source. An opt-in shared GPIO84 protection path is implemented with fault latching,
 polling fallback and PM disable/reconfigure. Target IRQ delivery and runtime
@@ -307,3 +307,31 @@ UUID `DF07200B-4379-31C9-B11F-93F31BB12E76`; Debug UUID is
 `C3E831AE-05E4-38EE-B4E6-EE0C06831EB9`. Neither bundle was installed or loaded.
 Physical latency/performance and electrical root-cause resolution are not proven
 by these host checks.
+
+## Kernel driver naming audit — 2026-10-12
+
+All production filenames/folders were reviewed by responsibility. Amplifier
+implementations now live in `Devices/Amplifiers/<Chip>` with corresponding C++
+namespaces. Factory, registration, driver registry/context, host adapter, amplifier
+manager and SPI controller owner names replace the earlier implementation-role
+terminology. `SiliconState` distinguishes chip state from endpoint views.
+
+A comparison against the previous commit verified all 74 production C++ files
+retain rename-normalized non-whitespace parity, allowing include sorting. No
+register sequence, firmware bytes, provider contract or hardware authorization
+changed. See [kernel driver naming](kernel_driver_naming.md) for the selected
+conventions, upstream references and module ownership rules.
+
+Final naming verification passed all 28 maintained suites plus the optional
+Windows audit (29 total), normal/sanitizer module and fault harnesses, pinned
+formatter for all 74 production files, and Debug/Release bundle gates: plist,
+metadata, vtable pairs, x86_64 and matching binary/dSYM UUIDs. Generic I2C/SPI
+service operations now use Communication names. The naming gate rejects the
+obsolete role term in source names/symbols. The three user-supplied HP collection
+files remain untouched and unstaged.
+
+Final Debug UUID: `6670947A-557E-3938-8046-AFD36E3CC12A`.
+Final Release UUID: `3D144221-8F67-3AC0-B533-356EF4AF9294`;
+SHA-256: `6bad5a529b80d6c16b1a9be0add9e04d6d59b300e8ee12572622738d5dd392a4`.
+Only the existing SDK kmod startup-object deployment-floor warnings remain.
+No bundle was deployed or loaded for this naming change.

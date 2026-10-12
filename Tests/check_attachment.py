@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 CPP=r'''
 #include "Diagnostics/AttachmentState.hpp"
 #include "Support/CPUIdentity.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierDriverRegistry.hpp"
 #include <cassert>
 using namespace cirrus;
 int main(){
@@ -28,10 +28,10 @@ int main(){
     assert(!strcmp(support::cpuVendorName("AuthenticAMD"),"AMD"));
     assert(!strcmp(support::cpuVendorName(nullptr),"UNKNOWN") && !strcmp(support::cpuVendorName("GenuineIntelX"),"UNKNOWN"));
     const auto cpu=support::readCPUIdentity();assert(cpu.vendor[12]==0 && cpu.brand[48]==0);
-    platform::AmplifierBackendRegistry registry;
+    platform::AmplifierDriverRegistry registry;
     core::RegisterMapConfig format;format.readable=[](uint32_t){return true;};format.writable=format.readable;
-    platform::AmplifierBackendDefinition definition{"phase-fixture","AMPFIXTURE",0x1111,1,format,{},
-        [](const platform::AmplifierBackendContext&)->core::AmplifierLifecycleHooks*{return nullptr;},[](core::AmplifierLifecycleHooks*){}};
+    platform::AmplifierDriverRegistration definition{"phase-fixture","AMPFIXTURE",0x1111,1,format,{},
+        [](const platform::AmplifierDriverContext&)->core::AmplifierLifecycleHooks*{return nullptr;},[](core::AmplifierLifecycleHooks*){}};
     definition.validDebugPhase=[](const char* phase){return !strcmp(phase,"probe") || !strcmp(phase,"firmware");};
     assert(registry.add(definition));
     assert(!registry.acceptsDebugPhase(nullptr,"probe"));

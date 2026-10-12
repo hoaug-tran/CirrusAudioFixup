@@ -1,10 +1,10 @@
 // CS35L41 silicon, firmware, calibration, protection and playback implementation.
 // Extracted from the shipping service; sequence order and diagnostics are retained.
-#include "Devices/CS35L41/CS35L41Driver.hpp"
-#include "Devices/CS35L41/CS35L41Device.hpp"
-#include "Devices/CS35L41/DSPControl.hpp"
-#include "Devices/CS35L41/Resources/Firmware.hpp"
-#include "Devices/CS35L41/Resources/Tuning.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Device.hpp"
+#include "Devices/Amplifiers/CS35L41/DSPControl.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/Firmware.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/Tuning.hpp"
 #include "Diagnostics/FailureNames.hpp"
 #include "Firmware/WMFW/WMFWParser.hpp"
 #include "Firmware/WMFW/WMFWUploader.hpp"
@@ -16,7 +16,7 @@
 #include <libkern/c++/OSString.h>
 
 using namespace cirrus::diagnostics;
-namespace cirrus::devices::cs35l41 {
+namespace cirrus::devices::amplifiers::cs35l41 {
 static uint64_t playbackTimeMilliseconds() {
     uint64_t nanos = 0;
     absolutetime_to_nanoseconds(mach_absolute_time(), &nanos);
@@ -354,7 +354,8 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
         return false;
     }
 
-    uint8_t ampIdx = amp.registerIO ? amp.endpointIndex : ((amp.address == cirrus::devices::cs35l41::registers::kI2cAddressRight) ? 1 : 0);
+    uint8_t ampIdx =
+        amp.registerIO ? amp.endpointIndex : ((amp.address == cirrus::devices::amplifiers::cs35l41::registers::kI2cAddressRight) ? 1 : 0);
     bool foundData = false;
     bool invalidData = false;
     bool uidReadFailed = false;
@@ -522,11 +523,11 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
 // A failed status read is also unsafe: the caller must leave output disabled.
 bool CS35L41Driver::checkProtectionStatus(AmplifierState& amp) {
     uint32_t status = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kIrq1Status1Register, &status, TRACE_PLAYBACK))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kIrq1Status1Register, &status, TRACE_PLAYBACK))
         return false;
     char prop[80];
     snprintf(prop, sizeof(prop), "Cirrus_Protection_Fault_%s", amp.name);
-    if (status & cirrus::devices::cs35l41::registers::kMaskProtectionFault) {
+    if (status & cirrus::devices::amplifiers::cs35l41::registers::kMaskProtectionFault) {
         const char* faultReason = "UNKNOWN_FAULT";
         if (status & 0x00000080) {
             faultReason = "CRITICAL_OVERTEMPERATURE";
@@ -546,7 +547,7 @@ bool CS35L41Driver::checkProtectionStatus(AmplifierState& amp) {
             setProperty(prop, faultVal);
             faultVal->release();
         }
-        recordDiagnosticFailure(amp, DIAG_AMP_PROTECTION, cirrus::devices::cs35l41::registers::kIrq1Status1Register, 0, status);
+        recordDiagnosticFailure(amp, DIAG_AMP_PROTECTION, cirrus::devices::amplifiers::cs35l41::registers::kIrq1Status1Register, 0, status);
         return false;
     }
     OSString* okVal = OSString::withCString("OK");
@@ -574,10 +575,12 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
     ++amp.cleanupAttempts;
     setDiagnosticStage(amp, STAGE_PLAYBACK_CLEANUP);
     amp.playbackStableCount = 0;
-    bool ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, 0, TRACE_PLAYBACK);
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678, TRACE_PLAYBACK) && ok;
+    bool ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierGainControl, 0, TRACE_PLAYBACK);
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678,
+                       TRACE_PLAYBACK) &&
+         ok;
     uint32_t before = 0;
-    bool known = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &before, TRACE_PLAYBACK);
+    bool known = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl1, &before, TRACE_PLAYBACK);
     bool needPdn = !known || (before & 1);
     ok = known && ok;
     bool unlocked = unlockTestKey(amp);
@@ -586,7 +589,7 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
         ok = writeRegister(amp, 0x00007438, 0x00585941, TRACE_PLAYBACK) && ok;
     if (needPdn)
         ok = writeRegister(amp, 0x00010010, 0x00800000, TRACE_PLAYBACK) && ok;
-    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl1, 1, 0, TRACE_PLAYBACK) && ok;
+    ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl1, 1, 0, TRACE_PLAYBACK) && ok;
     if (unlocked)
         ok = writeRegister(amp, 0x0000742C, 0x00000009, TRACE_PLAYBACK) && ok;
     bool pdnDone = !needPdn;
@@ -606,35 +609,37 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
     if (unlocked)
         ok = writeRegister(amp, 0x00007438, 0x00580941, TRACE_PLAYBACK) && ok;
     ok = lockTestKey(amp) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegGpio1Control1, 0x00000001, TRACE_PLAYBACK) && ok;
-    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2, 1, 0, TRACE_PLAYBACK) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegGpio1Control1, 0x00000001, TRACE_PLAYBACK) && ok;
+    ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2, 1, 0, TRACE_PLAYBACK) && ok;
     if (amp.dspAlive) {
         if (amp.firmwareIdVersion > 0x001C00) {
-            sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxSpeakerOutputDisable,
-                               cirrus::devices::cs35l41::registers::kStatusMailboxRunning);
+            sendMailboxCommand(amp, cirrus::devices::amplifiers::cs35l41::registers::kCmdMailboxSpeakerOutputDisable,
+                               cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxRunning);
         }
-        bool paused = sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxPause,
-                                         cirrus::devices::cs35l41::registers::kStatusMailboxPaused);
+        bool paused = sendMailboxCommand(amp, cirrus::devices::amplifiers::cs35l41::registers::kCmdMailboxPause,
+                                         cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxPaused);
         ok = paused && ok;
         if (!paused) {
             amp.firmwareValidated = false;
             stopDSP(amp);
         }
     }
-    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kPowerControl2,
-                            0x00003000 | cirrus::devices::cs35l41::registers::kMaskBoostEnable, 0, TRACE_PLAYBACK) &&
+    ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2,
+                            0x00003000 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable, 0, TRACE_PLAYBACK) &&
          ok;
     uint32_t pwr1 = 0, pwr2 = 0, volume = 0, gain = 0;
-    bool readable = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &pwr1, TRACE_PLAYBACK) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &pwr2, TRACE_PLAYBACK) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &volume, TRACE_PLAYBACK) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, &gain, TRACE_PLAYBACK);
+    bool readable =
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl1, &pwr1, TRACE_PLAYBACK) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2, &pwr2, TRACE_PLAYBACK) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &volume, TRACE_PLAYBACK) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierGainControl, &gain, TRACE_PLAYBACK);
     bool safe = ok && pdnDone && readable && !(pwr1 & 1) &&
-                !(pwr2 & (0x00003001 | cirrus::devices::cs35l41::registers::kMaskBoostEnable)) && volume == 0x0000A678 && gain == 0;
+                !(pwr2 & (0x00003001 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable)) && volume == 0x0000A678 &&
+                gain == 0;
     amp.playbackActive = !safe;
     if (!safe) {
         amp.playbackFaulted = true;
-        recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK, cirrus::devices::cs35l41::registers::kPowerControl2, 0, pwr2);
+        recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2, 0, pwr2);
     } else if (!amp.playbackFaulted) {
         amp.cleanupAttempts = 0;
         markDiagnosticSuccess(amp, STAGE_SAFE_IDLE);
@@ -658,7 +663,7 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
 // may recover on a selected speaker route. The compatibility fallback uses a
 // bounded recovery policy because it cannot observe the selected output.
 bool CS35L41Driver::stopRuntimePlayback(AmplifierState& amp) {
-    using namespace cirrus::devices::cs35l41;
+    using namespace cirrus::devices::amplifiers::cs35l41;
     if (amp.model != cirrus::core::AmplifierModel::CS35L41) {
         amp.playbackFaulted = true;
         recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, 0, 0, 0, kIOReturnNotReady, false);
@@ -720,20 +725,20 @@ bool CS35L41Driver::validateCS35L41Playback(AmplifierState& amp, const cirrus::c
         (mAudioEvents && !mAudioEvents->unchanged(context.generation)))
         return false;
     uint32_t pll = 0;
-    bool readable =
-        checkProtectionStatus(amp) && readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &pll, TRACE_PLAYBACK);
+    bool readable = checkProtectionStatus(amp) &&
+                    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1RawStatus3, &pll, TRACE_PLAYBACK);
     if (readable && (pll & 2))
         return true;
     amp.playbackFaulted = true;
     if (readable) {
         amp.pllRecoveryPending = true;
-        recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2, pll);
+        recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1RawStatus3, 2, pll);
     }
     return false;
 }
 
 IOReturn CS35L41Driver::commitCS35L41Playback(AmplifierState& amp) {
-    using namespace cirrus::devices::cs35l41;
+    using namespace cirrus::devices::amplifiers::cs35l41;
     amp.playbackStartCancelled = false;
     if (!synchronizeHdaStream() || !mHdaState.observed || amp.playbackTransition.streamTag != mHdaState.lastStreamTag ||
         amp.playbackTransition.streamFormat != mHdaState.lastFormat ||
@@ -886,29 +891,32 @@ void CS35L41Driver::monitorCS35L41(AmplifierState& amp, const cirrus::core::Play
         if (amp.playbackActive && hasAudio) {
             const bool dspMode = amp.monitorCount >= 1;
             uint32_t pwr2 = 0, core = 0, halo = 0;
-            bool powerReadable = readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &pwr2, TRACE_PLAYBACK);
+            bool powerReadable = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2, &pwr2, TRACE_PLAYBACK);
             bool dspHealthy = bootArgEnabled("-cirrusnodsp");
             if (dspMode) {
-                dspHealthy = amp.dspAlive && amp.firmwareValidated && amp.haloStateRegister &&
-                             readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &core, TRACE_PLAYBACK) &&
-                             readRegister(amp, amp.haloStateRegister, &halo, TRACE_PLAYBACK) &&
-                             (core & (cirrus::devices::cs35l41::registers::kValHaloCoreEnable |
-                                      cirrus::devices::cs35l41::registers::kValHaloCoreReset)) ==
-                                 cirrus::devices::cs35l41::registers::kValHaloCoreEnable &&
-                             halo == 2 && mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxRunning;
+                dspHealthy =
+                    amp.dspAlive && amp.firmwareValidated && amp.haloStateRegister &&
+                    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl, &core, TRACE_PLAYBACK) &&
+                    readRegister(amp, amp.haloStateRegister, &halo, TRACE_PLAYBACK) &&
+                    (core & (cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable |
+                             cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreReset)) ==
+                        cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable &&
+                    halo == 2 && mbox2 == cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxRunning;
             }
             if (!globalEn || !pllLock || !powerReadable ||
-                (pwr2 & (0x3001 | cirrus::devices::cs35l41::registers::kMaskBoostEnable)) != (dspMode ? 0x3001U : 1U) || !dspHealthy) {
+                (pwr2 & (0x3001 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable)) != (dspMode ? 0x3001U : 1U) ||
+                !dspHealthy) {
                 CIRRUS_ERR("ACTIVE_STATE_LOST amp=%s pwr1=0x%08X pwr2=0x%08X pll=%d mbox=%u core=0x%08X halo=%u", amp.name, pwrCtrl1, pwr2,
                            pllLock, mbox2, core, halo);
                 if (!pllLock) {
-                    recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, 2, pllLockSts);
+                    recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1RawStatus3, 2,
+                                            pllLockSts);
                     amp.pllRetryCooldown = 4;
                     amp.pllRecoveryPending =
                         globalEn && powerReadable && dspHealthy &&
-                        (pwr2 & (0x3001 | cirrus::devices::cs35l41::registers::kMaskBoostEnable)) == (dspMode ? 0x3001U : 1U);
+                        (pwr2 & (0x3001 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable)) == (dspMode ? 0x3001U : 1U);
                 } else {
-                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, cirrus::devices::cs35l41::registers::kPowerControl2,
+                    recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2,
                                             dspMode ? 0x3001U : 1U, pwr2);
                 }
                 amp.playbackFaulted = true;
@@ -943,7 +951,7 @@ void CS35L41Driver::monitorCS35L41(AmplifierState& amp, const cirrus::core::Play
     }
 
     if (hasAudio && !amp.playbackActive) {
-        using namespace cirrus::devices::cs35l41;
+        using namespace cirrus::devices::amplifiers::cs35l41;
         auto& transition = amp.playbackTransition;
         const bool dspMode = amp.monitorCount >= 1;
         if (amp.model != cirrus::core::AmplifierModel::CS35L41 || (!dspMode && !bootArgEnabled("-cirrusnodsp")) ||
@@ -987,7 +995,7 @@ void CS35L41Driver::monitorCS35L41(AmplifierState& amp, const cirrus::core::Play
 
 void CS35L41Driver::probeAmplifier(AmplifierState& amp) {
     if (amp.model != cirrus::core::AmplifierModel::CS35L41) {
-        CIRRUS_LOG("endpoint %s model=%u cached ID=0x%08X; diagnostic registers belong to its backend", amp.name, unsigned(amp.model),
+        CIRRUS_LOG("endpoint %s model=%u cached ID=0x%08X; diagnostic registers belong to its driver", amp.name, unsigned(amp.model),
                    amp.deviceId);
         return;
     }
@@ -999,19 +1007,19 @@ void CS35L41Driver::probeAmplifier(AmplifierState& amp) {
     else
         CIRRUS_LOG("amp %s probe address=0x%02X", amp.name, amp.address);
 
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &deviceId, TRACE_PROBE)) {
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDeviceId, &deviceId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s device-id read failed", amp.name);
         return;
     }
 
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRevisionIdRegister, &revisionId, TRACE_PROBE)) {
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRevisionIdRegister, &revisionId, TRACE_PROBE)) {
         CIRRUS_ERR("amp %s revision read failed", amp.name);
         return;
     }
 
     amp.deviceId = deviceId;
     amp.revisionId = revisionId;
-    amp.present = (deviceId == cirrus::devices::cs35l41::registers::kValDeviceId);
+    amp.present = (deviceId == cirrus::devices::amplifiers::cs35l41::registers::kValDeviceId);
     if (!amp.present) {
         CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver; add -cirrusdbg and report hardware profile", deviceId,
                    amp.name);
@@ -1037,28 +1045,28 @@ void CS35L41Driver::captureCS35L41FailureSnapshot(AmplifierState& amp, Diagnosti
     uint32_t irq1 = 0, irq2 = 0, irq3 = 0, irq4 = 0, pll = 0;
     uint32_t spEn = 0, spRate = 0, spFmt = 0, spHiz = 0, rxSlot = 0, dac = 0;
     uint32_t core = 0, halo = 0, mbox1 = 0, mbox2 = 0, scratch1 = 0;
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &devid, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRevisionIdRegister, &revid, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl1, &pwr1, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl2, &pwr2, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerControl3, &pwr3, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kPowerManagementStatus, &pwrSts, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDeviceId, &devid, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRevisionIdRegister, &revid, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl1, &pwr1, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2, &pwr2, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl3, &pwr3, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerManagementStatus, &pwrSts, TRACE_DUMP);
     readRegister(amp, 0x00010010, &irq1, TRACE_DUMP);
     readRegister(amp, 0x00010014, &irq2, TRACE_DUMP);
     readRegister(amp, 0x00010018, &irq3, TRACE_DUMP);
     readRegister(amp, 0x0001001C, &irq4, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &pll, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, &spEn, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRateControl, &spRate, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, &spFmt, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortHighImpedanceControl, &spHiz, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameRxSlot, &rxSlot, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDacPcm1Source, &dac, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &core, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1RawStatus3, &pll, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, &spEn, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortRateControl, &spRate, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFormat, &spFmt, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortHighImpedanceControl, &spHiz, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFrameRxSlot, &rxSlot, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDacPcm1Source, &dac, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl, &core, TRACE_DUMP);
     bool haloReadable = amp.haloStateRegister && readRegister(amp, amp.haloStateRegister, &halo, TRACE_DUMP);
     CIRRUS_LOG("HALO snapshot on %s: address=0x%08X readable=%d", amp.name, amp.haloStateRegister, haloReadable);
     readRegister(amp, 0x00013020, &mbox1, TRACE_DUMP);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kDspMbox2Register, &mbox2, TRACE_DUMP);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kDspMbox2Register, &mbox2, TRACE_DUMP);
     readRegister(amp, 0x02B805C0, &scratch1, TRACE_DUMP);
     mCapturingFailureSnapshot = false;
     mHost.endDiagnosticCapture();
@@ -1093,14 +1101,15 @@ bool CS35L41Driver::sendMailboxCommand(AmplifierState& amp, UInt32 command, UInt
     for (unsigned attempt = 0; attempt <= 5; ++attempt) {
         if (attempt != 0)
             IOSleep(1);
-        if (!readRegister(amp, cirrus::devices::cs35l41::registers::kDspMbox2Register, &status, TRACE_PLAYBACK)) {
-            recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::cs35l41::registers::kDspMbox2Register, expectedStatus, status,
-                                    mLastTransferReturn);
+        if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kDspMbox2Register, &status, TRACE_PLAYBACK)) {
+            recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::amplifiers::cs35l41::registers::kDspMbox2Register,
+                                    expectedStatus, status, mLastTransferReturn);
             return false;
         }
         if (status == 0xFFFFFFFFU || status == 0x00FFFFFFU) {
             CIRRUS_ERR("DSP mailbox reported error on %s for command %u: 0x%08X", amp.name, command, status);
-            recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::cs35l41::registers::kDspMbox2Register, expectedStatus, status);
+            recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::amplifiers::cs35l41::registers::kDspMbox2Register,
+                                    expectedStatus, status);
             return false;
         }
         if (status == expectedStatus)
@@ -1108,7 +1117,8 @@ bool CS35L41Driver::sendMailboxCommand(AmplifierState& amp, UInt32 command, UInt
     }
 
     CIRRUS_ERR("DSP mailbox command %u timed out on %s (expected=%u status=0x%08X)", command, amp.name, expectedStatus, status);
-    recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::cs35l41::registers::kDspMbox2Register, expectedStatus, status);
+    recordDiagnosticFailure(amp, DIAG_DSP_MAILBOX, cirrus::devices::amplifiers::cs35l41::registers::kDspMbox2Register, expectedStatus,
+                            status);
     return false;
 }
 
@@ -1120,8 +1130,8 @@ bool CS35L41Driver::initializeCS35L41Device(AmplifierState& amp) {
     amp.present = false;
 
     DriverRegisterIO io(this, amp);
-    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
-                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
     if (!device.probe(io)) {
         CIRRUS_ERR("failed to identify %s before reset", amp.name);
@@ -1135,8 +1145,8 @@ bool CS35L41Driver::initializeCS35L41Device(AmplifierState& amp) {
     if (!amp.present) {
         CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver; add -cirrusdbg and report hardware profile",
                    amp.deviceId, amp.name);
-        recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
-                                cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
+        recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::amplifiers::cs35l41::registers::kRegDeviceId,
+                                cirrus::devices::amplifiers::cs35l41::registers::kValDeviceId, amp.deviceId);
         return false;
     }
 
@@ -1152,23 +1162,23 @@ bool CS35L41Driver::initializeCS35L41Device(AmplifierState& amp) {
     auto result = device.initialize(io);
     if (result == cirrus::core::AmplifierDevice::InitResult::ResetFailed) {
         CIRRUS_ERR("failed to send soft reset to %s", amp.name);
-        recordDiagnosticFailure(amp, DIAG_RESET_WRITE, cirrus::devices::cs35l41::registers::kRegSoftwareReset,
-                                cirrus::devices::cs35l41::registers::kValSoftwareReset, 0, mLastTransferReturn);
+        recordDiagnosticFailure(amp, DIAG_RESET_WRITE, cirrus::devices::amplifiers::cs35l41::registers::kRegSoftwareReset,
+                                cirrus::devices::amplifiers::cs35l41::registers::kValSoftwareReset, 0, mLastTransferReturn);
         return false;
     }
 
     setDiagnosticStage(amp, STAGE_OTP_BOOT);
     if (result == cirrus::core::AmplifierDevice::InitResult::BootTimeout) {
         CIRRUS_ERR("otp boot complete polling failed on %s", amp.name);
-        recordDiagnosticFailure(amp, DIAG_OTP_TIMEOUT, cirrus::devices::cs35l41::registers::kRegIrq1Status4,
-                                cirrus::devices::cs35l41::registers::kMaskOtpBootDone, 0);
+        recordDiagnosticFailure(amp, DIAG_OTP_TIMEOUT, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Status4,
+                                cirrus::devices::amplifiers::cs35l41::registers::kMaskOtpBootDone, 0);
         return false;
     }
 
     if (result == cirrus::core::AmplifierDevice::InitResult::BootError) {
         UInt32 otpStatus = 0;
-        readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1Status3, &otpStatus, TRACE_PROBE);
-        recordDiagnosticFailure(amp, DIAG_OTP_BOOT_ERROR, cirrus::devices::cs35l41::registers::kRegIrq1Status3, 0, otpStatus);
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Status3, &otpStatus, TRACE_PROBE);
+        recordDiagnosticFailure(amp, DIAG_OTP_BOOT_ERROR, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Status3, 0, otpStatus);
         return false;
     }
 
@@ -1178,20 +1188,20 @@ bool CS35L41Driver::initializeCS35L41Device(AmplifierState& amp) {
     }
 
     UInt32 devIdAfter = 0, revIdAfter = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDeviceId, &devIdAfter) ||
-        !readRegister(amp, cirrus::devices::cs35l41::registers::kRegRevisionId, &revIdAfter)) {
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDeviceId, &devIdAfter) ||
+        !readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegRevisionId, &revIdAfter)) {
         CIRRUS_ERR("failed to identify %s after reset", amp.name);
         return false;
     }
 
     amp.deviceId = devIdAfter;
     amp.revisionId = revIdAfter;
-    amp.present = (devIdAfter == cirrus::devices::cs35l41::registers::kValDeviceId);
+    amp.present = (devIdAfter == cirrus::devices::amplifiers::cs35l41::registers::kValDeviceId);
     if (!amp.present) {
         CIRRUS_ERR("Amplifier device-id 0x%08X on %s is not handled by this driver after reset; add -cirrusdbg and report hardware profile",
                    devIdAfter, amp.name);
-        recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
-                                cirrus::devices::cs35l41::registers::kValDeviceId, devIdAfter);
+        recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::amplifiers::cs35l41::registers::kRegDeviceId,
+                                cirrus::devices::amplifiers::cs35l41::registers::kValDeviceId, devIdAfter);
         return false;
     }
 
@@ -1325,8 +1335,8 @@ void CS35L41Driver::runTimeBasedFSMCheck(AmplifierState& amp) {
 }
 
 bool CS35L41Driver::unlockTestKey(AmplifierState& amp) {
-    bool ret1 = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegTestKeyControl, 0x00000055);
-    bool ret2 = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegTestKeyControl, 0x000000AA);
+    bool ret1 = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegTestKeyControl, 0x00000055);
+    bool ret2 = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegTestKeyControl, 0x000000AA);
 
     if (!ret1 || !ret2) {
         CIRRUS_ERR("failed to unlock test keys on %s", amp.name);
@@ -1338,8 +1348,8 @@ bool CS35L41Driver::unlockTestKey(AmplifierState& amp) {
 }
 
 bool CS35L41Driver::lockTestKey(AmplifierState& amp) {
-    bool ret1 = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegTestKeyControl, 0x000000CC);
-    bool ret2 = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegTestKeyControl, 0x00000033);
+    bool ret1 = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegTestKeyControl, 0x000000CC);
+    bool ret2 = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegTestKeyControl, 0x00000033);
 
     if (!ret1 || !ret2) {
         CIRRUS_ERR("failed to lock test keys on %s", amp.name);
@@ -1479,7 +1489,7 @@ bool CS35L41Driver::applyErrataPatch(AmplifierState& amp) {
         }
     }
 
-    if (!updateRegisterBits(amp, 0x02BC1000, cirrus::devices::cs35l41::registers::kValHaloCoreEnable, 0x00000000)) {
+    if (!updateRegisterBits(amp, 0x02BC1000, cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable, 0x00000000)) {
         CIRRUS_ERR("failed to disable dsp core in core ctrl on %s", amp.name);
         return false;
     }
@@ -1489,8 +1499,8 @@ bool CS35L41Driver::applyErrataPatch(AmplifierState& amp) {
 
 bool CS35L41Driver::unpackOTP(AmplifierState& amp) {
     DriverRegisterIO io(this, amp);
-    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
-                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
     if (!device.unpackOTP(io)) {
         CIRRUS_ERR("failed to unpack OTP on %s", amp.name);
         return false;
@@ -1554,8 +1564,8 @@ bool CS35L41Driver::applyPLL(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
     DriverRegisterIO io(this, amp);
-    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
-                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
     bool pllLocked = false;
     if (!device.setupPLL(io, &pllLocked)) {
@@ -1590,8 +1600,8 @@ bool CS35L41Driver::applyASP(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
     DriverRegisterIO io(this, amp);
-    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
-                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
     if (!device.setupASP(io, amp.channel == cirrus::core::AudioChannel::Right, amp.firmwareValidated)) {
         return false;
@@ -1619,8 +1629,8 @@ bool CS35L41Driver::applyGPIO(AmplifierState& amp) {
     uint64_t startTime = mach_absolute_time();
 
     DriverRegisterIO io(this, amp);
-    auto device = amp.registerIO ? cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.endpoint)
-                                 : cirrus::devices::cs35l41::CS35L41Device(amp.name, amp.address);
+    auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
+                                 : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
     if (!device.setupGPIO(io)) {
         return false;
@@ -1646,7 +1656,7 @@ bool CS35L41Driver::applyGPIO(AmplifierState& amp) {
 
 bool CS35L41Driver::stopDSP(AmplifierState& amp) {
     DriverRegisterIO io(this, amp);
-    return cirrus::devices::cs35l41::DSPControl::halt(io, amp, [](uint32_t delay) { IODelay(delay); });
+    return cirrus::devices::amplifiers::cs35l41::DSPControl::halt(io, amp, [](uint32_t delay) { IODelay(delay); });
 }
 
 // Select board and channel tuning, not just a compatible firmware container.
@@ -2011,8 +2021,8 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     const uint8_t* tuningData = isRight ? foundRes->tuningRight : foundRes->tuningLeft;
     const size_t tuningSize = isRight ? foundRes->tuningRightSize : foundRes->tuningLeftSize;
     const char* tuningName = isRight ? foundRes->tuningRightName : foundRes->tuningLeftName;
-    cirrus::devices::cs35l41::tuning::Parameters tuning{};
-    if (!cirrus::devices::cs35l41::tuning::parse(tuningData, tuningSize, tuning)) {
+    cirrus::devices::amplifiers::cs35l41::tuning::Parameters tuning{};
+    if (!cirrus::devices::amplifiers::cs35l41::tuning::parse(tuningData, tuningSize, tuning)) {
         CIRRUS_ERR("invalid embedded gain tuning for %s; refusing this resource", amp.name);
         recordDiagnosticFailure(amp, DIAG_FIRMWARE_PARSE);
         setProperty(propStatus, "INVALID_GAIN_TUNING");
@@ -2086,30 +2096,30 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
 
     uint32_t preCoreCtrl = 0, preClkCtrl = 0, preMbox = 0;
     uint32_t preSysId = 0, preSysVer = 0, preSysCore = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &preCoreCtrl))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl, &preCoreCtrl))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspClockControl, &preClkCtrl))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspClockControl, &preClkCtrl))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspMailbox2, &preMbox))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspMailbox2, &preMbox))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemId, &preSysId))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemId, &preSysId))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemVersion, &preSysVer))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemVersion, &preSysVer))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemCoreId, &preSysCore))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemCoreId, &preSysCore))
         return failBoot();
     CIRRUS_LOG("dsp pre-reset registers on %s: core=0x%08X, clk=0x%08X, mbox=0x%08X, sysid=0x%08X, version=0x%08X, coreid=0x%08X", amp.name,
                preCoreCtrl, preClkCtrl, preMbox, preSysId, preSysVer, preSysCore);
 
     static const uint32_t fsRateRegs[] = {
-        cirrus::devices::cs35l41::registers::kRegDsp1Rx1Rate, cirrus::devices::cs35l41::registers::kRegDsp1Rx2Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Rx3Rate, cirrus::devices::cs35l41::registers::kRegDsp1Rx4Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Rx5Rate, cirrus::devices::cs35l41::registers::kRegDsp1Rx6Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Rx7Rate, cirrus::devices::cs35l41::registers::kRegDsp1Rx8Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Tx1Rate, cirrus::devices::cs35l41::registers::kRegDsp1Tx2Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Tx3Rate, cirrus::devices::cs35l41::registers::kRegDsp1Tx4Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Tx5Rate, cirrus::devices::cs35l41::registers::kRegDsp1Tx6Rate,
-        cirrus::devices::cs35l41::registers::kRegDsp1Tx7Rate, cirrus::devices::cs35l41::registers::kRegDsp1Tx8Rate};
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx1Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx2Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx3Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx4Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx6Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx7Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx8Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx1Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx2Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx3Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx4Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx5Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx6Rate,
+        cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx7Rate, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Tx8Rate};
     bool fsErrataOk = true;
     for (size_t i = 0; i < sizeof(fsRateRegs) / sizeof(fsRateRegs[0]); ++i) {
         fsErrataOk &= writeRegister(amp, fsRateRegs[i], 0x00000001, TRACE_FIRMWARE);
@@ -2120,35 +2130,35 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
 
     uint64_t mpuStart = mach_absolute_time();
 
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuLockConfig, 0x5555);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuLockConfig, 0xAAAA);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuLockConfig, 0x5555);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuLockConfig, 0xAAAA);
 
     uint32_t unlockVal = 0xFFFFFFFF;
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXmAccess0, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYmAccess0, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuWndwAccess0, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXregAccess0, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYregAccess0, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXmAccess0, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYmAccess0, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuWndwAccess0, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXregAccess0, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYregAccess0, unlockVal);
 
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXmAccess1, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYmAccess1, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuWndwAccess1, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXregAccess1, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYregAccess1, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXmAccess1, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYmAccess1, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuWndwAccess1, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXregAccess1, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYregAccess1, unlockVal);
 
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXmAccess2, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYmAccess2, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuWndwAccess2, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXregAccess2, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYregAccess2, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXmAccess2, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYmAccess2, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuWndwAccess2, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXregAccess2, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYregAccess2, unlockVal);
 
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXmAccess3, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYmAccess3, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuWndwAccess3, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuXregAccess3, unlockVal);
-    checkedWrite(cirrus::devices::cs35l41::registers::kRegDsp1MpuYregAccess3, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXmAccess3, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYmAccess3, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuWndwAccess3, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuXregAccess3, unlockVal);
+    checkedWrite(cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuYregAccess3, unlockVal);
 
-    bool mpuLocked = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1MpuLockConfig, 0);
+    bool mpuLocked = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1MpuLockConfig, 0);
     if (!writesOk || !mpuLocked)
         return failBoot();
 
@@ -2164,19 +2174,20 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
     }
 
     uint32_t currentClk = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspClockControl, &currentClk))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspClockControl, &currentClk))
         return failBoot();
     snprintf(propName, sizeof(propName), "Cirrus_DSP_CLOCK_RAW_%s", amp.name);
     setProperty(propName, (uint64_t)currentClk, 32);
 
     uint64_t resetStart = mach_absolute_time();
 
-    if (!updateRegisterBits(
-            amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl,
-            cirrus::devices::cs35l41::registers::kValHaloCoreReset | cirrus::devices::cs35l41::registers::kValHaloCoreEnable,
-            cirrus::devices::cs35l41::registers::kValHaloCoreReset | cirrus::devices::cs35l41::registers::kValHaloCoreEnable) ||
-        !updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl,
-                            cirrus::devices::cs35l41::registers::kValHaloCoreReset, 0))
+    if (!updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl,
+                            cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreReset |
+                                cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable,
+                            cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreReset |
+                                cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable) ||
+        !updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl,
+                            cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreReset, 0))
         return failBoot();
 
     uint64_t resetEnd = mach_absolute_time();
@@ -2193,11 +2204,11 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
     }
 
     uint32_t sysId = 0, sysVer = 0, sysCore = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemId, &sysId))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemId, &sysId))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemVersion, &sysVer))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemVersion, &sysVer))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemCoreId, &sysCore))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemCoreId, &sysCore))
         return failBoot();
 
     snprintf(propName, sizeof(propName), "Cirrus_DSP_SYS_ID_%s", amp.name);
@@ -2208,11 +2219,11 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
     setProperty(propName, (uint64_t)sysCore, 32);
 
     uint32_t postCoreCtrl = 0, postClkCtrl = 0, postMbox = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &postCoreCtrl))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl, &postCoreCtrl))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspClockControl, &postClkCtrl))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspClockControl, &postClkCtrl))
         return failBoot();
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspMailbox2, &postMbox))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspMailbox2, &postMbox))
         return failBoot();
     CIRRUS_LOG("dsp post-reset registers on %s: core=0x%08X, clk=0x%08X, mbox=0x%08X, sysid=0x%08X, version=0x%08X, coreid=0x%08X",
                amp.name, postCoreCtrl, postClkCtrl, postMbox, sysId, sysVer, sysCore);
@@ -2235,7 +2246,7 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
     }
 
     uint32_t mboxInit = 0;
-    if (!readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspMailbox2, &mboxInit))
+    if (!readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspMailbox2, &mboxInit))
         return failBoot();
     snprintf(propName, sizeof(propName), "Cirrus_DSP_MAILBOX_RAW_INIT_%s", amp.name);
     setProperty(propName, (uint64_t)mboxInit, 32);
@@ -2255,8 +2266,8 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
     if (haloState == HALO_STATE_CODE_RUN) {
         CIRRUS_LOG("HALO firmware reached RUN state on %s (halo_state=0x%08X)", amp.name, haloState);
 
-        if (!sendMailboxCommand(amp, cirrus::devices::cs35l41::registers::kCmdMailboxPause,
-                                cirrus::devices::cs35l41::registers::kStatusMailboxPaused))
+        if (!sendMailboxCommand(amp, cirrus::devices::amplifiers::cs35l41::registers::kCmdMailboxPause,
+                                cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxPaused))
             return failBoot();
     } else {
         CIRRUS_ERR("HALO firmware did NOT reach RUN on %s (halo_state=0x%08X, expected 0x2). "
@@ -2359,19 +2370,19 @@ bool CS35L41Driver::verifyDSPAlive(AmplifierState& amp) {
     bool corePass = false, resetPass = false, sysIdPass = false, mboxPass = false, xmPass = false;
 
     bool readable = amp.haloStateRegister && amp.haloHeartbeatRegister &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &coreCtrl, TRACE_DUMP) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemId, &sysId, TRACE_DUMP) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDspMailbox2, &mbox, TRACE_DUMP) &&
+                    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl, &coreCtrl, TRACE_DUMP) &&
+                    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemId, &sysId, TRACE_DUMP) &&
+                    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDspMailbox2, &mbox, TRACE_DUMP) &&
                     readRegister(amp, amp.haloStateRegister, &haloState, TRACE_DUMP);
 
-    if (coreCtrl & cirrus::devices::cs35l41::registers::kValHaloCoreEnable)
+    if (coreCtrl & cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable)
         corePass = true;
-    if ((coreCtrl & cirrus::devices::cs35l41::registers::kValHaloCoreReset) == 0)
+    if ((coreCtrl & cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreReset) == 0)
         resetPass = true;
     if (sysId != 0x00000000 && sysId != 0xFFFFFFFF)
         sysIdPass = true;
 
-    if (mbox == cirrus::devices::cs35l41::registers::kStatusMailboxPaused)
+    if (mbox == cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxPaused)
         mboxPass = true;
 
     uint8_t dummy[4] = {0};
@@ -2491,14 +2502,14 @@ bool CS35L41Driver::configureHardware(AmplifierState& amp) {
     CIRRUS_LOG("configuring generic serial port settings on %s", amp.name);
     bool ok = true;
 
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1Mask1, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1Mask2, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1Mask3, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1Mask4, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq2Mask1, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq2Mask2, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq2Mask3, 0xFFFFFFFF) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq2Mask4, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Mask1, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Mask2, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Mask3, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1Mask4, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq2Mask1, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq2Mask2, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq2Mask3, 0xFFFFFFFF) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq2Mask4, 0xFFFFFFFF) && ok;
 
     ok = writeRegister(amp, 0x00002020, 0x00000006) && ok;
 
@@ -2512,14 +2523,14 @@ void CS35L41Driver::logASPSnapshot(AmplifierState& amp) {
     uint32_t txWordLength = 0, rxWordLength = 0, txSlot = 0, rxSlot = 0;
     uint32_t rx1Src = 0, rx2Src = 0, rx3Src = 0, rx4Src = 0, rx5Src = 0;
 
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, &enables);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRateControl, &rate);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, &fmt);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortHighImpedanceControl, &hiz);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameTxSlot, &txSlot);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFrameRxSlot, &rxSlot);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortTxWordLength, &txWordLength);
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortRxWordLength, &rxWordLength);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, &enables);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortRateControl, &rate);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFormat, &fmt);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortHighImpedanceControl, &hiz);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFrameTxSlot, &txSlot);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFrameRxSlot, &rxSlot);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortTxWordLength, &txWordLength);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortRxWordLength, &rxWordLength);
     readRegister(amp, 0x00004C40, &rx1Src);
     readRegister(amp, 0x00004C44, &rx2Src);
     readRegister(amp, 0x00004C48, &rx3Src);
@@ -2574,8 +2585,8 @@ void CS35L41Driver::logDSPBootReport(AmplifierState& amp) {
     uint32_t sc1 = 0, sc2 = 0, sc3 = 0, sc4 = 0;
     uint32_t ts0 = 0, ts1 = 0, ts2 = 0;
 
-    bool readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1CcmCoreControl, &coreCtrl, TRACE_DUMP);
-    readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1SystemId, &sysId, TRACE_DUMP) && readable;
+    bool readable = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1CcmCoreControl, &coreCtrl, TRACE_DUMP);
+    readable = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1SystemId, &sysId, TRACE_DUMP) && readable;
     readable = amp.haloStateRegister && readRegister(amp, amp.haloStateRegister, &haloState, TRACE_DUMP) && readable;
     readable = readRegister(amp, 0x00013020, &mbox1, TRACE_DUMP) && readable;
     readable = readRegister(amp, 0x00013004, &mbox2, TRACE_DUMP) && readable;
@@ -2596,12 +2607,12 @@ void CS35L41Driver::logDSPBootReport(AmplifierState& amp) {
     IODelay(2000);
     hbReadable = amp.haloHeartbeatRegister && readRegister(amp, amp.haloHeartbeatRegister, &ts2, TRACE_DUMP) && hbReadable;
 
-    bool coreEn = (coreCtrl & cirrus::devices::cs35l41::registers::kValHaloCoreEnable) != 0;
-    bool coreOutOfReset = (coreCtrl & cirrus::devices::cs35l41::registers::kValHaloCoreReset) == 0;
+    bool coreEn = (coreCtrl & cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreEnable) != 0;
+    bool coreOutOfReset = (coreCtrl & cirrus::devices::amplifiers::cs35l41::registers::kValHaloCoreReset) == 0;
     bool sysIdOk = (sysId != 0x00000000 && sysId != 0xFFFFFFFF);
     bool runOk = (haloState == 2);
-    bool mboxOk = (mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxRunning ||
-                   mbox2 == cirrus::devices::cs35l41::registers::kStatusMailboxPaused);
+    bool mboxOk = (mbox2 == cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxRunning ||
+                   mbox2 == cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxPaused);
     const uint32_t MPU_VIO_MASK = 0x007E0000;
     bool mpuClean = ((xmVio & MPU_VIO_MASK) == 0 && (ymVio & MPU_VIO_MASK) == 0 && (pmVio & MPU_VIO_MASK) == 0);
     bool hbAlive = (ts0 != ts1 && ts1 != ts2);
@@ -2686,7 +2697,7 @@ void CS35L41Driver::snapshotDiagnostics(AmplifierState& amp, const char* stage) 
     readRegister(amp, 0x0001001C, &irq1[3]);
 
     uint32_t rawSts3 = 0;
-    readRegister(amp, cirrus::devices::cs35l41::registers::kRegIrq1RawStatus3, &rawSts3);
+    readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1RawStatus3, &rawSts3);
     bool pupDone = (irq1[0] & 0x01000000) != 0;
     bool ampShort = (irq1[0] & 0x80000000) != 0;
     bool dspError = (irq1[0] & 0x00000002) != 0;
@@ -2776,8 +2787,8 @@ void CS35L41Driver::logPowerSnapshot(AmplifierState& amp) {
 // PLL, DSP and power acknowledgements before applying operating gain.
 bool CS35L41Driver::powerUpAmplifier(AmplifierState& amp) {
     CIRRUS_LOG("starting power up sequence for %s (DSP Mode=%d)", amp.name, amp.monitorCount);
-    bool ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678);
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, 0) && ok;
+    bool ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678);
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierGainControl, 0) && ok;
     if (!ok || !checkProtectionStatus(amp)) {
         amp.playbackFaulted = true;
         stopPlayback(amp);
@@ -2785,50 +2796,50 @@ bool CS35L41Driver::powerUpAmplifier(AmplifierState& amp) {
     }
 
     if (amp.monitorCount == 1) {
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, 0x00010001) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortHighImpedanceControl, 0x00000003) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDacPcm1Source, 0x00000032) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAspTx3Source, 0x00000028) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAspTx4Source, 0x00000029) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx1Source, 0x00000008) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx2Source, 0x00000008) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx5Source, 0x00000029) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx6Source, 0x00000029) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, 0x00010001) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortHighImpedanceControl, 0x00000003) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDacPcm1Source, 0x00000032) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx3Source, 0x00000028) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx4Source, 0x00000029) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx1Source, 0x00000008) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx2Source, 0x00000008) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, 0x00000029) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx6Source, 0x00000029) && ok;
     } else {
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, 0x00010000) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortHighImpedanceControl, 0x00000002) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDacPcm1Source, 0x08) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAspTx3Source, 0x00000032) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAspTx4Source, 0x00000033) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx1Source, 0x00000008) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx2Source, 0x00000009) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
-        ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegDsp1Rx5Source, 0x00000020) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, 0x00010000) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortHighImpedanceControl, 0x00000002) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDacPcm1Source, 0x08) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx3Source, 0x00000032) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx4Source, 0x00000033) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx1Source, 0x00000008) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx2Source, 0x00000009) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, 0x00000020) && ok;
     }
 
     ok = updateRegisterBits(amp, 0x00002018, 0x00000001, 0x00000000) && ok;
 
     ok = writeRegister(amp, 0x00000040, 0x00000055) && ok;
     ok = writeRegister(amp, 0x00000040, 0x000000AA) && ok;
-    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kRegPowerControl1, 1, 0) && ok;
+    ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegPowerControl1, 1, 0) && ok;
     ok = writeRegister(amp, 0x00007438, 0x00585941) && ok;
     ok = writeRegister(amp, 0x00007414, 0x08C82222) && ok;
     ok = writeRegister(amp, 0x0000742C, 0x00000009) && ok;
-    ok = updateRegisterBits(amp, cirrus::devices::cs35l41::registers::kRegPowerControl2,
-                            0x00003000 | cirrus::devices::cs35l41::registers::kMaskBoostEnable, 0) &&
+    ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegPowerControl2,
+                            0x00003000 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable, 0) &&
          ok;
     ok = writeRegister(amp, 0x00000040, 0x000000CC) && ok;
     ok = writeRegister(amp, 0x00000040, 0x00000033) && ok;
 
     uint32_t digVol = 0, gainCtrl = 0;
-    ok = readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &digVol) && ok;
-    ok = readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, &gainCtrl) && ok;
+    ok = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &digVol) && ok;
+    ok = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierGainControl, &gainCtrl) && ok;
     CIRRUS_LOG("default volume states on %s: digital_volume=0x%08X gain=0x%08X", amp.name, digVol, gainCtrl);
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678) && ok;
-    ok = writeRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, 0x00000000) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierDigitalVolumeControl, 0x0000A678) && ok;
+    ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierGainControl, 0x00000000) && ok;
 
     if (!ok) {
         amp.playbackFaulted = true;
@@ -2845,18 +2856,20 @@ bool CS35L41Driver::powerUpAmplifier(AmplifierState& amp) {
 bool CS35L41Driver::verifyIdleConfiguration(AmplifierState& amp) {
     uint32_t pwr1 = 0, pwr2 = 0, spEn = 0, spFmt = 0;
     uint32_t dacSrc = 0, digVol = 0, gain = 0;
-    bool readable = readRegister(amp, cirrus::devices::cs35l41::registers::kRegPowerControl1, &pwr1, TRACE_PROBE) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegPowerControl2, &pwr2, TRACE_PROBE) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortEnables, &spEn, TRACE_PROBE) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, &spFmt, TRACE_PROBE) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegDacPcm1Source, &dacSrc, TRACE_PROBE) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &digVol, TRACE_PROBE) &&
-                    readRegister(amp, cirrus::devices::cs35l41::registers::kRegAmplifierGainControl, &gain, TRACE_PROBE);
+    bool readable =
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegPowerControl1, &pwr1, TRACE_PROBE) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegPowerControl2, &pwr2, TRACE_PROBE) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, &spEn, TRACE_PROBE) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFormat, &spFmt, TRACE_PROBE) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDacPcm1Source, &dacSrc, TRACE_PROBE) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierDigitalVolumeControl, &digVol, TRACE_PROBE) &&
+        readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAmplifierGainControl, &gain, TRACE_PROBE);
     bool dspMode = amp.monitorCount >= 1;
     uint32_t expectedSpEn = dspMode ? 0x00010001U : 0x00010000U;
     uint32_t expectedDac = dspMode ? 0x00000032U : 0x00000008U;
-    bool valid = readable && ((pwr1 & 0x1) == 0) && ((pwr2 & (0x00003001 | cirrus::devices::cs35l41::registers::kMaskBoostEnable)) == 0) &&
-                 spEn == expectedSpEn && spFmt == 0x20200200U && dacSrc == expectedDac && digVol == 0x0000A678U && gain == 0;
+    bool valid = readable && ((pwr1 & 0x1) == 0) &&
+                 ((pwr2 & (0x00003001 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable)) == 0) && spEn == expectedSpEn &&
+                 spFmt == 0x20200200U && dacSrc == expectedDac && digVol == 0x0000A678U && gain == 0;
     if (!valid) {
         CIRRUS_ERR("idle verify %s: read=%d pwr1=0x%08X pwr2=0x%08X sp_en=0x%08X sp_fmt=0x%08X dac=0x%08X vol=0x%08X gain=0x%08X mode=%s",
                    amp.name, readable, pwr1, pwr2, spEn, spFmt, dacSrc, digVol, gain, dspMode ? "DSP" : "BYPASS");
@@ -2883,8 +2896,8 @@ IOReturn CS35L41Driver::initializeHardware() {
     if (!initializeCS35L41Device(amp)) {
         CIRRUS_ERR("failed to initialize codec for %s", amp.name);
         if (amp.diagnostic.latestFailure == DIAG_OK)
-            recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::cs35l41::registers::kRegDeviceId,
-                                    cirrus::devices::cs35l41::registers::kValDeviceId, amp.deviceId);
+            recordDiagnosticFailure(amp, DIAG_DEVICE_ID, cirrus::devices::amplifiers::cs35l41::registers::kRegDeviceId,
+                                    cirrus::devices::amplifiers::cs35l41::registers::kValDeviceId, amp.deviceId);
         return kIOReturnNotReady;
     }
     markDiagnosticSuccess(amp, STAGE_OTP_BOOT);
@@ -2903,7 +2916,7 @@ IOReturn CS35L41Driver::initializeHardware() {
 
     setDiagnosticStage(amp, STAGE_CLOCK);
     if (!applyPLL(amp)) {
-        recordDiagnosticFailure(amp, DIAG_PLL_CONFIG, cirrus::devices::cs35l41::registers::kRegPllClockControl);
+        recordDiagnosticFailure(amp, DIAG_PLL_CONFIG, cirrus::devices::amplifiers::cs35l41::registers::kRegPllClockControl);
         return kIOReturnNotReady;
     }
     markDiagnosticSuccess(amp, STAGE_CLOCK);
@@ -2912,7 +2925,7 @@ IOReturn CS35L41Driver::initializeHardware() {
 
     setDiagnosticStage(amp, STAGE_ASP);
     if (!applyASP(amp)) {
-        recordDiagnosticFailure(amp, DIAG_ASP_CONFIG, cirrus::devices::cs35l41::registers::kRegSerialPortFormat, 0x20200200);
+        recordDiagnosticFailure(amp, DIAG_ASP_CONFIG, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortFormat, 0x20200200);
         return kIOReturnNotReady;
     }
     markDiagnosticSuccess(amp, STAGE_ASP);
@@ -2921,7 +2934,7 @@ IOReturn CS35L41Driver::initializeHardware() {
 
     setDiagnosticStage(amp, STAGE_GPIO);
     if (!applyGPIO(amp)) {
-        recordDiagnosticFailure(amp, DIAG_GPIO_CONFIG, cirrus::devices::cs35l41::registers::kRegGpioPadControl, 0x02000000);
+        recordDiagnosticFailure(amp, DIAG_GPIO_CONFIG, cirrus::devices::amplifiers::cs35l41::registers::kRegGpioPadControl, 0x02000000);
         return kIOReturnNotReady;
     }
     markDiagnosticSuccess(amp, STAGE_GPIO);
@@ -3065,7 +3078,7 @@ bool CS35L41Driver::pollRegisterBit(AmplifierState& amp, UInt32 reg, UInt32 mask
     return false;
 }
 
-CS35L41Driver::CS35L41Driver(const platform::AmplifierBackendContext& context)
+CS35L41Driver::CS35L41Driver(const platform::AmplifierDriverContext& context)
     : mContext(context), mHost(*context.host), mRouteGuard{mHost} {
     auto& amp = mAmplifier;
     amp.name = mHost.name();

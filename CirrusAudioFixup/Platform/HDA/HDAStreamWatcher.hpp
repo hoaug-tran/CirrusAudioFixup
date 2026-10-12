@@ -29,8 +29,8 @@ public:
         const uint32_t multiplier = ((format >> 11) & 7) + 1;
         const uint32_t divisor = ((format >> 8) & 7) + 1;
         const uint32_t sampleSize = (format >> 4) & 7;
-        return !(format & 0x8080) && multiplier <= 4 && baseRate * multiplier == 48000 * divisor &&
-               (format & 15) == 1 && sampleSize >= 1 && sampleSize <= 3;
+        return !(format & 0x8080) && multiplier <= 4 && baseRate * multiplier == 48000 * divisor && (format & 15) == 1 && sampleSize >= 1 &&
+               sampleSize <= 3;
     }
 
     static uint32_t decodeSampleRate(uint16_t format) {

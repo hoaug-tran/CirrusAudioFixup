@@ -1,12 +1,12 @@
-// Own silicon backend instances selected from immutable board/firmware bindings.
+// Own silicon driver instances selected from immutable board/firmware bindings.
 // Bus/controller providers are borrowed. Owner serializes every method and joins
 // all callers before destruction; controller D0 precedes resume. No CPU/model
 // switch, board name, register width, reset sequence or transport framing here.
 #pragma once
 #include "Core/AmplifierGroup.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierDriverRegistry.hpp"
 namespace cirrus::platform {
-class AmplifierRuntime {
+class AmplifierManager {
 public:
     static constexpr size_t kCapacity = core::AmplifierGroup::kCapacity;
     struct BindFailure {
@@ -15,10 +15,10 @@ public:
         IOReturn result{kIOReturnSuccess};
     };
     const BindFailure& bindFailure() const { return mBindFailure; }
-    explicit AmplifierRuntime(bool resumePlaybackAutomatically = true) : mResumeAutomatically(resumePlaybackAutomatically) {}
-    ~AmplifierRuntime() { unbind(); }
-    AmplifierRuntime(const AmplifierRuntime&) = delete;
-    AmplifierRuntime& operator=(const AmplifierRuntime&) = delete;
+    explicit AmplifierManager(bool resumePlaybackAutomatically = true) : mResumeAutomatically(resumePlaybackAutomatically) {}
+    ~AmplifierManager() { unbind(); }
+    AmplifierManager(const AmplifierManager&) = delete;
+    AmplifierManager& operator=(const AmplifierManager&) = delete;
     bool bound() const { return mGroup != nullptr; }
     size_t count() const { return mCount; }
     core::AmplifierStage stage() const { return mGroup ? mGroup->stage() : core::AmplifierStage::Detached; }
@@ -46,23 +46,23 @@ public:
         IOReturn ret = mGroup->detach();
         return ret == kIOReturnSuccess ? mGroup->bringUp() : ret;
     }
-    const AmplifierBackendDefinition* backend(size_t i) const { return i < mCount ? mSlots[i].definition : nullptr; }
-    IOReturn bind(const AmplifierBackendRegistry& registry, const AmplifierBackendContext* contexts, size_t count) {
+    const AmplifierDriverRegistration* registration(size_t i) const { return i < mCount ? mSlots[i].definition : nullptr; }
+    IOReturn bind(const AmplifierDriverRegistry& registry, const AmplifierDriverContext* contexts, size_t count) {
         if (!contexts)
             return rejectBind("NULL_CONTEXTS", kIOReturnBadArgument);
-        return bindContexts(registry, count, [&](size_t i) -> const AmplifierBackendContext& { return contexts[i]; });
+        return bindContexts(registry, count, [&](size_t i) -> const AmplifierDriverContext& { return contexts[i]; });
     }
-    IOReturn bind(const AmplifierBackendRegistry& registry, const AmplifierBackendContext* const* contexts, size_t count) {
+    IOReturn bind(const AmplifierDriverRegistry& registry, const AmplifierDriverContext* const* contexts, size_t count) {
         if (!contexts || count > kCapacity)
             return rejectBind("INVALID_CONTEXT_ARRAY", kIOReturnBadArgument);
         for (size_t i = 0; i < count; ++i)
             if (!contexts[i])
                 return rejectBind("NULL_MEMBER_CONTEXT", kIOReturnBadArgument, i);
-        return bindContexts(registry, count, [&](size_t i) -> const AmplifierBackendContext& { return *contexts[i]; });
+        return bindContexts(registry, count, [&](size_t i) -> const AmplifierDriverContext& { return *contexts[i]; });
     }
 
 private:
-    template <class ContextAt> IOReturn bindContexts(const AmplifierBackendRegistry& registry, size_t count, ContextAt contextAt) {
+    template <class ContextAt> IOReturn bindContexts(const AmplifierDriverRegistry& registry, size_t count, ContextAt contextAt) {
         mBindFailure = {};
         if (bound() || !count || count > kCapacity)
             return rejectBind("INVALID_RUNTIME_STATE_OR_COUNT", kIOReturnBadArgument);
@@ -88,7 +88,7 @@ private:
         for (size_t i = 0; i < count; ++i) {
             auto& slot = mSlots[i];
             ++mCount; // Own partial slot state from this point onward.
-            slot.context = new AmplifierBackendContext(contextAt(i));
+            slot.context = new AmplifierDriverContext(contextAt(i));
             if (!slot.context) {
                 releaseUninitialized();
                 return rejectBind("CONTEXT_ALLOCATION_FAILED", kIOReturnNoMemory, i);
@@ -96,7 +96,7 @@ private:
             slot.hooks = registry.create(*slot.context, slot.definition);
             if (!slot.hooks) {
                 releaseUninitialized();
-                return rejectBind("BACKEND_FIRMWARE_OR_FACTORY_REJECTED", kIOReturnNotPermitted, i);
+                return rejectBind("DRIVER_FIRMWARE_OR_FACTORY_REJECTED", kIOReturnNotPermitted, i);
             }
             slot.lifecycle = new core::AmplifierLifecycle(*slot.hooks);
             if (!slot.lifecycle) {
@@ -169,7 +169,7 @@ public:
         if (!mGroup)
             return mReleaseResult;
         mReleaseResult = mGroup->detach();
-        // Cleanup results are retained before releasing backend-owned objects.
+        // Cleanup results are retained before releasing driver-owned objects.
         for (size_t i = 0; i < mCount; ++i)
             mReleased[i] = mSlots[i].lifecycle->status();
         mReleasedCount = mCount;
@@ -200,8 +200,8 @@ private:
     }
     BindFailure mBindFailure{};
     struct Slot {
-        AmplifierBackendContext* context{nullptr};
-        const AmplifierBackendDefinition* definition{nullptr};
+        AmplifierDriverContext* context{nullptr};
+        const AmplifierDriverRegistration* definition{nullptr};
         core::AmplifierLifecycleHooks* hooks{nullptr};
         core::AmplifierLifecycle* lifecycle{nullptr};
     };

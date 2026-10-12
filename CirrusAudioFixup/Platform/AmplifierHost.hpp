@@ -1,6 +1,6 @@
-// Shared service facilities for independently implemented amplifier backends.
+// Shared service facilities for independently implemented amplifier drivers.
 // The host owns board authorization and diagnostic publication, not silicon state
-// or register sequences. Calls are serialized; the host outlives backend teardown.
+// or register sequences. Calls are serialized; the host outlives driver teardown.
 #pragma once
 
 #include "Diagnostics/DiagnosticTypes.hpp"

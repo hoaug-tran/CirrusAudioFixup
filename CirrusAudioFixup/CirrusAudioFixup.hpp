@@ -1,7 +1,7 @@
 //
 // CirrusAudioFixup.hpp
 // IOService lifecycle, endpoint resources and generic diagnostic publication.
-// The workloop serializes playback, sleep and stop. Backend-owned chip state
+// The workloop serializes playback, sleep and stop. Driver-owned chip state
 // is destroyed before borrowed ports/hosts; IOKit objects use retain/release.
 // See LICENSE for distribution terms.
 //
@@ -12,19 +12,19 @@
 #include "Core/AmplifierGroup.hpp"
 #include "Core/AmplifierLifecycle.hpp"
 #include "Core/RegisterIO.hpp"
-#include "Devices/AmplifierBackends.hpp"
+#include "Devices/AmplifierDrivers.hpp"
 #include "Diagnostics/AttachmentState.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/FirmwareBundle.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierDriverRegistry.hpp"
 #include "Platform/AmplifierHost.hpp"
-#include "Platform/AmplifierRuntime.hpp"
+#include "Platform/AmplifierManager.hpp"
 #include "Platform/BoardConfiguration.hpp"
 #include "Platform/HDA/AudioEventSource.hpp"
 #include "Platform/HDA/HDAStreamState.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
-#include "Platform/NativeSPIAmplifierRuntime.hpp"
 #include "Platform/PlatformProfile.hpp"
+#include "Platform/SPIAmplifierManager.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
 #include "Transport/ACPISPIResources.hpp"
@@ -45,7 +45,7 @@
 #include <os/log.h>
 #include <pexpert/pexpert.h>
 
-// Endpoint metadata and host diagnostics only. Silicon state belongs to backend.
+// Endpoint metadata and host diagnostics only. Silicon state belongs to driver.
 struct AmplifierState {
     char endpointLabel[16]{};
     const char* name{nullptr};
@@ -74,8 +74,8 @@ OSDeclareDefaultStructors(CirrusAudioFixup)
 
 private:
     void bringUpAmplifiers();
-    // Borrowed serialized host facilities; cleared after backend destruction.
-    struct AmplifierBackendOwner final : cirrus::platform::AmplifierHost {
+    // Borrowed serialized host facilities; cleared after driver destruction.
+    struct AmplifierHostAdapter final : cirrus::platform::AmplifierHost {
         CirrusAudioFixup* owner{nullptr};
         AmplifierState* amp{nullptr};
         void bind(CirrusAudioFixup* service, AmplifierState* endpoint) {
@@ -120,9 +120,9 @@ private:
         void endDiagnosticCapture() override { owner->mCapturingFailureSnapshot = false; }
     };
     char mRuntimeControllerPath[256]{};
-    bool bindAmplifierRuntime();
-    void teardownAmplifierRuntime();
-    bool registerAmplifierBackends();
+    bool bindAmplifierDrivers();
+    void releaseAmplifierDrivers();
+    bool registerAmplifierDrivers();
     cirrus::transport::I2CController* createI2CController();
 
     void runBackgroundMonitor();
@@ -141,11 +141,11 @@ private:
     IOService* mProvider{nullptr};
     cirrus::transport::NativeSPIHost mNativeSPI;
     bool setupCommunication(IOService* provider);
-    bool preflightI2CIdentity(const cirrus::platform::AmplifierBackendDefinition*);
+    bool preflightI2CIdentity(const cirrus::platform::AmplifierDriverRegistration*);
     size_t detectNativeSPIAmplifiers();
     size_t detectConfiguredI2CAmplifiers();
-    void teardownNativeSPI();
-    void suspendNativeTransport() {
+    void teardownCommunication();
+    void suspendCommunication() {
         mNativeSPI.suspend();
         if (mNativeSPI.bound())
             mAttachment.communication = "SUSPENDED";
@@ -155,7 +155,7 @@ private:
         if (mNativeSPI.bound())
             setProperty("Cirrus_SPI_Status", "SUSPENDED");
     }
-    bool resumeNativeTransport() {
+    bool resumeCommunication() {
         IOReturn ret = mNativeSPI.resume();
         if (mNativeSPI.bound()) {
             setProperty("Cirrus_SPI_Wake_Return", uint64_t(ret), 32);
@@ -176,7 +176,7 @@ private:
         }
         return ret == kIOReturnSuccess;
     }
-    bool nativeBusReady() const { return mProvider && mPowerAvailable && !mStopping; }
+    bool communicationReady() const { return mProvider && mPowerAvailable && !mStopping; }
     IOWorkLoop* mWorkLoop{nullptr};
     IOTimerEventSource* mProbeTimer{nullptr};
     IOCommandGate* mCommandGate{nullptr};
@@ -211,7 +211,7 @@ private:
 
     // Storage capacity is not supported topology. Current profiles permit
     // only the two channels with matching routing and speaker tuning.
-    static constexpr size_t kMaxAmplifiers = cirrus::platform::AmplifierRuntime::kCapacity;
+    static constexpr size_t kMaxAmplifiers = cirrus::platform::AmplifierManager::kCapacity;
     size_t mAmplifierCount{0};
     AmplifierState mAmplifiers[kMaxAmplifiers]{};
     const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
@@ -222,13 +222,13 @@ private:
     }
     bool mPlatformAuthorized{false};
     uint32_t mPlatformSubsystemId{0};
-    cirrus::platform::AmplifierBackendRegistry mBackendRegistry;
-    cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
+    cirrus::platform::AmplifierDriverRegistry mDriverRegistry;
+    cirrus::platform::AmplifierManager mAmplifierManager{false};
     cirrus::core::RegisterIO* mRuntimePorts[kMaxAmplifiers]{};
     cirrus::transport::I2CController* mI2CController{nullptr};
     cirrus::transport::I2CRegisterBus* mI2CBuses[kMaxAmplifiers]{};
     cirrus::core::RegisterMap* mI2CMaps[kMaxAmplifiers]{};
-    AmplifierBackendOwner mBackendOwners[kMaxAmplifiers]{};
+    AmplifierHostAdapter mHostAdapters[kMaxAmplifiers]{};
     cirrus::platform::AmplifierBinding mRuntimeBindings[kMaxAmplifiers]{};
     cirrus::firmware::FirmwareBundle mRuntimeFirmware[kMaxAmplifiers]{};
     cirrus::platform::BoardConfiguration mRuntimeBoard{};

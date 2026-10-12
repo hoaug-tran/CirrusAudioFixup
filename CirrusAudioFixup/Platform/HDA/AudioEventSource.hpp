@@ -7,8 +7,8 @@
 #pragma once
 
 #include <IOKit/IOEventSource.h>
-#include <IOKit/IOService.h>
 #include <IOKit/IOLib.h>
+#include <IOKit/IOService.h>
 
 namespace cirrus::platform::hda {
 
@@ -28,10 +28,9 @@ struct AudioEventState {
 // OpenCore's IOKit vtable linker requires the concrete metaclass in the global
 // namespace. Keep a namespace alias below for the driver-facing API.
 class CirrusAudioEventSource : public IOEventSource {
-    OSDeclareDefaultStructors(CirrusAudioEventSource)
+OSDeclareDefaultStructors(CirrusAudioEventSource)
 
-public:
-    using AudioEventState = cirrus::platform::hda::AudioEventState;
+    public : using AudioEventState = cirrus::platform::hda::AudioEventState;
     using Handler = void (*)(OSObject*, const AudioEventState&);
     static CirrusAudioEventSource* create(OSObject* owner, IOService* controller, Handler handler);
     static bool hooksReady();

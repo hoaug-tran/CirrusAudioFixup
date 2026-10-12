@@ -79,8 +79,8 @@ struct is not required.
 | `Core/` | Bus-independent register and amplifier contracts | `RegisterIO`, `RegisterMap`, `BusEndpoint`, `AmplifierLifecycle`, `AmplifierDescriptors` |
 | `Transport/` | Bus/provider transactions and controller ownership | `I2CController`, `I2CRegisterBus`, `VoodooI2CProvider`, `NativeSPIHost` |
 | `Transport/Intel/`, `Transport/AMD/` | Documented controller families | `IntelLPSSSPIController`, `AMDSPIController` |
-| `Platform/` | Board identity, resources, backend selection and owned runtime | `BoardConfiguration`, `AmplifierBackendRegistry`, `AmplifierRuntime` |
-| `Devices/<Model>/` | Silicon registers, framing, errata, lifecycle and resources | `CS35L41Backend`, `CS35L41SPIRegisterIO` |
+| `Platform/` | Board identity, resources, driver selection and owned runtime | `BoardConfiguration`, `AmplifierDriverRegistry`, `AmplifierManager` |
+| `Devices/<Model>/` | Silicon registers, framing, errata, lifecycle and resources | `CS35L41DriverFactory`, `CS35L41SPIRegisterIO` |
 | `Firmware/<Format>/` | Format-specific parser, mapping and upload | `WMFWParser`, `WMFWMemoryMapper`, `WMFWUploader` |
 | `Diagnostics/`, `Support/` | Transfer evidence and small kernel utilities | `DiagnosticTracer`, `Logging` |
 
@@ -89,14 +89,14 @@ layout. A protocol-specific firmware parser should retain its protocol name.
 Adding another AMP does not mean treating WMFW, CS35L41 framing or Intel LPSS
 registers as universal. `AmplifierModel` describes speaker AMP silicon, distinct
 from the Realtek HDA codec. `AmplifierDevice` retains register-level helpers;
-shipping lifecycle ownership lives in `AmplifierRuntime` and backend hooks.
+shipping lifecycle ownership lives in `AmplifierManager` and driver hooks.
 
 ### Framework target
 
-Adding a register-controlled AMP should require its `Devices/<Model>` backend,
+Adding a register-controlled AMP should require its `Devices/<Model>` driver,
 registry definition and verified board/firmware data. It should not require a
 silicon branch, new register sequence or descriptor allowlist in the service.
-Each backend owns its implementation and state; `AmplifierHost` supplies common
+Each driver owns its implementation and state; `AmplifierHost` supplies common
 board authorization, boot/resource policy, route observations and diagnostic
 publication. The production CS35L41 driver owns its live state, firmware parsing,
 silicon operations, protection and playback helpers. Its factory consumes only
@@ -105,7 +105,7 @@ service-member callback or service cast is part of the AMP template.
 
 AMP factories and destructors perform no hardware I/O. The serialized runtime calls
 safe shutdown before destroying drivers, then releases host/port/map/controller
-resources. A backend can report readiness and pending resources through
+resources. A driver can report readiness and pending resources through
 `AmplifierReport` and `prepareBringUpRetry`; pending polling must not reset hardware.
 Resource completion re-enters group bring-up using the same owned driver objects.
 Original diagnostics and cleanup failures must survive teardown/rebind. Traced
@@ -158,7 +158,7 @@ python3 Tests/reproduce_host.py
 python3 Tests/check_registers.py
 python3 Tests/check_transport.py
 python3 Tests/check_extensible_core.py
-python3 Tests/check_cs35l41_backend.py
+python3 Tests/check_cs35l41_driver.py
 python3 Tests/check_amd_spi.py
 python3 Tests/check_amd_spi_lifecycle.py
 python3 Tests/check_acpi_spi.py

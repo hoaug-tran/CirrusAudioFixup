@@ -49,8 +49,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-build-policy-") as directory:
 driver = (ROOT / "CirrusAudioFixup/CirrusAudioFixup.cpp").read_text(encoding="utf-8")
 assert driver.count('kDefaultVerboseLogging || bootArgEnabled("-cirrusdbg")') == 2
 assert 'setProperty("Cirrus_Build_Configuration"' in driver
-backend = (ROOT / 'CirrusAudioFixup/Devices/CS35L41/CS35L41Backend.cpp').read_text()
-assert 'mAmplifierRuntime.bringUp()' in driver and 'createBackend(' in backend
+factory = (ROOT / 'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp').read_text()
+assert 'mAmplifierManager.bringUp()' in driver and 'createDriver(' in factory
 assert 'switch (amp.model)' not in driver
 
 from production_source_fixture import source as production_source
@@ -69,7 +69,7 @@ for name in ("stopPlayback", "pollRegisterBit", "sendMailboxCommand"):
 monitor_start = driver.index('void CirrusAudioFixup::runBackgroundMonitor()')
 monitor = driver[monitor_start:driver.index('\n}', monitor_start)]
 assert 'IOSleep(' not in monitor and 'IODelay(' not in monitor
-assert 'mAmplifierRuntime.runtimeTick' in monitor and 'mAmplifierRuntime.startPlayback' in monitor
+assert 'mAmplifierManager.runtimeTick' in monitor and 'mAmplifierManager.startPlayback' in monitor
 assert 'Playback::advance' not in monitor and 'Playback::commit' not in monitor
 assert 'Playback::advance' in driver and 'Playback::commit' in driver
 

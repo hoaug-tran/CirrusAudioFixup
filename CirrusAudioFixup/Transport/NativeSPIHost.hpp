@@ -3,10 +3,10 @@
 #pragma once
 #include "Core/BusEndpoint.hpp"
 #include "Core/RegisterMap.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierDriverRegistry.hpp"
 #include "Transport/ACPIPath.hpp"
 #include "Transport/ACPISPIResources.hpp"
-#include "Transport/NativeSPIBackends.hpp"
+#include "Transport/SPIControllerDrivers.hpp"
 #include "Transport/SPIRegisterBus.hpp"
 #include <IOKit/IORegistryEntry.h>
 namespace cirrus::transport {
@@ -32,13 +32,13 @@ public:
         return {core::BusTransportType::SPI, mPaths[i], 0, false, r.endpoint.chipSelect, r.endpoint.clockHz, r.endpoint.mode};
     }
     IOReturn bind(IOACPIPlatformDevice* amplifier, IOService* owner, const core::RegisterMapConfig& format,
-                  NativeSPIControllerFactory factory = createNativeSPIBackend) {
+                  NativeSPIControllerFactory factory = createNativeSPIController) {
         return bindImpl(amplifier, owner, &format, factory);
     }
     // Controller inventory without guessing an unsupported AMP's register format.
     // No register buses/maps or AMP transfers are created in this mode.
     IOReturn bindControllers(IOACPIPlatformDevice* amplifier, IOService* owner,
-                             NativeSPIControllerFactory factory = createNativeSPIBackend) {
+                             NativeSPIControllerFactory factory = createNativeSPIController) {
         return bindImpl(amplifier, owner, nullptr, factory);
     }
 
@@ -145,8 +145,8 @@ private:
 
 public:
     // Call before lending register ports to clients. Replaces the read-only
-    // discovery maps only after every endpoint has a verified board/backend.
-    IOReturn configureAuthorized(const platform::AmplifierBackendRegistry& registry, const platform::BoardConfiguration& board,
+    // discovery maps only after every endpoint has a verified board/driver.
+    IOReturn configureAuthorized(const platform::AmplifierDriverRegistry& registry, const platform::BoardConfiguration& board,
                                  const platform::BoardIdentity& actual, const char* deviceHid, bool allowWrites = true) {
         if (!bound() || mAuthorized || !deviceHid || !board.permits(actual) || board.count != mCount)
             return fail("BOARD_AUTHORIZATION_REJECTED", kIOReturnNotPermitted);
@@ -167,7 +167,7 @@ public:
             }
             const auto* definition = registry.find(deviceHid, binding->siliconId, core::BusTransportType::SPI);
             if (!definition) {
-                result = fail("NO_REGISTERED_SPI_BACKEND", kIOReturnUnsupported, i, e.controllerPath, binding->siliconId);
+                result = fail("NO_REGISTERED_SPI_DRIVER", kIOReturnUnsupported, i, e.controllerPath, binding->siliconId);
                 break;
             }
             if (!mPorts[i]) {

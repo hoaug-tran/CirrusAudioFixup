@@ -7,11 +7,11 @@
 	objects = {
 6A9F6AC950CEE5FC9E124C03 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AttachmentState.hpp";sourceTree = "<group>";};
 5563407EB45C332E7AEB7810 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CPUIdentity.hpp";sourceTree = "<group>";};
-467C05493D3366377B8B15BF = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AMD/AMDNativeSPIBackend.hpp";sourceTree = "<group>";};
-93CA90577209D745B0DFA6F1 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "IntelNativeSPIBackend.hpp";sourceTree = "<group>";};
+467C05493D3366377B8B15BF = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AMD/AMDSPIControllerOwner.hpp";sourceTree = "<group>";};
+93CA90577209D745B0DFA6F1 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "IntelSPIControllerOwner.hpp";sourceTree = "<group>";};
 832F05729C9FF63F811668B8 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerFactory.hpp";sourceTree = "<group>";};
 5C656742B026D7B45E031029 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerOwner.hpp";sourceTree = "<group>";};
-520E5B62235CBEFCA0A2F70F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIBackends.hpp";sourceTree = "<group>";};
+520E5B62235CBEFCA0A2F70F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "SPIControllerDrivers.hpp";sourceTree = "<group>";};
 1EC86071840BB16D5072B690 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "TraceTypes.hpp";sourceTree = "<group>";};
 AA98911D63E8F93259AEBE62 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "FailureNames.hpp";sourceTree = "<group>";};
 53E69E8522D6B7A0D86DBC2F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "ResourceSchema.hpp";sourceTree = "<group>";};
@@ -19,21 +19,21 @@ AA98911D63E8F93259AEBE62 = {isa = PBXFileReference;lastKnownFileType = sourcecod
 4DC6A45D6438AA59D3DCAA71 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41Driver.hpp";sourceTree = "<group>";};
 ABCD61000000000000000001 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41Driver.cpp";sourceTree = "<group>";};
 ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD61000000000000000001;};
-        AECFDA71B41745F7BD246B9B = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41Backend.cpp";sourceTree = "<group>";};
+        AECFDA71B41745F7BD246B9B = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41DriverFactory.cpp";sourceTree = "<group>";};
         8A9A66A1329F44D390D8B6B8 = {isa = PBXBuildFile;fileRef = AECFDA71B41745F7BD246B9B;};
         28FCF60355DB403CA8D56264 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "I2CRegisterBus.hpp";sourceTree = "<group>";};
-		5471378CA53C475A884BD29A = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41Backend.hpp";sourceTree = "<group>";};
-		884B6D453F48442FA6D0B874 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AmplifierBackends.hpp";sourceTree = "<group>";};
+		5471378CA53C475A884BD29A = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41DriverFactory.hpp";sourceTree = "<group>";};
+		884B6D453F48442FA6D0B874 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AmplifierDrivers.hpp";sourceTree = "<group>";};
 		B71011000000000000000001 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "NativeSPIAmplifierRuntime.hpp";
+			path = "SPIAmplifierManager.hpp";
 			sourceTree = "<group>";
 		};
 		A6ACBB061A579B59A193BA93 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "AmplifierRuntime.hpp";
+			path = "AmplifierManager.hpp";
 			sourceTree = "<group>";
 		};
 		CA98C65691C0F2C60B20D60F = {
@@ -177,7 +177,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		EE9A377635384868BC5B5821 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "State.hpp";
+			path = "SiliconState.hpp";
 			sourceTree = "<group>";
 		};
 		B1CA410D7F1B4C648A2DD7F6 = {
@@ -195,7 +195,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		DF8B927CD2204E1381A49C5E = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = "Definition.hpp";
+			path = "CS35L41DriverRegistration.hpp";
 			sourceTree = "<group>";
 		};
 		5F18E3977620B1AFB2AEDD59 = {
@@ -218,11 +218,17 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			path = "CS35L41";
 			sourceTree = "<group>";
 		};
+        ABCD62000000000000000001 = {
+            isa = PBXGroup;
+            children = (5F18E3977620B1AFB2AEDD59,);
+            path = "Amplifiers";
+            sourceTree = "<group>";
+        };
 		B7025D93A1607FD444228958 = {
 			isa = PBXGroup;
 			children = (
                 884B6D453F48442FA6D0B874,
-				5F18E3977620B1AFB2AEDD59,
+				ABCD62000000000000000001,
 			);
 			path = "Devices";
 			sourceTree = "<group>";
@@ -464,7 +470,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			path = "FirmwareBundle.hpp";
 			sourceTree = "<group>";
 		};
-		0AE7D65E29CF3F41FCDAB433 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierBackendRegistry.hpp"; sourceTree = "<group>"; };
+		0AE7D65E29CF3F41FCDAB433 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierDriverRegistry.hpp"; sourceTree = "<group>"; };
 		E7B135887CFD04840682F4F3 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierGroup.hpp"; sourceTree = "<group>"; };
 		CAFE51000000000000000003 = {
 			isa = PBXFileReference;

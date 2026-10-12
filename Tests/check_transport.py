@@ -27,7 +27,7 @@ public:
     bool powered=true,stopping=false,mCapturingFailureSnapshot=false,nested=false;
     IOReturn mLastTransferReturn=0,diagnosticReturn=0,traceReturn=0;
     TraceSource source=TRACE_OTHER;uint8_t tracedEndpoint=0;
-    bool nativeBusReady()const{return powered && !stopping;}
+    bool communicationReady()const{return powered && !stopping;}
     void recordTrace(TraceSource s,uint8_t i,bool,bool,uint32_t,uint32_t,IOReturn result){source=s;tracedEndpoint=i;traceReturn=result;}
     void recordDiagnosticFailure(AmplifierState& a,unsigned,uint32_t,uint32_t,uint32_t,IOReturn result){diagnosticReturn=result;if(nested){nested=false;mCapturingFailureSnapshot=true;uint32_t v=0;readRegister(a,0,&v,TRACE_DUMP);mCapturingFailureSnapshot=false;}}
 '''

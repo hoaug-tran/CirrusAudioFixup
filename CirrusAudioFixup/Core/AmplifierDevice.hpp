@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "Core/RegisterIO.hpp"
 #include "Core/AudioTypes.hpp"
 #include "Core/BusEndpoint.hpp"
+#include "Core/RegisterIO.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

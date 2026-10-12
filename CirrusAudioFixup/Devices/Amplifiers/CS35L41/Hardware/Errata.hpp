@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace cirrus::devices::cs35l41 {
+namespace cirrus::devices::amplifiers::cs35l41 {
 
 struct ErrataPatch {
     uint32_t reg;
@@ -33,6 +33,6 @@ static const ErrataPatch kCs35l41RevB2ErrataPatch[] = {
 
 }
 
-using ErrataPatch = cirrus::devices::cs35l41::ErrataPatch;
-using ErrataTable = cirrus::devices::cs35l41::ErrataTable;
-using cirrus::devices::cs35l41::kCs35l41RevB2ErrataPatch;
+using ErrataPatch = cirrus::devices::amplifiers::cs35l41::ErrataPatch;
+using ErrataTable = cirrus::devices::amplifiers::cs35l41::ErrataTable;
+using cirrus::devices::amplifiers::cs35l41::kCs35l41RevB2ErrataPatch;

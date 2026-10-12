@@ -24,9 +24,7 @@ uint64_t IntelLPSSSPIController::MMIOWindow::nowUs() {
     return ns / 1000;
 }
 
-IntelLPSSSPIController::~IntelLPSSSPIController() {
-    shutdown();
-}
+IntelLPSSSPIController::~IntelLPSSSPIController() { shutdown(); }
 
 bool IntelLPSSSPIController::pciIsD0() const {
     if (!mPCI || mPCI->configRead16(0) != 0x8086 || mPCI->configRead16(2) != mDeviceId)
@@ -35,8 +33,7 @@ bool IntelLPSSSPIController::pciIsD0() const {
     // PMCSR is four bytes after the PM capability header. An absent PM
     // capability means there is no PCI D-state register to inspect.
     (void)mPCI->findPCICapability(kIOPCIPowerManagementCapability, &offset);
-    return !offset || (offset <= 0xf8 &&
-        (mPCI->configRead16(static_cast<uint8_t>(offset + 4)) & 3U) == 0);
+    return !offset || (offset <= 0xf8 && (mPCI->configRead16(static_cast<uint8_t>(offset + 4)) & 3U) == 0);
 }
 
 IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
@@ -88,8 +85,7 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     return result;
 }
 
-IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uint8_t* tx,
-                                         uint8_t* rx, size_t length) {
+IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
     if (!mLock)
         return kIOReturnNotReady;
     IOLockLock(mLock);

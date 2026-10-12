@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <IOKit/IOLib.h>
 #include "Firmware/WMFW/WMFWFormat.hpp"
+#include <IOKit/IOLib.h>
 
 #define WMFW_MAGIC_0 'W'
 #define WMFW_MAGIC_1 'M'
@@ -467,8 +467,7 @@ public:
             }
             if (base > 0xFFFFFFFFu - ctl.offset)
                 return false;
-            return WMFWMemoryMapper::mapPackedAddress(static_cast<RegionType>(ctl.type), base + ctl.offset, 0, reg) ==
-                   MappingStatus::OK;
+            return WMFWMemoryMapper::mapPackedAddress(static_cast<RegionType>(ctl.type), base + ctl.offset, 0, reg) == MappingStatus::OK;
         }
         return false;
     }

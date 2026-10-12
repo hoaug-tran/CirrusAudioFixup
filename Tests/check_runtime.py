@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-from service_runtime_fixture import PRODUCTION_BACKEND,FIELDS,BIND,IOLIB
+from service_runtime_fixture import PRODUCTION_DRIVER,FIELDS,BIND,IOLIB
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = production_source()
@@ -15,7 +15,7 @@ def function(name):
 
 names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringUpDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
 names.extend(['configureCS35L41Interrupt','monitorCS35L41','validateCS35L41Playback','commitCS35L41Playback','snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryBringUpResources'])
-functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierRuntime.bound() && bindAmplifierRuntime())mAmplifierRuntime.bringUp();')
+functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierManager.bound() && bindAmplifierDrivers())mAmplifierManager.bringUp();')
 
 amp = chip_state()
 
@@ -134,13 +134,13 @@ preamble = r'''
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Diagnostics/AttachmentState.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
-#include "Platform/AmplifierRuntime.hpp"
+#include "Platform/AmplifierManager.hpp"
 #include "Platform/AmplifierHost.hpp"
-#include "Devices/CS35L41/State.hpp"
-#include "Devices/CS35L41/Hardware/Registers.hpp"
-#include "Devices/CS35L41/Resources/Tuning.hpp"
-#include "Devices/CS35L41/Playback.hpp"
-#include "Devices/CS35L41/CS35L41Device.hpp"
+#include "Devices/Amplifiers/CS35L41/SiliconState.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/Tuning.hpp"
+#include "Devices/Amplifiers/CS35L41/Playback.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Device.hpp"
 using UInt8=uint8_t;
 using UInt16=uint16_t;
 using UInt32=uint32_t;
@@ -184,16 +184,16 @@ public:
 };
 }
 using namespace cirrus::diagnostics;
-using namespace cirrus::devices::cs35l41;
+using namespace cirrus::devices::amplifiers::cs35l41;
 bool gCirrusDebug = false;
 '''
 
-preamble += '#include "Devices/CS35L41/CS35L41Backend.hpp"\n#include "Devices/CS35L41/DSPControl.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += '#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"\n#include "Devices/Amplifiers/CS35L41/DSPControl.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
 
 # Runtime fault positions exclude boot transactions. Preserve the existing
 # simulated boot boundary, while running extracted production playback methods
 # through a test-only hook adapter. Production orchestration is extracted in
-# check_bringup; the complete owning driver is linked in check_cs35l41_backend.
+# check_bringup; the complete owning driver is linked in check_cs35l41_driver.
 RUNTIME_WRAPPER = r'''
 class RuntimeFixtureHooks final : public cirrus::core::AmplifierLifecycleHooks {
     cirrus::core::AmplifierLifecycleHooks* chip;
@@ -203,9 +203,9 @@ class RuntimeFixtureHooks final : public cirrus::core::AmplifierLifecycleHooks {
         return result;
     }
 public:
-    RuntimeFixtureHooks(cirrus::core::AmplifierLifecycleHooks* backend, CirrusAudioFixup::FixtureHost& p)
-        : chip(backend), platform(p) {}
-    ~RuntimeFixtureHooks() override { CirrusAudioFixup::destroyFixtureBackend(chip); }
+    RuntimeFixtureHooks(cirrus::core::AmplifierLifecycleHooks* driver, CirrusAudioFixup::FixtureHost& p)
+        : chip(driver), platform(p) {}
+    ~RuntimeFixtureHooks() override { CirrusAudioFixup::destroyFixtureDriver(chip); }
     cirrus::core::AmplifierReport report() const override{return chip->report();}
     IOReturn prepareBringUpRetry(uint64_t now) override{return chip->prepareBringUpRetry(now);}
     IOReturn identify() override { return chip->identify(); }
@@ -231,14 +231,14 @@ public:
     cirrus::core::ObservedPlayback observedPlayback() const override { return chip->observedPlayback(); }
     cirrus::core::BringUpDisposition disposition() const override { return chip->disposition(); }
 };
-cirrus::core::AmplifierLifecycleHooks* createRuntimeFixture(const cirrus::platform::AmplifierBackendContext& c) {
-    auto* backend=CirrusAudioFixup::createFixtureBackend(c);
-    if(!backend)return nullptr;
+cirrus::core::AmplifierLifecycleHooks* createRuntimeFixture(const cirrus::platform::AmplifierDriverContext& c) {
+    auto* driver=CirrusAudioFixup::createFixtureDriver(c);
+    if(!driver)return nullptr;
     auto* p=static_cast<CirrusAudioFixup::FixtureHost*>(c.platformContext);
-    return new RuntimeFixtureHooks(backend,*p);
+    return new RuntimeFixtureHooks(driver,*p);
 }
 '''
-RUNTIME_BIND = BIND.replace('createFixtureBackend,destroyFixtureBackend', 'createRuntimeFixture,CirrusAudioFixup::destroyFixtureBackend')
+RUNTIME_BIND = BIND.replace('createFixtureDriver,destroyFixtureDriver', 'createRuntimeFixture,CirrusAudioFixup::destroyFixtureDriver')
 
 mock = r'''
 namespace cirrus { namespace platform { namespace hda {
@@ -264,8 +264,8 @@ struct IOInterruptEventSource {
 class CirrusAudioFixup {
 public:
 ''' + FIELDS + r'''
-    void suspendNativeTransport() {}
-    bool resumeNativeTransport() {return true;}
+    void suspendCommunication() {}
+    bool resumeCommunication() {return true;}
 public:
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
@@ -430,14 +430,14 @@ public:
     IOReturn loadCS35L41Firmware(CS35L41Amp& a){a.bringUpDisposition=a.firmwareIdentityPending?cirrus::core::BringUpDisposition::Wait:cirrus::core::BringUpDisposition::Continue;return 0;}
     IOReturn verifyCS35L41Ready(CS35L41Amp& a){a.initialized=true;return 0;}
     IOReturn shutdownCS35L41(CS35L41Amp& a){bool stopped=stopPlayback(a);bool halted=stopDSP(a);a.initialized=false;a.firmwareValidated=false;return stopped&&halted?0:kIOReturnNotReady;}
-    void bringUpAmplifiers(){if(mNeedsReinitialization)++restores;if(bindAmplifierRuntime())mAmplifierRuntime.bringUp();}
+    void bringUpAmplifiers(){if(mNeedsReinitialization)++restores;if(bindAmplifierDrivers())mAmplifierManager.bringUp();}
     void initializeFirmware(CS35L41Amp&,const char*) {}
     static const char* failureName(DiagnosticFailure) { return "failure"; }
     static const char* stageName(DriverStage) { return "stage"; }
     // Existing lifecycle tests drive the production callback until a pending
     // start completes. Dedicated step tests below inspect each callback.
     void runBackgroundMonitor() {
-        if(!mAmplifierRuntime.bound() && bindAmplifierRuntime())mAmplifierRuntime.bringUp();
+        if(!mAmplifierManager.bound() && bindAmplifierDrivers())mAmplifierManager.bringUp();
         runMonitorStep();
         for(unsigned tick=0; tick<150; ++tick) {
             bool pending=false;
@@ -471,7 +471,7 @@ public:
 checks = r'''
 int main() {
     {
-        using namespace cirrus::devices::cs35l41;
+        using namespace cirrus::devices::amplifiers::cs35l41;
         CirrusAudioFixup stereo;
         stereo.isolateEndpoints=true;
         stereo.suppressRightPup=true;
@@ -829,7 +829,7 @@ int main() {
     power.runBackgroundMonitor(); power.handlePowerChange(false);
     assert(power.ops==offOps && timer.cancelled==1);
     power.handlePowerChange(true);
-    assert(power.mPowerAvailable && !power.mNeedsReinitialization && power.restores==0 && power.mAmplifierRuntime.stage()==cirrus::core::AmplifierStage::Ready);
+    assert(power.mPowerAvailable && !power.mNeedsReinitialization && power.restores==0 && power.mAmplifierManager.stage()==cirrus::core::AmplifierStage::Ready);
     assert(power.ops==offOps);
     power.mStopping=true; power.handlePowerChange(false); power.runBackgroundMonitor();
     assert(power.ops==offOps);
@@ -845,7 +845,7 @@ int main() {
     CirrusAudioFixup verdict;
     verdict.mAmplifiers[1]=verdict.mAmplifiers[0];
     verdict.mAmplifiers[1].address=0x41;verdict.mAmplifiers[1].channel=cirrus::core::AudioChannel::Right;
-    assert(verdict.bindAmplifierRuntime());verdict.mAmplifierRuntime.bringUp();
+    assert(verdict.bindAmplifierDrivers());verdict.mAmplifierManager.bringUp();
     verdict.mAmplifiers[0].dspAlive=false;verdict.mAmplifiers[1].dspAlive=false;
     verdict.publishDriverVerdict();
     assert(verdict.properties["Cirrus_Driver_Verdict"]=="OUTPUT_DISABLED_DSP_UNVERIFIED");
@@ -1007,15 +1007,15 @@ int main() {
     auto& missingAmp=missingIdentity.mAmplifiers[0];
     missingAmp.firmwareIdentityPending=true;
     missingAmp.firmwareIdentityDeadlineMs=playbackTimeMilliseconds();
-    assert(missingIdentity.bindAmplifierRuntime());missingIdentity.mAmplifierRuntime.bringUp();
+    assert(missingIdentity.bindAmplifierDrivers());missingIdentity.mAmplifierManager.bringUp();
     missingIdentity.retryBringUpResources();
     checkNew(missingAmp.playbackFaulted && !missingAmp.firmwareIdentityPending &&
-             missingIdentity.mAmplifierRuntime.stage()==cirrus::core::AmplifierStage::Faulted,
+             missingIdentity.mAmplifierManager.stage()==cirrus::core::AmplifierStage::Faulted,
              "identity wait expires with explicit failure instead of retrying forever");
     CirrusAudioFixup irqDriver;
     IOInterruptEventSource irqSource;
     irqDriver.mAmpInterrupt=&irqSource;
-    assert(irqDriver.bindAmplifierRuntime() && irqDriver.mAmplifierRuntime.bringUp()==0);
+    assert(irqDriver.bindAmplifierDrivers() && irqDriver.mAmplifierManager.bringUp()==0);
     checkNew(irqDriver.configureAmplifierInterrupt(),"healthy reference amps configure protection IRQ");
     checkNew(irqDriver.regs[0x10110]==0x7FFD7E3F && irqDriver.regs[0x242C]==0x02000000,
              "IRQ setup matches Linux mask and GPIO2 open drain");
@@ -1026,7 +1026,7 @@ int main() {
              "protection IRQ latches fault and disables level delivery");
     checkNew(irqDriver.properties["Cirrus_Amp_IRQ_Mode"]=="FAULT_LATCHED_IRQ_DISABLED","IRQ fault evidence survives polling fallback");
     CirrusAudioFixup irqSetupFault;
-    assert(irqSetupFault.bindAmplifierRuntime() && irqSetupFault.mAmplifierRuntime.bringUp()==0);
+    assert(irqSetupFault.bindAmplifierDrivers() && irqSetupFault.mAmplifierManager.bringUp()==0);
     irqSetupFault.failAt=2;
     checkNew(!irqSetupFault.configureAmplifierInterrupt() && irqSetupFault.regs[0x10110]==0xFFFFFFFF,
              "partial IRQ setup restores polling masks");
@@ -1163,6 +1163,6 @@ with tempfile.TemporaryDirectory(prefix='cirrus-runtime-check-') as directory:
     (tmp / 'IOKit').mkdir()
     (tmp / 'IOKit/IOLib.h').write_text(IOLIB.replace('inline void IOSleep(unsigned){}','inline void IOSleep(unsigned);'))
     source = tmp / 'runtime.cpp'
-    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + PRODUCTION_BACKEND + RUNTIME_WRAPPER + RUNTIME_BIND + functions + checks, encoding='utf-8')
+    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + PRODUCTION_DRIVER + RUNTIME_WRAPPER + RUNTIME_BIND + functions + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'runtime.exe')], check=True)
     subprocess.run([str(tmp / 'runtime.exe')], check=True)

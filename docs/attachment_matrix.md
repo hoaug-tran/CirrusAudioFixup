@@ -28,7 +28,7 @@ allowlists were not widened.
 | Known AMP, provider has no addressed I2C contract | Reject before board reset or AMP initialization; `I2C_PROVIDER_ABI_UNAVAILABLE` |
 | Known AMP, nub rejects the custom platform function | Read-only preflight returns the native error; `I2C_ADDRESSED_FUNCTION_UNSUPPORTED`; no board reset |
 | Known AMP, native SPI owner rejects controller identity/resources | `COMMUNICATION` failure with module reason/native return; no AMP transfers |
-| SPI controller works, AMP definition is absent | Controller-only inventory, no guessed register format/maps, no AMP transfers; `NO_REGISTERED_BACKEND` |
+| SPI controller works, AMP definition is absent | Controller-only inventory, no guessed register format/maps, no AMP transfers; `NO_REGISTERED_DRIVER` |
 | Communication returns a readable unexpected silicon ID | `AMPLIFIER` / `AMP_IDENTITY_MISMATCH`; no AMP initialization |
 | Direct ACPI node declares I2C without a selected provider/controller contract | `NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE`; it is not treated as SPI |
 | Mixed I2C/SPI, malformed or unsupported ACPI serial resources | `RESOURCE` rejection before controller/AMP traffic |

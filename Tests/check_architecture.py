@@ -70,7 +70,7 @@ fixture = r'''
 #include <cstring>
 #include "Core/AmplifierDescriptors.hpp"
 #include "Platform/PlatformProfile.hpp"
-#include "Platform/AmplifierBackendRegistry.hpp"
+#include "Platform/AmplifierDriverRegistry.hpp"
 #include "Diagnostics/AttachmentState.hpp"
 #include "Diagnostics/TraceTypes.hpp"
 using namespace cirrus::diagnostics;
@@ -95,7 +95,7 @@ public:
         cirrus::core::AmplifierModel model=cirrus::core::AmplifierModel::CS35L41;
         cirrus::core::AudioChannel channel=cirrus::core::AudioChannel::Left;
         cirrus::core::BusEndpoint endpoint{};uint8_t endpointIndex=0;cirrus::core::RegisterIO* registerIO=nullptr;};
-    struct Runtime{bool bound()const{return false;}}mAmplifierRuntime;
+    struct Runtime{bool bound()const{return false;}}mAmplifierManager;
     size_t detectConfiguredI2CAmplifiers(){return 0;}
     size_t expectedAmplifierCount()const{return mPlatformProfile->endpointCount;}
     static constexpr size_t kMaxAmplifiers=2;
@@ -106,14 +106,14 @@ public:
     cirrus::transport::I2CController* mI2CController=&controller;
     cirrus::transport::I2CRegisterBus* mI2CBuses[2]{};cirrus::core::RegisterMap* mI2CMaps[2]{};
     cirrus::transport::I2CController* createI2CController(){return nullptr;}
-    cirrus::platform::AmplifierBackendRegistry mBackendRegistry;
+    cirrus::platform::AmplifierDriverRegistry mDriverRegistry;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
     CirrusAudioFixup(){
-        static const cirrus::platform::AmplifierBackendDefinition d=[](){
+        static const cirrus::platform::AmplifierDriverRegistration d=[](){
             cirrus::core::RegisterMapConfig f;f.readable=[](uint32_t){return true;};f.writable=f.readable;
-            cirrus::platform::AmplifierBackendDefinition r{"fixture","CLSA0100",0x35a40,1,f,{},[](const cirrus::platform::AmplifierBackendContext&)->cirrus::core::AmplifierLifecycleHooks*{return nullptr;},[](cirrus::core::AmplifierLifecycleHooks*){}};
+            cirrus::platform::AmplifierDriverRegistration r{"fixture","CLSA0100",0x35a40,1,f,{},[](const cirrus::platform::AmplifierDriverContext&)->cirrus::core::AmplifierLifecycleHooks*{return nullptr;},[](cirrus::core::AmplifierLifecycleHooks*){}};
             r.model=cirrus::core::AmplifierModel::CS35L41;return r;
-        }();assert(mBackendRegistry.add(d));
+        }();assert(mDriverRegistry.add(d));
     }
     ~CirrusAudioFixup(){for(auto* p:mI2CMaps)delete p;for(auto* p:mI2CBuses)delete p;}
     cirrus::diagnostics::AttachmentState mAttachment{};

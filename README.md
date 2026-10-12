@@ -8,11 +8,11 @@
 [![Platform](https://img.shields.io/badge/subsystem-AppleACPI_%2F_VoodooI2C_%2F_HDA-orange?style=flat-square)](#how-it-works)
 [![License](https://img.shields.io/badge/license-Non--Commercial-lightgrey?style=flat-square)](LICENSE)
 
-**Open-source macOS kernel extension with an extensible amplifier runtime over I2C and SPI. The implemented silicon backend is CS35L41.**
+**Open-source macOS kernel extension with an extensible amplifier runtime over I2C and SPI. The implemented silicon driver is CS35L41.**
 
-Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered backends for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; ASUS/HP profiles and physical SPI playback validation remain pending. See [SPI development status](docs/spi_support.md).
+Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered drivers for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; ASUS/HP profiles and physical SPI playback validation remain pending. See [SPI development status](docs/spi_support.md).
 
-The shared register-map, endpoint, board/firmware identity, lifecycle and backend contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon backends are registered in `Devices/AmplifierBackends.hpp`.
+The shared register-map, endpoint, board/firmware identity, lifecycle and driver contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon drivers are registered in `Devices/AmplifierDrivers.hpp`.
 
 Reference platform: **Lenovo Legion 7 16ACHg6 · Realtek ALC287 · AMD**
 
@@ -74,7 +74,7 @@ CirrusAudioFixup observes the host output stream and manages the amplifier lifec
 
 ## Hardware and macOS scope
 
-The implemented backend is CS35L41. The current personality matches a `VoodooI2CDeviceNub` whose `IOName` is `CLSA0100`. Hardware initialization additionally requires HDA PCI subsystem identity `17AA:382B` or `17AA:3847` before the reference GPIO reset. Missing or different identity blocks initialization; firmware overrides do not override this wiring policy. Both configured amplifiers must be discovered before either is initialized.
+The implemented driver is CS35L41. The current personality matches a `VoodooI2CDeviceNub` whose `IOName` is `CLSA0100`. Hardware initialization additionally requires HDA PCI subsystem identity `17AA:382B` or `17AA:3847` before the reference GPIO reset. Missing or different identity blocks initialization; firmware overrides do not override this wiring policy. Both configured amplifiers must be discovered before either is initialized.
 
 | Configuration | What the source currently provides |
 | --- | --- |
@@ -82,10 +82,10 @@ The implemented backend is CS35L41. The current personality matches a `VoodooI2C
 | Lenovo Legion 5 Pro 16ACH6H, SSID `17AA:382B` | Explicit translation to the `17AA:3847` resource; validate speaker and boost equivalence on the actual machine |
 | `CLSA0101` / `CSC3551` | Staged profiles with automatic initialization disabled; `CSC3551` has opt-in ACPI SPI discovery |
 | Other Intel or AMD boards | Porting required: provider, reset wiring, audio route, boost circuit and tuning must be verified |
-| CS35L45 / CS35L51 / CS35L56 / other amplifier models | No implemented backend; unknown models are rejected before initialization |
+| CS35L45 / CS35L51 / CS35L56 / other amplifier models | No implemented driver; unknown models are rejected before initialization |
 | Realtek ALC codecs | Managed by AppleALC and the host audio stack, not by this kext |
 
-The reference profiles specify two endpoints: left `0x40` and right `0x41`. The service and runtime can own up to 16 endpoints; this capacity does not enable additional CS35L41 audio channels. Each backend and verified board must define its channel routing and tuning.
+The reference profiles specify two endpoints: left `0x40` and right `0x41`. The service and runtime can own up to 16 endpoints; this capacity does not enable additional CS35L41 audio channels. Each driver and verified board must define its channel routing and tuning.
 
 The HDA gate accepts 48 kHz stereo PCM with 16-, 20- or 24-bit samples. The amplifier uses fixed ASP slot timing. A 44.1 kHz *hardware stream* is rejected; CoreAudio may resample a 44.1 kHz source before it reaches HDA.
 
@@ -251,7 +251,7 @@ Flags with a value of `0` are treated as disabled. Debug builds enable routine l
 | `-cirrusro` | Skip GPIO reset, initialization and register writes; collect a one-shot register snapshot. Reads still send an I2C register-address prefix |
 | `-cirrusnodsp` | Skip firmware and coefficient upload; use the explicit DAC bypass path without DSP acoustic protection |
 | `-cirrusphase=<name>` | Stop after a selected initialization stage; playback stays disabled |
-| `-cirrusspi` | Opt-in native ACPI SPI ownership; unknown boards remain read-only. Writes require a verified profile and registered backend; `-cirrusro` forces read-only operation |
+| `-cirrusspi` | Opt-in native ACPI SPI ownership; unknown boards remain read-only. Writes require a verified profile and registered driver; `-cirrusro` forces read-only operation |
 | `-cirruslegacyprobe` | Permit read-only fixed-address discovery outside automatic profile policy; never invent endpoints or authorize initialization |
 | `-cirrusprobe` | Record the flag in `CirrusBootArgParsed`; currently does not enable a separate transaction-log mode |
 | `-cirrusdelay=<ms>` | Set the read-only snapshot delay, default 100 ms. Does not replace the normal 15 ms startup wait |
@@ -456,7 +456,7 @@ Existing board/speaker entries and resource symbols reject import without change
 replace an existing profile explicitly in source after reviewing its resources.
 Generated arrays carry SHA-256 comments for byte identity, not proof of authenticity.
 
-For another amplifier model, implement `AmplifierLifecycleHooks`, silicon identity/access rules and bus formats, then register its factory in `Devices/AmplifierBackends.hpp`. Add its silicon descriptor and matching IOService personality where needed, plus a verified board manifest and exact firmware/tuning bindings. Common bring-up, playback coordination and PM dispatch do not need a new model switch. Reset/trim, clocks, power, DSP parsing, IRQ handling and fault recovery remain backend responsibilities. See [the backend contract](docs/extensible_driver.md).
+For another amplifier model, implement `AmplifierLifecycleHooks`, silicon identity/access rules and bus formats, then register its factory in `Devices/AmplifierDrivers.hpp`. Add its silicon descriptor and matching IOService personality where needed, plus a verified board manifest and exact firmware/tuning bindings. Common bring-up, playback coordination and PM dispatch do not need a new model switch. Reset/trim, clocks, power, DSP parsing, IRQ handling and fault recovery remain driver responsibilities. See [the driver contract](docs/extensible_driver.md).
 
 ---
 
@@ -471,10 +471,12 @@ OEM firmware and Veco left/right coefficients for the `17AA3847 / spkid1` profil
 The OEM configured gain is also 17.5 dB. These checks establish resource identity,
 not matching Windows effects, volume curves or measured acoustic output.
 
-Register definitions and sequencing draw on the Linux CS35L41 HDA/ASoC drivers. This is a macOS port with board-specific behavior, not a claim of bit-for-bit parity with every upstream path. Firmware and tuning resources are embedded in [Firmware.hpp](CirrusAudioFixup/Devices/CS35L41/Resources/Firmware.hpp); preserve their provenance and applicable licenses when replacing them.
+Register definitions and sequencing draw on the Linux CS35L41 HDA/ASoC drivers. This is a macOS port with board-specific behavior, not a claim of bit-for-bit parity with every upstream path. Firmware and tuning resources are embedded in [Firmware.hpp](CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Firmware.hpp); preserve their provenance and applicable licenses when replacing them.
 
 See the [CS35L41 parity audit](docs/linux_parity_audit.md) for corrected reset/unmute values and remaining differences. DSP playback uses Linux's default PCM gain of 17.5 dB unless its selected channel has an embedded `.bincfg` override. Digital amplifier volume stays at 0 dB. The existing reference resource has no companion gain override. The Windows OEM effects chain is not reproduced or verified here. A matching volume-slider position does not establish equal loudness or EQ.
 
 See [LICENSE](LICENSE) for the non-commercial distribution terms. Paid system-setup services are permitted under the license when no fee is charged for this software itself; selling the software or paid EFI bundles is not.
 
 Maintained by [Tran Kinh Hoang](https://github.com/hoaug-tran). Thanks to the VoodooI2C team, Acidanthera, Cirrus Logic and the Linux audio maintainers for their code and documentation. The [reference EFI](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh) and its [historical audio issue](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh/issues/2) provide board context, not a validation matrix for every macOS release.
+
+Driver module naming and ownership conventions: [kernel driver naming](docs/kernel_driver_naming.md).

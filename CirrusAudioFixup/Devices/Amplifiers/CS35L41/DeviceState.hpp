@@ -2,10 +2,10 @@
 #pragma once
 #include "Core/AudioTypes.hpp"
 #include "Core/BusEndpoint.hpp"
-#include "Devices/CS35L41/State.hpp"
+#include "Devices/Amplifiers/CS35L41/SiliconState.hpp"
 
-namespace cirrus::devices::cs35l41 {
-struct DeviceState : cirrus::devices::cs35l41::State {
+namespace cirrus::devices::amplifiers::cs35l41 {
+struct DeviceState : cirrus::devices::amplifiers::cs35l41::SiliconState {
     char endpointLabel[16]{};
     // Identity and channel come from the silicon probe and board endpoint.
     // Do not infer routing or tuning from a display name or slave address.

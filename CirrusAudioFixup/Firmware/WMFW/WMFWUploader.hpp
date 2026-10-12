@@ -24,10 +24,9 @@ public:
         outPlan.planCrc = 0xFFFFFFFF;
 
         uint32_t mappedBase = 0;
-        if (WMFWMemoryMapper::mapPackedAddress(region.regionType, 0, 0, mappedBase) != MappingStatus::OK ||
-            policy.maxPayloadBytes < 4 || policy.maxPayloadBytes > 252 || (region.size && !region.data.begin) ||
-            region.data.size < region.size || (region.dspRegister & 3) || (region.size & 3) ||
-            uint64_t(region.dspRegister) + region.size > 0x100000000ULL)
+        if (WMFWMemoryMapper::mapPackedAddress(region.regionType, 0, 0, mappedBase) != MappingStatus::OK || policy.maxPayloadBytes < 4 ||
+            policy.maxPayloadBytes > 252 || (region.size && !region.data.begin) || region.data.size < region.size ||
+            (region.dspRegister & 3) || (region.size & 3) || uint64_t(region.dspRegister) + region.size > 0x100000000ULL)
             return false;
         if (!region.size)
             return true;

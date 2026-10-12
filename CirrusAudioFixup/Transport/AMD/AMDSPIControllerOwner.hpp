@@ -4,7 +4,7 @@
 #include "Transport/AMD/AMDSPIController.hpp"
 #include "Transport/NativeSPIControllerOwner.hpp"
 namespace cirrus::transport::amd {
-class AMDNativeSPIBackend final : public NativeSPIControllerOwner {
+class AMDSPIControllerOwner final : public NativeSPIControllerOwner {
     AMDSPIController mController;
     IOACPIPlatformDevice* mTarget{nullptr}; // Borrowed host retain.
 public:
@@ -36,17 +36,17 @@ public:
         return result;
     }
 };
-inline NativeSPIControllerOwner* createNativeSPIBackend(IOACPIPlatformDevice* target, IOPCIDevice*, IOService* owner,
-                                                        NativeSPIControllerFailure& failure) {
-    auto* backend = new AMDNativeSPIBackend;
-    if (!backend) {
+inline NativeSPIControllerOwner* createNativeSPIController(IOACPIPlatformDevice* target, IOPCIDevice*, IOService* owner,
+                                                           NativeSPIControllerFailure& failure) {
+    auto* driver = new AMDSPIControllerOwner;
+    if (!driver) {
         failure = {"AMD_CONTROLLER_BIND_FAILED", kIOReturnNoMemory, 0};
         return nullptr;
     }
-    if (backend->bind(target, owner, failure) != kIOReturnSuccess) {
-        delete backend;
+    if (driver->bind(target, owner, failure) != kIOReturnSuccess) {
+        delete driver;
         return nullptr;
     }
-    return backend;
+    return driver;
 }
 }

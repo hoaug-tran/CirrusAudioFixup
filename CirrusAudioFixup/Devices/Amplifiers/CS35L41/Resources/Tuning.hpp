@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace cirrus::devices::cs35l41::tuning {
+namespace cirrus::devices::amplifiers::cs35l41::tuning {
 
 struct Parameters {
     uint32_t pcmGain{17};
@@ -18,8 +18,7 @@ struct Parameters {
 };
 
 inline uint32_t readLittle32(const uint8_t* data) {
-    return uint32_t(data[0]) | (uint32_t(data[1]) << 8) |
-           (uint32_t(data[2]) << 16) | (uint32_t(data[3]) << 24);
+    return uint32_t(data[0]) | (uint32_t(data[1]) << 8) | (uint32_t(data[2]) << 16) | (uint32_t(data[3]) << 24);
 }
 
 // Layout follows Linux v6.12 cs35l41_hda.c: a 16-byte header, then records
@@ -30,8 +29,7 @@ inline bool parse(const uint8_t* data, size_t size, Parameters& output) {
     output = {};
     if (!data && !size)
         return true;
-    if (!data || size < 16 || size > 65536 || (size & 3) ||
-        readLittle32(data) != 0x109A4A35 || readLittle32(data + 4) != 1 ||
+    if (!data || size < 16 || size > 65536 || (size & 3) || readLittle32(data) != 0x109A4A35 || readLittle32(data + 4) != 1 ||
         readLittle32(data + 8) != size)
         return false;
     const uint32_t entries = readLittle32(data + 12);
@@ -65,8 +63,6 @@ inline bool parse(const uint8_t* data, size_t size, Parameters& output) {
     return true;
 }
 
-inline uint32_t encodeGain(uint32_t pcmGain) {
-    return (pcmGain << 5) | 19U;
-}
+inline uint32_t encodeGain(uint32_t pcmGain) { return (pcmGain << 5) | 19U; }
 
 }

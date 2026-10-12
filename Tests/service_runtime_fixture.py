@@ -1,17 +1,17 @@
 """Production orchestration extraction with mocked silicon primitives.
 
 This fixture intentionally borrows mock chip state to inspect isolated stage
-faults. It is not the production ownership contract. check_cs35l41_backend links
+faults. It is not the production ownership contract. check_cs35l41_driver links
 and exercises the complete independent production driver.
 """
 from pathlib import Path
 from production_source_fixture import method
 ROOT=Path(__file__).resolve().parents[1]
 HEADER=(ROOT/'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text()
-a=HEADER.index('    struct AmplifierBackendOwner final')
+a=HEADER.index('    struct AmplifierHostAdapter final')
 b=HEADER.index('    char mRuntimeControllerPath',a)
 PLATFORM_ADAPTER=HEADER[a:b]
-PRODUCTION_BACKEND=""
+PRODUCTION_DRIVER=""
 FIXTURE_SHIM=r'''
 
     struct FixtureHost final : cirrus::platform::AmplifierHost {
@@ -27,8 +27,8 @@ FIXTURE_SHIM=r'''
     };
     struct FixtureHooks final : cirrus::core::AmplifierLifecycleHooks {
         FixtureHost& host;CirrusAudioFixup& owner;AmplifierState& mAmplifier;
-        const cirrus::platform::AmplifierBackendContext& mContext;
-        FixtureHooks(const cirrus::platform::AmplifierBackendContext& c,FixtureHost& h):host(h),owner(*h.owner),mAmplifier(*h.amp),mContext(c){}
+        const cirrus::platform::AmplifierDriverContext& mContext;
+        FixtureHooks(const cirrus::platform::AmplifierDriverContext& c,FixtureHost& h):host(h),owner(*h.owner),mAmplifier(*h.amp),mContext(c){}
         cirrus::core::BringUpDisposition disposition() const override{return mAmplifier.bringUpDisposition;}
         IOReturn identify() override{uint32_t id=0;if(!mContext.io.read(0,&id))return mContext.io.lastError();return id==0x35a40?0:kIOReturnNotFound;}
         IOReturn authorizeBoard() override{return host.authorized()?0:kIOReturnNotPermitted;}
@@ -45,7 +45,7 @@ FIXTURE_SHIM=r'''
         IOReturn runtimeTick(const cirrus::core::PlaybackContext& c) override{owner.monitorCS35L41(mAmplifier,c);return 0;}
         bool validatePlayback(const cirrus::core::PlaybackContext& c) override{return owner.validateCS35L41Playback(mAmplifier,c);}
         bool playbackNeedsPreparation() const override{return mAmplifier.initialized && !mAmplifier.playbackActive && (!mAmplifier.playbackFaulted || (mAmplifier.pllRecoveryPending && mAmplifier.pllRecoveryAttempts<3));}
-        bool playbackPrepared() const override{return mAmplifier.initialized && !mAmplifier.playbackFaulted && mAmplifier.playbackTransition.phase==cirrus::devices::cs35l41::PlaybackPhase::Prepared;}
+        bool playbackPrepared() const override{return mAmplifier.initialized && !mAmplifier.playbackFaulted && mAmplifier.playbackTransition.phase==cirrus::devices::amplifiers::cs35l41::PlaybackPhase::Prepared;}
         bool playbackFaulted() const override{return mAmplifier.playbackFaulted && (!mAmplifier.pllRecoveryPending || mAmplifier.pllRecoveryAttempts>=3);}
         bool playbackStartCancelled() const override{return mAmplifier.playbackStartCancelled;}
         bool playbackPending() const override{return mAmplifier.playbackTransition.pending() || mAmplifier.shutdownTransition.pending();}
@@ -74,39 +74,39 @@ FIXTURE_SHIM=r'''
         void logASPSnapshot(AmplifierState& a){owner.logASPSnapshot(a);}
         void initializeFirmware(AmplifierState& a,const char* p){owner.initializeFirmware(a,p);}
 '''
-DRIVER=(ROOT/'CirrusAudioFixup/Devices/CS35L41/CS35L41Driver.cpp').read_text()
+DRIVER=(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41Driver.cpp').read_text()
 for flow in ('initializeHardware','loadFirmwareFlow','verifyReadyFlow','shutdownFlow'):
     body=method(DRIVER,'CS35L41Driver',flow).replace('CS35L41Driver::','').replace('mHost.debugHalted()','owner.mDebugPhaseHalted')
     FIXTURE_SHIM+=body+'\n'
 FIXTURE_SHIM+=r'''
     };
-    static cirrus::core::AmplifierLifecycleHooks* createFixtureBackend(const cirrus::platform::AmplifierBackendContext& c){auto* h=static_cast<FixtureHost*>(c.platformContext);if(h->amp->model!=cirrus::core::AmplifierModel::CS35L41)return nullptr;return new FixtureHooks(c,*h);}
-    static void destroyFixtureBackend(cirrus::core::AmplifierLifecycleHooks* p){delete p;}
+    static cirrus::core::AmplifierLifecycleHooks* createFixtureDriver(const cirrus::platform::AmplifierDriverContext& c){auto* h=static_cast<FixtureHost*>(c.platformContext);if(h->amp->model!=cirrus::core::AmplifierModel::CS35L41)return nullptr;return new FixtureHooks(c,*h);}
+    static void destroyFixtureDriver(cirrus::core::AmplifierLifecycleHooks* p){delete p;}
 '''
 FIELDS=r'''
     cirrus::diagnostics::AttachmentState mAttachment{};
     void publishAttachmentStatus(){}
-    cirrus::platform::AmplifierRuntime mAmplifierRuntime{false};
-    cirrus::platform::AmplifierBackendRegistry fixtureRegistry;
+    cirrus::platform::AmplifierManager mAmplifierManager{false};
+    cirrus::platform::AmplifierDriverRegistry fixtureRegistry;
     cirrus::platform::BoardConfiguration fixtureBoard;
     cirrus::platform::AmplifierBinding fixtureBindings[2]{};
     cirrus::firmware::FirmwareBundle fixtureFirmware[2]{};
     FixtureHost fixtureOwners[2]{};
     cirrus::core::RegisterIO* fixturePorts[2]{};
     bool fixtureRegistered=false;
-    bool bindAmplifierRuntime();
-    void teardownAmplifierRuntime();
+    bool bindAmplifierDrivers();
+    void releaseAmplifierDrivers();
     size_t expectedAmplifierCount() const {return mPlatformProfile->endpointCount;}
-    ~CirrusAudioFixup(){teardownAmplifierRuntime();}
+    ~CirrusAudioFixup(){releaseAmplifierDrivers();}
 '''
 FIELDS=FIXTURE_SHIM+FIELDS
 BIND=r'''
-bool CirrusAudioFixup::bindAmplifierRuntime() {
-    if(mAmplifierRuntime.bound())return true;
+bool CirrusAudioFixup::bindAmplifierDrivers() {
+    if(mAmplifierManager.bound())return true;
     cirrus::core::RegisterMapConfig f;f.readable=[](uint32_t){return true;};f.writable=f.readable;
-    static const cirrus::platform::AmplifierBackendDefinition d{"fixture-service","CLSA0100",0x35a40,1,f,{},createFixtureBackend,destroyFixtureBackend,true};
+    static const cirrus::platform::AmplifierDriverRegistration d{"fixture-service","CLSA0100",0x35a40,1,f,{},createFixtureDriver,destroyFixtureDriver,true};
     if(!fixtureRegistered){assert(fixtureRegistry.add(d));fixtureRegistered=true;}
-    const cirrus::platform::AmplifierBackendContext* contexts[2]{};
+    const cirrus::platform::AmplifierDriverContext* contexts[2]{};
     size_t count=0;for(const auto& amp:mAmplifiers)if(amp.present)++count;
     if(!count)return false;
     fixtureBoard={{0x17aa,0x382b,"CLSA0100"},fixtureBindings,count,true,true,true};
@@ -116,13 +116,13 @@ bool CirrusAudioFixup::bindAmplifierRuntime() {
         fixtureBindings[i]={amp.endpoint,0x35a40,uint32_t(amp.channel),1,amp.name,"CLSA0100",2};
         fixtureFirmware[i]={{0x35a40,0x17aa,0x382b,1,uint32_t(amp.channel),amp.name},cirrus::firmware::FirmwareFormat::Deferred};
         fixtureOwners[i].bind(this,&amp);fixturePorts[i]=new ServiceRegisterIO(this,amp);
-        contexts[i]=new cirrus::platform::AmplifierBackendContext{*fixturePorts[i],amp.endpoint,fixtureBoard,fixtureBoard.identity,i,fixtureFirmware[i],"CLSA0100",&fixtureOwners[i],"isolated-primitives",static_cast<cirrus::platform::AmplifierHost*>(&fixtureOwners[i])};
+        contexts[i]=new cirrus::platform::AmplifierDriverContext{*fixturePorts[i],amp.endpoint,fixtureBoard,fixtureBoard.identity,i,fixtureFirmware[i],"CLSA0100",&fixtureOwners[i],"isolated-primitives",static_cast<cirrus::platform::AmplifierHost*>(&fixtureOwners[i])};
     }
-    auto result=mAmplifierRuntime.bind(fixtureRegistry,contexts,count);
+    auto result=mAmplifierManager.bind(fixtureRegistry,contexts,count);
     for(auto* context:contexts)delete context;
-    if(result!=kIOReturnSuccess){for(auto& amp:mAmplifiers)amp.playbackFaulted=true;teardownAmplifierRuntime();return false;}
+    if(result!=kIOReturnSuccess){for(auto& amp:mAmplifiers)amp.playbackFaulted=true;releaseAmplifierDrivers();return false;}
     return true;
 }
-void CirrusAudioFixup::teardownAmplifierRuntime(){mAmplifierRuntime.unbind();for(auto& platform:fixtureOwners)platform.clear();for(auto*& port:fixturePorts){delete port;port=nullptr;}}
+void CirrusAudioFixup::releaseAmplifierDrivers(){mAmplifierManager.unbind();for(auto& platform:fixtureOwners)platform.clear();for(auto*& port:fixturePorts){delete port;port=nullptr;}}
 '''
 IOLIB='#pragma once\n#include "Diagnostics/DiagnosticTypes.hpp"\nconstexpr int kIOReturnNotReady=-2,kIOReturnBadArgument=-3,kIOReturnNotPermitted=-4,kIOReturnNotFound=-5,kIOReturnNoMemory=-6,kIOReturnUnsupported=-7,kIOReturnTimeout=-8;\ninline void IOSleep(unsigned){}\n'

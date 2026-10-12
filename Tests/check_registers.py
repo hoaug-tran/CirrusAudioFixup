@@ -5,7 +5,7 @@ import tempfile
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-REG_HPP = ROOT / 'CirrusAudioFixup/Devices/CS35L41/Hardware/Registers.hpp'
+REG_HPP = ROOT / 'CirrusAudioFixup/Devices/Amplifiers/CS35L41/Hardware/Registers.hpp'
 content = REG_HPP.read_text(encoding='utf-8')
 
 constexprs = dict(re.findall(r'(?:inline\s+)?constexpr\s+(?:uint8_t|uint16_t|uint32_t)\s+([A-Za-z0-9_]+)\s*=\s*([^;]+);', content))
@@ -233,15 +233,15 @@ def to_pascal(macro_name):
     parts = n.split('_')
     return 'k' + ''.join(p.capitalize() if not p.isdigit() else p for p in parts)
 
-test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/CS35L41/Hardware/Registers.hpp"\n\n'
+test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"\n\n'
 for m, v in LEGACY_MACROS:
     test_cpp += f'#define {m} {v}\n'
-test_cpp += '\nusing namespace cirrus::devices::cs35l41;\n\nint main() {\n'
+test_cpp += '\nusing namespace cirrus::devices::amplifiers::cs35l41;\n\nint main() {\n'
 
-test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/CS35L41/Hardware/Registers.hpp"\n\n'
+test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"\n\n'
 for m, v in LEGACY_MACROS:
     test_cpp += f'#define {m} {v}\n'
-test_cpp += '\nusing namespace cirrus::devices::cs35l41;\n\nint main() {\n'
+test_cpp += '\nusing namespace cirrus::devices::amplifiers::cs35l41;\n\nint main() {\n'
 
 count = 0
 for macro, _ in LEGACY_MACROS:

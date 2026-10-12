@@ -335,3 +335,18 @@ Final Release UUID: `3D144221-8F67-3AC0-B533-356EF4AF9294`;
 SHA-256: `6bad5a529b80d6c16b1a9be0add9e04d6d59b300e8ee12572622738d5dd392a4`.
 Only the existing SDK kmod startup-object deployment-floor warnings remain.
 No bundle was deployed or loaded for this naming change.
+
+## Verified EFI Debug deployment — 2026-10-12
+
+The final source/build audit passed again (29 suites including the optional
+Windows audit, formatter and both bundle gates). The verified Debug bundle from
+source commit `7a8c46e` was installed into the mounted reference OpenCore EFI;
+all copied files match the build. The previous bundle/config and new dSYM are
+backed up under `build/EFIDeployment/20261012-235422-7a8c46e-Debug`. Config/NVRAM
+and other kexts are unchanged. Debug verbosity is enabled by the build itself.
+
+Installed UUID `6670947A-557E-3938-8046-AFD36E3CC12A`, executable SHA-256
+`74bcf8e5879ae2231a4bf6e65068e4c62a184407c01b460bbc1d03b1061fc754`.
+The kernel still runs old UUID `2564C407-4ED3-379A-8693-8C529B52434D` until reboot;
+new-build hardware validation is pending. See [EFI boot validation](efi_boot_validation.md)
+for exact identities, preparation evidence, boot checks and rollback.

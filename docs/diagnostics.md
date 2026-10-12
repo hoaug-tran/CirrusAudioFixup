@@ -61,6 +61,12 @@ Availability, permissions and retained buffer contents vary; neither is guarante
 ```bash
 sudo bash Tools/collect_macos.sh
 ```
+Evidence is saved in a new `~/Desktop/cirrus-evidence.XXXXXX` directory for the
+user who invoked sudo, not root's home. On completion or interruption, the
+collector returns ownership to that user and grants owner read/write access
+(and directory traversal), including partial captures. Existing Desktop files
+are not modified. Direct root execution uses the logged-in console account.
+
 
 It prints an evidence directory, not an archive. Read `status.txt` and the raw files: an exit status of zero from `ioreg` still permits no matching service. Some optional NVRAM properties, registry planes or developer tools may be absent. Review boot arguments, calibration data and hardware identifiers before sharing. The directory is temporary; copy it to a persistent location before rebooting.
 

@@ -110,3 +110,33 @@ true
     assert "exit=7" in status and "exit=1" in status and "empty output" in status
 assert "kernel-log-fallback" in source
 print("PASS: firmware CLI regressions, collector syntax and capture failures (macOS execution not tested)")
+
+# Execute the actual Desktop setup/EXIT trap without privileged captures. Stub
+# account lookup only; mkdir/mktemp/chown/chmod operate on an isolated real tree.
+if sys.platform != 'win32':
+    import os
+    setup = source[source.index('evidence_user='):source.index('capture() {')]
+    setup = setup.replace('/usr/bin/stat', 'fixture_stat').replace('/usr/bin/id', 'fixture_id').replace('/usr/bin/dscl', 'fixture_dscl')
+    setup = setup.replace('/usr/sbin/chown', shutil.which('chown')).replace('/usr/bin/mktemp', shutil.which('mktemp'))
+    with tempfile.TemporaryDirectory(prefix='cirrus-desktop-') as directory:
+        home = Path(directory) / 'user home'; home.mkdir()
+        marker = Path(directory) / 'result-path'
+        preamble = r'''
+fixture_stat(){ printf '%s\n' tester; }
+fixture_id(){ if [ "$1" = -u ]; then printf '%s\n' "$FIXTURE_UID"; else printf '%s\n' "$FIXTURE_GID"; fi; }
+fixture_dscl(){ printf 'NFSHomeDirectory: %s\n' "$FIXTURE_HOME"; }
+'''
+        environment = dict(os.environ, FIXTURE_HOME=str(home), FIXTURE_UID=str(os.getuid()), FIXTURE_GID=str(os.getgid()), FIXTURE_MARKER=str(marker), SUDO_USER='tester')
+        environment['HOME']='/var/root'
+        for sudo_user, exit_code in (('tester',0),('root',7)):
+            environment['SUDO_USER']=sudo_user
+            script = preamble + setup + '\nprintf "%s" "$output" > "$FIXTURE_MARKER"\nprintf evidence > "$output/capture.txt"\nexit '+str(exit_code)+'\n'
+            result = subprocess.run([bash,'-c',script],env=environment,capture_output=True,text=True)
+            assert result.returncode == exit_code, result.stderr
+            output = Path(marker.read_text())
+            assert output.parent == home/'Desktop' and output.name.startswith('cirrus-evidence.')
+            assert output.stat().st_uid == os.getuid() and output.stat().st_mode & 0o700 == 0o700
+            capture = output/'capture.txt'
+            assert capture.stat().st_uid == os.getuid() and capture.stat().st_mode & 0o600 == 0o600
+            capture.write_text('user can edit')
+print('PASS collector Desktop destination, sudo/console account resolution and user access after success/error exit')

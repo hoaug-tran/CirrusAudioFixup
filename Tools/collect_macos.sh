@@ -13,7 +13,47 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-output=$(mktemp -d "${TMPDIR:-/tmp}/cirrus-evidence.XXXXXX") || exit 1
+# sudo may set HOME to /var/root. Resolve the invoking account through Directory
+# Services instead; direct root execution uses the logged-in console account.
+evidence_user="${SUDO_USER:-}"
+if [ -z "$evidence_user" ] || [ "$evidence_user" = root ]; then
+    evidence_user=$(/usr/bin/stat -f '%Su' /dev/console) || exit 1
+fi
+if [ -z "$evidence_user" ] || [ "$evidence_user" = root ] || [ "$evidence_user" = loginwindow ]; then
+    printf '%s\n' 'No desktop user found. Run this collector with sudo from your user session.' >&2
+    exit 1
+fi
+evidence_uid=$(/usr/bin/id -u "$evidence_user") || exit 1
+evidence_gid=$(/usr/bin/id -g "$evidence_user") || exit 1
+evidence_home_record=$(/usr/bin/dscl . -read "/Users/$evidence_user" NFSHomeDirectory) || exit 1
+evidence_home="${evidence_home_record#NFSHomeDirectory: }"
+case "$evidence_home" in
+    /*) ;;
+    *) printf '%s\n' 'Could not resolve the desktop user home directory.' >&2; exit 1 ;;
+esac
+evidence_desktop="$evidence_home/Desktop"
+if [ ! -d "$evidence_desktop" ]; then
+    /bin/mkdir -p "$evidence_desktop" || exit 1
+    /usr/sbin/chown "$evidence_uid:$evidence_gid" "$evidence_desktop" || exit 1
+    /bin/chmod u+rwx "$evidence_desktop" || exit 1
+fi
+umask 077
+output=$(/usr/bin/mktemp -d "$evidence_desktop/cirrus-evidence.XXXXXX") || exit 1
+
+# Return partial captures too, including interrupted/error exits. Only this new
+# evidence directory is modified; existing Desktop files keep their permissions.
+finish_evidence() {
+    local result=$?
+    if ! /usr/sbin/chown -R "$evidence_uid:$evidence_gid" "$output" ||
+       ! /bin/chmod -R u+rwX "$output"; then
+        printf 'Could not grant user access to evidence: %s\n' "$output" >&2
+        result=1
+    fi
+    exit "$result"
+}
+trap finish_evidence EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 capture() {
     local name="$1"

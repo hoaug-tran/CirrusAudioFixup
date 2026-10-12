@@ -17,6 +17,7 @@ assert project.count('"$(PROJECT_DIR)/MacKernelSDK/Library/x86_64"') == 2
 
 source = r'''
 #include "Support/Logging.hpp"
+#include <cassert>
 bool gCirrusDebug = cirrus::support::kDefaultVerboseLogging;
 int main() {
     IOLog("build=%s\n", cirrus::support::kBuildConfiguration);
@@ -25,7 +26,9 @@ int main() {
     gCirrusDebug = true;
     CIRRUS_LOG("requested");
     gCirrusDebug = false;
-    CIRRUS_LOG("disabled");
+    int evaluations=0;
+    CIRRUS_LOG("disabled %d", ++evaluations);
+    assert(evaluations==0);
 }
 '''
 with tempfile.TemporaryDirectory(prefix="cirrus-build-policy-") as directory:

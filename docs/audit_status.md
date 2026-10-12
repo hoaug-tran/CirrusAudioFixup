@@ -278,3 +278,32 @@ no native I2C implementation or physical support claim.
 The follow-up passed all 29 audit suites, normal/sanitized attachment matrix,
 formatter and Debug/Release bundle checks (metadata, vtables, x86_64 and matching
 binary/dSYM UUIDs). No resulting bundle was installed or loaded.
+
+## Diagnostics and quiet Release audit — 2026-10-12
+
+The audit found root diagnostic context could be overwritten by cleanup, and
+quiet Release still recorded every transfer and could read failure snapshots.
+Root stage/register/expected/actual/native return now remain immutable. Failure
+counts saturate. Trace recording is allocated only for verbose or explicitly
+requested tracing; quiet failures retain essential reporting without snapshot
+reads. Diagnostic allocation failure no longer aborts safe service startup.
+
+Trace snapshots copy bounded history while locked, then allocate/format/publish
+outside the recorder lock; text concatenation is linear. Failure history freezes
+before extra snapshot reads. Trace labels use endpoint indices without channel
+inference. Workloop/timer/command-gate setup errors and PM registration failures
+report the precise failed operation and available native return. See
+[diagnostic readiness audit](diagnostics.md#diagnostic-readiness-audit-2026-10-12)
+for the boundary evidence and remaining physical observability limits.
+
+Verification passed: all 29 audit suites, additional production trace allocation
+fault/wrap/lock tests in normal and ASan/UBSan runs, formatter, Debug/Release
+builds, metadata, vtables, x86_64 and binary/dSYM UUID matching. Xcode membership
+now ignores Finder's `.DS_Store` metadata while retaining checks for actual files.
+Only the existing SDK 15.5 kmod startup-object/deployment-floor linker warnings
+remain. The final Release binary SHA-256 is
+`128e1b575044ea333dc7623695804ba239efc3f1cbed415f824119a6edbcb908`,
+UUID `DF07200B-4379-31C9-B11F-93F31BB12E76`; Debug UUID is
+`C3E831AE-05E4-38EE-B4E6-EE0C06831EB9`. Neither bundle was installed or loaded.
+Physical latency/performance and electrical root-cause resolution are not proven
+by these host checks.

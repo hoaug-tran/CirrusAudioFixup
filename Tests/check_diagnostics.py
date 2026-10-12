@@ -17,6 +17,7 @@ preamble = r'''
 using UInt32=uint32_t;
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0;
+bool gCirrusDebug=true;
 #define CIRRUS_ERR(...) (++logs)
 struct OSString {
     std::string value;
@@ -35,14 +36,16 @@ class CirrusAudioFixup {
 public:
     unsigned logs=0,publications=0,snapshots=0,dumps=0;
     bool mCapturingFailureSnapshot=false;
+    std::string captureOrder;
     std::map<std::string,uint32_t> numbers;
     void setProperty(const char* p,uint64_t v,unsigned) { numbers[p]=uint32_t(v); }
     void setProperty(const char*,OSString*) {}
+    void setProperty(const char*,const char*) {}
     const char* failureName(DiagnosticFailure) { return "failure"; }
     const char* stageName(DriverStage) { return "stage"; }
     void publishStatistics() { ++publications; }
-    void captureFailureSnapshot(CS35L41Amp&,DiagnosticFailure) { ++snapshots; }
-    void dumpTraceBuffer(const char*,const char*) { ++dumps; }
+    void captureFailureSnapshot(CS35L41Amp&,DiagnosticFailure) { ++snapshots;captureOrder+="S"; }
+    void dumpTraceBuffer(const char*,const char*) { ++dumps;captureOrder+="T"; }
     void recordDiagnosticFailure(AmplifierState&,DiagnosticFailure,UInt32,UInt32,UInt32,IOReturn,bool);
 };
 '''
@@ -55,7 +58,9 @@ int main() {
     auto record=[&](UInt32 expected,IOReturn ret) {
         d.recordDiagnosticFailure(amp,DIAG_I2C_TRANSFER,0x2014,expected,0,ret,true);
     };
+    amp.diagnostic.stage=STAGE_NONE;
     record(4,-77);
+    check(d.captureOrder=="TS","trace freezes before diagnostic hardware reads");
     record(4,-88);
     check(d.numbers["Cirrus_Diag_IOReturn_left"]==uint32_t(-88) && d.publications==2 && d.logs==2,
           "IOReturn-only change published and logged immediately");
@@ -73,6 +78,20 @@ int main() {
     check(amp.diagnostic.firstFailure==DIAG_I2C_TRANSFER && amp.diagnostic.latestFailure==DIAG_DSP_MAILBOX,
           "first failure preserved when latest changes");
     check(d.snapshots==2 && d.dumps==2,"new failure class captures snapshot");
+    check(amp.diagnostic.firstReg==0x2014 && amp.diagnostic.firstExpected==4 && amp.diagnostic.firstIOReturn==-77,
+          "original transfer evidence survives cleanup failures");
+    check(d.numbers["Cirrus_Diag_FirstIOReturn_left"]==uint32_t(-77),"first native return property preserved");
+    CirrusAudioFixup transfer;CS35L41Amp transferAmp;
+    transfer.recordDiagnosticFailure(transferAmp,DIAG_I2C_TRANSFER,0x11,1,0,-55,false);
+    check(transfer.dumps==1 && transfer.snapshots==0,"first transfer freezes history without invasive snapshot reads");
+    transfer.recordDiagnosticFailure(transferAmp,DIAG_I2C_TRANSFER,0x11,1,0,-55,true);
+    check(transfer.dumps==2 && transfer.snapshots==1,"outer failure can capture snapshot without replacing first evidence");
+    gCirrusDebug=false;auto snapshots=d.snapshots;auto dumps=d.dumps;
+    d.recordDiagnosticFailure(amp,DIAG_DSP_BOOT,0x99,3,4,-9,true);
+    check(d.snapshots==snapshots && d.dumps==dumps,"quiet Release failure performs no snapshot reads or trace serialization");
+    amp.diagnostic.failureCount=UINT32_MAX;
+    d.recordDiagnosticFailure(amp,DIAG_DSP_BOOT,0x99,3,4,-9,true);
+    check(amp.diagnostic.failureCount==UINT32_MAX,"failure counter saturates");
     printf("%s diagnostic change publication, rate limiting and snapshot deduplication\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }
@@ -84,3 +103,65 @@ with tempfile.TemporaryDirectory(prefix='cirrus-diagnostics-') as directory:
     cpp.write_text(preamble + states + mock + function + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', str(cpp), '-o', str(tmp / 'check.exe')], check=True)
     subprocess.run([str(tmp / 'check.exe')], check=True)
+
+# Execute the production circular recorder/dumper. Allocations and publication
+# assert that no recorder lock is held, including allocation failure paths.
+def extract(signature):
+    start=source.index(signature)
+    return source[start:source.index('\n}',start)+2]
+trace_mock=r'''
+#include "Diagnostics/DiagnosticTypes.hpp"
+#include <cassert>
+#include <cstdlib>
+#include <cstring>
+#include <cstdio>
+#include <map>
+#include <string>
+using namespace cirrus::diagnostics;
+constexpr int kIOReturnOffline=-1,kIOReturnTimeout=-2;
+struct IOLock{};
+bool locked=false,failString=false;int allocation=0,failAllocation=0;unsigned live=0,clockCalls=0;
+void IOLockLock(IOLock*){assert(!locked);locked=true;}
+void IOLockUnlock(IOLock*){assert(locked);locked=false;}
+void* IOMallocData(size_t n){assert(!locked);if(++allocation==failAllocation)return nullptr;++live;return malloc(n);}
+void IOFreeData(void* p,size_t){assert(!locked);--live;free(p);}
+void clock_get_uptime(uint64_t* t){++clockCalls;*t=uint64_t(clockCalls)*1000000;}
+void absolutetime_to_nanoseconds(uint64_t t,uint64_t* out){*out=t;}
+#define CIRRUS_LOG(...) do{}while(0)
+#define CIRRUS_ERR(...) do{}while(0)
+struct OSString{std::string text;static OSString* withCString(const char* s){assert(!locked);return failString?nullptr:new OSString{s};}void release(){delete this;}};
+class CirrusAudioFixup{
+public:
+ static constexpr size_t kTraceBufferSize=1024;
+ IOLock* mTraceLock=nullptr;uint32_t mTraceHead=0,mTraceTail=0;TraceStats mTraceStats{};TraceEntry mTraceBuffer[kTraceBufferSize]{};
+ struct Native{bool bound(){return false;}}mNativeSPI;
+ std::map<std::string,std::string> strings;
+ void setProperty(const char* key,OSString* v){assert(!locked);strings[key]=v->text;}
+ void setProperty(const char*,uint32_t,unsigned){assert(!locked);}
+ void recordTrace(TraceSource,uint8_t,bool,bool,uint32_t,uint32_t,IOReturn);
+ void dumpTraceBuffer(const char* propertyName=nullptr,const char* mirrorPropertyName=nullptr);
+ void publishStatistics();
+};
+'''
+trace_checks=r'''
+int main(){
+ CirrusAudioFixup d;
+ d.recordTrace(TRACE_PROBE,0,false,false,1,2,0);d.dumpTraceBuffer();assert(clockCalls==0 && allocation==0);
+ IOLock lock;d.mTraceLock=&lock;
+ for(unsigned i=0;i<1100;++i)d.recordTrace(TRACE_FIRMWARE,0,true,false,i,i+1,-2);
+ assert(d.mTraceStats.writeFail==1100 && d.mTraceStats.retries==1100);
+ d.dumpTraceBuffer("latest","first");assert(!live && !locked && d.strings["first"]==d.strings["latest"]);
+ const auto& text=d.strings["latest"];
+ assert(text.find("0x0004D")!=std::string::npos && text.find("0x0044B")!=std::string::npos && text.find("Firmware")!=std::string::npos);
+ d.publishStatistics();
+ for(int offset:{1,2}){failAllocation=allocation+offset;d.dumpTraceBuffer();assert(!live&&!locked);}
+ failAllocation=0;failString=true;d.dumpTraceBuffer();assert(!live&&!locked);
+}
+'''
+with tempfile.TemporaryDirectory(prefix='cirrus-trace-') as directory:
+    tmp=Path(directory);cpp=tmp/'trace.cpp'
+    cpp.write_text(trace_mock+extract('void CirrusAudioFixup::recordTrace(')+extract('void CirrusAudioFixup::dumpTraceBuffer(')+extract('void CirrusAudioFixup::publishStatistics()')+trace_checks)
+    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+        subprocess.run(['clang++','-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(cpp),'-o',str(tmp/'trace')],check=True)
+        subprocess.run([str(tmp/'trace')],check=True)
+print('PASS production trace: quiet no clock/allocation, bounded chronological wrap, first/latest mirror, unlocked publication and allocation fault cleanup')

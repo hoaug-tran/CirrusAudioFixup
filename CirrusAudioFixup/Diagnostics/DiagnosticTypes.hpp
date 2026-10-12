@@ -137,6 +137,9 @@ struct DiagnosticState {
     DriverStage stage{STAGE_NONE};
     DriverStage lastGoodStage{STAGE_NONE};
     DiagnosticFailure firstFailure{DIAG_OK};
+    DriverStage firstStage{STAGE_NONE};
+    uint32_t firstReg{0}, firstExpected{0}, firstActual{0};
+    IOReturn firstIOReturn{kIOReturnSuccess};
     DiagnosticFailure latestFailure{DIAG_OK};
     uint32_t failureCount{0};
     uint32_t reg{0};

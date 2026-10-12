@@ -28,7 +28,7 @@ def walk(identifier, parent):
         references[identifier] = path
 
 walk(objects[project['rootObject']]['mainGroup'], ROOT)
-expected = {path for path in (ROOT / 'CirrusAudioFixup').rglob('*') if path.is_file()}
+expected = {path for path in (ROOT / 'CirrusAudioFixup').rglob('*') if path.is_file() and path.name != '.DS_Store'}
 assert expected <= set(references.values()), expected - set(references.values())
 target = objects['CAFE00000040']
 compiled = set()

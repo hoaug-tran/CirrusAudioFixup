@@ -113,3 +113,61 @@ requires the captured GPIO84/type3 provider. `Cirrus_Amp_IRQ_Mode` reports setup
 fallback or latched-fault state. Polling health remains enabled. Registration is
 not proof that interrupts were delivered; do not manufacture a speaker short or
 overtemperature to test it. IRQ is disabled by default pending target validation.
+
+## Diagnostic readiness audit (2026-10-12)
+
+Debug defaults to verbose logging; Release enables it with `-cirrusdbg`.
+`-cirrusdumptrace` explicitly enables transfer history even without verbosity.
+Quiet Release does not allocate a trace lock, timestamp or lock each transfer,
+serialize transfer history, or perform failure-snapshot register reads. Essential
+failure reporting and all safety/protection/readback checks remain enabled.
+`Cirrus_Trace_Enabled` distinguishes disabled history from a zero-transfer capture.
+Trace allocation failure reports `DIAGNOSTICS_UNAVAILABLE` and does not prevent
+otherwise safe startup. A history is bounded to the newest 1,023 transfers.
+
+| Boundary | Evidence to inspect | Interpretation / limit |
+| --- | --- | --- |
+| Loading / dependencies | Collector loaded bundle UUID, build metadata, kernel load errors | An absent service may mean the bundle never loaded; AMP diagnostics cannot explain a pre-load failure |
+| Attachment / board | `ATTACH`, CPU/provider/path, subsystem IDs, attachment first/latest stage/reason/return/index kind | CPU vendor is metadata; board authorization and communication availability are separate |
+| Resources / communication | Bus classification, controller/native return, identity register and raw ID, `TRACE_PROBE` | Distinguishes absent ABI, invalid resources, failed transfer and readable wrong silicon; cannot prove the electrical cause of a timeout |
+| AMP initialization / firmware | Runtime first failure stage/return/cleanup return, diagnostic first/latest, firmware identity and chip stage | Missing/late identity is bounded waiting; unsupported identity and parse/upload faults do not trigger guessed firmware |
+| Playback / host audio | Route/event mode, HDA stream observation, phase deadlines, PLL/protection/mailbox failure evidence | READY_DSP and HDA RUN alone do not prove audible output |
+| IRQ / fallback | IRQ mode and fallback reason; configuration native return | Missing/failed IRQ retains polling; no unverified wiring is enabled |
+| PM / teardown | `Cirrus_PM_Registration_Return`, controller PM attachment evidence, runtime cleanup status | Registration errors log the native return before service stop; controller resume failure preserves its first cause |
+| Diagnostics unavailable | `DIAGNOSTICS_UNAVAILABLE`, `Cirrus_Trace_Enabled` | Missing trace after allocation failure is not evidence of zero hardware traffic |
+
+For each AMP, immutable root evidence is published as
+`Cirrus_Diag_FirstStage_<name>`, `FirstReg`, `FirstExpected`, `FirstActual` and
+`FirstIOReturn` under the same `Cirrus_Diag_` prefix. Existing failure fields
+continue to describe the latest error. A cleanup failure cannot overwrite the
+root transfer return or register. The failure counter saturates rather than
+wrapping. Repeated identical failure publications remain rate limited.
+
+In verbose mode, first/latest trace text is frozen **before** failure-snapshot
+register reads. The latter must not displace the transfer that caused the fault.
+Trace entries use `AMP<endpoint index>` rather than guessing left/right from
+index or transport. Trace formatting, allocation and IORegistry publication
+occur outside the recorder lock, using a bounded copied history; text construction
+is linear in the number of captured bytes.
+
+This is software diagnostic readiness, not a guarantee that every physical root
+cause is observable. NACK/timeouts may still require controller logs, ACPI/resource
+captures, electrical measurements or a known-good comparison. Source fault tests
+cover native errors and cleanup; cold boot, output routing, IRQ delivery, repeated
+sleep/wake and performance under real logging load remain hardware checks. Debug
+logging can perturb timing, so compare with quiet Release after collecting evidence.
+
+`Cirrus_Offline_Return_Count` and `Cirrus_Timeout_Return_Count` count observed
+transfer returns. The legacy `Cirrus_NOACK_Count` remains an alias for Offline
+returns for existing collectors; it is not proof of an electrical NACK. Internal
+legacy `retries` counts Timeout returns, not measured controller retries.
+
+The first transfer failure freezes trace history even when invasive snapshots are
+not requested. A later chip-level snapshot can update latest history without
+replacing that first trace. The maintained test executes both nested reporting
+steps explicitly.
+
+Research reference: the upstream [Linux dynamic-debug documentation](https://www.kernel.org/doc/html/v6.12/admin-guide/dynamic-debug-howto.html)
+describes explicit activation of debug call sites. This audit applies the same
+policy distinction to the existing macOS driver verbosity switch; it does not
+claim Linux jump-label patching or zero instruction overhead on macOS.

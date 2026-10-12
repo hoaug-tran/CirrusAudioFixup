@@ -270,10 +270,13 @@ bool CirrusAudioFixup::init(OSDictionary* properties) {
         return false;
     }
 
-    mTraceLock = IOLockAlloc();
-    if (!mTraceLock)
-        return false;
-    initTraceBuffer();
+    if (gCirrusDebug || bootArgEnabled("-cirrusdumptrace")) {
+        mTraceLock = IOLockAlloc();
+        if (!mTraceLock)
+            CIRRUS_ERR("DIAGNOSTICS_UNAVAILABLE component=trace_lock return=NO_MEMORY; continuing without transfer history");
+        initTraceBuffer();
+    }
+    setProperty("Cirrus_Trace_Enabled", mTraceLock ? kOSBooleanTrue : kOSBooleanFalse);
 
     setProperty("CirrusReachedInit", kOSBooleanTrue);
     CIRRUS_LOG("init");
@@ -847,7 +850,11 @@ bool CirrusAudioFixup::setupPowerManagement(IOService* provider) {
     mPowerStates[1].capabilityFlags = kIOPMPowerOn | kIOPMDeviceUsable;
     mPowerStates[1].outputPowerCharacter = kIOPMPowerOn;
     mPowerStates[1].inputPowerRequirement = kIOPMPowerOn;
-    return registerPowerDriver(this, mPowerStates, 2) == kIOReturnSuccess;
+    const IOReturn result = registerPowerDriver(this, mPowerStates, 2);
+    setProperty("Cirrus_PM_Registration_Return", uint64_t(result), 32);
+    if (result != kIOReturnSuccess)
+        CIRRUS_ERR("PM_REGISTRATION_FAILED operation=registerPowerDriver return=0x%08X; service will stop", result);
+    return result == kIOReturnSuccess;
 }
 
 // The command gate shares the timer's workloop serialization.
@@ -1208,23 +1215,29 @@ bool CirrusAudioFixup::setupProbeTimer() {
     }
 
     if (!mWorkLoop) {
+        CIRRUS_ERR("EVENT_SETUP_FAILED operation=workLoop reason=NO_MEMORY");
         return false;
     }
 
     mProbeTimer = IOTimerEventSource::timerEventSource(this, probeTimerFired);
     if (!mProbeTimer) {
+        CIRRUS_ERR("EVENT_SETUP_FAILED operation=timerEventSource reason=NO_MEMORY");
         OSSafeReleaseNULL(mWorkLoop);
         return false;
     }
 
-    if (mWorkLoop->addEventSource(mProbeTimer) != kIOReturnSuccess) {
+    IOReturn eventReturn = mWorkLoop->addEventSource(mProbeTimer);
+    if (eventReturn != kIOReturnSuccess) {
+        CIRRUS_ERR("EVENT_SETUP_FAILED operation=addTimer return=0x%08X", eventReturn);
         OSSafeReleaseNULL(mProbeTimer);
         OSSafeReleaseNULL(mWorkLoop);
         return false;
     }
 
     mCommandGate = IOCommandGate::commandGate(this);
-    if (!mCommandGate || mWorkLoop->addEventSource(mCommandGate) != kIOReturnSuccess) {
+    eventReturn = mCommandGate ? mWorkLoop->addEventSource(mCommandGate) : kIOReturnNoMemory;
+    if (eventReturn != kIOReturnSuccess) {
+        CIRRUS_ERR("EVENT_SETUP_FAILED operation=%s return=0x%08X", mCommandGate ? "addCommandGate" : "commandGate", eventReturn);
         OSSafeReleaseNULL(mCommandGate);
         mWorkLoop->removeEventSource(mProbeTimer);
         OSSafeReleaseNULL(mProbeTimer);
@@ -1873,14 +1886,18 @@ void CirrusAudioFixup::publishStatistics() {
     if (!mTraceLock)
         return;
     IOLockLock(mTraceLock);
-    setProperty("Cirrus_Read_Success", mTraceStats.readSuccess, 32);
-    setProperty("Cirrus_Read_Fail", mTraceStats.readFail, 32);
-    setProperty("Cirrus_Write_Success", mTraceStats.writeSuccess, 32);
-    setProperty("Cirrus_Write_Fail", mTraceStats.writeFail, 32);
-    setProperty("Cirrus_Bulk_Success", mTraceStats.bulkSuccess, 32);
-    setProperty("Cirrus_Bulk_Fail", mTraceStats.bulkFail, 32);
-    setProperty("Cirrus_NOACK_Count", mTraceStats.noackCount, 32);
+    const auto stats = mTraceStats;
     IOLockUnlock(mTraceLock);
+    setProperty("Cirrus_Read_Success", stats.readSuccess, 32);
+    setProperty("Cirrus_Read_Fail", stats.readFail, 32);
+    setProperty("Cirrus_Write_Success", stats.writeSuccess, 32);
+    setProperty("Cirrus_Write_Fail", stats.writeFail, 32);
+    setProperty("Cirrus_Bulk_Success", stats.bulkSuccess, 32);
+    setProperty("Cirrus_Bulk_Fail", stats.bulkFail, 32);
+    setProperty("Cirrus_Offline_Return_Count", stats.noackCount, 32);
+    setProperty("Cirrus_Timeout_Return_Count", stats.retries, 32);
+    // Retain the legacy property for collectors; Offline is not electrical NACK proof.
+    setProperty("Cirrus_NOACK_Count", stats.noackCount, 32);
 }
 
 const char* CirrusAudioFixup::stageName(DriverStage stage) {
@@ -1965,10 +1982,28 @@ void CirrusAudioFixup::recordDiagnosticFailure(AmplifierState& amp, DiagnosticFa
     bool first = diag.firstFailure == DIAG_OK;
     bool changed =
         diag.latestFailure != failure || diag.reg != reg || diag.actual != actual || diag.expected != expected || diag.ioReturn != ioReturn;
-    if (first)
+    if (first) {
         diag.firstFailure = failure;
+        diag.firstStage = diag.stage;
+        diag.firstReg = reg;
+        diag.firstExpected = expected;
+        diag.firstActual = actual;
+        diag.firstIOReturn = ioReturn;
+        char key[96];
+        snprintf(key, sizeof(key), "Cirrus_Diag_FirstStage_%s", amp.name);
+        setProperty(key, stageName(diag.firstStage));
+        snprintf(key, sizeof(key), "Cirrus_Diag_FirstReg_%s", amp.name);
+        setProperty(key, reg, 32);
+        snprintf(key, sizeof(key), "Cirrus_Diag_FirstExpected_%s", amp.name);
+        setProperty(key, expected, 32);
+        snprintf(key, sizeof(key), "Cirrus_Diag_FirstActual_%s", amp.name);
+        setProperty(key, actual, 32);
+        snprintf(key, sizeof(key), "Cirrus_Diag_FirstIOReturn_%s", amp.name);
+        setProperty(key, uint64_t(ioReturn), 32);
+    }
     diag.latestFailure = failure;
-    diag.failureCount++;
+    if (diag.failureCount != UINT32_MAX)
+        ++diag.failureCount;
     diag.reg = reg;
     diag.expected = expected;
     diag.actual = actual;
@@ -2009,13 +2044,16 @@ void CirrusAudioFixup::recordDiagnosticFailure(AmplifierState& amp, DiagnosticFa
                    failureName(diag.firstFailure));
     }
 
-    if (captureSnapshot && !mCapturingFailureSnapshot && diag.snapshotFailure != failure) {
-        diag.snapshotFailure = failure;
-        captureFailureSnapshot(amp, failure);
+    if (gCirrusDebug && !mCapturingFailureSnapshot && (first || (captureSnapshot && diag.snapshotFailure != failure))) {
         char latestTrace[80], firstTrace[80];
         snprintf(latestTrace, sizeof(latestTrace), "Cirrus_Trace_Latest_%s", amp.name);
         snprintf(firstTrace, sizeof(firstTrace), "Cirrus_Trace_First_%s", amp.name);
+        // Freeze transfer history before snapshot reads add diagnostic traffic.
         dumpTraceBuffer(latestTrace, first ? firstTrace : nullptr);
+        if (captureSnapshot && diag.snapshotFailure != failure) {
+            diag.snapshotFailure = failure;
+            captureFailureSnapshot(amp, failure);
+        }
     }
 }
 
@@ -2099,23 +2137,37 @@ void CirrusAudioFixup::publishDriverVerdict() {
 void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mirrorPropertyName) {
     if (!mTraceLock)
         return;
-    IOLockLock(mTraceLock);
 
     CIRRUS_LOG("--- TRACE BUFFER DUMP START ---");
 
     size_t bufferSize = 128 * 1024;
     char* dumpBuffer = (char*)IOMallocData(bufferSize);
     if (!dumpBuffer) {
-        IOLockUnlock(mTraceLock);
+        CIRRUS_ERR("DIAGNOSTICS_UNAVAILABLE component=trace_text return=NO_MEMORY");
         return;
     }
+    auto* entries = static_cast<TraceEntry*>(IOMallocData(sizeof(TraceEntry) * kTraceBufferSize));
+    if (!entries) {
+        IOFreeData(dumpBuffer, bufferSize);
+        CIRRUS_ERR("DIAGNOSTICS_UNAVAILABLE component=trace_snapshot return=NO_MEMORY");
+        return;
+    }
+    // Copy a bounded history while locked; allocate, format and publish outside
+    // the transfer recorder lock. Diagnostic output must not serialize bus work.
+    size_t count = 0;
+    IOLockLock(mTraceLock);
+    uint32_t cursor = mTraceHead;
+    while (cursor != mTraceTail && count < kTraceBufferSize) {
+        entries[count++] = mTraceBuffer[cursor];
+        cursor = (cursor + 1) % kTraceBufferSize;
+    }
+    IOLockUnlock(mTraceLock);
     dumpBuffer[0] = '\0';
     size_t currentLen = 0;
     char lineBuffer[128];
 
-    uint32_t curr = mTraceHead;
-    while (curr != mTraceTail) {
-        const TraceEntry& e = mTraceBuffer[curr];
+    for (size_t i = 0; i < count; ++i) {
+        const TraceEntry& e = entries[i];
         const char* srcStr = "OTHER";
         switch (e.source) {
         case TRACE_PROBE:
@@ -2138,8 +2190,8 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
         }
 
         char nativeLabel[16]{};
-        snprintf(nativeLabel, sizeof(nativeLabel), "SPI%u", e.amp);
-        const char* ampStr = mNativeSPI.bound() ? nativeLabel : ((e.amp == 0) ? "LEFT" : "RIGHT");
+        snprintf(nativeLabel, sizeof(nativeLabel), "AMP%u", e.amp);
+        const char* ampStr = nativeLabel;
 
         if (e.isBulk) {
             snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X\n", e.timestamp, srcStr, ampStr,
@@ -2151,11 +2203,10 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
 
         size_t lineLen = strlen(lineBuffer);
         if (currentLen + lineLen < bufferSize - 1) {
-            strlcat(dumpBuffer, lineBuffer, bufferSize);
+            memcpy(dumpBuffer + currentLen, lineBuffer, lineLen);
             currentLen += lineLen;
+            dumpBuffer[currentLen] = 0;
         }
-
-        curr = (curr + 1) % kTraceBufferSize;
     }
     CIRRUS_LOG("--- TRACE BUFFER DUMP END ---");
 
@@ -2165,10 +2216,12 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
         if (mirrorPropertyName)
             setProperty(mirrorPropertyName, strObj);
         strObj->release();
+    } else {
+        CIRRUS_ERR("DIAGNOSTICS_UNAVAILABLE component=trace_property return=NO_MEMORY");
     }
     IOFreeData(dumpBuffer, bufferSize);
 
-    IOLockUnlock(mTraceLock);
+    IOFreeData(entries, sizeof(TraceEntry) * kTraceBufferSize);
 }
 
 bool CirrusAudioFixup::bulkRead(AmplifierState& amp, UInt32 reg, UInt8* data, size_t length, TraceSource source) {

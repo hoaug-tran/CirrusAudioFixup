@@ -280,6 +280,7 @@ struct CustomI2C final : cirrus::transport::I2CController {
  size_t maxReadBytes()const override{return 32;}
  IOReturn transfer(const cirrus::transport::I2CEndpoint& ep,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n)override {
   assert(ep.address==0x40&&!ep.tenBit&&tn<=32&&n<=32);++customTransfers;
+  if(i2cResult)return i2cResult;
   if(!n)i2cWrites.emplace_back(tx,tx+tn);else i2cReads.emplace_back(tx,tx+tn);
   for(size_t i=0;i<n;++i)rx[i]=uint8_t(i2cProbeID>>(24-8*i));return 0;
  }
@@ -612,6 +613,23 @@ int main(){
  amp.crs.bytes=i2cCRS;CirrusAudioFixup acpiI2C;const auto busWrites=writeTransfers;
  assert(!acpiI2C.setupCommunication(&amp) && acpiI2C.strings["Cirrus_Bus"]=="I2C" && writeTransfers==busWrites && !liveControllers);
  assert(!strcmp(acpiI2C.mAttachment.first.reason,"NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE"));
+ // Selected ACPI I2C adapters obey the same pre-reset identity and AMP policy.
+ auto originalACPIPath=amp.path;amp.path="fixture-i2c-controller";
+ auto directBinding=i2cBinding;directBinding.endpoint.controllerPath=amp.path.c_str();
+ auto directBoard=i2cBoard;directBoard.amplifiers=&directBinding;
+ auto directProfile=i2cProfile;directProfile.boardConfiguration=&directBoard;directProfile.i2cControllerFactory=createCustomI2C;
+ CirrusAudioFixup directReady;directReady.mProvider=&amp;directReady.mPlatformProfile=&directProfile;
+ assert(directReady.mBackendRegistry.add(i2cDefinition));
+ auto directReads=i2cReads.size();assert(directReady.setupCommunication(&amp) && i2cReads.size()==directReads+1 && directReady.mPlatformAuthorized);
+ directReady.teardownNativeSPI();
+ CirrusAudioFixup directUnsupported;directUnsupported.mProvider=&amp;directUnsupported.mPlatformProfile=&directProfile;
+ assert(directUnsupported.mBackendRegistry.add(i2cDefinition));i2cResult=kIOReturnUnsupported;
+ assert(!directUnsupported.setupCommunication(&amp) && !strcmp(directUnsupported.mAttachment.first.reason,"I2C_ADDRESSED_FUNCTION_UNSUPPORTED"));
+ directUnsupported.teardownNativeSPI();i2cResult=0;
+ CirrusAudioFixup directNoAMP;directNoAMP.mProvider=&amp;directNoAMP.mPlatformProfile=&directProfile;directReads=i2cReads.size();
+ assert(directNoAMP.setupCommunication(&amp) && !directNoAMP.mPlatformAuthorized && i2cReads.size()==directReads);
+ assert(!strcmp(directNoAMP.mAttachment.first.reason,"NO_REGISTERED_BACKEND"));directNoAMP.teardownNativeSPI();
+ amp.path=originalACPIPath;
  auto mixedBus=descriptor("SPI0",0);mixedBus.insert(mixedBus.end(),i2cCRS.begin(),i2cCRS.end());amp.crs.bytes=mixedBus;
  CirrusAudioFixup mixedResources;assert(!mixedResources.setupCommunication(&amp) && !strcmp(mixedResources.mAttachment.first.reason,"MIXED_I2C_SPI_RESOURCES") && !liveControllers);
  puts("PASS Intel/AMD x I2C/SPI attachment/runtime matrix, unsupported controller/AMP separation, ACPI bus classification and no unsupported AMP writes");

@@ -460,8 +460,17 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         if (mPlatformProfile->i2cControllerFactory) {
             if (!mI2CController)
                 mI2CController = createI2CController();
+            if (!mI2CController)
+                return false;
+            if (!expected) {
+                mPlatformAuthorized = false;
+                setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+                recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_BACKEND", kIOReturnUnsupported);
+            }
+            if (expected && !preflightI2CIdentity(expected))
+                return false;
             publishAttachmentStatus();
-            return mI2CController != nullptr;
+            return true;
         }
         mAttachment.communication = "UNSUPPORTED";
         recordAttachmentFailure("COMMUNICATION", "NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE", kIOReturnUnsupported);

@@ -264,3 +264,17 @@ background polling. The source does not expand Info.plist matching, board
 allowlists, firmware resources or physical support claims. See
 [attachment matrix](attachment_matrix.md) for the complete contract and observed
 AMD/custom-I2C baseline on the older loaded bundle.
+
+### Direct ACPI I2C factory policy follow-up
+
+A selected ACPI I2C adapter now uses the same pre-reset identity preflight and
+unregistered-AMP authorization gate as provider-backed I2C. Previously that
+branch returned immediately after controller creation. Regression coverage
+executes the actual service branch for successful identity reads, an unsupported
+addressed function and an absent AMP registration. The unsupported AMP path
+performs no identity transfer and retains controller-only diagnostics. This adds
+no native I2C implementation or physical support claim.
+
+The follow-up passed all 29 audit suites, normal/sanitized attachment matrix,
+formatter and Debug/Release bundle checks (metadata, vtables, x86_64 and matching
+binary/dSYM UUIDs). No resulting bundle was installed or loaded.

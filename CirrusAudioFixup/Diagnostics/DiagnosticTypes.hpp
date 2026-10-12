@@ -149,6 +149,18 @@ struct DiagnosticState {
     DiagnosticFailure snapshotFailure{DIAG_OK};
 };
 
+// Workloop-owned publication cache; comparisons allocate nothing. UINT32_MAX
+// forces the first snapshot to publish. Native returns are stored as raw 32 bits.
+struct RuntimeDiagnosticSnapshot {
+    uint32_t stage{UINT32_MAX}, failureStage{0}, firstFailure{0}, latestFailure{0}, cleanup{0}, failures{0};
+    bool update(const RuntimeDiagnosticSnapshot& next) {
+        const bool changed = stage != next.stage || failureStage != next.failureStage || firstFailure != next.firstFailure ||
+                             latestFailure != next.latestFailure || cleanup != next.cleanup || failures != next.failures;
+        *this = next;
+        return changed;
+    }
+};
+
 struct TraceEntry {
     uint64_t timestamp;
     uint8_t amp;

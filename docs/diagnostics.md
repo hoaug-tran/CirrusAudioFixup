@@ -171,3 +171,33 @@ Research reference: the upstream [Linux dynamic-debug documentation](https://www
 describes explicit activation of debug call sites. This audit applies the same
 policy distinction to the existing macOS driver verbosity switch; it does not
 claim Linux jump-label patching or zero instruction overhead on macOS.
+
+## Runtime telemetry follow-up (2026-10-13)
+
+All 32-bit service properties narrow values before widening to the IORegistry
+number argument. Negative native returns therefore appear as raw 32-bit codes
+(e.g. `0xE00002BC`) rather than sign-extended 64-bit decimal values. Internal
+IOReturns, failure decisions and trace native returns are unchanged.
+
+`Cirrus_Runtime_Stage` and `Cirrus_Runtime_<index>_Stage` now follow actual
+coordinator lifecycle transitions rather than remaining bringup snapshots.
+`Cirrus_Runtime_Count` is the number of bound driver instances; each slot's
+`Bound` field distinguishes live state from retained historical evidence.
+Per-slot `FirstFailure`, `LatestFailure`, `FailureStage`, `CleanupReturn` and
+`FailureCount` update when their structured status changes. Common enum values
+are Detached=0, Ready=6, Playing=8, Suspended=11 and Faulted=12.
+
+A fixed workloop-owned cache compares stages/failure values. This publisher performs no property writes, formatting, log publication or
+statistics snapshots when its observed status is unchanged.
+A transition refreshes the aggregate verdict/AMP status and, when tracing is
+actually enabled, the existing transfer statistics. Quiet Release does not enable
+transfer recording as a side effect of these updates.
+
+Unbind marks removed slots `Bound=0`. It retains the last live root evidence and
+publishes the driver's captured teardown status under
+`Cirrus_Runtime_<index>_Released_{Stage,FailureStage,FirstFailure,LatestFailure,CleanupReturn,FailureCount}`.
+A later rebind forces a fresh live snapshot while leaving the explicitly named
+release history available. IRQ failures publish native `IRQ_Return` per slot and
+refresh the aggregate fault verdict immediately. Chip/report faults and the
+coordinator's lifecycle stage are distinct observations; consult both rather than
+assuming a Ready coordinator means an unfaulted chip.

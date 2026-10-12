@@ -13,7 +13,7 @@ HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='ut
 def function(name):
     return method(SOURCE,'CirrusAudioFixup',name)
 
-names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringUpDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'publishDriverVerdict', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
+names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringUpDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'publishDriverVerdict', 'publishRuntimeStatus', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
 names.extend(['configureCS35L41Interrupt','monitorCS35L41','validateCS35L41Playback','commitCS35L41Playback','snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryBringUpResources'])
 functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierManager.bound() && bindAmplifierDrivers())mAmplifierManager.bringUp();')
 
@@ -268,6 +268,9 @@ public:
     bool resumeCommunication() {return true;}
 public:
     bool retryPlatformIdentity(){return false;}
+    cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
+    uint32_t mPublishedRuntimeStage=UINT32_MAX,mPublishedRuntimeCount=UINT32_MAX;
+    void publishStatistics(){}
     bool mPlatformIdentityPending=false;
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
@@ -1027,6 +1030,8 @@ int main() {
     checkNew(!irqSource.enabled && irqDriver.mAmplifiers[0].playbackFaulted,
              "protection IRQ latches fault and disables level delivery");
     checkNew(irqDriver.properties["Cirrus_Amp_IRQ_Mode"]=="FAULT_LATCHED_IRQ_DISABLED","IRQ fault evidence survives polling fallback");
+    checkNew(irqDriver.numericProperties.count("Cirrus_Runtime_0_IRQ_Return")==1 && irqDriver.numericProperties["Cirrus_Runtime_0_IRQ_Return"]<=UINT32_MAX,"IRQ native failure is published as raw 32 bits");
+    checkNew(irqDriver.properties["Cirrus_Driver_Verdict"]=="FAULT_LATCHED","IRQ fault immediately updates aggregate verdict");
     CirrusAudioFixup irqSetupFault;
     assert(irqSetupFault.bindAmplifierDrivers() && irqSetupFault.mAmplifierManager.bringUp()==0);
     irqSetupFault.failAt=2;

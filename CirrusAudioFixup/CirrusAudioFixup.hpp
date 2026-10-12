@@ -161,14 +161,14 @@ private:
     bool resumeCommunication() {
         IOReturn ret = mNativeSPI.resume();
         if (mNativeSPI.bound()) {
-            setProperty("Cirrus_SPI_Wake_Return", uint64_t(ret), 32);
+            setProperty("Cirrus_SPI_Wake_Return", uint64_t(uint32_t(ret)), 32);
             setProperty("Cirrus_SPI_Status",
                         ret == kIOReturnSuccess ? (mPlatformAuthorized ? "BOUND_AUTHORIZED" : "BOUND_READ_ONLY") : "WAKE_FAILED");
             const auto& failure = mNativeSPI.failure();
             setProperty("Cirrus_SPI_Failure_Reason", failure.reason);
-            setProperty("Cirrus_SPI_Failure_Index", uint64_t(failure.index), 32);
+            setProperty("Cirrus_SPI_Failure_Index", uint64_t(uint32_t(failure.index)), 32);
             setProperty("Cirrus_SPI_Failure_Source", failure.source);
-            setProperty("Cirrus_SPI_Failure_Detail", uint64_t(failure.detail), 32);
+            setProperty("Cirrus_SPI_Failure_Detail", uint64_t(uint32_t(failure.detail)), 32);
             mAttachment.communication = ret == kIOReturnSuccess ? (mPlatformAuthorized ? "READY" : "READ_ONLY") : "FAILED";
             publishAttachmentStatus();
             if (ret != kIOReturnSuccess)
@@ -217,6 +217,8 @@ private:
     static constexpr size_t kMaxAmplifiers = cirrus::platform::AmplifierManager::kCapacity;
     size_t mAmplifierCount{0};
     AmplifierState mAmplifiers[kMaxAmplifiers]{};
+    cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[kMaxAmplifiers]{};
+    uint32_t mPublishedRuntimeStage{UINT32_MAX}, mPublishedRuntimeCount{UINT32_MAX};
     const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
     size_t expectedAmplifierCount() const {
         return mPlatformProfile
@@ -256,6 +258,7 @@ private:
                                  bool captureSnapshot = true);
     void captureFailureSnapshot(AmplifierState& amp, cirrus::diagnostics::DiagnosticFailure failure);
     void publishDriverVerdict();
+    bool publishRuntimeStatus();
     static const char* stageName(cirrus::diagnostics::DriverStage stage);
     static const char* failureName(cirrus::diagnostics::DiagnosticFailure failure);
 

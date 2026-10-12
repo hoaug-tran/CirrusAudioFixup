@@ -388,3 +388,46 @@ Backup/config/failing logs are under
 `build/EFIDeployment/20261013-013712-e0b46ee-Debug`. Config/NVRAM are unchanged;
 no live reload or reboot occurred. Corrected-build output remains unverified until
 another boot. The original known-working backup is retained separately.
+
+## Successful boot and remaining telemetry fixes — 2026-10-13
+
+The supplied new log has 2,531 Cirrus messages and no Cirrus ERROR, ATTACH_FAIL or
+DIAG_FAIL record. The kernel loads corrected UUID
+`B0FF6C51-3DDC-3E0D-899B-03743BD14534`. Board identity resolves at 4.841 s, both
+firmware/coefficient uploads pass readback/CRC, calibration verifies from EFI,
+and both drivers reach READY_DSP by 14.029 s. The playback pair reaches active
+at 52.685 s; protection is OK and PLL is locked. The user confirms audible output.
+The author console line is present. This verifies that boot/output flow on this
+reference machine, not headphone/sleep-wake or all supported hardware.
+
+The audit found sign-extended native return properties and stale runtime-stage
+publication. Service 32-bit properties now narrow before IORegistry publication.
+A fixed cache updates per-slot and aggregate lifecycle/failure metadata only on
+change, including playback and PM; quiet steady-state performs no property writes.
+Trace statistics publish at transitions when trace exists. Removed slots are
+marked unbound, with distinct released-status evidence retaining teardown results.
+IRQ error reporting now captures per-slot native returns and refreshes fault verdicts
+without changing the interrupt servicing or silicon sequence.
+
+Tests exercise actual publication code for 1,000 unchanged snapshots, partial/pair
+playback, native errors, PM stages, detach/rebind and a new teardown error without
+losing the first fault, normally and under ASan/UBSan. Diagnostic mocks retain
+64-bit numbers so sign-extension bugs cannot be hidden by test-side truncation.
+Production IRQ faults also assert raw native return and immediate fault verdict.
+
+The pre-reset I2C probe's general error recovered after verified reset and all
+subsequent identity probes succeeded; that is retained evidence, not an active
+transport fault. log-other has no Cirrus messages. Both captures contain overlapping
+AMDRadeonX5000 allocation errors; no amplifier cause is established, and graphics
+configuration was not changed by this maintenance pass.
+
+Verification passed all 28 maintained suites plus optional Windows audit (29),
+additional normal/sanitizer publication and IRQ checks, pinned formatter, final
+Debug/Release builds, plist/metadata/vtables/x86_64 and binary/dSYM UUID matches.
+No chip implementation, register sequence, firmware bytes or board policy changed.
+The final Debug artifact UUID is `BE966E50-11B6-332C-9668-8FB409DB9C7A`, SHA-256
+`b7ff9779b7ffbf6a311a4bec06e44a1371f4534b053f65dd6dbd5b0274ff5ecc`.
+Release UUID is `C1144DEF-F56E-34B2-9220-4E049F112EBD`, SHA-256
+`4a37d8cefb5d47cd65897ba581da002a80189e6b114e5dc3b0a040380e7b850b`.
+The authorized EFI replacement follows the source commit/push, with per-file
+verification and a backup of the currently audible B0FF6C51 bundle.

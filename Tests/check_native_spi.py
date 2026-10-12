@@ -189,6 +189,7 @@ public:
  void setDiagnosticStage(Amp&,cirrus::diagnostics::DriverStage){++hostReports;}
  void markDiagnosticSuccess(Amp&,cirrus::diagnostics::DriverStage){++hostReports;}
  cirrus::transport::I2CController* createI2CController();
+ bool publishRuntimeStatus(){return false;}
  bool bindAmplifierDrivers();void releaseAmplifierDrivers();
  size_t expectedAmplifierCount()const{return mPlatformProfile->boardConfiguration?mPlatformProfile->boardConfiguration->count:mPlatformProfile->endpointCount;}
  size_t detectConfiguredI2CAmplifiers();
@@ -613,6 +614,7 @@ int main(){
  amp.crs.bytes=i2cCRS;CirrusAudioFixup acpiI2C;const auto busWrites=writeTransfers;
  assert(!acpiI2C.setupCommunication(&amp) && acpiI2C.strings["Cirrus_Bus"]=="I2C" && writeTransfers==busWrites && !liveControllers);
  assert(!strcmp(acpiI2C.mAttachment.first.reason,"NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE"));
+ assert(acpiI2C.numbers["Cirrus_Attach_First_Return"]==uint32_t(kIOReturnUnsupported) && acpiI2C.numbers["Cirrus_Attach_Latest_Return"]<=UINT32_MAX);
  // Selected ACPI I2C adapters obey the same pre-reset identity and AMP policy.
  auto originalACPIPath=amp.path;amp.path="fixture-i2c-controller";
  auto directBinding=i2cBinding;directBinding.endpoint.controllerPath=amp.path.c_str();

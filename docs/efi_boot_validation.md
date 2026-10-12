@@ -1,3 +1,25 @@
+# Runtime diagnostics maintenance — 2026-10-13
+
+The B0FF6C51 build below has now booted with user-confirmed audible output, both
+AMPs READY_DSP/PLAYBACK_ACTIVE and no Cirrus failure records in the supplied log.
+The following verified Debug artifact fixes telemetry representation/publication
+without changing silicon, firmware or authorization. EFI replacement is performed
+**after** the source commit/push; the local manifest records the actual outcome.
+
+- Expected new UUID: `BE966E50-11B6-332C-9668-8FB409DB9C7A`.
+- Executable SHA-256: `b7ff9779b7ffbf6a311a4bec06e44a1371f4534b053f65dd6dbd5b0274ff5ecc`.
+- Planned backup: `build/EFIDeployment/20261013-runtime-telemetry-BE966E50`.
+- Actual installation evidence: `build/EFIDeployment/latest.json` (commit, per-file
+  hashes, unchanged config hash, UUID, backup and verification status).
+- After reboot, check Runtime_Stage/slot stages track Ready/Playing/Suspended/Faulted;
+  steady-state polls must not repeatedly emit DIAG_VERDICT. Native negative returns
+  should have only their 32-bit bit pattern. Released_* fields are historical.
+- Config, boot arguments, NVRAM and other kexts are to remain unchanged. No live
+  reload or automatic reboot is part of this maintenance operation.
+
+The records below describe earlier bundles; their UUIDs do not identify the new
+telemetry artifact. The current kernel continues to run B0FF6C51 until reboot.
+
 # Corrected board-identity retry build — 2026-10-13
 
 The first test boot loaded the October 12 Debug bundle but stayed silent because

@@ -37,8 +37,8 @@ public:
     unsigned logs=0,publications=0,snapshots=0,dumps=0;
     bool mCapturingFailureSnapshot=false;
     std::string captureOrder;
-    std::map<std::string,uint32_t> numbers;
-    void setProperty(const char* p,uint64_t v,unsigned) { numbers[p]=uint32_t(v); }
+    std::map<std::string,uint64_t> numbers;
+    void setProperty(const char* p,uint64_t v,unsigned) { numbers[p]=v; }
     void setProperty(const char*,OSString*) {}
     void setProperty(const char*,const char*) {}
     const char* failureName(DiagnosticFailure) { return "failure"; }
@@ -165,3 +165,47 @@ with tempfile.TemporaryDirectory(prefix='cirrus-trace-') as directory:
         subprocess.run(['clang++','-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(cpp),'-o',str(tmp/'trace')],check=True)
         subprocess.run([str(tmp/'trace')],check=True)
 print('PASS production trace: quiet no clock/allocation, bounded chronological wrap, first/latest mirror, unlocked publication and allocation fault cleanup')
+
+publication_mock=r'''
+#include "Diagnostics/DiagnosticTypes.hpp"
+#include <cassert>
+#include <cstdio>
+#include <map>
+#include <string>
+struct Status{uint32_t stage=6,firstFailureStage=0;int firstFailure=0,latestFailure=0,cleanupResult=0;uint32_t failures=0;};
+struct Manager{uint32_t n=2,s=6;Status items[2];size_t count(){return n;}uint32_t stage(){return s;}const Status* status(size_t i){return i<n?&items[i]:nullptr;}const Status* releasedStatus(size_t i){return i<2?&items[i]:nullptr;}};
+class CirrusAudioFixup{
+public:
+ Manager mAmplifierManager;
+ cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
+ uint32_t mPublishedRuntimeCount=UINT32_MAX,mPublishedRuntimeStage=UINT32_MAX;
+ unsigned writes=0,stats=0;std::map<std::string,uint64_t> numbers;
+ void setProperty(const char* k,uint64_t v,unsigned){++writes;numbers[k]=v;}
+ void publishStatistics(){++stats;}
+ bool publishRuntimeStatus();
+};
+'''
+publication_checks=r'''
+int main(){
+ CirrusAudioFixup d;assert(d.publishRuntimeStatus());auto writes=d.writes,stats=d.stats;
+ for(unsigned i=0;i<1000;++i)assert(!d.publishRuntimeStatus());assert(d.writes==writes&&d.stats==stats);
+ d.mAmplifierManager.items[0].stage=8;assert(d.publishRuntimeStatus());assert(d.numbers["Cirrus_Runtime_0_Stage"]==8&&d.numbers["Cirrus_Runtime_Stage"]==6);
+ d.mAmplifierManager.items[1].stage=8;d.mAmplifierManager.s=8;assert(d.publishRuntimeStatus());assert(d.numbers["Cirrus_Runtime_Stage"]==8);
+ d.mAmplifierManager.items[0].stage=12;d.mAmplifierManager.s=12;d.mAmplifierManager.items[0].firstFailure=int(0xe00002bcU);d.mAmplifierManager.items[0].latestFailure=-55;d.mAmplifierManager.items[0].cleanupResult=-77;d.mAmplifierManager.items[0].failures=1;
+ assert(d.publishRuntimeStatus()&&d.numbers["Cirrus_Runtime_0_FirstFailure"]==0xe00002bcU&&d.numbers["Cirrus_Runtime_0_CleanupReturn"]==uint32_t(-77));
+ d.mAmplifierManager.items[0].latestFailure=-88;assert(d.publishRuntimeStatus()&&d.numbers["Cirrus_Runtime_0_FirstFailure"]==0xe00002bcU&&d.numbers["Cirrus_Runtime_0_LatestFailure"]==uint32_t(-88));
+ d.mAmplifierManager.s=11;assert(d.publishRuntimeStatus());
+ d.mAmplifierManager.items[0].cleanupResult=-99;
+ d.mAmplifierManager.n=0;d.mAmplifierManager.s=0;assert(d.publishRuntimeStatus());
+ assert(d.numbers["Cirrus_Runtime_0_Bound"]==0&&d.numbers["Cirrus_Runtime_1_Bound"]==0&&d.numbers["Cirrus_Runtime_0_FirstFailure"]==0xe00002bcU);
+ assert(d.numbers["Cirrus_Runtime_0_Released_CleanupReturn"]==uint32_t(-99)&&d.numbers["Cirrus_Runtime_0_Released_FirstFailure"]==0xe00002bcU);
+ assert(!d.publishRuntimeStatus());
+ d.mAmplifierManager.n=1;d.mAmplifierManager.items[0]=Status{};d.mAmplifierManager.s=6;assert(d.publishRuntimeStatus()&&d.numbers["Cirrus_Runtime_0_Bound"]==1);
+}
+'''
+with tempfile.TemporaryDirectory(prefix='cirrus-runtime-publication-') as directory:
+    p=Path(directory);(p/'publication.cpp').write_text(publication_mock+extract('bool CirrusAudioFixup::publishRuntimeStatus()')+publication_checks)
+    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+        subprocess.run(['clang++','-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(p/'publication.cpp'),'-o',str(p/'publication')],check=True)
+        subprocess.run([str(p/'publication')],check=True)
+print('PASS runtime transition publication: no steady-state writes, partial/group playback, native 32-bit failures, PM, detach/rebind and preserved root evidence')

@@ -13,7 +13,7 @@ HEADER = (ROOT / 'CirrusAudioFixup/CirrusAudioFixup.hpp').read_text(encoding='ut
 def function(name):
     return method(SOURCE,'CirrusAudioFixup',name)
 
-names = ['bringUpAmplifiers', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'stopAfterDebugStage']
+names = ['bringUpAmplifiers', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'publishRuntimeStatus', 'stopAfterDebugStage']
 amp = chip_state()
 
 preamble = r'''
@@ -53,6 +53,9 @@ class CirrusAudioFixup {
 public:
     void suspendCommunication() {}
     bool resumeCommunication() { return true; }
+    cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
+    uint32_t mPublishedRuntimeStage=UINT32_MAX,mPublishedRuntimeCount=UINT32_MAX;
+    void publishStatistics(){}
     bool mPlatformIdentityPending=false;
     bool mPlatformAuthorized=true;
     const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CLSA0100");
@@ -175,6 +178,7 @@ public:
         return !haltError;
     }
     void publishDriverVerdict();
+    bool publishRuntimeStatus();
     void handlePowerChange(bool powered);
     bool initializeCS35L41Device(CS35L41Amp&);
     void bringUpAmplifiers();

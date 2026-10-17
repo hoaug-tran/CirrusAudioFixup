@@ -87,6 +87,7 @@ public:
         mWindow.write8(0x48, uint8_t(txLength - 1));
         mWindow.write8(0x4b, uint8_t(rxLength));
         uint64_t start = mWindow.nowUs();
+        uint32_t pollsRemaining = 100001; // Two seconds at the 20-us polling interval, independent of the clock.
         if (mRevision == AMDSPIRevision::V1)
             mWindow.write32(0, mWindow.read32(0) | (1U << 16));
         else
@@ -99,7 +100,7 @@ public:
             }
             if (!(status & kBusy))
                 break;
-            if (mWindow.nowUs() - start >= 2000000) {
+            if (!--pollsRemaining || mWindow.nowUs() - start >= 2000000) {
                 // Hardware owns CS for the command; do not select another chip
                 // or reset a running command. Recovery requires owner power/reset.
                 mOnline = false;

@@ -21,7 +21,7 @@ inline void IOSleep(unsigned) {}
 using namespace cirrus::transport;
 struct Window : amd::RegisterWindow {
     uint8_t regs[0x100]{};uint64_t clock=0;unsigned writes=0,commands=0;
-    bool v2=false,stuck=false,gone=false,busy=false;
+    bool v2=false,stuck=false,gone=false,busy=false,frozenClock=false;
     std::map<uint32_t,uint32_t> values;
     std::vector<std::vector<uint8_t>> frames;
     uint8_t read8(uint32_t o) override { assert(o<sizeof(regs));return regs[o]; }
@@ -36,7 +36,7 @@ struct Window : amd::RegisterWindow {
         if(o==0&&(v&(1<<20)))regs[2]&=~0x10;
         if(!v2&&o==0&&(v&(1<<16))) {regs[2]&=~1;execute();}
     }
-    uint64_t nowUs() override {return clock++;}
+    uint64_t nowUs() override {return frozenClock?0:clock++;}
     void delayUs(uint32_t d) override {clock+=d;}
     void execute() {
         ++commands;busy=stuck;
@@ -81,7 +81,7 @@ int main() {
     bus.suspend();n=w.writes;assert(!io.read(0,&id)&&w.writes==n);
     assert(bus.resume()==0&&io.read(0,&id));
     w.busy=true;n=w.writes;assert(!io.read(0,&id)&&w.writes==n);w.busy=false;
-    w.stuck=true;id=0xdead;assert(!io.read(0,&id)&&id==0xdead&&io.lastReturn()==kIOReturnTimeout);
+    w.stuck=true;w.frozenClock=true;id=0xdead;assert(!io.read(0,&id)&&id==0xdead&&io.lastReturn()==kIOReturnTimeout);
     assert(bus.resume()==kIOReturnBusy);n=w.writes;bus.shutdown();assert(w.writes==n);
     w.busy=false;w.stuck=false;assert(bus.initialize(rev)==0);
     w.gone=true;n=w.writes;assert(!io.read(0,&id)&&w.writes==n&&io.lastReturn()==kIOReturnNoDevice);

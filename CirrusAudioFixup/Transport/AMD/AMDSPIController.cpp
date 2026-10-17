@@ -104,8 +104,11 @@ IOReturn AMDSPIController::bind(IOACPIPlatformDevice* provider, IOService* owner
 IOReturn AMDSPIController::command(const SPIEndpoint& ep, const uint8_t* tx, size_t nt, uint8_t* rx, size_t nr) {
     if (!mLock)
         return kIOReturnNotReady;
+    // The owner serializes lifecycle and borrowers. AML must never run under
+    // the controller transaction lock; it may acquire unrelated IOKit locks.
+    const bool powered = mWindow.base && isD0();
     IOLockLock(mLock);
-    IOReturn result = mWindow.base && isD0() ? mEngine.command(ep, tx, nt, rx, nr) : kIOReturnNotReady;
+    IOReturn result = powered ? mEngine.command(ep, tx, nt, rx, nr) : kIOReturnNotReady;
     IOLockUnlock(mLock);
     return result;
 }
@@ -120,9 +123,10 @@ void AMDSPIController::suspend() {
 IOReturn AMDSPIController::resume() {
     if (!mLock)
         return kIOReturnNotReady;
-    IOLockLock(mLock);
     mPowerAvailable = true;
-    IOReturn result = mWindow.base && isD0() ? mEngine.resume() : kIOReturnNotReady;
+    const bool powered = mWindow.base && isD0();
+    IOLockLock(mLock);
+    IOReturn result = powered ? mEngine.resume() : kIOReturnNotReady;
     if (result != kIOReturnSuccess)
         mPowerAvailable = false;
     IOLockUnlock(mLock);
@@ -130,14 +134,17 @@ IOReturn AMDSPIController::resume() {
 }
 void AMDSPIController::shutdown() {
     // The owner has stopped/joined clients; no caller can wait on this lock.
+    const bool powered = mWindow.base && isD0();
     if (mLock)
         IOLockLock(mLock);
-    if (mWindow.base && isD0())
+    if (powered)
         mEngine.shutdown();
     else
         mEngine.abandon();
     mWindow.base = nullptr;
     mPowerAvailable = false;
+    if (mLock)
+        IOLockUnlock(mLock);
     if (mMap) {
         mMap->release();
         mMap = nullptr;
@@ -149,7 +156,6 @@ void AMDSPIController::shutdown() {
     }
     mOwner = nullptr;
     if (mLock) {
-        IOLockUnlock(mLock);
         IOLockFree(mLock);
         mLock = nullptr;
     }

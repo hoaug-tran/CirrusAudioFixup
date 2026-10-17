@@ -45,10 +45,10 @@ struct IOACPIPlatformDevice {
  bool opened=false,failOpen=false,failMap=false,hasPSC=true,failPSC=false;UInt32 power=0;
  IOReturn evaluateObject(const char*,OSObject** out){++hid.refs;*out=&hid;return 0;}
  IOReturn validateObject(const char*){return hasPSC?0:-1;}
- IOReturn evaluateInteger(const char*,UInt32* out){*out=power;return failPSC?-1:0;}
+ IOReturn evaluateInteger(const char*,UInt32* out){assert(!storage.held);*out=power;return failPSC?-1:0;}
  void retain(){++refs;}void release(){--refs;}bool isOpen(){return opened;}
  bool open(IOService* o){++opens;if(failOpen)return false;owner=o;opened=true;return true;}
- void close(IOService* o){assert(opened&&o==owner);++closes;opened=false;}
+ void close(IOService* o){assert(!storage.held);assert(opened&&o==owner);++closes;opened=false;}
  IOMemoryMap* mapDeviceMemoryWithIndex(unsigned i){assert(i==0);return failMap?nullptr:&map;}
 };
 ''')

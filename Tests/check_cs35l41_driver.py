@@ -20,14 +20,15 @@ using namespace devices::amplifiers::cs35l41;
 bool gCirrusDebug=false;
 struct Port:core::RegisterIO {
     std::map<uint32_t,uint32_t> values;
-    unsigned calls=0,failAt=0,reads=0,writes=0,diagnosticReads=0;
+    unsigned calls=0,failAt=0,failFrom=0,reads=0,writes=0,diagnosticReads=0;
     int error=0;
     bool alive=true;
+    uint64_t readCostMs=0;
     std::vector<diagnostics::TraceSource> sources;
     Port(){values[0]=registers::kValDeviceId;values[4]=0xb2;values[0x10]=3;values[0x1001c]=2;values[0x10098]=2;}
-    bool step(){assert(alive);error=++calls==failAt?-99:0;return error==0;}
+    bool step(){assert(alive);++calls;error=(calls==failAt||(failFrom&&calls>=failFrom))?-99:0;return error==0;}
     int32_t lastError()const override{return error;}
-    bool read(uint32_t r,uint32_t* v)override{++reads;if(!step())return false;*v=values[r];return true;}
+    bool read(uint32_t r,uint32_t* v)override{++reads;fixtureTimeMs+=readCostMs;if(!step())return false;*v=values[r];return true;}
     bool write(uint32_t r,uint32_t v)override{++writes;if(!step())return false;if(r==0x10010 || r==0x10018 || r==0x1001c)values[r]&=~v;else values[r]=v;if(r==0x20)values[0x1001c]=2;return true;}
     bool updateBits(uint32_t r,uint32_t m,uint32_t v)override{uint32_t old=0;return read(r,&old) && write(r,(old&~m)|(v&m));}
     bool bulkRead(uint32_t,uint8_t* p,size_t n)override{if(!step())return false;memset(p,0,n);return true;}
@@ -39,14 +40,14 @@ struct Port:core::RegisterIO {
 };
 struct Host:platform::AmplifierHost {
     diagnostics::DiagnosticState diag{};
-    bool alive=true,allow=true,bypass=true,capturing=false;
+    bool alive=true,allow=true,bypass=true,capturing=false,readOnly=false;
     std::string phase;std::map<std::string,std::string> properties;
     unsigned captures=0,publications=0;
     bool authorized()const override{assert(alive);return allow;}
     const char* name()const override{return "owned-driver";}
     bool supportsResources()const override{return alive;}
     const diagnostics::DiagnosticState& diagnostics()const override{return diag;}
-    bool bootArgEnabled(const char* s)const override{return bypass && !strcmp(s,"-cirrusnodsp");}
+    bool bootArgEnabled(const char* s)const override{return (bypass && !strcmp(s,"-cirrusnodsp"))||(readOnly&&!strcmp(s,"-cirrusro"));}
     bool bootArgStrEquals(const char* s,const char* v)const override{return !strcmp(s,"-cirrusphase") && phase==v;}
     bool stopAfterDebugStage(const char* s)override{return phase==s;}
     bool debugHalted()const override{return !phase.empty();}
@@ -76,6 +77,24 @@ struct Fixture {
     void bind(){assert(runtime.bind(registry,&context,1)==0);}
 };
 int main(){
+    {
+        Fixture probe;probe.host.readOnly=true;probe.port.failFrom=3;
+        CS35L41Driver driver(probe.context);driver.inspect();
+        assert(probe.port.writes==0&&probe.port.diagnosticReads==3);
+        assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="PARTIAL_BUS_FAILURE");
+    }
+    {
+        Fixture probe;probe.host.readOnly=true;probe.port.readCostMs=130;
+        CS35L41Driver driver(probe.context);driver.inspect();
+        assert(probe.port.writes==0&&probe.port.diagnosticReads==2);
+        assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="PARTIAL_TIME_BUDGET");
+    }
+    {
+        Fixture probe;probe.host.readOnly=true;
+        CS35L41Driver driver(probe.context);driver.inspect();
+        assert(probe.port.writes==0&&probe.port.diagnosticReads>3);
+        assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
+    }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
     for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
         Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;

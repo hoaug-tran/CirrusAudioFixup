@@ -1271,6 +1271,10 @@ void CS35L41Driver::dumpAllRegisters(AmplifierState& amp) {
     size_t numRegs = sizeof(cs35l41_reg_desc) / sizeof(cs35l41_reg_desc[0]);
     uint32_t successCount = 0;
     uint32_t crc = 0;
+    uint32_t failedCount = 0, consecutiveFailures = 0, firstFailedRegister = 0;
+    IOReturn firstFailure = kIOReturnSuccess;
+    const uint64_t started = playbackTimeMilliseconds();
+    const char* status = "COMPLETE";
 
     size_t bufferSize = 16 * 1024;
     char* dumpBuffer = (char*)IOMallocData(bufferSize);
@@ -1284,9 +1288,14 @@ void CS35L41Driver::dumpAllRegisters(AmplifierState& amp) {
     for (size_t i = 0; i < numRegs; i++) {
         if (!cs35l41_reg_desc[i].readable)
             continue;
+        if (playbackTimeMilliseconds() - started >= 250) {
+            status = "PARTIAL_TIME_BUDGET";
+            break;
+        }
 
         uint32_t val = 0;
         if (readRegister(amp, cs35l41_reg_desc[i].addr, &val, TRACE_DUMP)) {
+            consecutiveFailures = 0;
             successCount++;
             crc = crc32Le(crc, (const uint8_t*)&cs35l41_reg_desc[i].addr, 4);
             crc = crc32Le(crc, (const uint8_t*)&val, 4);
@@ -1302,11 +1311,33 @@ void CS35L41Driver::dumpAllRegisters(AmplifierState& amp) {
                 strlcat(dumpBuffer, lineBuffer, bufferSize);
                 currentLen += lineLen;
             }
+        } else {
+            if (!failedCount) {
+                firstFailedRegister = cs35l41_reg_desc[i].addr;
+                firstFailure = mLastTransferReturn;
+            }
+            ++failedCount;
+            if (++consecutiveFailures >= 3) {
+                status = "PARTIAL_BUS_FAILURE";
+                break;
+            }
         }
     }
+    if (failedCount && !strcmp(status, "COMPLETE"))
+        status = "PARTIAL_READ_ERRORS";
+    char statusProperty[80];
+    snprintf(statusProperty, sizeof(statusProperty), "Cirrus_Dump_Status_%s", amp.name);
+    OSString* dumpStatus = OSString::withCString(status);
+    if (dumpStatus) {
+        setProperty(statusProperty, dumpStatus);
+        dumpStatus->release();
+    }
+    CIRRUS_LOG("BOOT_FLOW CS35L41 DUMP_END amp=%s status=%s reads=%u failures=%u first_reg=0x%08X first_ret=0x%08X", amp.name,
+               status, successCount, failedCount, firstFailedRegister, uint32_t(firstFailure));
     CIRRUS_LOG("dump complete: %u registers successfully read, crc32: 0x%08X", successCount, crc);
 
-    snprintf(lineBuffer, sizeof(lineBuffer), "crc32: 0x%08X\n", crc);
+    snprintf(lineBuffer, sizeof(lineBuffer), "status: %s; failed: %u; first: 0x%08X/0x%08X; crc32: 0x%08X\n", status, failedCount,
+             firstFailedRegister, uint32_t(firstFailure), crc);
     strlcat(dumpBuffer, lineBuffer, bufferSize);
 
     char propName[64];

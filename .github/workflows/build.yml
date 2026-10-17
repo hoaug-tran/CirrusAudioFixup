@@ -8,6 +8,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  windows-collector:
+    name: Windows audio collector tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Test Windows PowerShell 5.1 collector helpers
+        shell: powershell
+        run: ./Tests/check_windows_collector.ps1
+      - name: Test PowerShell 7 collector helpers
+        shell: pwsh
+        run: ./Tests/check_windows_collector.ps1
+
   build:
     name: Build and Test
     runs-on: macos-latest

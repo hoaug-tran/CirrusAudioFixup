@@ -2826,7 +2826,7 @@ bool CS35L41Driver::powerUpAmplifier(AmplifierState& amp) {
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx2Source, 0x00000008) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
-        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, 0x00000029) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, amp.power.dspSupplyMonitorSource()) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx6Source, 0x00000029) && ok;
     } else {
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, 0x00010000) && ok;

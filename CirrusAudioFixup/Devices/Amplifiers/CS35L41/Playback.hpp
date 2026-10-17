@@ -241,7 +241,7 @@ public:
                                           {0x4C44, dsp ? 8U : 9U},
                                           {0x4C48, 0x18},
                                           {0x4C4C, 0x19},
-                                          {0x4C50, dsp ? 0x29U : 0x20U}};
+                                          {0x4C50, dsp ? power.dspSupplyMonitorSource() : 0x20U}};
             for (const auto& item : common)
                 if (!io.write(item[0], item[1]))
                     return fail(state, DIAG_PLAYBACK_INVARIANT, item[0], item[1]);
@@ -372,7 +372,7 @@ public:
         // health monitor. A valid PLL alone cannot prove that PCM and speaker
         // telemetry still reach the inputs expected by the selected firmware.
         const uint32_t signalPath[][2] = {{0x4804, 0x21}, {0x4808, 0x20200200}, {0x4830, 0x18}, {0x4840, 0x18}, {0x4C40, 8},
-                                          {0x4C44, 8},    {0x4C48, 0x18},       {0x4C4C, 0x19}, {0x4C50, 0x29}, {0x4C54, 0x29}};
+                                          {0x4C44, 8},    {0x4C48, 0x18},       {0x4C4C, 0x19}, {0x4C50, power.dspSupplyMonitorSource()}, {0x4C54, 0x29}};
         for (unsigned i = 0; i < (dsp ? 10U : 4U); ++i) {
             uint32_t actual = 0;
             if (!io.read(signalPath[i][0], &actual) || actual != signalPath[i][1]) {

@@ -59,6 +59,17 @@ int main(){
    if(br==PlaybackProgress::Pending)br=Playback::advance(explicitLegacy,b,now,dsp,0x2b01,nullptr,kLegacyPowerConfiguration);
   }
   assert(ar==PlaybackProgress::Prepared&&br==ar&&cr==ar);
+  // Windows 103C89C6 InitSequence and Linux HDA select VPMON for
+  // internal boost; external boost must retain VBSTMON. Bypass is unchanged.
+  assert(hp.r[0x4C50]==(dsp?0x28U:0x20U));
+  assert(legacy.r[0x4C50]==(dsp?0x29U:0x20U));
+  if(dsp){
+   auto wrongInternal=hp;auto wrongExternal=legacy;auto ci=c;auto ai=a;
+   wrongInternal.r[0x4C50]=0x29;wrongExternal.r[0x4C50]=0x28;
+   assert(!Playback::commit(wrongInternal,ci,17<<5,true,internal));
+   assert(!Playback::commit(wrongExternal,ai,17<<5,true));
+   assert(wrongInternal.r[0x6000]==0xA678&&wrongExternal.r[0x6000]==0xA678);
+  }
   assert(legacy.r[0x2018]==(dsp?0x3001U:1U)&&hp.r[0x2018]==(dsp?0x3021U:0x21U));
   assert(Playback::commit(legacy,a,17<<5,dsp));
   assert(Playback::commit(hp,c,17<<5,dsp,internal));

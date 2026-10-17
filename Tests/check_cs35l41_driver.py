@@ -10,6 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 CPP=r'''
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
+#include "Devices/Amplifiers/CS35L41/DeviceConfiguration.hpp"
 #include "Devices/AmplifierDrivers.hpp"
 #include "Platform/AmplifierManager.hpp"
 #include <cassert>
@@ -93,6 +94,23 @@ int main(){
         assert((internal.port.values[0x3808]&0x7f)==0x4a);
         assert(!internal.port.values.count(0x7414));
         assert(internal.runtime.suspend()==0&&internal.runtime.resume()==0);
+    }
+    {
+        Fixture configured;
+        DeviceConfiguration config{{BoostTopology::Internal,1200,4100,47},0,0};
+        configured.binding.driverConfiguration=&config;configured.binding.driverConfigurationSize=sizeof(config);
+        configured.binding.driverConfigurationKind=kDeviceConfigurationKind;configured.binding.interruptGpio=0;
+        configured.port.values[0x242c]=0x00030000;
+        configured.bind();
+        // The concrete driver owns a copy; later mutation of discovery storage
+        // must not change electrical configuration across resume.
+        config.power.peakMilliamp=5000;
+        assert(configured.runtime.bringUp()==0);
+        assert((configured.port.values[0x3814]&0xff03)==0x6b01);
+        assert((configured.port.values[0x3808]&0x7f)==0x42);
+        assert((configured.port.values[0x242c]&0x07000000)==0);
+        assert((configured.port.values[0x242c]&0x00030000)==0);
+        assert(configured.runtime.suspend()==0&&configured.runtime.resume()==0);
     }
     Fixture good;good.bind();assert(good.port.calls==0);assert(good.runtime.bringUp()==0);
     assert(good.runtime.report(0).initialized && !good.runtime.report(0).faulted);

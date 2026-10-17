@@ -21,7 +21,7 @@ inline constexpr platform::AmplifierDriverRegistration kDriverRegistrations[] = 
     {"cs35l41-clsa0101", "CLSA0101", registers::kValDeviceId, 3, cs35l41RegisterFormat(false), cs35l41RegisterFormat(true), createDriver,
      destroyDriver, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectDevice, validDebugPhase},
     {"cs35l41-csc3551", "CSC3551", registers::kValDeviceId, 3, cs35l41RegisterFormat(false), cs35l41RegisterFormat(true), createDriver,
-     destroyDriver, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectDevice, validDebugPhase},
+     destroyDriver, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectDevice, validDebugPhase, discoverBoard},
 };
 inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) {
     for (const auto& definition : kDriverRegistrations)

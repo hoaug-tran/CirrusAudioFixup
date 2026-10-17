@@ -159,6 +159,9 @@ public:
  bool bootArgEnabled(const char* k){return flags[k];}
  void setProperty(const char* k,bool value){numbers[k]=value;}
  const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
+ cirrus::platform::DiscoveredBoard* mDiscoveredBoard=nullptr;
+ cirrus::platform::PlatformProfile mDiscoveredProfile{};
+ void discoverPlatformConfiguration(IOACPIPlatformDevice*,const cirrus::platform::AmplifierDriverRegistration&){}
  uint32_t mPlatformSubsystemId=0;
  cirrus::platform::AmplifierDriverRegistry mDriverRegistry;
  IOService* mProvider=nullptr;char mRuntimeControllerPath[256]{};

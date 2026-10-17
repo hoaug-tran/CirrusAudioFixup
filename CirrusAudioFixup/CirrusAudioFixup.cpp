@@ -1,6 +1,6 @@
 //
 // CirrusAudioFixup.cpp
-// IOKit service for board-specific CS35L41 bring-up and playback control.
+// IOKit host for registered amplifier and communication drivers.
 //
 // Hardware readiness is established by register and DSP checks. HDA stream
 // observation cannot confirm the downstream audio route or audible output.
@@ -10,6 +10,7 @@
 #include "CirrusAudioFixup.hpp"
 #include "Diagnostics/FailureNames.hpp"
 #include "Support/CPUIdentity.hpp"
+#include "Transport/ACPIPlatformProperties.hpp"
 
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/pci/IOPCIDevice.h>
@@ -502,6 +503,13 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         if (const auto* exact = cirrus::platform::findPlatformProfile(acpiHid, acpiSubsystemId))
             if (exact->identitySource == cirrus::platform::BoardIdentitySource::ACPI)
                 mPlatformProfile = exact;
+    // Discovery results belong to this provider instance, never to a global
+    // model profile. Preserve them while identity and borrowers remain valid.
+    if (mDiscoveredBoard && acpiHid) {
+        const cirrus::platform::BoardIdentity identity{uint16_t(acpiSubsystemId >> 16), uint16_t(acpiSubsystemId), acpiHid};
+        if (mDiscoveredBoard->configuration.permits(identity))
+            mPlatformProfile = &mDiscoveredProfile;
+    }
     mPlatformSubsystemId = mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? acpiSubsystemId : pciSubsystemId;
     mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, mPlatformSubsystemId);
     setProperty("Cirrus_Platform_ACPI_SSID", uint64_t(acpiSubsystemId), 32);
@@ -516,6 +524,36 @@ void CirrusAudioFixup::resolvePlatformProfile() {
                    mPlatformProfile->endpointCount);
     }
     OSSafeReleaseNULL(ownedHid);
+}
+
+void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi, const cirrus::platform::AmplifierDriverRegistration& definition) {
+    cirrus::transport::ACPIDeviceProperties properties;
+    const IOReturn propertyReturn = properties.load(acpi);
+    const char* reason = "ACPI_PROPERTIES_UNAVAILABLE";
+    if (propertyReturn == kIOReturnSuccess && mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI) {
+        cirrus::transport::ACPIPlatformProperties source(properties);
+        cirrus::core::BusEndpoint endpoints[kMaxAmplifiers]{};
+        for (size_t i = 0; i < mNativeSPI.count(); ++i)
+            endpoints[i] = mNativeSPI.endpoint(i);
+        const cirrus::platform::BoardDiscoveryContext context{
+            {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid},
+            endpoints, mNativeSPI.count(), source};
+        mDiscoveredBoard = definition.discoverBoard(context, reason);
+        if (mDiscoveredBoard && mDiscoveredBoard->configuration.permits(context.identity)) {
+            mDiscoveredProfile = *mPlatformProfile;
+            mDiscoveredProfile.name = "acpi-device-properties";
+            mDiscoveredProfile.boardConfiguration = &mDiscoveredBoard->configuration;
+            mDiscoveredProfile.endpointCount = mDiscoveredBoard->configuration.count;
+            mDiscoveredProfile.allowAutomaticInitialization = true;
+            mPlatformProfile = &mDiscoveredProfile;
+            mPlatformAuthorized = true;
+            setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
+        } else {
+            delete mDiscoveredBoard;
+            mDiscoveredBoard = nullptr;
+        }
+    }
+    setProperty("Cirrus_Platform_Discovery", reason);
 }
 
 // ACPI SPI matching is deliberately opt-in until physical controller tests.
@@ -650,6 +688,8 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                                                           : cirrus::transport::createNativeSPIController);
     const IOReturn controllerReturn = ret;
     bool writable = false;
+    if (ret == kIOReturnSuccess && selected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard)
+        discoverPlatformConfiguration(acpi, *selected);
     if (ret == kIOReturnSuccess && mPlatformAuthorized && mPlatformProfile->boardConfiguration) {
         cirrus::platform::BoardIdentity actual{uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId),
                                                mPlatformProfile->acpiHid};
@@ -791,6 +831,11 @@ void CirrusAudioFixup::teardownCommunication() {
     for (auto& amp : mAmplifiers)
         amp.registerIO = nullptr;
     mNativeSPI.shutdown();
+    if (mPlatformProfile == &mDiscoveredProfile)
+        mPlatformProfile = &cirrus::platform::defaultPlatformProfile();
+    delete mDiscoveredBoard;
+    mDiscoveredBoard = nullptr;
+    mDiscoveredProfile = {};
 }
 
 // Validate diagnostic options before any reset or amplifier write.

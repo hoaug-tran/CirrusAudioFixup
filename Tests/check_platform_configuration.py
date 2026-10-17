@@ -1,4 +1,4 @@
-"""Exact HP board identity, channel/asset bindings and captured firmware hashes."""
+"""Driver-owned ACPI configuration, legacy identity isolation and asset provenance."""
 from pathlib import Path
 import hashlib
 import re
@@ -24,34 +24,71 @@ with tempfile.TemporaryDirectory(prefix="cirrus-hp-profile-") as directory:
 #include <cassert>
 #include <cstring>
 #include <initializer_list>
+#include <map>
+#include <vector>
+#include <algorithm>
+#include "Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp"
 #include "Platform/PlatformProfile.hpp"
+struct Properties:cirrus::platform::PlatformProperties {
+ std::map<std::string,std::vector<uint32_t>> values{
+ {"cirrus,dev-index",{0,1}}, {"cirrus,speaker-position",{1,0}},
+ {"cirrus,boost-type",{0,0}}, {"cirrus,gpio1-func",{0,0}}, {"cirrus,gpio2-func",{2,2}},
+ {"cirrus,boost-ind-nanohenry",{1000,1000}}, {"cirrus,boost-peak-milliamp",{4500,4500}},
+ {"cirrus,boost-cap-microfarad",{24,24}}};
+ bool array(const char* name,uint32_t* output,size_t count)const override {
+  auto i=values.find(name);if(i==values.end()||i->second.size()!=count)return false;
+  std::copy(i->second.begin(),i->second.end(),output);return true;
+ }
+};
+bool allowResources=true;
+bool assets(uint16_t,uint16_t,uint32_t speaker){return allowResources&&speaker==0;}
+using namespace cirrus;
+using namespace devices::amplifiers::cs35l41;
+platform::DiscoveredBoard* resolve(Properties& p,platform::BoardIdentity identity={0x103c,0x89c6,"CSC3551"}){
+ core::BusEndpoint endpoints[]={{core::BusTransportType::SPI,"\\_SB.PCI0.SPI9",0,false,1,2000000,0},
+                               {core::BusTransportType::SPI,"\\_SB.PCI0.SPI9",0,false,0,4000000,0}};
+ const char* reason=nullptr;
+ return resolvePlatformConfiguration({identity,endpoints,2,p},assets,reason);
+}
 void profileChecks(){
- using namespace cirrus;uint32_t identity=7;
+ assert(platform::defaultPlatformProfile().amplifierModel==core::AmplifierModel::Unknown);
+ assert(!platform::defaultPlatformProfile().endpoints&&!platform::defaultPlatformProfile().endpointCount);
+ uint32_t identity=7;
  assert(platform::parseACPISubsystemId("103C89C6",identity)&&identity==0x103c89c6);
- assert(platform::parseACPISubsystemId("103c89c6",identity));
  for(auto bad:{"", "103C89C", "0x103C89C6", "103G89C6", "000089C6", "FFFFFFFF"})
   assert(!platform::parseACPISubsystemId(bad,identity)&&identity==0x103c89c6);
- auto* profile=platform::findPlatformProfile("CSC3551",identity);
- assert(profile&&profile->identitySource==platform::BoardIdentitySource::ACPI);
- assert(profile->boardConfiguration&&profile->boardConfiguration->useBoardFirmwareIdentity);
- assert(platform::permitsHardwareInitialization(*profile,identity));
- assert(!platform::permitsHardwareInitialization(*profile,0x103c8ca4));
- assert(!platform::permitsHardwareInitialization(*profile,0x17aa3847));
- const auto& board=*profile->boardConfiguration;assert(board.count==2);
- assert(board.amplifiers[0].channelIndex==uint32_t(core::AudioChannel::Right));
- assert(board.amplifiers[1].channelIndex==uint32_t(core::AudioChannel::Left));
- for(unsigned i=0;i<2;++i){
-  const auto& a=board.amplifiers[i];assert(a.endpoint.valid());
-  assert(a.endpoint.transport==core::BusTransportType::SPI&&a.endpoint.spiChipSelect==i);
-  assert(a.endpoint.spiClockHz==4000000&&a.endpoint.spiMode==0&&a.siliconId==0x35a40);
-  assert(!strcmp(a.endpoint.controllerPath,"\x5c_SB.PC00.SPI0"));
-  auto* power=devices::amplifiers::cs35l41::powerConfiguration(a.driverConfiguration,a.driverConfigurationSize,a.driverConfigurationKind);
-  assert(power&&power->internal()&&power->inductorNanohenry==1000&&power->peakMilliamp==4500&&power->capacitorMicrofarad==24);
+ assert(!platform::findPlatformProfile("CSC3551",identity)->allowAutomaticInitialization);
+ Properties properties;auto* discovered=resolve(properties);assert(discovered);
+ const auto& board=discovered->configuration;assert(board.permits({0x103c,0x89c6,"CSC3551"}));
+ assert(board.count==2&&board.useBoardFirmwareIdentity);
+ assert(board.amplifiers[0].channelIndex==0&&board.amplifiers[1].channelIndex==1);
+ assert(board.amplifiers[0].endpoint.spiChipSelect==1&&board.amplifiers[0].endpoint.spiClockHz==2000000);
+ assert(!strcmp(board.amplifiers[0].endpoint.controllerPath,"\\_SB.PCI0.SPI9"));
+ assert(!strcmp(board.amplifiers[0].tuningResource,"speaker-protection"));
+ DeviceConfiguration configuration;
+ const auto& binding=board.amplifiers[0];
+ assert(decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,configuration));
+ assert(configuration.power.internal()&&configuration.power.peakMilliamp==4500);
+ delete discovered;
+ // Synthetic fixtures prove the resolver is independent of manufacturer and
+ // board name. They do not register resources or claim physical OEM support.
+ for(auto vendor:{0x103c,0x17aa,0x1234}){
+  Properties p;p.values["cirrus,boost-peak-milliamp"]={4100,4000};
+  discovered=resolve(p,{uint16_t(vendor),0x5678,"CSC3551"});assert(discovered);
+  auto* config=static_cast<const DeviceConfiguration*>(discovered->configuration.amplifiers[0].driverConfiguration);
+  assert(config->power.peakMilliamp==4000);delete discovered;
  }
- assert(strstr(board.amplifiers[0].tuningResource,"-r0.bin"));
- assert(strstr(board.amplifiers[1].tuningResource,"-l0.bin"));
- assert(!platform::findPlatformProfile("CSC3551")->allowAutomaticInitialization);
- assert(!platform::findPlatformProfile("CSC3551",0x103c8ca4)->allowAutomaticInitialization);
+ for(auto key:{"cirrus,dev-index","cirrus,speaker-position","cirrus,boost-type","cirrus,gpio1-func", "cirrus,gpio2-func",
+               "cirrus,boost-ind-nanohenry","cirrus,boost-peak-milliamp","cirrus,boost-cap-microfarad"}){
+  Properties p;p.values.erase(key);assert(!resolve(p));
+ }
+ for(auto key:{"cirrus,dev-index","cirrus,speaker-position"}){Properties p;p.values[key]={0,0};assert(!resolve(p));}
+ {Properties p;p.values["cirrus,gpio1-func"]={1,0};assert(!resolve(p));}
+ {Properties p;p.values["cirrus,gpio2-func"]={3,2};assert(!resolve(p));}
+ {Properties p;p.values["cirrus,boost-type"]={1,1};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));}
+ {Properties p;p.values["cirrus,boost-type"]={1,1};auto* corrected=resolve(p);assert(corrected);delete corrected;}
+ allowResources=false;assert(!resolve(properties));allowResources=true;
+ assert(!resolve(properties,{0,0x89c6,"CSC3551"}));
  assert(platform::findPlatformProfile("CLSA0100")->resetQuirk);
 }
 '''
@@ -74,6 +111,8 @@ class CirrusAudioFixup {
 public:
  IOService* mProvider=nullptr;IOPCIDevice* audio=nullptr;
  const cirrus::platform::PlatformProfile* mPlatformProfile=nullptr;
+ cirrus::platform::DiscoveredBoard* mDiscoveredBoard=nullptr;
+ cirrus::platform::PlatformProfile mDiscoveredProfile{};
  uint32_t mPlatformSubsystemId=0;bool mPlatformAuthorized=false;
  IOService* getAudioController(){if(audio)audio->retain();return audio;}
  void setProperty(const char*,uint64_t,unsigned){}
@@ -87,7 +126,12 @@ public:
 int main(){
  profileChecks();IOACPIPlatformDevice amp;IOPCIDevice audio;CirrusAudioFixup service;
  service.mProvider=&amp;service.audio=&audio;service.resolvePlatformProfile();
- assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x103c89c6);
+ assert(!service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x103c89c6);
+ Properties properties;service.mDiscoveredBoard=resolve(properties);assert(service.mDiscoveredBoard);
+ service.mDiscoveredProfile=*service.mPlatformProfile;
+ service.mDiscoveredProfile.boardConfiguration=&service.mDiscoveredBoard->configuration;
+ service.mDiscoveredProfile.allowAutomaticInitialization=true;service.resolvePlatformProfile();
+ assert(service.mPlatformAuthorized);
  assert(service.mPlatformProfile->identitySource==cirrus::platform::BoardIdentitySource::ACPI);
  // A PCI SSID alone must not substitute for the declared ACPI _SUB contract.
  amp.sub.value="INVALID";audio.ssid=0x103c89c6;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
@@ -109,6 +153,7 @@ int main(){
  amp.hid.value="CSC3551";amp.sub.value="103C89C6";service.resolvePlatformProfile();
  assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x103c89c6);
  assert(amp.hid.refs==1&&amp.sub.refs==1&&audio.refs==1);
+ delete service.mDiscoveredBoard;
 }
 '''
     (tmp/'IOKit').mkdir()
@@ -118,4 +163,4 @@ int main(){
     subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
-print("PASS HP and legacy Lenovo identity isolation, endpoints, power configuration and captured asset SHA-256")
+print("PASS OEM-independent ACPI configuration, topology validation, resource gates, Lenovo isolation and captured asset SHA-256")

@@ -12,7 +12,6 @@
 #include "Core/AudioTypes.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include "Platform/BoardConfiguration.hpp"
-#include "Platform/Boards/HPZBookFuryG9.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -80,16 +79,15 @@ static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
 };
 
 static constexpr PlatformProfile kPlatformProfiles[] = {
-    {"hp-zbook-fury-g9-103c89c6", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 2, nullptr, true,
-     &boards::kHP89C6Board, nullptr, 0, nullptr, nullptr, nullptr, BoardIdentitySource::ACPI},
     {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true, nullptr,
      nullptr, 0, &kLegionProtectionIRQ},
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
-    {"generic-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
+    {"acpi-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 0, nullptr, false,
+     nullptr, nullptr, 0, nullptr, nullptr, nullptr, BoardIdentitySource::ACPI},
 };
 
 static constexpr PlatformProfile kSafeUnknownPlatform = {
-    "unrecognized-fail-closed", nullptr, core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false};
+    "unrecognized-fail-closed", nullptr, core::AmplifierModel::Unknown, nullptr, 0, nullptr, false};
 
 inline const PlatformProfile* findPlatformProfileIn(const PlatformProfile* profiles, size_t count, const char* acpiHid,
                                                     uint32_t subsystemId) {

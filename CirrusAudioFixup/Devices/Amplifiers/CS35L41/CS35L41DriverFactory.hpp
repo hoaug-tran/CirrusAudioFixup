@@ -7,4 +7,6 @@ core::AmplifierLifecycleHooks* createDriver(const platform::AmplifierDriverConte
 void destroyDriver(core::AmplifierLifecycleHooks*);
 void inspectDevice(const platform::AmplifierDriverContext&);
 bool validDebugPhase(const char*);
+platform::DiscoveredBoard* discoverBoard(const platform::BoardDiscoveryContext&, const char*& reason);
+bool protectionResourceAvailable(uint16_t vendor, uint16_t device, uint32_t speaker);
 }

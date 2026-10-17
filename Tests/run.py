@@ -11,7 +11,7 @@ args = parser.parse_args()
 # Explicit membership: a one-off experiment must never enter CI via a glob.
 suites = (
     "reproduce_host", "check_registers", "check_transport", "check_diagnostics", "check_attachment",
-    "check_extensible_core", "check_cs35l41_driver", "check_cs35l41_power", "check_hp_spi_profile", "check_native_spi", "check_spi_chip_select", "check_spi_gpio", "check_spi_gpio_binding", "check_amd_spi", "check_amd_spi_lifecycle", "check_acpi_spi", "check_acpi_cast", "check_pci_publication", "check_spi_transport", "check_intel_spi", "check_intel_spi_lifecycle", "check_hda", "check_calibration", "check_tuning", "check_bringup",
+    "check_extensible_core", "check_cs35l41_driver", "check_cs35l41_power", "check_platform_configuration", "check_platform_discovery", "check_native_spi", "check_spi_chip_select", "check_spi_gpio", "check_spi_gpio_binding", "check_amd_spi", "check_amd_spi_lifecycle", "check_acpi_spi", "check_acpi_cast", "check_pci_publication", "check_spi_transport", "check_intel_spi", "check_intel_spi_lifecycle", "check_hda", "check_calibration", "check_tuning", "check_bringup",
     "check_runtime", "check_audio_events", "check_firmware_identity",
     "check_architecture", "check_release", "check_build_policy", "check_tools",
     "check_vtable_policy", "check_xcode_project", "check_source_layout",

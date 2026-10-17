@@ -3,6 +3,7 @@
 #include "uploader.hpp"
 #include "arrays.hpp"
 #include "resources.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 #include <vector>
 
 void putBE(std::vector<uint8_t>& v, unsigned word, uint32_t n) {
@@ -12,6 +13,19 @@ void putLE(std::vector<uint8_t>& v, unsigned pos, uint32_t n) {
     for (unsigned i=0;i<4;i++) v[pos+i]=uint8_t(n>>(i*8));
 }
 int main() {
+    using cirrus::devices::amplifiers::cs35l41::selectFirmwareResource;
+    {
+        FirmwareResource catalog[3]{};
+        catalog[0].subsystemVendor=catalog[1].subsystemVendor=catalog[2].subsystemVendor=0x1234;
+        catalog[0].subsystemDevice=catalog[1].subsystemDevice=catalog[2].subsystemDevice=0x5678;
+        catalog[1].spkid=1;catalog[2].spkid=2;
+        assert(selectFirmwareResource(catalog,3,0x1234,0x5678,1)==&catalog[1]);
+        assert(selectFirmwareResource(catalog,3,0x1234,0x5678,7)==&catalog[0]);
+        assert(!selectFirmwareResource(catalog,3,0x17aa,0x5678,1));
+        std::swap(catalog[0],catalog[2]);
+        assert(selectFirmwareResource(catalog,3,0x1234,0x5678,1)==&catalog[1]);
+        catalog[0].spkid=1;assert(!selectFirmwareResource(catalog,3,0x1234,0x5678,1));
+    }
     const FirmwareResource* lenovo = nullptr;
     const FirmwareResource* hp = nullptr;
     for (size_t i = 0; i < cs35l41FirmwareCount; ++i) {
@@ -24,6 +38,30 @@ int main() {
     assert(lenovo && lenovo->spkid == 1 && lenovo->bin != lenovo->binRight);
     assert(hp && hp->spkid == 0 && hp->bin != hp->binRight && hp->wmfwSize == 34068);
     assert(hp->binSize == 4000 && hp->binRightSize == 4000);
+    {
+        FirmwareImage captured{};
+        assert(WMFWParser::parseWMFW(hp->wmfw,hp->wmfwSize,&captured));
+        // Actual unpacked XM table in the supplied HP Linux regmap. It has two
+        // algorithms and a different firmware XM base from the Lenovo fixture.
+        const uint32_t words[]={0x40000,0x30000,2,0x400a4,0x2b01,0x1f4,0xe,0,0,2,
+                                0xcd,0x1d3f01,0x94,0x50,0xe,0x7bc,0xf20b,0x100,0x176,0x4c,0,0};
+        std::vector<uint8_t> actual(sizeof(words));
+        for(unsigned i=0;i<sizeof(words)/sizeof(words[0]);++i)putBE(actual,i,words[i]);
+        assert(WMFWParser::parseAlgorithmTable(actual.data(),actual.size(),captured));
+        assert(captured.firmwareId==0x400a4&&captured.haloFirmwareVersion==0x2b01&&captured.algorithmTotal==2);
+        for(auto name:{"HALO_STATE","HALO_HEARTBEAT","CAL_AMBIENT","CAL_R","CAL_STATUS","CAL_CHECKSUM"}) {
+            WMFWControlRef ref{};uint32_t reg=0;
+            assert(WMFWParser::findControl(&captured,name,ref));
+            assert(ref.control->type==WMFW_ADSP2_XM&&ref.control->len==4);
+            assert(WMFWParser::resolveControl(captured,ref,reg));
+            printf("PASS captured HP %s=0x%08X\n",name,reg);
+        }
+        for(unsigned side=0;side<2;++side){
+            assert(WMFWParser::parseBIN(side?hp->binRight:hp->bin,side?hp->binRightSize:hp->binSize,&captured));
+            MappedImage mapped{};assert(WMFWMemoryMapper::mapCoefficients(captured,mapped));
+            assert(mapped.regionCount>0);
+        }
+    }
     FirmwareImage fw{};
     auto wmfw=cs35l41_dsp1_spk_prot_17aa3847_wmfw;
     auto wmfwSize=sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw);

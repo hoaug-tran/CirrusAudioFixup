@@ -7,6 +7,7 @@
 #include "Core/RegisterMap.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include "Platform/BoardConfiguration.hpp"
+#include "Platform/BoardDiscovery.hpp"
 #include <string.h>
 namespace cirrus::platform {
 class AmplifierHost;
@@ -41,6 +42,7 @@ struct AmplifierDriverRegistration {
     const char* platformContract{nullptr};
     void (*inspect)(const AmplifierDriverContext&){nullptr};
     bool (*validDebugPhase)(const char*){nullptr};
+    DiscoveredBoard* (*discoverBoard)(const BoardDiscoveryContext&, const char*& reason){nullptr};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if (bus == core::BusTransportType::I2C && (transportMask & 1))
             return &i2cFormat;

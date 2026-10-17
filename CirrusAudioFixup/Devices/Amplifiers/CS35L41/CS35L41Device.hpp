@@ -264,11 +264,15 @@ public:
         return success && lockOk;
     }
 
-    bool setupGPIO(core::RegisterIO& io) {
+    bool setupGPIO(core::RegisterIO& io, uint8_t gpio1Function = 0, uint8_t gpio2Function = 2, bool configureGPIO1 = false) {
+        if (gpio1Function != 0 || (gpio2Function != 0 && gpio2Function != 2))
+            return false;
         bool ok = true;
         ok = io.updateBits(registers::kRegGpio1Control1, 0x80001000, 0x80000000) && ok;
         ok = io.updateBits(registers::kRegGpio2Control1, 0x80001000, 0x80000000) && ok;
-        ok = io.updateBits(registers::kRegGpioPadControl, 0x07000000, 0x02000000) && ok;
+        if (configureGPIO1)
+            ok = io.updateBits(registers::kRegGpioPadControl, 0x00030000, uint32_t(gpio1Function) << 16) && ok;
+        ok = io.updateBits(registers::kRegGpioPadControl, 0x07000000, uint32_t(gpio2Function) << 24) && ok;
         return ok;
     }
 

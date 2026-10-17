@@ -3,6 +3,7 @@
 #include "Core/AudioTypes.hpp"
 #include "Core/BusEndpoint.hpp"
 #include "Devices/Amplifiers/CS35L41/SiliconState.hpp"
+#include "Devices/Amplifiers/CS35L41/PowerConfiguration.hpp"
 
 namespace cirrus::devices::amplifiers::cs35l41 {
 struct DeviceState : cirrus::devices::amplifiers::cs35l41::SiliconState {
@@ -18,7 +19,10 @@ struct DeviceState : cirrus::devices::amplifiers::cs35l41::SiliconState {
     cirrus::core::AmplifierModel model{cirrus::core::AmplifierModel::Unknown};
     cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
     cirrus::devices::amplifiers::cs35l41::PowerConfiguration power{};
+    uint8_t gpio1Function{0}, gpio2Function{2};
+    bool explicitGPIOConfiguration{false};
     uint32_t firmwareSubsystemId{0};
+    uint32_t firmwareSpeakerId{0};
 };
 
 }

@@ -5,13 +5,20 @@
 	};
 	objectVersion = 56;
 	objects = {
-B2584EBEAE4CA972F9FBCB04 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_hp_spi_profile.py"; sourceTree = "<group>";};
+1BF3A8D39570B9D4030EDF80 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "acpi_kernel_fixture.py"; sourceTree = "<group>";};
+6A12FEBC78457916CD62CEDB = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_platform_discovery.py"; sourceTree = "<group>";};
+4A6AFA34854DBE7CD379F8B6 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PropertyQuirks.hpp"; sourceTree = "<group>";};
+A1570F28CEE6D997D09CAC15 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "FirmwareSelection.hpp"; sourceTree = "<group>";};
+A837D6A8E58194CDD0717147 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIPlatformProperties.hpp"; sourceTree = "<group>";};
+E47A4CB735CAE8D3F77E1F34 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PlatformConfiguration.hpp"; sourceTree = "<group>";};
+C4F40FB4905257886C78251E = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "DeviceConfiguration.hpp"; sourceTree = "<group>";};
+B2584EBEAE4CA972F9FBCB04 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_platform_configuration.py"; sourceTree = "<group>";};
 3D55DC2B7DD82C9247A72604 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_cs35l41_power.py"; sourceTree = "<group>";};
 0D60D9B10857C8580E0A61A3 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_gpio_binding.py"; sourceTree = "<group>";};
 6D3CC2C430CB04F9BE45D87C = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_gpio.py"; sourceTree = "<group>";};
 35CBC7DC46BA4BB4CB450D20 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_chip_select.py"; sourceTree = "<group>";};
 E6D5CA58311CC56FA72A29B5 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PowerConfiguration.hpp"; sourceTree = "<group>";};
-614937864310FDEE840D627B = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "Boards/HPZBookFuryG9.hpp"; sourceTree = "<group>";};
+614937864310FDEE840D627B = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "BoardDiscovery.hpp"; sourceTree = "<group>";};
 E8D60B38E48F46AB269FAEE7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "IntelSPIChipSelects.hpp"; sourceTree = "<group>";};
 1CB8291BF505D0D65865013C = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "IntelGPIOOutput.hpp"; sourceTree = "<group>";};
 9B1AA0FF3764E3D5DBFA46BE = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIGPIOResources.hpp"; sourceTree = "<group>";};
@@ -144,6 +151,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		90842EAEFC1528FA929AB2B2 = {
 			isa = PBXGroup;
 			children = (
+                4A6AFA34854DBE7CD379F8B6,
 				EAA44267639C6B62DBD497AD,
 				980DB57ED7434DBC3429FD16,
 				6D21BF6889C943914C1FE564,
@@ -166,6 +174,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		DBD8EDACAC2E17BAD75D5AC6 = {
 			isa = PBXGroup;
 			children = (
+                A1570F28CEE6D997D09CAC15,
                 53E69E8522D6B7A0D86DBC2F,
 				9725FD599984B55A6E6D7EDF,
 				A03263A4BA55A2FF07FC04D6,
@@ -213,6 +222,8 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			isa = PBXGroup;
 			children = (
                 E6D5CA58311CC56FA72A29B5,
+                E47A4CB735CAE8D3F77E1F34,
+                C4F40FB4905257886C78251E,
                 271EC16674AE80213B2E6986,
                 4DC6A45D6438AA59D3DCAA71,
                 ABCD61000000000000000001,
@@ -528,6 +539,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			children = (
                 9B1AA0FF3764E3D5DBFA46BE,
                 BB7372D2E62BC2AA18F2E02A,
+                A837D6A8E58194CDD0717147,
                 467C05493D3366377B8B15BF,
                 832F05729C9FF63F811668B8,
                 5C656742B026D7B45E031029,
@@ -699,6 +711,8 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		CC9C8F7C5041835F9AAE8AA0 = {
 			isa = PBXGroup;
 			children = (
+                1BF3A8D39570B9D4030EDF80,
+                6A12FEBC78457916CD62CEDB,
                 B2584EBEAE4CA972F9FBCB04,
                 3D55DC2B7DD82C9247A72604,
                 0D60D9B10857C8580E0A61A3,

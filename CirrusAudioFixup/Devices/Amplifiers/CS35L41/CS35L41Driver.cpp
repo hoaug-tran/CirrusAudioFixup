@@ -3,7 +3,9 @@
 #include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41Device.hpp"
 #include "Devices/Amplifiers/CS35L41/DSPControl.hpp"
+#include "Devices/Amplifiers/CS35L41/DeviceConfiguration.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/Firmware.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/Tuning.hpp"
 #include "Diagnostics/FailureNames.hpp"
 #include "Firmware/WMFW/WMFWParser.hpp"
@@ -17,6 +19,11 @@
 
 using namespace cirrus::diagnostics;
 namespace cirrus::devices::amplifiers::cs35l41 {
+bool protectionResourceAvailable(uint16_t vendor, uint16_t device, uint32_t speaker) {
+    const auto* resource = selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, vendor, device, speaker);
+    return resource && !resource->isDummy && resource->wmfw && resource->wmfwSize && resource->bin && resource->binSize &&
+           resource->binRight && resource->binRightSize;
+}
 static uint64_t playbackTimeMilliseconds() {
     uint64_t nanos = 0;
     absolutetime_to_nanoseconds(mach_absolute_time(), &nanos);
@@ -79,6 +86,8 @@ struct cs35l41_amp_efi_data {
 bool CS35L41Driver::configureCS35L41Interrupt(AmplifierState& amp, bool enabled) {
     if (!enabled)
         return writeRegister(amp, 0x10110, 0xFFFFFFFF, TRACE_PLAYBACK);
+    if (amp.gpio2Function != 2)
+        return false;
     return amp.initialized && !amp.playbackFaulted && checkProtectionStatus(amp) &&
            updateRegisterBits(amp, 0x242C, 0x07000000, 0x02000000, TRACE_PLAYBACK) &&
            updateRegisterBits(amp, 0x1100C, 0x80001000, 0x80000000, TRACE_PLAYBACK) &&
@@ -1634,7 +1643,7 @@ bool CS35L41Driver::applyGPIO(AmplifierState& amp) {
     auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
-    if (!device.setupGPIO(io)) {
+    if (!device.setupGPIO(io, amp.gpio1Function, amp.gpio2Function, amp.explicitGPIOConfiguration)) {
         return false;
     }
 
@@ -1906,11 +1915,11 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
         CIRRUS_LOG("Explicit firmware SSID override: 0x%08X", ssid);
     }
 
-    uint32_t spkid = 1;
+    uint32_t spkid = amp.firmwareSubsystemId ? amp.firmwareSpeakerId : 1;
     bool explicitSpeaker = parseBootArgument("-cirrusspkid", &spkid, sizeof(spkid));
     // The compiled speaker default preserves the existing reference profile.
     // It is not a GPIO/ACPI measurement of the physical speaker vendor.
-    const char* speakerSource = explicitSpeaker ? "BOOT_ARGUMENT" : "COMPILED_DEFAULT_UNVERIFIED";
+    const char* speakerSource = explicitSpeaker ? "BOOT_ARGUMENT" : amp.firmwareSubsystemId ? "BOARD_GENERIC_RESOURCE" : "COMPILED_DEFAULT_UNVERIFIED";
     CIRRUS_LOG("Firmware identity %s: SSID=0x%08X speaker=%u source=%s", amp.name, ssid, spkid, speakerSource);
 
     char speakerProperty[80];
@@ -1935,14 +1944,8 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     amp.firmwareIdentityPending = false;
     amp.firmwareIdentityDeadlineMs = 0;
 
-    const FirmwareResource* foundRes = nullptr;
-    for (size_t i = 0; i < cs35l41FirmwareCount; i++) {
-        if (cs35l41Firmware[i].subsystemVendor == subVendor && cs35l41Firmware[i].subsystemDevice == subDevice &&
-            (cs35l41Firmware[i].spkid == spkid || cs35l41Firmware[i].spkid == 0)) {
-            foundRes = &cs35l41Firmware[i];
-            break;
-        }
-    }
+    const FirmwareResource* foundRes = selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, uint16_t(subVendor),
+                                                             uint16_t(subDevice), spkid);
 
     if (!foundRes) {
         CIRRUS_ERR("No firmware resource matched Subsystem ID 0x%08X (vendor=0x%04X, device=0x%04X, spkid=%u) on %s", ssid, subVendor,
@@ -2958,7 +2961,8 @@ IOReturn CS35L41Driver::initializeHardware() {
 
     setDiagnosticStage(amp, STAGE_GPIO);
     if (!applyGPIO(amp)) {
-        recordDiagnosticFailure(amp, DIAG_GPIO_CONFIG, cirrus::devices::amplifiers::cs35l41::registers::kRegGpioPadControl, 0x02000000);
+        recordDiagnosticFailure(amp, DIAG_GPIO_CONFIG, cirrus::devices::amplifiers::cs35l41::registers::kRegGpioPadControl,
+                                uint32_t(amp.gpio2Function) << 24);
         return kIOReturnNotReady;
     }
     markDiagnosticSuccess(amp, STAGE_GPIO);
@@ -3113,12 +3117,17 @@ CS35L41Driver::CS35L41Driver(const platform::AmplifierDriverContext& context)
     amp.model = core::AmplifierModel::CS35L41;
     amp.channel = static_cast<core::AudioChannel>(context.board.amplifiers[context.bindingIndex].channelIndex);
     const auto& binding = context.board.amplifiers[context.bindingIndex];
-    const auto* configuration = powerConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind);
-    if (configuration)
-        amp.power = *configuration;
+    DeviceConfiguration configuration;
+    if (decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind, configuration)) {
+        amp.power = configuration.power;
+        amp.gpio1Function = configuration.gpio1Function;
+        amp.gpio2Function = configuration.gpio2Function;
+        amp.explicitGPIOConfiguration = binding.driverConfigurationKind && !strcmp(binding.driverConfigurationKind, kDeviceConfigurationKind);
+    }
     amp.deviceId = context.board.amplifiers[context.bindingIndex].siliconId;
     amp.firmwareSubsystemId = context.board.useBoardFirmwareIdentity ?
         (uint32_t(context.actualBoard.subsystemVendor) << 16 | context.actualBoard.subsystemDevice) : 0;
+    amp.firmwareSpeakerId = binding.speakerId;
     amp.present = true;
     amp.diagnostic = mHost.diagnostics();
 }

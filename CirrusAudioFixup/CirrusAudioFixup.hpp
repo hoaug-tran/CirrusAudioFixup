@@ -141,6 +141,7 @@ private:
     IOService* mProvider{nullptr};
     cirrus::transport::NativeSPIHost mNativeSPI;
     bool setupCommunication(IOService* provider);
+    void discoverPlatformConfiguration(IOACPIPlatformDevice* provider, const cirrus::platform::AmplifierDriverRegistration& definition);
     bool retryPlatformIdentity();
     bool mPlatformIdentityPending{false};
     uint64_t mPlatformIdentityDeadlineMs{0};
@@ -220,6 +221,8 @@ private:
     cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[kMaxAmplifiers]{};
     uint32_t mPublishedRuntimeStage{UINT32_MAX}, mPublishedRuntimeCount{UINT32_MAX};
     const cirrus::platform::PlatformProfile* mPlatformProfile{nullptr};
+    cirrus::platform::DiscoveredBoard* mDiscoveredBoard{nullptr};
+    cirrus::platform::PlatformProfile mDiscoveredProfile{};
     size_t expectedAmplifierCount() const {
         return mPlatformProfile
                    ? (mPlatformProfile->boardConfiguration ? mPlatformProfile->boardConfiguration->count : mPlatformProfile->endpointCount)

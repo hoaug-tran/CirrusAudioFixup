@@ -370,7 +370,7 @@ python3 Tests/run.py
 python3 Tests/run.py --audit
 ```
 
-Tests are development tools and are not shipped inside the kext. The maintained suite is shared by local builds and CI; temporary fixtures are removed after each test. CI packages downloadable bundles only for version tags or manual runs, with seven-day retention for workflow artifacts. Release assets remain attached to the release.
+Tests are development tools and are not shipped inside the kext. The maintained suite is shared by local builds and CI; temporary fixtures are removed after each test. CI runs on pushes to every branch, pull requests and manual runs. Successful builds package Release, Debug and matching symbols as downloadable workflow artifacts with seven-day retention. Public release publication requires a matching version tag; release assets remain attached to the release.
 
 Injected failures deliberately print errors. Check each process's exit code and final PASS result. These tests exercise production code with mocked buses and IOKit objects; they cannot establish a real I2C transaction, loaded kext or speaker output.
 

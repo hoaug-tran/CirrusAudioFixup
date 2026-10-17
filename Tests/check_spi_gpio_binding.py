@@ -47,7 +47,7 @@ constexpr unsigned kIORegistryIterateRecursively=1;
 struct IORegistryIterator {unsigned i=0;static IORegistryIterator* iterateOver(IORegistryEntry*,const void*,unsigned){return new IORegistryIterator;}
  IORegistryEntry* getNextObject(){return i<devices.size()?devices[i++]:nullptr;}void release(){delete this;}};
 struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t getLength(){return sizeof(r);}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
-struct IOACPIPlatformDevice:IOService {std::map<std::string,OSObject*> values;IOMemoryMap* map=nullptr;bool opened=false;unsigned opens=0,closes=0;
+class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObject*> values;IOMemoryMap* map=nullptr;bool opened=false;unsigned opens=0,closes=0;
  OSObject* metaCast(const char* n)override{return !strcmp(n,"IOACPIPlatformDevice")?this:nullptr;}
  IOReturn validateObject(const char* n){return values.count(n)?0:kIOReturnNotFound;}
  IOReturn evaluateObject(const char* n,OSObject** out){auto i=values.find(n);if(i==values.end())return kIOReturnNotFound;*out=i->second;(*out)->retain();return 0;}
@@ -56,7 +56,7 @@ struct IOACPIPlatformDevice:IOService {std::map<std::string,OSObject*> values;IO
  void close(IOService*){assert(opened);opened=false;++closes;}
  IOMemoryMap* mapDeviceMemoryWithIndex(unsigned n){if(n||!map)return nullptr;map->retain();return map;}
 };
-struct IOPCIDevice:IOService {};
+class IOPCIDevice:public IOService {};
 ''')
     (tmp / "test.cpp").write_text(r'''
 #define KERNEL 1

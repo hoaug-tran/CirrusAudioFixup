@@ -64,10 +64,10 @@ constexpr int kIOReturnSuccess=0;
 constexpr bool kOSBooleanTrue=true,kOSBooleanFalse=false;
 constexpr unsigned kIOPCIConfigSubSystemVendorID=0x2c,kIOPCIConfigSubSystemID=0x2e;
 struct IORegistryEntry:OSObject {};
-struct IOService:IORegistryEntry {OSObject* getProperty(const char*){return nullptr;}const char* getName(){return "unrecognized";}};
-struct IOACPIPlatformDevice:IOService {OSString hid{"CSC3551"},sub{"103C89C6"};
+class IOService:public IORegistryEntry {public:OSObject* getProperty(const char*){return nullptr;}const char* getName(){return "unrecognized";}};
+class IOACPIPlatformDevice:public IOService {public:OSString hid{"CSC3551"},sub{"103C89C6"};
  int evaluateObject(const char* name,OSObject** out){*out=!strcmp(name,"_HID")?&hid:!strcmp(name,"_SUB")?&sub:nullptr;if(!*out)return -1;(*out)->retain();return 0;}};
-struct IOPCIDevice:IOService {uint32_t ssid=0x103c8ca4;uint16_t configRead16(unsigned offset){return offset==0x2c?ssid>>16:ssid&0xffff;}};
+class IOPCIDevice:public IOService {public:uint32_t ssid=0x103c8ca4;uint16_t configRead16(unsigned offset){return offset==0x2c?ssid>>16:ssid&0xffff;}};
 #include "Support/KernelDeviceCast.hpp"
 #define CIRRUS_LOG(...) ((void)0)
 class CirrusAudioFixup {

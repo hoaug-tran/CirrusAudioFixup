@@ -4,6 +4,9 @@
 #include "IntelLPSSSPIController.hpp"
 #include <kern/clock.h>
 #include <mach/mach_time.h>
+#if defined(KERNEL)
+#include "Support/Logging.hpp"
+#endif
 
 namespace cirrus::transport::intel {
 
@@ -37,18 +40,23 @@ bool IntelLPSSSPIController::pciIsD0() const {
 }
 
 IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
+    mBindFailureReason = "NONE";
+    auto reject = [this](const char* reason, IOReturn result) {
+        mBindFailureReason = reason;
+        return result;
+    };
     if (mPCI || mLock)
-        return kIOReturnBusy;
+        return reject("INTEL_CONTROLLER_ALREADY_BOUND", kIOReturnBusy);
     if (!pci || !owner)
-        return kIOReturnBadArgument;
+        return reject("INTEL_CONTROLLER_ARGUMENT_REJECTED", kIOReturnBadArgument);
     LPSSSPIProfile profile{};
     if (!lookupLPSSSPIProfile(pci->configRead16(0), pci->configRead16(2), profile))
-        return kIOReturnUnsupported;
+        return reject("INTEL_CONTROLLER_ID_UNSUPPORTED", kIOReturnUnsupported);
     mDeviceId = pci->configRead16(2);
     mProfile = profile;
     mLock = IOLockAlloc();
     if (!mLock)
-        return kIOReturnNoMemory;
+        return reject("INTEL_CONTROLLER_LOCK_ALLOCATION_FAILED", kIOReturnNoMemory);
     mPCI = pci;
     mPCI->retain();
     mOwner = owner;
@@ -60,28 +68,47 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         mOwner = nullptr;
         IOLockFree(mLock);
         mLock = nullptr;
-        return kIOReturnExclusiveAccess;
+        return reject("INTEL_CONTROLLER_EXCLUSIVE_OPEN_FAILED", kIOReturnExclusiveAccess);
     }
+#if defined(KERNEL)
+    if (gCirrusDebug) {
+        uint8_t pmOffset = 0;
+        (void)mPCI->findPCICapability(kIOPCIPowerManagementCapability, &pmOffset);
+        owner->setProperty("Cirrus_Intel_SPI_PM_Capability_Offset", uint64_t(pmOffset), 32);
+        if (pmOffset && pmOffset <= 0xf8)
+            owner->setProperty("Cirrus_Intel_SPI_PMCSR", uint64_t(mPCI->configRead16(uint8_t(pmOffset + 4))), 32);
+        owner->setProperty("Cirrus_Intel_SPI_PCI_Command", uint64_t(mPCI->configRead16(kIOPCIConfigCommand)), 32);
+    }
+#endif
     if (!pciIsD0()) {
         shutdown();
-        return kIOReturnNotReady;
+        return reject("INTEL_CONTROLLER_NOT_D0", kIOReturnNotReady);
     }
     mMemoryWasEnabled = (mPCI->configRead16(kIOPCIConfigCommand) & 2U) != 0;
     mPCI->setMemoryEnable(true);
     mMemoryChanged = true;
     if (!(mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {
         shutdown();
-        return kIOReturnNotReady;
+        return reject("INTEL_CONTROLLER_MEMORY_ENABLE_FAILED", kIOReturnNotReady);
     }
     mMap = mPCI->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0);
+#if defined(KERNEL)
+    if (gCirrusDebug && mMap)
+        owner->setProperty("Cirrus_Intel_SPI_BAR0_Length", uint64_t(mMap->getLength()), 64);
+#endif
     if (!mMap || mMap->getLength() < LPSSSPIEngine::kMinimumWindowBytes || !mMap->getVirtualAddress()) {
+        const char* reason = !mMap                                                    ? "INTEL_CONTROLLER_BAR_MAPPING_FAILED"
+                             : mMap->getLength() < LPSSSPIEngine::kMinimumWindowBytes ? "INTEL_CONTROLLER_BAR_TOO_SMALL"
+                                                                                      : "INTEL_CONTROLLER_BAR_ADDRESS_UNAVAILABLE";
         shutdown();
-        return kIOReturnNoResources;
+        return reject(reason, kIOReturnNoResources);
     }
     mWindow.base = reinterpret_cast<volatile uint8_t*>(mMap->getVirtualAddress());
     IOReturn result = mEngine.initialize(mProfile);
-    if (result != kIOReturnSuccess)
+    if (result != kIOReturnSuccess) {
         shutdown();
+        return reject("INTEL_CONTROLLER_ENGINE_INITIALIZATION_FAILED", result);
+    }
     return result;
 }
 
@@ -90,8 +117,15 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
         return kIOReturnNotReady;
     IOLockLock(mLock);
     IOReturn result = kIOReturnNotReady;
-    if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U))
+    if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {
+#if defined(KERNEL)
+        result = mChipSelects.validate();
+        if (result == kIOReturnSuccess)
+            result = mEngine.exchange(endpoint, tx, rx, length, mChipSelects.select(endpoint.chipSelect));
+#else
         result = mEngine.exchange(endpoint, tx, rx, length);
+#endif
+    }
     IOLockUnlock(mLock);
     return result;
 }
@@ -120,6 +154,12 @@ IOReturn IntelLPSSSPIController::resume() {
             result = mEngine.resume();
         else
             mEngine.markOffline();
+#if defined(KERNEL)
+        if (result == kIOReturnSuccess)
+            result = mChipSelects.validate();
+        if (result != kIOReturnSuccess)
+            mEngine.markOffline();
+#endif
     }
     IOLockUnlock(mLock);
     return result;
@@ -135,6 +175,9 @@ void IntelLPSSSPIController::shutdown() {
     else
         mEngine.abandon();
     mWindow.base = nullptr;
+#if defined(KERNEL)
+    mChipSelects.shutdown();
+#endif
     if (mMap) {
         mMap->release();
         mMap = nullptr;

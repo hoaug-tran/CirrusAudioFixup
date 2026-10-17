@@ -10,6 +10,12 @@
 #include <Headers/kern_api.hpp>
 #include <IOKit/IORegistryEntry.h>
 #include <libkern/c++/OSNumber.h>
+#if defined(KERNEL)
+#include "Support/BuildConfig.hpp"
+#include <IOKit/IOCatalogue.h>
+#include <IOKit/IOTimerEventSource.h>
+#include <libkern/c++/OSOrderedSet.h>
+#endif
 
 bool ADDPR(debugEnabled) = false;
 uint32_t ADDPR(debugPrintDelay) = 0;
@@ -21,11 +27,124 @@ using cirrus::platform::hda::AudioEventState;
 // provider. Lilu closes its registration window before late device matching;
 // this service only anchors early loading and never touches the amplifier.
 class CirrusAudioBootstrap : public IOService {
-OSDeclareDefaultStructors(CirrusAudioBootstrap) public : bool start(IOService* provider) override {
+    OSDeclareDefaultStructors(CirrusAudioBootstrap)
+#if defined(KERNEL)
+        IOWorkLoop* auditLoop = nullptr;
+    IOTimerEventSource* auditTimer = nullptr;
+    unsigned auditSamples = 0;
+    bool auditTimerAttached = false;
+
+    void auditMatching() {
+        setProperty("Cirrus_Matching_Audit_Sample", uint64_t(++auditSamples), 32);
+        // Read the in-kernel catalogue. The userspace GetContents RPC is no
+        // longer supported; a missing result must not be reported as zero.
+        auto* matching = OSDictionary::withCapacity(1);
+        if (matching) {
+            auto* bundle = OSString::withCString("com.hoaugtr.CirrusAudioFixup");
+            if (bundle) {
+                matching->setObject("CFBundleIdentifier", bundle);
+                bundle->release();
+                SInt32 generation = 0;
+                auto* personalities = gIOCatalogue->findDrivers(matching, &generation);
+                if (personalities) {
+                    auto* snapshot = OSArray::withCapacity(personalities->getCount());
+                    if (snapshot) {
+                        for (unsigned i = 0; i < personalities->getCount(); ++i)
+                            snapshot->setObject(personalities->getObject(i));
+                        setProperty("Cirrus_Catalogue_Personalities", snapshot);
+                        setProperty("Cirrus_Catalogue_Status", "CAPTURED");
+                        snapshot->release();
+                    } else
+                        setProperty("Cirrus_Catalogue_Status", "SNAPSHOT_ALLOCATION_FAILED");
+                    setProperty("Cirrus_Catalogue_Generation", uint64_t(uint32_t(generation)), 32);
+                    personalities->release();
+                } else
+                    setProperty("Cirrus_Catalogue_Status", "QUERY_FAILED");
+            }
+            matching->release();
+        }
+        auto* acpi = serviceMatching("IOACPIPlatformDevice");
+        if (acpi) {
+            auto* name = OSString::withCString("CSC3551");
+            if (name) {
+                acpi->setObject("IONameMatch", name);
+                name->release();
+                auto* iterator = getMatchingServices(acpi);
+                if (iterator) {
+                    unsigned count = 0;
+                    while (auto* provider = OSDynamicCast(IOService, iterator->getNextObject())) {
+                        ++count;
+                        setProperty("Cirrus_SPI_Provider_Name", provider->getName());
+                        setProperty("Cirrus_SPI_Provider_ID", provider->getRegistryEntryID(), 64);
+                        SInt32 providerGeneration = 0;
+                        auto* candidates = gIOCatalogue->findDrivers(provider, &providerGeneration);
+                        if (candidates) {
+                            auto* snapshot = OSArray::withCapacity(candidates->getCount());
+                            if (snapshot) {
+                                for (unsigned i = 0; i < candidates->getCount(); ++i)
+                                    snapshot->setObject(candidates->getObject(i));
+                                setProperty("Cirrus_SPI_Provider_Catalogue_Candidates", snapshot);
+                                snapshot->release();
+                            }
+                            candidates->release();
+                        }
+                    }
+                    setProperty("Cirrus_SPI_Provider_Count", uint64_t(count), 32);
+                    iterator->release();
+                }
+            }
+            acpi->release();
+        }
+    }
+    static void auditTick(OSObject* owner, IOTimerEventSource*) {
+        auto* self = OSDynamicCast(CirrusAudioBootstrap, owner);
+        if (!self)
+            return;
+        self->auditMatching();
+        if (self->auditSamples < 4)
+            self->auditTimer->setTimeoutMS(self->auditSamples == 2 ? 9000 : 20000);
+    }
+#endif
+public:
+    bool start(IOService* provider) override {
         if (checkKernelArgument("-cirrusoff"))
             return false;
-        return IOService::start(provider);
+        if (!IOService::start(provider))
+            return false;
+#if defined(KERNEL)
+        if (cirrus::support::kDefaultVerboseLogging || checkKernelArgument("-cirrusdbg")) {
+            setProperty("Cirrus_Bootstrap_Status", "STARTED");
+            setProperty("Cirrus_Build_Configuration", cirrus::support::kBuildConfiguration);
+            auditMatching();
+            auditLoop = IOWorkLoop::workLoop();
+            auditTimer = IOTimerEventSource::timerEventSource(this, auditTick);
+            if (auditLoop && auditTimer && auditLoop->addEventSource(auditTimer) == kIOReturnSuccess) {
+                auditTimerAttached = true;
+                auditTimer->setTimeoutMS(1000);
+                setProperty("Cirrus_Matching_Audit_Timer", "ARMED");
+            } else
+                setProperty("Cirrus_Matching_Audit_Timer", "UNAVAILABLE");
+            IOLog("CirrusAudioFixup: bootstrap started; matching evidence retained in IORegistry\n");
+        }
+#endif
+        return true;
     }
+#if defined(KERNEL)
+    void stop(IOService* provider) override {
+        if (auditTimer)
+            auditTimer->cancelTimeout();
+        if (auditTimerAttached) {
+            auditLoop->removeEventSource(auditTimer);
+            auditTimerAttached = false;
+        }
+        IOService::stop(provider);
+    }
+    void free() override {
+        OSSafeReleaseNULL(auditTimer);
+        OSSafeReleaseNULL(auditLoop);
+        IOService::free();
+    }
+#endif
 };
 
 OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)

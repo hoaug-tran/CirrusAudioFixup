@@ -36,28 +36,41 @@ bool AMDSPIController::isD0() const {
     UInt32 state = 0;
     return mProvider->evaluateInteger("_PSC", &state) == kIOReturnSuccess && state == 0;
 }
-IOReturn AMDSPIController::bind(IOACPIPlatformDevice* provider, IOService* owner) {
-    if (mProvider || mLock)
-        return kIOReturnBusy;
-    if (!provider || !owner)
-        return kIOReturnBadArgument;
+bool AMDSPIController::resolveRevision(IOACPIPlatformDevice* provider, AMDSPIRevision& revision) {
+    if (!provider)
+        return false;
     OSObject* object = nullptr;
-    IOReturn result = provider->evaluateObject("_HID", &object);
+    const auto result = provider->evaluateObject("_HID", &object);
     auto* hid = OSDynamicCast(OSString, object);
-    AMDSPIRevision revision = AMDSPIRevision::V1;
     bool supported = false;
     if (result == kIOReturnSuccess && hid) {
-        if (hid->isEqualTo("AMDI0061"))
+        if (hid->isEqualTo("AMDI0061")) {
             supported = true;
-        else if (hid->isEqualTo("AMDI0062")) {
+            revision = AMDSPIRevision::V1;
+        } else if (hid->isEqualTo("AMDI0062")) {
             supported = true;
             revision = AMDSPIRevision::V2;
         }
     }
     if (object)
         object->release();
-    if (!supported)
+    return supported;
+}
+
+bool AMDSPIController::supportsProvider(IOACPIPlatformDevice* provider) {
+    AMDSPIRevision revision{};
+    return resolveRevision(provider, revision);
+}
+
+IOReturn AMDSPIController::bind(IOACPIPlatformDevice* provider, IOService* owner) {
+    if (mProvider || mLock)
+        return kIOReturnBusy;
+    if (!provider || !owner)
+        return kIOReturnBadArgument;
+    AMDSPIRevision revision{};
+    if (!resolveRevision(provider, revision))
         return kIOReturnUnsupported;
+    IOReturn result = kIOReturnSuccess;
     mLock = IOLockAlloc();
     if (!mLock)
         return kIOReturnNoMemory;

@@ -13,6 +13,10 @@ public:
             failure = {"AMD_CONTROLLER_BIND_FAILED", kIOReturnBadArgument, 0};
             return failure.result;
         }
+        if (!AMDSPIController::supportsProvider(target)) {
+            failure = {"AMD_CONTROLLER_ID_UNSUPPORTED", kIOReturnUnsupported, 0};
+            return failure.result;
+        }
         uint32_t power = 0;
         if (target->evaluateInteger("_PSC", &power) != kIOReturnSuccess || power != 0) {
             failure = {"AMD_CONTROLLER_D0_UNVERIFIED", kIOReturnNotReady, power};

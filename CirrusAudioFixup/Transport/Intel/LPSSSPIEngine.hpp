@@ -44,14 +44,19 @@ public:
     // initialize/exchange/suspend/resume/shutdown, including power transitions.
     explicit LPSSSPIEngine(RegisterWindow& window) : mWindow(window) {}
 
+    uint32_t initialCapabilities() const { return mInitialCapabilities; }
+    uint32_t initialStatus() const { return mInitialStatus; }
     IOReturn initialize(LPSSSPIProfile profile = {LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300}) {
         if (mInitialized)
             return kIOReturnBusy;
+        mInitialCapabilities = mInitialStatus = 0;
         mProfile = profile;
         if (!mProfile.rootClockHz)
             return kIOReturnBadArgument;
         uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
         uint32_t status = mWindow.read32(kStatus);
+        mInitialCapabilities = caps;
+        mInitialStatus = status;
         if (caps == 0xffffffffU || status == 0xffffffffU || ((caps >> 4) & 0xf) != 2)
             return kIOReturnUnsupported;
         if (status & kBusy)
@@ -121,10 +126,11 @@ public:
         mInitialized = mOnline = mTouched = false;
     }
 
-    IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
+    IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length, SPIChipSelect* external = nullptr) {
         if (!online())
             return kIOReturnNotReady;
-        if (!tx || !length || length > kMaxFrameBytes || !endpoint.clockHz || endpoint.mode > 3 || endpoint.chipSelect >= mSelectCount)
+        if (!tx || !length || length > kMaxFrameBytes || !endpoint.clockHz || endpoint.mode > 3 ||
+            (!external && endpoint.chipSelect >= mSelectCount))
             return kIOReturnBadArgument;
         uint32_t status = mWindow.read32(kStatus);
         if (status == 0xffffffffU) {
@@ -167,14 +173,15 @@ public:
         if (mProfile.forceClockGate)
             mWindow.write32(kClockGate, (gate & ~3U) | 3U);
         mWindow.write32(kControl0, mWindow.read32(kControl0) & ~kEnabled);
-        uint32_t inactive = (mWindow.read32(kChipSelect) & ~mProfile.selectMask) | (endpoint.chipSelect << 8) | 3U;
+        uint32_t inactive = (mWindow.read32(kChipSelect) & ~mProfile.selectMask) | (external ? 0 : endpoint.chipSelect << 8) | 3U;
         mWindow.write32(kChipSelect, inactive);
         // CS selection is latched; wait at least two input clock cycles before
         // assertion, allowing a slow fractional input clock as well.
         uint64_t selectDelay = (2000000ULL * denominator + clockNumerator - 1) / clockNumerator;
         mWindow.delayUs(static_cast<uint32_t>(selectDelay ? selectDelay : 1));
-        if (!drainRx())
-            return finish(kIOReturnIOError, inactive, gate);
+        const auto drained = drainRx();
+        if (drained != kIOReturnSuccess)
+            return finish(drained, inactive, gate, nullptr, drained == kIOReturnNoDevice);
         mWindow.write32(kStatus, kOverrun | kTimeoutStatus | kBitError);
         // Motorola master, eight bits, no IRQ or DMA service requests.
         uint32_t cr0 = (static_cast<uint32_t>(divisor - 1) << 8) | 7U;
@@ -183,21 +190,26 @@ public:
         mWindow.write32(0x28, 0);
         mWindow.write32(0x2c, 0);
         mWindow.write32(kControl0, cr0 | kEnabled);
-        mWindow.write32(kChipSelect, inactive & ~2U);
+        if (external) {
+            const auto result = external->setActive(true);
+            if (result != kIOReturnSuccess)
+                return finish(result, inactive, gate, external);
+        } else
+            mWindow.write32(kChipSelect, inactive & ~2U);
 
         size_t sent = 0, received = 0;
         while (received < length) {
             size_t previousSent = sent, previousReceived = received;
             status = mWindow.read32(kStatus);
             if (status == 0xffffffffU)
-                return finish(kIOReturnNoDevice, inactive, gate);
+                return finish(kIOReturnNoDevice, inactive, gate, external, true);
             if (status & (kOverrun | kBitError))
-                return finish(kIOReturnIOError, inactive, gate);
+                return finish(kIOReturnIOError, inactive, gate, external);
             // Drain receive data even on write-only calls. Keep at most eight
             // bytes outstanding, below the CNL FIFO depth, to avoid overrun.
             if (status & kRxReady) {
                 if (received == sent)
-                    return finish(kIOReturnIOError, inactive, gate);
+                    return finish(kIOReturnIOError, inactive, gate, external);
                 uint8_t value = static_cast<uint8_t>(mWindow.read32(kData));
                 if (rx)
                     rx[received] = value;
@@ -206,7 +218,7 @@ public:
             if (sent < length && sent - received < 8 && (status & kTxReady))
                 mWindow.write32(kData, tx[sent++]);
             if (mWindow.nowUs() - started >= budgetUs)
-                return finish(kIOReturnTimeout, inactive, gate);
+                return finish(kIOReturnTimeout, inactive, gate, external);
             // Short polling waits preserve CS. No sleeping allocator or
             // interrupt completion can outlive the borrowed buffers.
             if (sent == previousSent && received == previousReceived)
@@ -215,42 +227,56 @@ public:
         do {
             status = mWindow.read32(kStatus);
             if (status == 0xffffffffU)
-                return finish(kIOReturnNoDevice, inactive, gate);
+                return finish(kIOReturnNoDevice, inactive, gate, external, true);
             if (status & (kOverrun | kBitError))
-                return finish(kIOReturnIOError, inactive, gate);
+                return finish(kIOReturnIOError, inactive, gate, external);
             if (!(status & kBusy))
                 break;
             if (mWindow.nowUs() - started >= budgetUs)
-                return finish(kIOReturnTimeout, inactive, gate);
+                return finish(kIOReturnTimeout, inactive, gate, external);
             mWindow.delayUs(1);
         } while (true);
-        return finish(kIOReturnSuccess, inactive, gate);
+        return finish(kIOReturnSuccess, inactive, gate, external);
     }
 
 private:
-    bool drainRx() {
+    IOReturn drainRx() {
         for (unsigned i = 0; i < 256; ++i) {
             uint32_t status = mWindow.read32(kStatus);
             if (status == 0xffffffffU)
-                return false;
+                return kIOReturnNoDevice;
             if (!(status & kRxReady))
-                return true;
+                return kIOReturnSuccess;
             (void)mWindow.read32(kData);
         }
-        return false;
+        return kIOReturnIOError;
     }
 
-    IOReturn finish(IOReturn result, uint32_t inactive, uint32_t gate) {
-        if (result == kIOReturnNoDevice) {
+    IOReturn finish(IOReturn result, uint32_t inactive, uint32_t gate, SPIChipSelect* external = nullptr, bool controllerGone = false) {
+        uint32_t control = controllerGone ? 0xffffffffU : mWindow.read32(kControl0);
+        if (controllerGone || control == 0xffffffffU) {
             mOnline = false;
-            return result;
+            if (external)
+                (void)external->setActive(false);
+            return kIOReturnNoDevice;
         }
         // Stop clocks on error before releasing CS. On success BSY was already
         // clear. Force the clock gate on while changing CS, a CNL LPSS quirk.
-        mWindow.write32(kControl0, mWindow.read32(kControl0) & ~kEnabled);
+        mWindow.write32(kControl0, control & ~kEnabled);
         mWindow.write32(kChipSelect, inactive);
         (void)mWindow.read32(kChipSelect);
-        (void)drainRx();
+        if (external) {
+            const auto released = external->setActive(false);
+            if (released != kIOReturnSuccess) {
+                mOnline = false;
+                if (result == kIOReturnSuccess)
+                    result = released;
+            }
+        }
+        if (drainRx() == kIOReturnNoDevice) {
+            mOnline = false;
+            return result == kIOReturnSuccess ? kIOReturnNoDevice : result;
+        }
         mWindow.write32(kStatus, kOverrun | kTimeoutStatus | kBitError);
         mWindow.write32(kClockGate, gate);
         return result;
@@ -267,6 +293,7 @@ private:
         mWindow.write32(kClockGate, gate);
     }
 
+    uint32_t mInitialCapabilities{0}, mInitialStatus{0};
     LPSSSPIProfile mProfile{LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300};
     RegisterWindow& mWindow;
     bool mInitialized{false}, mOnline{false}, mTouched{false};

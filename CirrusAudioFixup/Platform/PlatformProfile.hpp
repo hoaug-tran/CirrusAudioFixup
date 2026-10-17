@@ -12,6 +12,7 @@
 #include "Core/AudioTypes.hpp"
 #include "Firmware/FirmwareBundle.hpp"
 #include "Platform/BoardConfiguration.hpp"
+#include "Platform/Boards/HPZBookFuryG9.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -46,6 +47,7 @@ struct InterruptWiring {
     uint32_t gpioPin, gpioIRQ;
 };
 static constexpr InterruptWiring kLegionProtectionIRQ = {"GPIO84_PROTECTION_WITH_POLLING_BACKUP", 0, false, 84, 3};
+enum class BoardIdentitySource : uint8_t { AudioPCI, ACPI };
 struct PlatformProfile {
     const char* name;
     const char* acpiHid;
@@ -64,6 +66,7 @@ struct PlatformProfile {
     // contract and evidence before this entry may enable a board.
     transport::I2CController* (*i2cControllerFactory)(IOService*){nullptr};
     transport::NativeSPIControllerFactory spiControllerFactory{nullptr};
+    BoardIdentitySource identitySource{BoardIdentitySource::AudioPCI};
 };
 
 // Only endpoints with verified routing and per-speaker tuning may initialize.
@@ -77,6 +80,8 @@ static constexpr ResetControllerQuirk kAmdAmdi0030Reset = {
 };
 
 static constexpr PlatformProfile kPlatformProfiles[] = {
+    {"hp-zbook-fury-g9-103c89c6", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 2, nullptr, true,
+     &boards::kHP89C6Board, nullptr, 0, nullptr, nullptr, nullptr, BoardIdentitySource::ACPI},
     {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true, nullptr,
      nullptr, 0, &kLegionProtectionIRQ},
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},

@@ -10,6 +10,7 @@
 
 #include "Core/RegisterIO.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
+#include "Devices/Amplifiers/CS35L41/PowerConfiguration.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 
 namespace cirrus::devices::amplifiers::cs35l41 {
@@ -89,7 +90,7 @@ public:
     // retains a synchronous quiesce path for IOKit PM acknowledgement and
     // final teardown, where a pending timer cannot outlive the provider.
     static PlaybackProgress shutdown(core::RegisterIO& io, ShutdownTransition& state, uint64_t now, bool dspAlive, uint32_t firmwareVersion,
-                                     uint64_t (*clock)() = nullptr) {
+                                     uint64_t (*clock)() = nullptr, const PowerConfiguration& power = kLegacyPowerConfiguration) {
         using namespace diagnostics;
         auto failed = [&](DiagnosticFailure failure, uint32_t reg, uint32_t actual = 0) {
             state.ok = false;
@@ -124,11 +125,13 @@ public:
             if (!known)
                 failed(DIAG_IDLE_ROLLBACK, 0x2014);
             bool needPdn = !known || (before & 1);
-            protectedWrite(0x7438, 0x00585941);
+            if (!power.internal())
+                protectedWrite(0x7438, 0x00585941);
             if (needPdn)
                 write(0x10010, 0x00800000);
             update(0x2014, 1, 0);
-            protectedWrite(0x742C, 9);
+            if (!power.internal())
+                protectedWrite(0x742C, 9);
             state.pdnDone = !needPdn;
             state.deadlineMs = sampleTime(now, clock) + 100;
             state.phase = ShutdownPhase::Pdn;
@@ -150,8 +153,10 @@ public:
             }
             if (!state.pdnDone && state.failure == DIAG_OK)
                 failed(DIAG_POWER_DOWN_TIMEOUT, 0x10010);
-            protectedWrite(0x7438, 0x00580941);
-            write(0x11008, 1);
+            if (!power.internal()) {
+                protectedWrite(0x7438, 0x00580941);
+                write(0x11008, 1);
+            }
             update(0x2018, 1, 0);
             if (dspAlive) {
                 if (firmwareVersion > 0x001C00) {
@@ -210,7 +215,7 @@ public:
     }
 
     static PlaybackProgress advance(core::RegisterIO& io, PlaybackTransition& state, uint64_t now, bool dsp, uint32_t firmwareVersion,
-                                    uint64_t (*clock)() = nullptr) {
+                                    uint64_t (*clock)() = nullptr, const PowerConfiguration& power = kLegacyPowerConfiguration) {
         using namespace diagnostics;
         switch (state.phase) {
         case PlaybackPhase::Idle: {
@@ -261,11 +266,13 @@ public:
             return result;
         }
         case PlaybackPhase::Power: {
-            if (!io.updateBits(0x2018, 1 | registers::kMaskBoostEnable, 1) || !io.write(0x11008, 0x8001) || !io.write(0x10010, 0x01000000))
+            if (!io.updateBits(0x2018, 1 | registers::kMaskBoostEnable, power.activePower(false)) ||
+                (!power.internal() && !io.write(0x11008, 0x8001)) || !io.write(0x10010, 0x01000000))
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
-            bool ok = io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0x0F) && io.write(0x742C, 0x79) &&
+            bool ok = power.internal() ? io.updateBits(0x2014, 1, 1) :
+                      io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0x0F) && io.write(0x742C, 0x79) &&
                       io.write(0x7438, 0x00585941) && io.updateBits(0x2014, 1, 1);
-            bool locked = closeKeys(io);
+            bool locked = power.internal() || closeKeys(io);
             if (!ok || !locked)
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
             state.phase = PlaybackPhase::Pup;
@@ -292,8 +299,8 @@ public:
                 state.phase = PlaybackPhase::Output;
                 state.deadlineMs = sampleTime(now, clock) + 5;
             } else {
-                bool ok = io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941);
-                bool locked = closeKeys(io);
+                bool ok = power.internal() || (io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
+                bool locked = power.internal() || closeKeys(io);
                 if (!ok || !locked)
                     return fail(state, DIAG_PLAYBACK_INVARIANT);
                 state.phase = PlaybackPhase::Pll;
@@ -322,7 +329,7 @@ public:
             }
             uint32_t pwr1 = 0, pwr2 = 0, dac = 0, asp = 0;
             if (!io.read(0x2014, &pwr1) || !io.read(0x2018, &pwr2) || !io.read(0x4C00, &dac) || !io.read(0x4800, &asp) || !(pwr1 & 1) ||
-                (pwr2 & (0x3001 | registers::kMaskBoostEnable)) != (dsp ? 0x3001U : 1U) || dac != (dsp ? 0x32U : 8U) ||
+                (pwr2 & (0x3001 | registers::kMaskBoostEnable)) != power.activePower(dsp) || dac != (dsp ? 0x32U : 8U) ||
                 asp != (dsp ? 0x10001U : 0x10000U))
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
             state.phase = PlaybackPhase::Prepared;
@@ -342,14 +349,15 @@ public:
 
     // The caller must recheck route generation, stream identity, protection
     // and readiness of every required peer immediately before this operation.
-    static bool commit(core::RegisterIO& io, PlaybackTransition& state, uint32_t gain, bool dsp) {
+    static bool commit(core::RegisterIO& io, PlaybackTransition& state, uint32_t gain, bool dsp,
+                       const PowerConfiguration& power = kLegacyPowerConfiguration) {
         if (state.phase != PlaybackPhase::Prepared)
             return false;
         uint32_t volume = 0, actualGain = 0, pwr1 = 0, pwr2 = 0;
         uint32_t pll = 0, irq = 0, dac = 0, asp = 0, mailboxStatus = 0;
         auto powerReady = [&]() {
             return io.read(0x2014, &pwr1) && io.read(0x2018, &pwr2) && (pwr1 & 1) &&
-                   (pwr2 & (0x3001 | registers::kMaskBoostEnable)) == (dsp ? 0x3001U : 1U);
+                   (pwr2 & (0x3001 | registers::kMaskBoostEnable)) == power.activePower(dsp);
         };
         // A peer may wait in Prepared while clocks or power change. Read
         // current invariants again immediately before its own unmute write.

@@ -22,8 +22,73 @@
 #define super IOService
 using namespace cirrus::diagnostics;
 OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
+#if defined(KERNEL)
+    namespace {
+    // Publish one coherent event on the registry root so failed service creation
+    // remains observable after IOKit frees the temporary driver instance.
+    void publishMatchingEvent(const char* stage, IOService* provider, IOReturn result, const char* retainedProperty = nullptr) {
+        if (!gCirrusDebug)
+            return;
+        auto* event = OSDictionary::withCapacity(4);
+        if (!event)
+            return;
+        auto* text = OSString::withCString(stage);
+        auto* code = OSNumber::withNumber(uint64_t(uint32_t(result)), 32);
+        if (text) {
+            event->setObject("Stage", text);
+            text->release();
+        }
+        if (code) {
+            event->setObject("Return", code);
+            code->release();
+        }
+        if (provider) {
+            auto* name = OSString::withCString(provider->getName());
+            auto* id = OSNumber::withNumber(provider->getRegistryEntryID(), 64);
+            if (name) {
+                event->setObject("Provider", name);
+                name->release();
+            }
+            if (id) {
+                event->setObject("ProviderID", id);
+                id->release();
+            }
+        }
+        auto* root = IORegistryEntry::getRegistryRoot();
+        if (root) {
+            root->setProperty("Cirrus_Last_Service_Lifecycle", event);
+            if (retainedProperty)
+                root->setProperty(retainedProperty, event);
+            if (result != kIOReturnSuccess)
+                root->setProperty("Cirrus_Last_Service_Failure", event);
+        }
+        event->release();
+    }
+    void retainFailedServiceEvidence(IOService * service) {
+        if (!gCirrusDebug)
+            return;
+        auto* properties = service->dictionaryWithProperties();
+        if (!properties)
+            return;
+        auto* evidence = OSDictionary::withCapacity(properties->getCount());
+        auto* iterator = OSCollectionIterator::withCollection(properties);
+        if (evidence && iterator) {
+            while (auto* key = OSDynamicCast(OSString, iterator->getNextObject())) {
+                if (strncmp(key->getCStringNoCopy(), "Cirrus", 6) == 0)
+                    evidence->setObject(key, properties->getObject(key));
+            }
+            auto* root = IORegistryEntry::getRegistryRoot();
+            if (root)
+                root->setProperty("Cirrus_Failed_Service_Evidence", evidence);
+        }
+        OSSafeReleaseNULL(iterator);
+        OSSafeReleaseNULL(evidence);
+        properties->release();
+    }
+}
+#endif
 
-    class CirrusAudioFixup;
+class CirrusAudioFixup;
 
 class ServiceRegisterIO : public cirrus::core::RegisterIO {
 private:
@@ -271,8 +336,14 @@ bool CirrusAudioFixup::init(OSDictionary* properties) {
         return false;
     }
     gCirrusDebug = cirrus::support::kDefaultVerboseLogging || bootArgEnabled("-cirrusdbg");
+#if defined(KERNEL)
+    publishMatchingEvent("INIT_ENTERED", nullptr, kIOReturnSuccess);
+#endif
     if (!super::init(properties)) {
         CIRRUS_ERR("super::init failed");
+#if defined(KERNEL)
+        publishMatchingEvent("INIT_SUPER_FAILED", nullptr, kIOReturnError);
+#endif
         return false;
     }
 
@@ -291,6 +362,9 @@ bool CirrusAudioFixup::init(OSDictionary* properties) {
 
 IOService* CirrusAudioFixup::probe(IOService* provider, SInt32* score) {
     IOService* result = super::probe(provider, score);
+#if defined(KERNEL)
+    publishMatchingEvent("PROBE", provider, result ? kIOReturnSuccess : kIOReturnUnsupported);
+#endif
 
     setProperty("CirrusReachedProbe", kOSBooleanTrue);
 
@@ -371,7 +445,7 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
         return verified;
     }
 
-    CIRRUS_LOG("No platform hardware reset quirk configured for profile %s; continuing with ACPI and I2C reset",
+    CIRRUS_LOG("No platform hardware reset quirk configured for profile %s; continuing with firmware reset state and silicon software reset",
                mPlatformProfile ? mPlatformProfile->name : "unknown");
     return true;
 }
@@ -381,7 +455,7 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     const uint32_t previousSubsystemId = mPlatformSubsystemId;
     const char* acpiHid = nullptr;
     OSObject* ownedHid = nullptr;
-    if (auto* acpi = OSDynamicCast(IOACPIPlatformDevice, mProvider)) {
+    if (auto* acpi = cirrus::support::acpiDeviceCast(mProvider)) {
         if (acpi->evaluateObject("_HID", &ownedHid) == kIOReturnSuccess)
             if (auto* hid = OSDynamicCast(OSString, ownedHid))
                 acpiHid = hid->getCStringNoCopy();
@@ -403,15 +477,36 @@ void CirrusAudioFixup::resolvePlatformProfile() {
 
     uint32_t pciSubsystemId = 0;
     IOService* controller = getAudioController();
-    if (auto* pci = OSDynamicCast(IOPCIDevice, controller))
+    if (auto* pci =
+#if defined(KERNEL)
+            controller ? static_cast<IOPCIDevice*>(controller->metaCast("IOPCIDevice")) : nullptr
+#else
+            OSDynamicCast(IOPCIDevice, controller)
+#endif
+    )
         pciSubsystemId = (uint32_t(pci->configRead16(kIOPCIConfigSubSystemVendorID)) << 16) | pci->configRead16(kIOPCIConfigSubSystemID);
     if (controller)
         controller->release();
     if (const auto* exact = cirrus::platform::findPlatformProfile(acpiHid, pciSubsystemId))
-        mPlatformProfile = exact;
-    mPlatformSubsystemId = pciSubsystemId;
-    mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, pciSubsystemId);
-    if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != pciSubsystemId) {
+        if (exact->identitySource == cirrus::platform::BoardIdentitySource::AudioPCI)
+            mPlatformProfile = exact;
+    uint32_t acpiSubsystemId = 0;
+    if (auto* acpi = cirrus::support::acpiDeviceCast(mProvider)) {
+        OSObject* object = nullptr;
+        if (acpi->evaluateObject("_SUB", &object) == kIOReturnSuccess)
+            if (auto* sub = OSDynamicCast(OSString, object))
+                cirrus::platform::parseACPISubsystemId(sub->getCStringNoCopy(), acpiSubsystemId);
+        OSSafeReleaseNULL(object);
+    }
+    if (acpiSubsystemId)
+        if (const auto* exact = cirrus::platform::findPlatformProfile(acpiHid, acpiSubsystemId))
+            if (exact->identitySource == cirrus::platform::BoardIdentitySource::ACPI)
+                mPlatformProfile = exact;
+    mPlatformSubsystemId = mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? acpiSubsystemId : pciSubsystemId;
+    mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, mPlatformSubsystemId);
+    setProperty("Cirrus_Platform_ACPI_SSID", uint64_t(acpiSubsystemId), 32);
+    setProperty("Cirrus_Platform_Identity_Source", mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? "ACPI_SUB" : "AUDIO_PCI");
+    if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != mPlatformSubsystemId) {
         setProperty("Cirrus_Platform_PCI_SSID", uint64_t(uint32_t(pciSubsystemId)), 32);
         setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
         setProperty("Cirrus_Board_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
@@ -425,7 +520,16 @@ void CirrusAudioFixup::resolvePlatformProfile() {
 
 // ACPI SPI matching is deliberately opt-in until physical controller tests.
 bool CirrusAudioFixup::setupCommunication(IOService* provider) {
-    auto* acpi = OSDynamicCast(IOACPIPlatformDevice, provider);
+    auto* acpi = cirrus::support::acpiDeviceCast(provider);
+#if defined(KERNEL)
+    if (gCirrusDebug)
+        setProperty("Cirrus_ACPI_Provider_Cast", acpi ? "REGISTERED_CLASS_MATCH" : "NOT_ACPI");
+    if (!acpi && provider && strcmp(provider->getMetaClass()->getClassName(), "IOACPIPlatformDevice") == 0) {
+        mAttachment.communication = "TYPE_REJECTED";
+        recordAttachmentFailure("PROVIDER", "ACPI_METACLASS_CAST_FAILED", kIOReturnUnsupported);
+        return false;
+    }
+#endif
     if (!acpi) {
         setProperty("Cirrus_Bus", "I2C");
         const auto* expected =
@@ -459,6 +563,16 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                   ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
                                                                              resourceData->getLength(), parsed, &hasI2C)
                                   : cirrus::transport::ACPISPIResult::Malformed;
+#if defined(KERNEL)
+    if (gCirrusDebug) {
+        setProperty("Cirrus_ACPI_CRS_Return", uint64_t(uint32_t(resourceReturn)), 32);
+        setProperty("Cirrus_ACPI_CRS_Object_Type", resources ? resources->getMetaClass()->getClassName() : "NONE");
+        setProperty("Cirrus_ACPI_CRS_Parse_Result", uint64_t(resourceKind), 32);
+        setProperty("Cirrus_ACPI_CRS_Has_I2C", hasI2C ? kOSBooleanTrue : kOSBooleanFalse);
+        if (resourceData && resourceData->getLength() <= 65536)
+            setProperty("Cirrus_ACPI_CRS_Data", resourceData);
+    }
+#endif
     OSSafeReleaseNULL(resources);
     if (resourceKind == cirrus::transport::ACPISPIResult::NoSPI && hasI2C) {
         setProperty("Cirrus_Bus", "I2C");
@@ -639,7 +753,7 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         }
         auto& amp = mAmplifiers[mAmplifierCount++];
         amp = {};
-        snprintf(amp.endpointLabel, sizeof(amp.endpointLabel), "spi%lu", i);
+        snprintf(amp.endpointLabel, sizeof(amp.endpointLabel), "spi%u", unsigned(i));
         amp.name = amp.endpointLabel;
         amp.address = 0xff; // SPI chip-select is never an I2C slave address.
         amp.channel = cirrus::core::AudioChannel::MaxChannels;
@@ -696,9 +810,15 @@ bool CirrusAudioFixup::start(IOService* provider) {
     setProperty("CirrusReachedStart", kOSBooleanTrue);
     CIRRUS_LOG("Author: Tran Kinh Hoang (hoaugtr)");
     CIRRUS_LOG("start");
+#if defined(KERNEL)
+    publishMatchingEvent("START_ENTERED", provider, kIOReturnSuccess);
+#endif
 
     if (!super::start(provider)) {
         CIRRUS_ERR("super::start failed");
+#if defined(KERNEL)
+        publishMatchingEvent("START_SUPER_FAILED", provider, kIOReturnError);
+#endif
         return false;
     }
 
@@ -728,6 +848,10 @@ bool CirrusAudioFixup::start(IOService* provider) {
     }
 
     if (!setupCommunication(provider)) {
+#if defined(KERNEL)
+        retainFailedServiceEvidence(this);
+        publishMatchingEvent("START_COMMUNICATION_FAILED", provider, kIOReturnError);
+#endif
         teardownCommunication();
         mProvider = nullptr;
         super::stop(provider);
@@ -757,6 +881,9 @@ bool CirrusAudioFixup::start(IOService* provider) {
 
     if (!setupProbeTimer()) {
         CIRRUS_ERR("probe timer setup failed");
+#if defined(KERNEL)
+        publishMatchingEvent("START_PROBE_TIMER_FAILED", provider, kIOReturnNoMemory);
+#endif
         teardownCommunication();
         mProvider = nullptr;
         super::stop(provider);
@@ -1372,7 +1499,7 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         }
         auto& amp = mAmplifiers[mAmplifierCount];
         amp = {};
-        snprintf(amp.endpointLabel, sizeof(amp.endpointLabel), "i2c%lu", i);
+        snprintf(amp.endpointLabel, sizeof(amp.endpointLabel), "i2c%u", unsigned(i));
         amp.name = amp.endpointLabel;
         amp.endpoint = endpoint;
         amp.address = uint8_t(endpoint.i2cAddress);
@@ -1573,7 +1700,13 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
         mHdaState.missCount = 0;
     }
 
-    IOPCIDevice* pciDev = OSDynamicCast(IOPCIDevice, audioCtrl);
+    IOPCIDevice* pciDev =
+#if defined(KERNEL)
+        audioCtrl ? static_cast<IOPCIDevice*>(audioCtrl->metaCast("IOPCIDevice")) : nullptr
+#else
+        OSDynamicCast(IOPCIDevice, audioCtrl)
+#endif
+        ;
     if (!pciDev) {
         publishStatus("NOT_A_PCI_CONTROLLER");
         audioCtrl->release();
@@ -2480,7 +2613,13 @@ IOService* CirrusAudioFixup::audioController() {
             while ((entry = OSDynamicCast(IORegistryEntry, hdaIter->getNextObject()))) {
                 IORegistryEntry* parent = entry;
                 for (unsigned depth = 0; parent && depth < 8; ++depth) {
-                    IOPCIDevice* pci = OSDynamicCast(IOPCIDevice, parent);
+                    IOPCIDevice* pci =
+#if defined(KERNEL)
+                        parent ? static_cast<IOPCIDevice*>(parent->metaCast("IOPCIDevice")) : nullptr
+#else
+                        OSDynamicCast(IOPCIDevice, parent)
+#endif
+                        ;
                     if (pci) {
                         const char* name = pci->getName();
                         uint16_t vendor = pci->configRead16(kIOPCIConfigVendorID);
@@ -2527,7 +2666,13 @@ IOService* CirrusAudioFixup::audioController() {
 
     while ((service = OSDynamicCast(IOService, iter->getNextObject()))) {
         uint32_t pciVendor = 0;
-        IOPCIDevice* pci = OSDynamicCast(IOPCIDevice, service);
+        IOPCIDevice* pci =
+#if defined(KERNEL)
+            service ? static_cast<IOPCIDevice*>(service->metaCast("IOPCIDevice")) : nullptr
+#else
+            OSDynamicCast(IOPCIDevice, service)
+#endif
+            ;
         if (pci) {
             pciVendor = pci->configRead16(kIOPCIConfigVendorID);
         } else {
@@ -2666,6 +2811,9 @@ void CirrusAudioFixup::recordAttachmentFailure(const char* stage, const char* re
         reason = "UNSPECIFIED_FAILURE";
     if (!indexKind)
         indexKind = "UNKNOWN";
+#if defined(KERNEL)
+    publishMatchingEvent(reason, mProvider, result, "Cirrus_Last_Attachment_Failure");
+#endif
     const bool publish = mAttachment.record(stage, reason, result, index, indexKind);
     if (!publish)
         return;

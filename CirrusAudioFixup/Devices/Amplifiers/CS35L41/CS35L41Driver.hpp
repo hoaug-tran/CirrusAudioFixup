@@ -1,6 +1,7 @@
 // Independent CS35L41 implementation and owned live state.
 // Host/register/board/asset views outlive this driver through shutdown.
 #pragma once
+#include "Devices/Amplifiers/CS35L41/PowerConfiguration.hpp"
 #include "Devices/Amplifiers/CS35L41/DeviceState.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp"
 #include "Platform/AmplifierDriverRegistry.hpp"

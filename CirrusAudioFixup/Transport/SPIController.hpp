@@ -9,6 +9,14 @@
 
 namespace cirrus::transport {
 
+// Borrowed by a serialized controller frame. An external select must never
+// assert a native output as well; failed assertions still require release.
+class SPIChipSelect {
+public:
+    virtual ~SPIChipSelect() = default;
+    virtual IOReturn setActive(bool active) = 0;
+};
+
 struct SPIEndpoint {
     uint32_t chipSelect;
     uint32_t clockHz;

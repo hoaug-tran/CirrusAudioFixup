@@ -17,6 +17,8 @@ struct DeviceState : cirrus::devices::amplifiers::cs35l41::SiliconState {
     uint8_t endpointIndex{0};
     cirrus::core::AmplifierModel model{cirrus::core::AmplifierModel::Unknown};
     cirrus::core::AudioChannel channel{cirrus::core::AudioChannel::Left};
+    cirrus::devices::amplifiers::cs35l41::PowerConfiguration power{};
+    uint32_t firmwareSubsystemId{0};
 };
 
 }

@@ -9,7 +9,8 @@ core::AmplifierLifecycleHooks* createDriver(const platform::AmplifierDriverConte
         return nullptr;
     const auto& binding = c.board.amplifiers[c.bindingIndex];
     if (binding.siliconId != registers::kValDeviceId || !c.endpoint.sameDevice(binding.endpoint) ||
-        binding.channelIndex > uint32_t(core::AudioChannel::Right))
+        binding.channelIndex > uint32_t(core::AudioChannel::Right) ||
+        !powerConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind))
         return nullptr;
     return new CS35L41Driver(c);
 }

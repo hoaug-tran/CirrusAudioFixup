@@ -4,6 +4,7 @@
 #include "Core/BusEndpoint.hpp"
 #include "Core/RegisterMap.hpp"
 #include "Platform/AmplifierDriverRegistry.hpp"
+#include "Support/KernelDeviceCast.hpp"
 #include "Transport/ACPIPath.hpp"
 #include "Transport/ACPISPIResources.hpp"
 #include "Transport/SPIControllerDrivers.hpp"
@@ -107,7 +108,7 @@ private:
             if (slot == mControllers) {
                 mTargets[slot] = target; // Adopt resolver retain, including failure path.
                 ++mControllers;
-                auto* pci = findPCI(target);
+                auto* pci = findPCI(target, owner, factory == createNativeSPIController);
                 NativeSPIControllerFailure failure{};
                 mOwners[slot] = factory(target, pci, owner, failure);
                 if (pci)
@@ -255,7 +256,7 @@ private:
             IOACPIPlatformDevice* found = nullptr;
             bool duplicate = false;
             while (auto* entry = it->getNextObject()) {
-                auto* candidate = OSDynamicCast(IOACPIPlatformDevice, entry);
+                auto* candidate = cirrus::support::acpiDeviceCast(entry);
                 char path[256]{}, normal[256]{};
                 length = sizeof(path);
                 if (candidate && candidate->getPath(path, &length, plane) && canonicalACPIPath(path, normal, sizeof(normal)) &&
@@ -280,10 +281,12 @@ private:
         } while (scope);
         return nullptr;
     }
-    static IOPCIDevice* findPCI(IOACPIPlatformDevice* target) {
-        auto* it = IOService::getMatchingServices(IOService::serviceMatching("IOPCIDevice"));
-        if (!it)
-            return nullptr;
+    static IOPCIDevice* findPCI(IOACPIPlatformDevice* target, IOService* owner, bool allowWait = true) {
+        auto* matching = IOService::serviceMatching("IOPCIDevice");
+        auto* it = matching ? IOService::getMatchingServices(matching) : nullptr;
+        if (matching)
+            matching->release();
+        unsigned visited = 0, castable = 0;
         IOPCIDevice* found = nullptr;
         bool duplicate = false;
         char targetPath[256]{}, targetName[256]{};
@@ -291,8 +294,11 @@ private:
         auto* plane = IORegistryEntry::getPlane("IOACPIPlane");
         const bool havePath =
             plane && target->getPath(targetPath, &length, plane) && canonicalACPIPath(targetPath, targetName, sizeof(targetName));
-        while (auto* entry = it->getNextObject()) {
-            auto* pci = OSDynamicCast(IOPCIDevice, entry);
+        while (auto* entry = it ? it->getNextObject() : nullptr) {
+            ++visited;
+            auto* pci = cirrus::support::pciDeviceCast(entry);
+            if (pci)
+                ++castable;
             bool matches = pci && pci->getProperty("acpi-device") == target;
             if (pci && !matches && havePath) {
                 auto* path = OSDynamicCast(OSString, pci->getProperty("acpi-path"));
@@ -310,7 +316,56 @@ private:
         }
         if (found && !duplicate)
             found->retain();
-        it->release();
+        if (it)
+            it->release();
+#if defined(KERNEL)
+        if (owner) {
+            if (allowWait) {
+                owner->setProperty("Cirrus_SPI_PCI_Initial_Visited", uint64_t(visited), 32);
+                owner->setProperty("Cirrus_SPI_PCI_Initial_Castable", uint64_t(castable), 32);
+            }
+            owner->setProperty("Cirrus_SPI_PCI_Visited", uint64_t(visited), 32);
+            owner->setProperty("Cirrus_SPI_PCI_Castable", uint64_t(castable), 32);
+            owner->setProperty("Cirrus_SPI_PCI_Target_Path", targetPath);
+            owner->setProperty("Cirrus_SPI_PCI_Lookup_Status", duplicate ? "AMBIGUOUS" : found ? "PRESENT" : "NOT_PUBLISHED_OR_UNMATCHED");
+        }
+        if (allowWait && !found && !duplicate && havePath && !nativeSPIControllerHasACPIContract(target)) {
+            // ACPI nubs can match before PCI enumeration has published the
+            // corresponding service. Wait only for this exact registry path,
+            // with a finite deadline; never substitute another PCI device.
+            auto* waitMatching = IOService::serviceMatching("IOPCIDevice");
+            auto* properties = OSDictionary::withCapacity(1);
+            auto* path = OSString::withCString(targetPath);
+            if (waitMatching && properties && path) {
+                properties->setObject("acpi-path", path);
+                waitMatching->setObject("IOPropertyMatch", properties);
+                owner->setProperty("Cirrus_SPI_PCI_Lookup_Status", "WAITING_PUBLICATION");
+                auto* service = IOService::waitForMatchingService(waitMatching, 5000000000ULL);
+                auto* waitedPCI = cirrus::support::pciDeviceCast(service);
+                if (waitedPCI) {
+                    // Recheck identity and uniqueness after publication rather
+                    // than trusting whichever service woke the wait first.
+                    auto* validated = findPCI(target, owner, false);
+                    if (validated == waitedPCI)
+                        found = validated;
+                    else if (validated)
+                        validated->release();
+                }
+                if (service)
+                    service->release();
+                owner->setProperty("Cirrus_SPI_PCI_Lookup_Status", found ? "PUBLISHED_AFTER_WAIT" : "WAIT_TIMEOUT_OR_ASSOCIATION_REJECTED");
+            } else
+                owner->setProperty("Cirrus_SPI_PCI_Lookup_Status", "WAIT_ALLOCATION_FAILED");
+            OSSafeReleaseNULL(path);
+            OSSafeReleaseNULL(properties);
+            OSSafeReleaseNULL(waitMatching);
+        }
+#else
+        (void)allowWait;
+        (void)owner;
+        (void)visited;
+        (void)castable;
+#endif
         return duplicate ? nullptr : found;
     }
     const char* controllerSource(size_t slot) const {

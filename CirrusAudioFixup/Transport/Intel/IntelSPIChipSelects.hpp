@@ -1,0 +1,172 @@
+// Resolve controller cs-gpios without embedding board IDs or GPIO numbers.
+// The SPI owner keeps GPIO providers/maps alive and serializes every frame/PM.
+#pragma once
+#include "Transport/ACPIDeviceProperties.hpp"
+#include "Transport/ACPIGPIOResources.hpp"
+#include "Transport/Intel/IntelGPIOOutput.hpp"
+
+namespace cirrus::transport::intel {
+class IntelSPIChipSelects {
+public:
+    static constexpr size_t kCapacity = 16;
+    IntelSPIChipSelects() = default;
+    IntelSPIChipSelects(const IntelSPIChipSelects&) = delete;
+    IntelSPIChipSelects& operator=(const IntelSPIChipSelects&) = delete;
+    ~IntelSPIChipSelects() { shutdown(); }
+    IOReturn bind(IOACPIPlatformDevice* controller, IOService* owner) {
+        if (!controller || !owner || mOwner)
+            return kIOReturnBadArgument;
+        mOwner = owner;
+        ACPIDeviceProperties properties;
+        auto result = properties.load(controller);
+        if (result != kIOReturnSuccess)
+            return result;
+        auto* object = properties.get("cs-gpios");
+        if (!object)
+            return kIOReturnSuccess;
+        auto* values = OSDynamicCast(OSArray, object);
+        if (!values || !values->getCount() || values->getCount() > kCapacity * 4)
+            return kIOReturnUnsupported;
+        for (unsigned i = 0; i < values->getCount();) {
+            if (mCount == kCapacity)
+                return kIOReturnUnsupported;
+            auto& line = mLines[mCount++];
+            auto* native = OSDynamicCast(OSNumber, values->getObject(i));
+            if (native) {
+                if (native->unsigned64BitValue())
+                    return kIOReturnUnsupported;
+                ++i;
+                continue;
+            }
+            if (values->getCount() - i < 4)
+                return kIOReturnUnsupported;
+            auto* resource = OSDynamicCast(OSNumber, values->getObject(i + 1));
+            auto* pin = OSDynamicCast(OSNumber, values->getObject(i + 2));
+            auto* low = OSDynamicCast(OSNumber, values->getObject(i + 3));
+            if (!resource || !pin || !low || resource->unsigned64BitValue() > 0xffff || pin->unsigned64BitValue() > 0xffff ||
+                low->unsigned64BitValue() > 1)
+                return kIOReturnUnsupported;
+            // SPI endpoint polarity is active-low; ACPI's GPIO flag is not a
+            // replacement for SpiSerialBus polarity (Linux spi-cs-high policy).
+            auto* source = resolveACPIReference(controller, values->getObject(i));
+            if (!source)
+                return kIOReturnNotFound;
+            OSObject* crs = nullptr;
+            result = source->evaluateObject("_CRS", &crs);
+            auto* bytes = OSDynamicCast(OSData, crs);
+            ACPIGPIOResource gpio{};
+            const bool decoded = result == kIOReturnSuccess && bytes &&
+                                 parseACPIGPIOResource(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(),
+                                                       resource->unsigned32BitValue(), pin->unsigned32BitValue(), gpio);
+            OSSafeReleaseNULL(crs);
+            auto* provider = decoded ? resolveACPIDevice(source, gpio.source) : nullptr;
+            source->release();
+            if (!provider)
+                return decoded ? kIOReturnNotFound : kIOReturnUnsupported;
+            result = bindLine(line, provider, gpio.pin);
+            provider->release();
+            if (result != kIOReturnSuccess)
+                return result;
+            i += 4;
+        }
+        // Verify the complete topology before changing any output. Every
+        // bound CS is set inactive; reset pins are never borrowed as CS.
+        for (size_t i = 0; i < mCount; ++i)
+            if (mLines[i].gpio && (result = mLines[i].output.setActive(false)) != kIOReturnSuccess)
+                return result;
+        return kIOReturnSuccess;
+    }
+    size_t count() const { return mCount; }
+    bool usesGPIO(size_t index) const { return index < mCount && mLines[index].gpio; }
+    uint16_t pin(size_t index) const { return index < mCount ? mLines[index].pin : 0; }
+    SPIChipSelect* select(uint32_t index) { return index < mCount && mLines[index].gpio ? &mLines[index].output : nullptr; }
+    IOReturn validate() const {
+        for (size_t i = 0; i < mCount; ++i) {
+            if (!mLines[i].gpio)
+                continue;
+            uint32_t power = 0;
+            auto* provider = mLines[i].provider;
+            if ((provider->getDeviceStatus() & 3) != 3 || (provider->validateObject("_PSC") == kIOReturnSuccess &&
+                                                           (provider->evaluateInteger("_PSC", &power) != kIOReturnSuccess || power)))
+                return kIOReturnNotReady;
+            const auto result = mLines[i].output.validate();
+            if (result != kIOReturnSuccess)
+                return result;
+        }
+        return kIOReturnSuccess;
+    }
+    void shutdown() {
+        for (size_t i = mCount; i > 0; --i) {
+            auto& line = mLines[i - 1];
+            line.output.unbind();
+            OSSafeReleaseNULL(line.map);
+            // One exclusive open per provider, even with multiple CS lines.
+            if (line.opened)
+                line.provider->close(mOwner);
+            OSSafeReleaseNULL(line.provider);
+            line.gpio = line.opened = false;
+        }
+        mCount = 0;
+        mOwner = nullptr;
+    }
+
+private:
+    struct Line final : IntelGPIOWindow {
+        IOACPIPlatformDevice* provider{nullptr};
+        IOMemoryMap* map{nullptr};
+        IntelGPIOOutput output;
+        uint16_t pin{0};
+        bool gpio{false}, opened{false};
+        uint32_t read32(uint32_t offset) override {
+            const auto value = *reinterpret_cast<volatile uint32_t*>(map->getVirtualAddress() + offset);
+            OSSynchronizeIO();
+            return value;
+        }
+        void write32(uint32_t offset, uint32_t value) override {
+            *reinterpret_cast<volatile uint32_t*>(map->getVirtualAddress() + offset) = value;
+            OSSynchronizeIO();
+        }
+    };
+    IOReturn bindLine(Line& line, IOACPIPlatformDevice* provider, uint16_t pin) {
+        OSObject* object = nullptr;
+        auto result = provider->evaluateObject("_HID", &object);
+        auto* hid = OSDynamicCast(OSString, object);
+        IntelGPIOPad pad{};
+        const bool supported = result == kIOReturnSuccess && hid && lookupIntelGPIOPad(hid->getCStringNoCopy(), pin, pad);
+        OSSafeReleaseNULL(object);
+        if (!supported || (provider->getDeviceStatus() & 3) != 3)
+            return kIOReturnUnsupported;
+        uint32_t power = 0;
+        if (provider->validateObject("_PSC") == kIOReturnSuccess &&
+            (provider->evaluateInteger("_PSC", &power) != kIOReturnSuccess || power))
+            return kIOReturnNotReady;
+        bool alreadyOpen = false;
+        for (size_t i = 0; i + 1 < mCount; ++i) {
+            const auto& previous = mLines[i];
+            if (previous.provider == provider) {
+                if (previous.pin == pin)
+                    return kIOReturnBadArgument;
+                alreadyOpen = true;
+            }
+        }
+        line.provider = provider;
+        provider->retain();
+        if (!alreadyOpen) {
+            if (provider->isOpen() || !provider->open(mOwner))
+                return kIOReturnExclusiveAccess;
+            line.opened = true;
+        }
+        line.pin = pin;
+        line.map = provider->mapDeviceMemoryWithIndex(pad.memoryIndex);
+        if (!line.map || !line.map->getVirtualAddress())
+            return kIOReturnNoResources;
+        result = line.output.bind(line, line.map->getLength(), pad, true);
+        if (result == kIOReturnSuccess)
+            line.gpio = true;
+        return result;
+    }
+    Line mLines[kCapacity];
+    size_t mCount{0};
+    IOService* mOwner{nullptr};
+};
+}

@@ -9,6 +9,7 @@ class AMDSPIController final : public SPIController {
 public:
     AMDSPIController() : mEngine(mWindow) {}
     ~AMDSPIController() override { shutdown(); }
+    static bool supportsProvider(IOACPIPlatformDevice* provider);
     IOReturn bind(IOACPIPlatformDevice* provider, IOService* owner);
     void suspend();
     IOReturn resume();
@@ -29,6 +30,7 @@ private:
         void delayUs(uint32_t us) override { IODelay(us); }
     };
     bool isD0() const;
+    static bool resolveRevision(IOACPIPlatformDevice* provider, AMDSPIRevision& revision);
     AMDSPIController(const AMDSPIController&) = delete;
     AMDSPIController& operator=(const AMDSPIController&) = delete;
     MMIOWindow mWindow;

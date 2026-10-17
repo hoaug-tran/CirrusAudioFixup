@@ -334,7 +334,7 @@ The two builds intentionally use the same hardware sequencing, checks, fault rec
 
 CI verifies binary/dSYM UUIDs and packages symbols separately in `SYMBOLS.zip`. Keep the symbols for the exact build; an optimized Release panic still needs matching symbols. There are no Debug-only panic assertions in the current driver.
 
-Branch pushes produce test artifacts. Public releases require a new matching `vX.Y.Z` tag, plist versions and changelog entry. Versioned assets include checksums and build metadata. Existing releases are not overwritten.
+Branch pushes produce test artifacts. Public releases require a new matching `vX.Y.Z` tag whose commit belongs to `main`, matching plist versions and a changelog entry. Tags on unmerged development branches cannot publish releases. Versioned assets include checksums and build metadata. Existing releases are not overwritten.
 
 ---
 

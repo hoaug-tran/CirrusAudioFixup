@@ -4,6 +4,9 @@ import subprocess
 import sys
 import shlex
 import re
+import os
+import tempfile
+import textwrap
 
 ROOT = Path(__file__).resolve().parents[1]
 # Apple's -verify_arch consumes every remaining argument as an architecture.
@@ -18,6 +21,33 @@ for name in ("Package kext bundles", "Upload Release artifact", "Upload Debug ar
     step = build_job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
     assert not re.search(r"^        if:", step, re.M), name + " must run after successful builds on every branch"
 assert "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')" in release_job
+assert 'fetch-depth: 0' in release_job
+gate = release_job.split('      - name: Verify release commit belongs to main\n', 1)[1].split('\n      - name:', 1)[0]
+gate = textwrap.dedent(gate.split('run: |\n', 1)[1])
+assert release_job.index('Verify release commit belongs to main') < release_job.index('Publish a new version')
+# Execute the actual release gate against real main/feature histories, without
+# network access or publication credentials. An ancestor tag remains valid.
+with tempfile.TemporaryDirectory(prefix='cirrus-release-branch-') as directory:
+    tmp = Path(directory)
+    repo, origin, checkout = (tmp / name for name in ('source', 'origin.git', 'checkout'))
+    def git(*args, cwd=None):
+        return subprocess.check_output(['git', *args], cwd=cwd, stderr=subprocess.STDOUT, text=True).strip()
+    git('init', '-b', 'main', str(repo))
+    git('config', 'user.name', 'Fixture', cwd=repo)
+    git('config', 'user.email', 'fixture@example.invalid', cwd=repo)
+    git('commit', '--allow-empty', '-m', 'initial', cwd=repo)
+    ancestor = git('rev-parse', 'HEAD', cwd=repo)
+    git('commit', '--allow-empty', '-m', 'main change', cwd=repo)
+    main = git('rev-parse', 'HEAD', cwd=repo)
+    git('checkout', '-b', 'feat/unmerged', cwd=repo)
+    git('commit', '--allow-empty', '-m', 'feature change', cwd=repo)
+    feature = git('rev-parse', 'HEAD', cwd=repo)
+    git('clone', '--bare', str(repo), str(origin))
+    git('clone', '-b', 'main', str(origin), str(checkout))
+    for commit, allowed in ((main, True), (ancestor, True), (feature, False), ('f' * 40, False)):
+        result = subprocess.run(['bash', '-eu', '-c', gate], cwd=checkout,
+                                env={**os.environ, 'GITHUB_SHA': commit}, capture_output=True, text=True)
+        assert (result.returncode == 0) == allowed, result.stdout + result.stderr
 assert "xcodebuild -version |" not in workflow, "Do not close Xcode's stdout before it finishes"
 lipo_commands = [shlex.split(line.strip()) for line in workflow.splitlines()
                  if line.strip().startswith("lipo ")]
@@ -44,4 +74,4 @@ for text, plist, tag in [
 subprocess.run([sys.executable, str(ROOT / "Tools/release_metadata.py")], check=True)
 print("PASS tag/version mismatch and pending release rejection")
 print("PASS CI lipo verification argument order")
-print("PASS all-branch CI/artifacts, tag-only publication and complete Xcode version output")
+print("PASS all-branch CI/artifacts, main-only release tag ancestry and complete Xcode version output")

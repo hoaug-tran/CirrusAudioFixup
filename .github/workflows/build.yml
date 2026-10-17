@@ -135,6 +135,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release commit belongs to main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::Release tags must point to a commit in main history."
+            exit 1
+          fi
 
       - name: Download Release artifact
         uses: actions/download-artifact@v4

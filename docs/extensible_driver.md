@@ -469,3 +469,11 @@ Final bundle verification: Debug UUID `2E32A0FB-B690-3F39-A580-5B06CE074F49`.
 Both configurations pass their matching binary/dSYM UUID and x86_64 gates. The
 SDK 15.5 kmod startup objects still emit the existing deployment-floor 11.0 linker
 warnings; this does not establish physical compatibility across macOS releases.
+
+## Board-owned driver configuration and identity
+
+`AmplifierBinding` may carry an immutable configuration pointer, size and schema name. Only the registered AMP factory interprets that view; it rejects unknown schemas and invalid electrical values before initialization. The CS35L41 module now implements its internal and legacy external power paths through this mechanism. A new silicon driver owns its own schema without adding boost fields or model branches to the service/runtime.
+
+A `PlatformProfile` declares its identity source. Existing profiles use audio PCI identity; the exact HP SPI profile selects amplifier ACPI `_SUB`. `BoardConfiguration::useBoardFirmwareIdentity` explicitly opts into that verified board identity for firmware selection. Other profiles retain existing codec-identity behavior. No global subsystem translation is inferred from the CPU, codec model or transport.
+
+Controller modules still own provider resources. Intel LPSS borrows the generic `SPIChipSelect` contract for each external selection, while the Intel module resolves ACPI GPIO resources and retains/maps the documented GPIO family. Unsupported GPIO providers fail binding rather than falling back to a native CS. See [HP SPI bring-up](hp_spi_bringup.md) for the current target validation boundary.

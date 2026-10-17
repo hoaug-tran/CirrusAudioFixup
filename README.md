@@ -10,7 +10,7 @@
 
 **Open-source macOS kernel extension with an extensible amplifier runtime over I2C and SPI. The implemented silicon driver is CS35L41.**
 
-Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered drivers for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; ASUS/HP profiles and physical SPI playback validation remain pending. See [SPI development status](docs/spi_support.md).
+Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered drivers for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; An experimental HP ZBook Fury 16 G9 (103C89C6) profile now uses the captured GPIO CS and internal boost configuration; native macOS load and physical SPI playback validation remain pending. ASUS profiles remain pending. See [SPI development status](docs/spi_support.md).
 
 The shared register-map, endpoint, board/firmware identity, lifecycle and driver contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon drivers are registered in `Devices/AmplifierDrivers.hpp`.
 
@@ -80,7 +80,8 @@ The implemented driver is CS35L41. The current personality matches a `VoodooI2CD
 | --- | --- |
 | Lenovo Legion 7 16ACHg6, SSID `17AA:3847` | Reference stereo profile, AMD `AMDI0030` reset quirk, embedded firmware and left/right tuning |
 | Lenovo Legion 5 Pro 16ACH6H, SSID `17AA:382B` | Explicit translation to the `17AA:3847` resource; validate speaker and boost equivalence on the actual machine |
-| `CLSA0101` / `CSC3551` | Staged profiles with automatic initialization disabled; `CSC3551` has opt-in ACPI SPI discovery |
+| `CLSA0101` / unknown `CSC3551` | Automatic initialization disabled; `CSC3551` has opt-in ACPI SPI discovery |
+| HP `CSC3551`, ACPI `_SUB=103C89C6` | Experimental SPI profile: native/GPIO CS, internal boost, matched R/L firmware; [target validation required](docs/hp_spi_bringup.md) |
 | Other Intel or AMD boards | Porting required: provider, reset wiring, audio route, boost circuit and tuning must be verified |
 | CS35L45 / CS35L51 / CS35L56 / other amplifier models | No implemented driver; unknown models are rejected before initialization |
 | Realtek ALC codecs | Managed by AppleALC and the host audio stack, not by this kext |

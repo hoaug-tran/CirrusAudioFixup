@@ -10,6 +10,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-power-") as directory:
 #include <cassert>
 #include <map>
 #include <vector>
+#include <algorithm>
 #include "Devices/Amplifiers/CS35L41/Playback.hpp"
 using namespace cirrus::devices::amplifiers::cs35l41;
 struct Port:cirrus::core::RegisterIO {
@@ -42,6 +43,39 @@ int main(){
  invalid=internal;invalid.inductorNanohenry=900;assert(!invalid.configure(untouched)&&untouched.writes.empty());
  assert(!powerConfiguration(&internal,sizeof(internal),"other-schema"));
  assert(powerConfiguration(&internal,sizeof(internal),kPowerConfigurationKind)==&internal);
+ assert(powerConfiguration(nullptr,0,nullptr)==&kLegacyPowerConfiguration);
+ Port legacyConfiguration;assert(kLegacyPowerConfiguration.configure(legacyConfiguration));
+ assert(legacyConfiguration.calls==0); // Old bindings gain no boost programming I/O.
+ // Run legacy default, explicit external and internal lifecycles interleaved:
+ // no global power selection may leak between independent amplifier instances.
+ for(bool dsp:{false,true}){
+  Port legacy,explicitLegacy,hp;
+  for(auto* io:{&legacy,&explicitLegacy,&hp})io->r[0x10098]=2;
+  PlaybackTransition a{},b{},c{};
+  PlaybackProgress ar=PlaybackProgress::Pending,br=ar,cr=ar;
+  for(uint64_t now=0;now<20;++now){
+   if(ar==PlaybackProgress::Pending)ar=Playback::advance(legacy,a,now,dsp,0x2b01);
+   if(cr==PlaybackProgress::Pending)cr=Playback::advance(hp,c,now,dsp,0x2b01,nullptr,internal);
+   if(br==PlaybackProgress::Pending)br=Playback::advance(explicitLegacy,b,now,dsp,0x2b01,nullptr,kLegacyPowerConfiguration);
+  }
+  assert(ar==PlaybackProgress::Prepared&&br==ar&&cr==ar);
+  assert(legacy.r[0x2018]==(dsp?0x3001U:1U)&&hp.r[0x2018]==(dsp?0x3021U:0x21U));
+  assert(Playback::commit(legacy,a,17<<5,dsp));
+  assert(Playback::commit(hp,c,17<<5,dsp,internal));
+  assert(Playback::commit(explicitLegacy,b,17<<5,dsp,kLegacyPowerConfiguration));
+  assert(legacy.r==explicitLegacy.r&&legacy.writes==explicitLegacy.writes);
+  assert(std::find(legacy.writes.begin(),legacy.writes.end(),0x742c)!=legacy.writes.end());
+  assert(std::find(legacy.writes.begin(),legacy.writes.end(),0x11008)!=legacy.writes.end());
+  ShutdownTransition sa{},sb{},sc{};ar=br=cr=PlaybackProgress::Pending;
+  for(uint64_t now=20;now<40;++now){
+   if(ar==PlaybackProgress::Pending)ar=Playback::shutdown(legacy,sa,now,dsp,0x2b01);
+   if(cr==PlaybackProgress::Pending)cr=Playback::shutdown(hp,sc,now,dsp,0x2b01,nullptr,internal);
+   if(br==PlaybackProgress::Pending)br=Playback::shutdown(explicitLegacy,sb,now,dsp,0x2b01,nullptr,kLegacyPowerConfiguration);
+  }
+  assert(ar==PlaybackProgress::Prepared&&br==ar&&cr==ar);
+  assert(legacy.r==explicitLegacy.r&&legacy.writes==explicitLegacy.writes);
+  assert(legacy.calls==explicitLegacy.calls);
+ }
  for(bool dsp:{false,true}){
   Port io;io.r[0x10098]=2;PlaybackTransition playback{};PlaybackProgress result=PlaybackProgress::Pending;
   for(uint64_t now=0;now<20&&result==PlaybackProgress::Pending;++now)
@@ -65,4 +99,4 @@ int main(){
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
-print("PASS CS35L41 internal boost coefficients, active power, muted preparation, commit and shutdown")
+print("PASS CS35L41 legacy/internal power isolation, coefficients, muted preparation, commit and shutdown")

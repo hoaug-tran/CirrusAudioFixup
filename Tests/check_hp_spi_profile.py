@@ -92,8 +92,22 @@ int main(){
  // A PCI SSID alone must not substitute for the declared ACPI _SUB contract.
  amp.sub.value="INVALID";audio.ssid=0x103c89c6;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
  amp.sub.value="103C8CA4";service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
- amp.hid.value="CLSA0100";audio.ssid=0x17aa382b;service.resolvePlatformProfile();
- assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x17aa382b);
+ // Selecting HP first must not leak its identity, topology or channels into
+ // either previously supported Lenovo board, even with a conflicting _SUB.
+ for(auto ssid:{0x17aa382bU,0x17aa3847U}){
+  amp.hid.value="CLSA0100";amp.sub.value="103C89C6";audio.ssid=ssid;service.resolvePlatformProfile();
+  assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==ssid);
+  const auto& legacy=*service.mPlatformProfile;
+  assert(!strcmp(legacy.name,"lenovo-clsa0100-cs35l41"));
+  assert(legacy.identitySource==cirrus::platform::BoardIdentitySource::AudioPCI);
+  assert(!legacy.boardConfiguration&&legacy.endpointCount==2&&legacy.resetQuirk&&legacy.interruptWiring);
+  assert(legacy.endpoints[0].address==0x40&&legacy.endpoints[0].channel==cirrus::core::AudioChannel::Left);
+  assert(legacy.endpoints[1].address==0x41&&legacy.endpoints[1].channel==cirrus::core::AudioChannel::Right);
+  audio.ssid=0x12345678;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
+ }
+ amp.hid.value="CLSA0101";audio.ssid=0x17aa382b;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
+ amp.hid.value="CSC3551";amp.sub.value="103C89C6";service.resolvePlatformProfile();
+ assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x103c89c6);
  assert(amp.hid.refs==1&&amp.sub.refs==1&&audio.refs==1);
 }
 '''
@@ -104,4 +118,4 @@ int main(){
     subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
-print("PASS HP exact identity, SPI endpoints, reversed channels, internal power configuration and captured asset SHA-256")
+print("PASS HP and legacy Lenovo identity isolation, endpoints, power configuration and captured asset SHA-256")

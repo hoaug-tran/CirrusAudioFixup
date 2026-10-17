@@ -302,12 +302,14 @@ function Export-SetupApiSections([string]$Path,[string[]]$Terms,[string]$Destina
     $truncated=$false; [long]$blockBytes=0
     try {
         while ($null -ne ($line=$reader.ReadLine())) {
-            if ($line.StartsWith('>>>')) { $block.Clear(); $matched=$false; $truncated=$false; $blockBytes=0 }
+            # Real SetupAPI sections also contain ">>> Section start" lines;
+            # those belong to the same block and must not erase the device ID.
+            if ($line -match '^>>>\s+(?:\[|Device Install )') { $block.Clear(); $matched=$false; $truncated=$false; $blockBytes=0 }
             $blockBytes += $line.Length*2+2
             if ($block.Count -lt 10000 -and $blockBytes -le 2MB) { $block.Add($line) }
             else { $truncated=$true }
             if ($line -match $pattern) { $matched=$true }
-            if ($line.StartsWith('<<<')) {
+            if ($line -match '^<<<\s+\[Exit status:' -or $line -eq '<<< Section end') {
                 if ($matched) {
                     if ($truncated) { throw 'A relevant SetupAPI section exceeded 10000 lines/2 MiB; extract is incomplete.' }
                     foreach ($item in $block) { $writer.WriteLine($item); $written += $item.Length*2+2 }

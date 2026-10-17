@@ -99,9 +99,11 @@ Cirrus=Models,NTamd64
 >>> Device Install ACPI\CSC3551\10
 UNRELATED_PREFIX_INSTANCE
 <<< Section end
->>> Device Install ACPI\CSC3551\1
+>>>  [Device Install (Hardware initiated) - ACPI\CSC3551\1]
+>>>  Section start 2026/10/17 12:00:00.000
 KEEP_AUDIO_DETAIL
-<<< Section end
+<<<  Section end 2026/10/17 12:00:00.100
+<<<  [Exit status: SUCCESS]
 >>> Device Install GPU
 UNRELATED_GPU
 <<< Section end
@@ -109,6 +111,7 @@ UNRELATED_GPU
     Export-SetupApiSections $log @('ACPI\CSC3551\1') $extract
     $text=[IO.File]::ReadAllText($extract)
     Assert ($text.Contains('KEEP_AUDIO_DETAIL') -and -not $text.Contains('UNRELATED_')) 'SetupAPI exact section filter failed'
+    Assert ($text.Contains('Section start') -and $text.Contains('[Exit status: SUCCESS]')) 'SetupAPI timestamps/end marker lost'
     $script:Root=Join-Path $temp 'report'
     Write-Manifest
     Write-Manifest

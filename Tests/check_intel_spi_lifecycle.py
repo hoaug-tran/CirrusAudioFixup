@@ -110,6 +110,9 @@ int main(){
         if(mode==5)bad.state=3;
         if(mode==6)bad.map.regs[0x2fc/4]=0xffffffff;
         assert(bus.bind(&bad,&owner)!=0&&bad.refs==1);
+        const char* reasons[]={"INTEL_CONTROLLER_ID_UNSUPPORTED","INTEL_CONTROLLER_EXCLUSIVE_OPEN_FAILED","INTEL_CONTROLLER_EXCLUSIVE_OPEN_FAILED","INTEL_CONTROLLER_BAR_MAPPING_FAILED","INTEL_CONTROLLER_BAR_TOO_SMALL","INTEL_CONTROLLER_NOT_D0","INTEL_CONTROLLER_ENGINE_INITIALIZATION_FAILED"};
+        assert(!strcmp(bus.bindFailureReason(),reasons[mode]));
+        if(mode==6)assert(bus.initialCapabilities()==0xffffffffU);
         assert(bad.opened==(mode==1));
         if(mode<=2)assert(bad.closes==0);
         else assert(bad.closes==1&&!bad.memory);

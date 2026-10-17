@@ -12,9 +12,18 @@ void putLE(std::vector<uint8_t>& v, unsigned pos, uint32_t n) {
     for (unsigned i=0;i<4;i++) v[pos+i]=uint8_t(n>>(i*8));
 }
 int main() {
-    assert(cs35l41FirmwareCount==1);
-    assert(cs35l41Firmware[0].subsystemVendor==0x17AA && cs35l41Firmware[0].subsystemDevice==0x3847);
-    assert(cs35l41Firmware[0].spkid==1 && cs35l41Firmware[0].bin!=cs35l41Firmware[0].binRight);
+    const FirmwareResource* lenovo = nullptr;
+    const FirmwareResource* hp = nullptr;
+    for (size_t i = 0; i < cs35l41FirmwareCount; ++i) {
+        const auto& resource = cs35l41Firmware[i];
+        if (resource.subsystemVendor == 0x17AA && resource.subsystemDevice == 0x3847)
+            lenovo = &resource;
+        if (resource.subsystemVendor == 0x103C && resource.subsystemDevice == 0x89C6)
+            hp = &resource;
+    }
+    assert(lenovo && lenovo->spkid == 1 && lenovo->bin != lenovo->binRight);
+    assert(hp && hp->spkid == 0 && hp->bin != hp->binRight && hp->wmfwSize == 34068);
+    assert(hp->binSize == 4000 && hp->binRightSize == 4000);
     FirmwareImage fw{};
     auto wmfw=cs35l41_dsp1_spk_prot_17aa3847_wmfw;
     auto wmfwSize=sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw);

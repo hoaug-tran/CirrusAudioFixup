@@ -35,7 +35,8 @@ struct Bus: RegisterBus {
  IOReturn command(const uint8_t* tx,size_t nt,uint8_t* rx,size_t nr) override {
   assert(nt<=262 && nr<=256);if(lock)assert(lock->held);
   frames.emplace_back(tx,tx+nt);if(++calls==failAt)return -99;
-  for(size_t i=0;i<nr;++i)rx[i]=response[i%response.size()];return 0;
+  for(size_t i=0;i<nr;++i)rx[i]=response[i%response.size()];
+  return 0;
  }
 };
 bool accessible(uint32_t){return true;}

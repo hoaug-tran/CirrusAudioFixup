@@ -128,6 +128,7 @@ preamble = r'''
 #include <cstdio>
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 #include <map>
 #include <vector>
 #include <string>

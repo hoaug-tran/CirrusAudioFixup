@@ -81,6 +81,19 @@ int main(){
         f.binding.endpoint=f.context.endpoint=f.endpoint;f.bind();assert(f.runtime.bringUp()==0 && f.runtime.report(0).initialized);
         assert(f.runtime.suspend()==0 && f.runtime.resume()==0);f.runtime.unbind();
     }
+    {
+        Fixture internal;
+        const PowerConfiguration config{BoostTopology::Internal,1000,4500,24};
+        internal.binding.driverConfiguration=&config;
+        internal.binding.driverConfigurationSize=sizeof(config);
+        internal.binding.driverConfigurationKind=kPowerConfigurationKind;
+        internal.bind();assert(internal.runtime.bringUp()==0);
+        assert((internal.port.values[0x3810]&0xffff)==0x4932);
+        assert((internal.port.values[0x3814]&0xff03)==0x7500);
+        assert((internal.port.values[0x3808]&0x7f)==0x4a);
+        assert(!internal.port.values.count(0x7414));
+        assert(internal.runtime.suspend()==0&&internal.runtime.resume()==0);
+    }
     Fixture good;good.bind();assert(good.port.calls==0);assert(good.runtime.bringUp()==0);
     assert(good.runtime.report(0).initialized && !good.runtime.report(0).faulted);
     assert(!strcmp(good.runtime.report(0).readyVerdict,"READY_BYPASS_EXPLICIT"));
@@ -107,7 +120,13 @@ int main(){
     assert(wait.runtime.retryBringUp(deadline)==kIOReturnTimeout && wait.runtime.stage()==core::AmplifierStage::Faulted);
     assert(wait.host.properties["Cirrus_Phase5A_Status_owned-driver"]=="CODEC_IDENTITY_TIMEOUT");
     Fixture bad;bad.context.host=nullptr;assert(!createDriver(bad.context) && bad.port.calls==0);
-    bad.context.host=&bad.host;bad.binding.channelIndex=2;assert(!createDriver(bad.context) && bad.port.calls==0);
+    bad.context.host=&bad.host;
+    const PowerConfiguration invalidPower{BoostTopology::Internal,1000,5000,24};
+    bad.binding.driverConfiguration=&invalidPower;bad.binding.driverConfigurationSize=sizeof(invalidPower);
+    bad.binding.driverConfigurationKind=kPowerConfigurationKind;
+    assert(!createDriver(bad.context)&&bad.port.calls==0);
+    bad.binding.driverConfiguration=nullptr;bad.binding.driverConfigurationSize=0;bad.binding.driverConfigurationKind=nullptr;
+    bad.binding.channelIndex=2;assert(!createDriver(bad.context) && bad.port.calls==0);
     bad.binding.channelIndex=0;bad.binding.siliconId=0x35a41;assert(!createDriver(bad.context) && bad.port.calls==0);
     bad.binding.siliconId=0x35a40;bad.binding.endpoint.i2cAddress=0x41;assert(!createDriver(bad.context) && bad.port.calls==0);
     bad.binding.endpoint=bad.endpoint;bad.context.bindingIndex=1;assert(!createDriver(bad.context) && bad.port.calls==0);

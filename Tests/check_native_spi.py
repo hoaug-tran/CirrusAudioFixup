@@ -39,6 +39,7 @@ inline void IOSleep(unsigned){}
 #include <cassert>
 class OSObject {public:unsigned refs=1;virtual ~OSObject()=default;void retain(){++refs;}void release(){assert(refs);--refs;}};
 #define OSDynamicCast(type,obj) dynamic_cast<type*>(obj)
+static OSObject pciMatchingDictionary;
 #define OSSafeReleaseNULL(obj) do{if(obj){obj->release();obj=nullptr;}}while(0)
 struct OSString:OSObject {std::string value;const char* getCStringNoCopy(){return value.c_str();}};
 struct OSData:OSObject {std::vector<uint8_t> bytes;const void* getBytesNoCopy(){return bytes.data();}size_t getLength(){return bytes.size();}};
@@ -60,7 +61,7 @@ struct IORegistryEntry:OSObject {
 struct OSIterator {std::vector<IORegistryEntry*> list;size_t pos=0;OSIterator(std::vector<IORegistryEntry*> v):list(v){++iteratorLive;}virtual ~OSIterator(){--iteratorLive;}OSObject* getNextObject(){return pos<list.size()?list[pos++]:nullptr;}void release(){delete this;}};
 constexpr int kIORegistryIterateRecursively=1;
 struct IORegistryIterator:OSIterator {using OSIterator::OSIterator;static IORegistryIterator* iterateOver(IORegistryEntry*,const IORegistryPlane*,int){return iteratorFailure?nullptr:new IORegistryIterator(nodes);}};
-class IOService:public IORegistryEntry {public:bool addressedABI=true;void* metaCast(const char*){return addressedABI?this:nullptr;}static void* serviceMatching(const char*){return nullptr;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
+class IOService:public IORegistryEntry {public:bool addressedABI=true;void* metaCast(const char*){return addressedABI?this:nullptr;}static OSObject* serviceMatching(const char*){pciMatchingDictionary.retain();return &pciMatchingDictionary;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
 class IOACPIPlatformDevice:public IOService {public:
  OSData crs;OSString hid;unsigned status=3,power=0;bool rejectCRS=false;bool amd=false,hasPSC=true;
  int evaluateInteger(const char*,uint32_t* out){*out=power;return hasPSC?0:kIOReturnNotFound;}
@@ -85,7 +86,11 @@ class {cls}:public SPIController {{
  bool active=false;
 public:
  {cls}(){{++liveControllers;}}~{cls}(){{--liveControllers;}}
+ static bool supportsProvider({typ}* p){{return p && {valid};}}
  IOReturn bind({typ}* p,IOService*){{active={valid};return active?0:kIOReturnUnsupported;}}
+ const char* bindFailureReason() const {{return active?"NONE":"INTEL_CONTROLLER_ID_UNSUPPORTED";}}
+ uint32_t initialCapabilities() const {{return 0;}}
+ uint32_t initialStatus() const {{return 0;}}
  size_t maxTransferBytes() const override {{return 262;}}
  IOReturn exchange(const SPIEndpoint&,const uint8_t*,uint8_t*,size_t) override {{return kIOReturnUnsupported;}}
  IOReturn command(const SPIEndpoint& ep,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n) override {{if(!active)return kIOReturnNotReady;if(!n){{++writeTransfers;writes.emplace_back(tx,tx+tn);}}for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[ep.chipSelect]>>(24-8*i)):0;return 0;}}
@@ -283,7 +288,8 @@ struct CustomI2C final : cirrus::transport::I2CController {
   assert(ep.address==0x40&&!ep.tenBit&&tn<=32&&n<=32);++customTransfers;
   if(i2cResult)return i2cResult;
   if(!n)i2cWrites.emplace_back(tx,tx+tn);else i2cReads.emplace_back(tx,tx+tn);
-  for(size_t i=0;i<n;++i)rx[i]=uint8_t(i2cProbeID>>(24-8*i));return 0;
+  for(size_t i=0;i<n;++i)rx[i]=uint8_t(i2cProbeID>>(24-8*i));
+  return 0;
  }
 };
 cirrus::transport::I2CController* createCustomI2C(IOService* provider){
@@ -335,8 +341,9 @@ int main(){
  resources(amp,{{"SPI0",0},{"SPI1",1}});b.hasPSC=false;
  assert(host.bind(&amp,&owner,format)==kIOReturnNotReady&&!liveControllers&&a.refs==1&&b.refs==1);b.hasPSC=true;
  b.amd=false;
- assert(host.bind(&amp,&owner,format)==kIOReturnUnsupported&&!host.bound()&&!liveControllers&&a.refs==1&&b.refs==1);
- assert(!strcmp(host.failure().reason,"AMD_CONTROLLER_HID_UNSUPPORTED")&&host.failure().index==1&&!strcmp(host.failure().source,"SPI1"));b.amd=true;
+ assert(host.bind(&amp,&owner,format)==kIOReturnNotFound&&!host.bound()&&!liveControllers&&a.refs==1&&b.refs==1);
+ assert(!strcmp(host.failure().reason,"PCI_ASSOCIATION_UNAVAILABLE_OR_ACPI_CONTROLLER_UNSUPPORTED"));
+ assert(!strcmp(host.failure().reason,"PCI_ASSOCIATION_UNAVAILABLE_OR_ACPI_CONTROLLER_UNSUPPORTED")&&host.failure().index==1&&!strcmp(host.failure().source,"SPI1"));b.amd=true;
  resources(amp,{{"SPI0",0},{"SPI0",0}});assert(host.bind(&amp,&owner,format)==kIOReturnBadArgument&&!liveControllers);
  assert(!strcmp(host.failure().reason,"DUPLICATE_CHIP_SELECT")&&host.failure().index==1);
  resources(amp,{{"SPI0",0},{"\\_SB.SPI0",0}});assert(host.bind(&amp,&owner,format)==kIOReturnBadArgument&&!liveControllers);
@@ -589,7 +596,7 @@ int main(){
   assert(unsupportedCommunication.mDriverRegistry.add(shipDefinition));if(isIntel)pci.supported=false;else a.amd=false;
   assert(!unsupportedCommunication.setupCommunication(&amp));
   assert(!strcmp(unsupportedCommunication.mAttachment.amplifier,"REGISTERED_NOT_PROBED"));
-  assert(!strcmp(unsupportedCommunication.mAttachment.first.stage,"COMMUNICATION") && unsupportedCommunication.mAttachment.first.result==kIOReturnUnsupported);
+  assert(!strcmp(unsupportedCommunication.mAttachment.first.stage,"COMMUNICATION") && unsupportedCommunication.mAttachment.first.result==(isIntel?kIOReturnUnsupported:kIOReturnNotFound));
   assert(!liveControllers && writeTransfers==writesBefore);pci.supported=true;a.amd=!isIntel;
   CirrusAudioFixup readyI2C;readyI2C.mProvider=&i2cProvider;readyI2C.mPlatformProfile=&i2cProfile;readyI2C.mPlatformSubsystemId=0x12345678;readyI2C.setProperty("Cirrus_CPU_Vendor",cpu);
   assert(readyI2C.mDriverRegistry.add(i2cDefinition));assert(readyI2C.setupCommunication(&i2cProvider) && readyI2C.detectConfiguredI2CAmplifiers()==1 && readyI2C.bindAmplifierDrivers());
@@ -635,6 +642,7 @@ int main(){
  auto mixedBus=descriptor("SPI0",0);mixedBus.insert(mixedBus.end(),i2cCRS.begin(),i2cCRS.end());amp.crs.bytes=mixedBus;
  CirrusAudioFixup mixedResources;assert(!mixedResources.setupCommunication(&amp) && !strcmp(mixedResources.mAttachment.first.reason,"MIXED_I2C_SPI_RESOURCES") && !liveControllers);
  puts("PASS Intel/AMD x I2C/SPI attachment/runtime matrix, unsupported controller/AMP separation, ACPI bus classification and no unsupported AMP writes");
+ assert(pciMatchingDictionary.refs==1);
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;
 }
 ''')

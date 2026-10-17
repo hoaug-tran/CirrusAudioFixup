@@ -35,9 +35,11 @@ class CirrusAudioBootstrap : public IOService {
     bool auditTimerAttached = false;
 
     void auditMatching() {
+        IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap AUDIT_BEGIN sample=%u\n", auditSamples + 1);
         setProperty("Cirrus_Matching_Audit_Sample", uint64_t(++auditSamples), 32);
         // Read the in-kernel catalogue. The userspace GetContents RPC is no
         // longer supported; a missing result must not be reported as zero.
+        IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap CATALOGUE_BEGIN\n");
         auto* matching = OSDictionary::withCapacity(1);
         if (matching) {
             auto* bundle = OSString::withCString("com.hoaugtr.CirrusAudioFixup");
@@ -63,6 +65,8 @@ class CirrusAudioBootstrap : public IOService {
             }
             matching->release();
         }
+        IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap CATALOGUE_END\n");
+        IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap REGISTRY_BEGIN\n");
         auto* acpi = serviceMatching("IOACPIPlatformDevice");
         if (acpi) {
             auto* name = OSString::withCString("CSC3551");
@@ -95,6 +99,8 @@ class CirrusAudioBootstrap : public IOService {
             }
             acpi->release();
         }
+        IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap REGISTRY_END\n");
+        IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap AUDIT_END\n");
     }
     static void auditTick(OSObject* owner, IOTimerEventSource*) {
         auto* self = OSDynamicCast(CirrusAudioBootstrap, owner);
@@ -109,13 +115,18 @@ public:
     bool start(IOService* provider) override {
         if (checkKernelArgument("-cirrusoff"))
             return false;
+#if defined(KERNEL)
+        if (cirrus::support::kDefaultVerboseLogging || checkKernelArgument("-cirrusdbg"))
+            IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap START_BEGIN\n");
+#endif
         if (!IOService::start(provider))
             return false;
 #if defined(KERNEL)
         if (cirrus::support::kDefaultVerboseLogging || checkKernelArgument("-cirrusdbg")) {
             setProperty("Cirrus_Bootstrap_Status", "STARTED");
             setProperty("Cirrus_Build_Configuration", cirrus::support::kBuildConfiguration);
-            auditMatching();
+            // Keep matching/catalogue enumeration out of IOResources start.
+            // The independent timer performs the bounded audit after return.
             auditLoop = IOWorkLoop::workLoop();
             auditTimer = IOTimerEventSource::timerEventSource(this, auditTick);
             if (auditLoop && auditTimer && auditLoop->addEventSource(auditTimer) == kIOReturnSuccess) {
@@ -124,7 +135,7 @@ public:
                 setProperty("Cirrus_Matching_Audit_Timer", "ARMED");
             } else
                 setProperty("Cirrus_Matching_Audit_Timer", "UNAVAILABLE");
-            IOLog("CirrusAudioFixup: bootstrap started; matching evidence retained in IORegistry\n");
+            IOLog("CirrusAudioFixup: BOOT_FLOW bootstrap START_END audit=%s\n", auditTimerAttached ? "DEFERRED" : "UNAVAILABLE");
         }
 #endif
         return true;
@@ -223,6 +234,7 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
     void loaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
         if (index != audioInfo[0].loadIndex)
             return;
+        IOLog("CirrusAudioFixup: BOOT_FLOW HDA_HOOKS_BEGIN\n");
         // These signatures come from IOAudioFamily source and the kernel SDK,
         // rather than private AppleHDA class layouts or guessed vtable offsets.
         KernelPatcher::RouteRequest controlRequest("__ZN14IOAudioControl11updateValueEP8OSObject", updateValue, originalUpdateValue);
@@ -234,22 +246,29 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
             __atomic_store_n(&engineHook, patcher.routeMultiple(index, &engineRequest, 1, address, size), __ATOMIC_RELEASE);
         patcher.clearError();
         IOLog("CirrusAudioFixup: IOAudioFamily event hooks: output=%d engine=%d\n", controlHook, engineHook);
+        IOLog("CirrusAudioFixup: BOOT_FLOW HDA_HOOKS_END\n");
     }
 }
 
 extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup_start(kmod_info_t*, void*) {
     if (checkKernelArgument("-cirrusoff"))
         return KERN_SUCCESS;
+    IOLog("CirrusAudioFixup: BOOT_FLOW MODULE_START_BEGIN\n");
     listenersLock = IOLockAlloc();
-    if (!listenersLock)
+    if (!listenersLock) {
+        IOLog("CirrusAudioFixup: BOOT_FLOW MODULE_START_END lock-allocation-failed\n");
         return KERN_FAILURE;
+    }
+    IOLog("CirrusAudioFixup: BOOT_FLOW LILU_ACCESS_BEGIN\n");
     auto error = lilu.requestAccess();
+    IOLog("CirrusAudioFixup: BOOT_FLOW LILU_ACCESS_END ret=%u\n", unsigned(error));
     if (error == LiluAPI::Error::NoError) {
         registered = lilu.onKextLoad(audioInfo, 1, loaded) == LiluAPI::Error::NoError;
         lilu.releaseAccess();
     }
     if (!registered)
         IOLog("CirrusAudioFixup: event registration unavailable; HDA observation fallback remains active\n");
+    IOLog("CirrusAudioFixup: BOOT_FLOW MODULE_START_END registered=%u\n", unsigned(registered));
     return KERN_SUCCESS;
 }
 

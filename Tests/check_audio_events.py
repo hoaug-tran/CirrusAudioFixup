@@ -16,6 +16,9 @@ metadata = plistlib.loads((ROOT / 'CirrusAudioFixup/Info.plist').read_bytes())
 bootstrap = metadata['IOKitPersonalities']['CirrusAudioBootstrap']
 assert bootstrap['IOProviderClass'] == 'IOResources' and bootstrap['IOResourceMatch'] == 'IOKit'
 assert metadata['OSBundleRequired'] == 'Root'
+bootstrap_start = source[source.index('bool start(IOService* provider)'):source.index('void stop(IOService* provider)')]
+assert 'auditMatching();' not in bootstrap_start, 'Debug catalogue audit must not run synchronously in bootstrap start'
+assert 'self->auditMatching();' in source and 'auditTimer->setTimeoutMS(1000)' in bootstrap_start
 
 fixture = r'''
 #include <cassert>

@@ -9,6 +9,21 @@
 #endif
 
 namespace cirrus::transport::intel {
+void IntelLPSSSPIController::traceStage(IOService* owner, const char* stage, IOReturn result) {
+#if defined(KERNEL)
+    if (gCirrusDebug) {
+        if (owner) {
+            owner->setProperty("Cirrus_Intel_SPI_Stage", stage);
+            owner->setProperty("Cirrus_Intel_SPI_Stage_Return", uint64_t(uint32_t(result)), 32);
+        }
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI %s ret=0x%08X", stage, uint32_t(result));
+    }
+#else
+    (void)owner;
+    (void)stage;
+    (void)result;
+#endif
+}
 
 uint32_t IntelLPSSSPIController::MMIOWindow::read32(uint32_t offset) {
     uint32_t value = *reinterpret_cast<volatile uint32_t*>(base + offset);
@@ -43,17 +58,20 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     mBindFailureReason = "NONE";
     auto reject = [this](const char* reason, IOReturn result) {
         mBindFailureReason = reason;
+        traceStage(mOwner, reason, result);
         return result;
     };
     if (mPCI || mLock)
         return reject("INTEL_CONTROLLER_ALREADY_BOUND", kIOReturnBusy);
     if (!pci || !owner)
         return reject("INTEL_CONTROLLER_ARGUMENT_REJECTED", kIOReturnBadArgument);
+    traceStage(owner, "PCI_IDENTITY_BEGIN");
     LPSSSPIProfile profile{};
     if (!lookupLPSSSPIProfile(pci->configRead16(0), pci->configRead16(2), profile))
         return reject("INTEL_CONTROLLER_ID_UNSUPPORTED", kIOReturnUnsupported);
     mDeviceId = pci->configRead16(2);
     mProfile = profile;
+    traceStage(owner, "PCI_IDENTITY_END");
     mLock = IOLockAlloc();
     if (!mLock)
         return reject("INTEL_CONTROLLER_LOCK_ALLOCATION_FAILED", kIOReturnNoMemory);
@@ -62,6 +80,7 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     mOwner = owner;
     // Refuse controllers already opened by another client; a second SPI
     // owner could corrupt transfers even if our own lock is held.
+    traceStage(owner, "PCI_OPEN_BEGIN");
     if (mPCI->isOpen() || !mPCI->open(mOwner)) {
         mPCI->release();
         mPCI = nullptr;
@@ -70,6 +89,7 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         mLock = nullptr;
         return reject("INTEL_CONTROLLER_EXCLUSIVE_OPEN_FAILED", kIOReturnExclusiveAccess);
     }
+    traceStage(owner, "PCI_OPEN_END");
 #if defined(KERNEL)
     if (gCirrusDebug) {
         uint8_t pmOffset = 0;
@@ -91,7 +111,9 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         shutdown();
         return reject("INTEL_CONTROLLER_MEMORY_ENABLE_FAILED", kIOReturnNotReady);
     }
+    traceStage(owner, "BAR_MAP_BEGIN");
     mMap = mPCI->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0);
+    traceStage(owner, "BAR_MAP_END", mMap ? kIOReturnSuccess : kIOReturnNoResources);
 #if defined(KERNEL)
     if (gCirrusDebug && mMap)
         owner->setProperty("Cirrus_Intel_SPI_BAR0_Length", uint64_t(mMap->getLength()), 64);
@@ -104,7 +126,9 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         return reject(reason, kIOReturnNoResources);
     }
     mWindow.base = reinterpret_cast<volatile uint8_t*>(mMap->getVirtualAddress());
+    traceStage(owner, "MMIO_INITIALIZE_BEGIN");
     IOReturn result = mEngine.initialize(mProfile);
+    traceStage(owner, "MMIO_INITIALIZE_END", result);
     if (result != kIOReturnSuccess) {
         shutdown();
         return reject("INTEL_CONTROLLER_ENGINE_INITIALIZATION_FAILED", result);
@@ -115,11 +139,39 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
 IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
     if (!mLock)
         return kIOReturnNotReady;
+    const uint32_t selectBit = endpoint.chipSelect < 32 ? 1U << endpoint.chipSelect : 0;
+    const bool trace = selectBit && !(mTracedSelects & selectBit);
+    if (trace) {
+        mTracedSelects |= selectBit;
+        traceStage(mOwner, "FIRST_TRANSFER_BEGIN");
+#if defined(KERNEL)
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI endpoint cs=%u mode=%u hz=%u bytes=%lu", endpoint.chipSelect, endpoint.mode,
+                   endpoint.clockHz, length);
+#endif
+    }
+#if defined(KERNEL)
+    // Lifecycle is serialized by the service owner. Never enter AML while
+    // holding the transaction lock, including on read-only identity probes.
+    const auto powerResult = mChipSelects.validatePower();
+    if (powerResult != kIOReturnSuccess) {
+        if (trace)
+            traceStage(mOwner, "FIRST_TRANSFER_POWER_FAILED", powerResult);
+        return powerResult;
+    }
+    if (trace)
+        traceStage(mOwner, "FIRST_TRANSFER_POWER_END");
+#endif
+    if (trace)
+        traceStage(mOwner, "FIRST_TRANSFER_LOCK_BEGIN");
     IOLockLock(mLock);
+#if defined(KERNEL)
+    if (trace)
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI FIRST_TRANSFER_LOCK_END");
+#endif
     IOReturn result = kIOReturnNotReady;
     if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {
 #if defined(KERNEL)
-        result = mChipSelects.validate();
+        result = mChipSelects.validateOutputs();
         if (result == kIOReturnSuccess)
             result = mEngine.exchange(endpoint, tx, rx, length, mChipSelects.select(endpoint.chipSelect));
 #else
@@ -127,6 +179,8 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
 #endif
     }
     IOLockUnlock(mLock);
+    if (trace)
+        traceStage(mOwner, "FIRST_TRANSFER_END", result);
     return result;
 }
 
@@ -146,6 +200,17 @@ void IntelLPSSSPIController::suspend() {
 IOReturn IntelLPSSSPIController::resume() {
     if (!mLock)
         return kIOReturnNotReady;
+    traceStage(mOwner, "RESUME_BEGIN");
+#if defined(KERNEL)
+    const auto powerResult = mChipSelects.validatePower();
+    if (powerResult != kIOReturnSuccess) {
+        IOLockLock(mLock);
+        mEngine.markOffline();
+        IOLockUnlock(mLock);
+        traceStage(mOwner, "RESUME_POWER_FAILED", powerResult);
+        return powerResult;
+    }
+#endif
     IOLockLock(mLock);
     IOReturn result = kIOReturnNotReady;
     if (mWindow.base && pciIsD0()) {
@@ -156,16 +221,20 @@ IOReturn IntelLPSSSPIController::resume() {
             mEngine.markOffline();
 #if defined(KERNEL)
         if (result == kIOReturnSuccess)
-            result = mChipSelects.validate();
+            result = mChipSelects.validateOutputs();
         if (result != kIOReturnSuccess)
             mEngine.markOffline();
 #endif
-    }
+    } else
+        mEngine.markOffline();
     IOLockUnlock(mLock);
+    mTracedSelects = 0;
+    traceStage(mOwner, "RESUME_END", result);
     return result;
 }
 
 void IntelLPSSSPIController::shutdown() {
+    traceStage(mOwner, "SHUTDOWN_BEGIN");
     // The owner must have stopped and joined all callers before this method;
     // freeing a lock while another caller waits on it is not safe.
     if (mLock)
@@ -175,6 +244,10 @@ void IntelLPSSSPIController::shutdown() {
     else
         mEngine.abandon();
     mWindow.base = nullptr;
+    // All borrowers were joined by the owner. Provider close/release may enter
+    // IOKit or firmware: do not call them under our private transaction lock.
+    if (mLock)
+        IOLockUnlock(mLock);
 #if defined(KERNEL)
     mChipSelects.shutdown();
 #endif
@@ -189,10 +262,11 @@ void IntelLPSSSPIController::shutdown() {
         mPCI->release();
         mPCI = nullptr;
     }
+    traceStage(mOwner, "SHUTDOWN_END");
     mOwner = nullptr;
     mMemoryChanged = false;
+    mTracedSelects = 0;
     if (mLock) {
-        IOLockUnlock(mLock);
         IOLockFree(mLock);
         mLock = nullptr;
     }

@@ -22,7 +22,9 @@ public:
     IOReturn bind(IOPCIDevice* pci, IOService* owner);
 #if defined(KERNEL)
     IOReturn configureChipSelects(IOACPIPlatformDevice* controller, IOService* owner) {
-        const auto result = mChipSelects.bind(controller, owner);
+        traceStage(owner, "CHIP_SELECT_BIND_BEGIN");
+        const auto result = mChipSelects.bind(controller, owner, traceStage);
+        traceStage(owner, "CHIP_SELECT_BIND_END", result);
         if (owner) {
             owner->setProperty("Cirrus_Intel_SPI_GPIO_Bind_Return", uint64_t(uint32_t(result)), 32);
             owner->setProperty("Cirrus_Intel_SPI_CS_Map_Count", uint64_t(mChipSelects.count()), 32);
@@ -57,6 +59,7 @@ private:
     };
 
     bool pciIsD0() const;
+    static void traceStage(IOService* owner, const char* stage, IOReturn result = kIOReturnSuccess);
     uint16_t mDeviceId{0};
     LPSSSPIProfile mProfile{};
     IntelLPSSSPIController(const IntelLPSSSPIController&) = delete;
@@ -72,6 +75,7 @@ private:
     IOLock* mLock{nullptr};
     bool mMemoryWasEnabled{false};
     bool mMemoryChanged{false};
+    uint32_t mTracedSelects{0};
     const char* mBindFailureReason{"NONE"};
 };
 

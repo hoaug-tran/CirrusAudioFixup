@@ -35,7 +35,7 @@ struct Window : RegisterWindow {
     std::vector<std::vector<uint8_t>> transactions;
     std::vector<std::pair<uint32_t,uint32_t>> writes;
     unsigned busyTail=0,assertions=0,deassertions=0,failAfter=0;
-    bool selected=false,stuck=false,forceBusy=false,overrun=false,missing=false,staleForever=false;
+    bool selected=false,stuck=false,forceBusy=false,overrun=false,missing=false,staleForever=false,frozenClock=false;
     Window() {
         regs[E::kCapabilities/4]=0x20|(3<<9);
         regs[E::kChipSelect/4]=3;
@@ -92,7 +92,7 @@ struct Window : RegisterWindow {
             }
         }
     }
-    uint64_t nowUs() override { return ++time; }
+    uint64_t nowUs() override { return frozenClock?0:++time; }
     void delayUs(uint32_t v) override { time+=v; }
 };
 struct Controller : SPIController {
@@ -185,6 +185,8 @@ int main() {
     assert(timeout.engine.exchange(ep,tx,rx,32)==kIOReturnTimeout);inactive(timeout.w);
     assert(timeout.w.assertions==1&&timeout.w.deassertions==1);
     timeout.w.stuck=false;assert(timeout.engine.exchange(ep,tx,rx,32)==0);inactive(timeout.w);
+    Controller frozen;frozen.w.stuck=true;frozen.w.frozenClock=true;
+    assert(frozen.engine.exchange(ep,tx,rx,32)==kIOReturnTimeout);inactive(frozen.w);
     Controller errors;errors.w.overrun=true;
     assert(errors.engine.exchange(ep,tx,rx,32)==kIOReturnIOError);inactive(errors.w);
     errors.w.overrun=false;errors.w.staleForever=true;
@@ -202,5 +204,5 @@ int main() {
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
                         '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
                         str(tmp/'test.cpp'),'-o',str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
+        subprocess.run([str(exe)],check=True,timeout=10)
 print('PASS Intel LPSS PIO + CS35L41: native CS, full-duplex FIFO, modes, clock, firmware chunks, errors, timeout and suspend; hardware untested')

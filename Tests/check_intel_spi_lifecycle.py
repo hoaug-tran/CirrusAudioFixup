@@ -56,7 +56,7 @@ struct IOPCIDevice {
     void retain(){++refs;}void release(){--refs;}
     bool isOpen(){return opened;}
     bool open(IOService* c){++opens;if(rejectOpen)return false;opened=true;client=c;return true;}
-    void close(IOService* c){assert(opened&&client==c);opened=false;++closes;}
+    void close(IOService* c){assert(!lockStorage.held);assert(opened&&client==c);opened=false;++closes;}
     uint32_t findPCICapability(uint8_t,uint8_t* out){*out=0x40;return 1;}
     bool setMemoryEnable(bool b){if(!rejectMemory)memory=b;return memory;}
     IOMemoryMap* mapDeviceMemoryWithRegister(uint8_t reg){assert(reg==0x10);return rejectMap?nullptr:&map;}

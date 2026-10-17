@@ -593,7 +593,9 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         return true;
     }
     OSObject* resources = nullptr;
+    CIRRUS_LOG("BOOT_FLOW ACPI_CRS_BEGIN");
     const IOReturn resourceReturn = acpi->evaluateObject("_CRS", &resources);
+    CIRRUS_LOG("BOOT_FLOW ACPI_CRS_END ret=0x%08X", uint32_t(resourceReturn));
     auto* resourceData = OSDynamicCast(OSData, resources);
     cirrus::transport::ACPISPIResources parsed{};
     bool hasI2C = false;
@@ -683,9 +685,11 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     }
     mAttachment.amplifier = "REGISTERED_NOT_PROBED";
     const auto format = *selected->format(cirrus::core::BusTransportType::SPI);
+    CIRRUS_LOG("BOOT_FLOW SPI_BIND_BEGIN");
     IOReturn ret = mNativeSPI.bind(acpi, this, format,
                                    mPlatformProfile->spiControllerFactory ? mPlatformProfile->spiControllerFactory
                                                                           : cirrus::transport::createNativeSPIController);
+    CIRRUS_LOG("BOOT_FLOW SPI_BIND_END ret=0x%08X", uint32_t(ret));
     const IOReturn controllerReturn = ret;
     bool writable = false;
     if (ret == kIOReturnSuccess && selected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard)
@@ -870,7 +874,9 @@ bool CirrusAudioFixup::start(IOService* provider) {
     mProvider = provider;
     logProviderInfo(provider);
     dumpProviderProperties(provider);
+    CIRRUS_LOG("BOOT_FLOW PROFILE_BEGIN");
     resolvePlatformProfile();
+    CIRRUS_LOG("BOOT_FLOW PROFILE_END");
 
     if (!registerAmplifierDrivers()) {
         recordAttachmentFailure("REGISTRATION", "DRIVER_REGISTRY_REJECTED", kIOReturnBadArgument);
@@ -892,7 +898,10 @@ bool CirrusAudioFixup::start(IOService* provider) {
         }
     }
 
-    if (!setupCommunication(provider)) {
+    CIRRUS_LOG("BOOT_FLOW COMMUNICATION_BEGIN");
+    const bool communicationReady = setupCommunication(provider);
+    CIRRUS_LOG("BOOT_FLOW COMMUNICATION_END ready=%u", unsigned(communicationReady));
+    if (!communicationReady) {
 #if defined(KERNEL)
         retainFailedServiceEvidence(this);
         publishMatchingEvent("START_COMMUNICATION_FAILED", provider, kIOReturnError);
@@ -912,19 +921,25 @@ bool CirrusAudioFixup::start(IOService* provider) {
                    mPlatformIdentityDeadlineMs);
         publishAttachmentStatus();
     } else {
+        CIRRUS_LOG("BOOT_FLOW RESET_POLICY_BEGIN");
         bool hardwareResetVerified = performPlatformHardwareReset();
+        CIRRUS_LOG("BOOT_FLOW RESET_POLICY_END verified=%u", unsigned(hardwareResetVerified));
         if (!hardwareResetVerified) {
             CIRRUS_LOG("Platform hardware reset not asserted or verified; continuing with ACPI and I2C soft reset");
         }
 
         IOSleep(15);
+        CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_BEGIN");
         if (mNativeSPI.bound())
             detectNativeSPIAmplifiers();
         else
             detectAmplifiers();
+        CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_END count=%lu", mAmplifierCount);
     }
 
+    CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_BEGIN");
     if (!setupProbeTimer()) {
+        CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=0");
         CIRRUS_ERR("probe timer setup failed");
 #if defined(KERNEL)
         publishMatchingEvent("START_PROBE_TIMER_FAILED", provider, kIOReturnNoMemory);
@@ -934,6 +949,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
         super::stop(provider);
         return false;
     }
+    CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=1");
 
     bool probeEnabled = bootArgEnabled("-cirrusprobe");
     setProperty("CirrusBootArgParsed", probeEnabled ? kOSBooleanTrue : kOSBooleanFalse);
@@ -953,12 +969,16 @@ bool CirrusAudioFixup::start(IOService* provider) {
         }
     }
 
-    if (!setupPowerManagement(provider)) {
+    CIRRUS_LOG("BOOT_FLOW PM_SETUP_BEGIN");
+    const bool powerManagementReady = setupPowerManagement(provider);
+    CIRRUS_LOG("BOOT_FLOW PM_SETUP_END ready=%u", unsigned(powerManagementReady));
+    if (!powerManagementReady) {
         stop(provider);
         return false;
     }
     setupAmplifierInterrupt();
     registerService();
+    CIRRUS_LOG("BOOT_FLOW START_END");
     return true;
 }
 
@@ -1063,11 +1083,13 @@ IOReturn CirrusAudioFixup::lifecycleAction(OSObject* owner, void* operation, voi
 IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device) {
     if (device != this || state > 1)
         return IOPMAckImplied;
+    CIRRUS_LOG("BOOT_FLOW PM_CHANGE_BEGIN state=%lu", state);
     if (mCommandGate) {
         IOReturn result = mCommandGate->runAction(lifecycleAction, reinterpret_cast<void*>(state));
         if (result != kIOReturnSuccess)
             CIRRUS_ERR("PM gate failed: 0x%08X", result);
     }
+    CIRRUS_LOG("BOOT_FLOW PM_CHANGE_END state=%lu", state);
     return IOPMAckImplied;
 }
 
@@ -1676,10 +1698,12 @@ size_t CirrusAudioFixup::detectAmplifiers() {
 }
 
 void CirrusAudioFixup::runReadOnlyProbe() {
-    CIRRUS_LOG("read-only probe begin");
+    CIRRUS_LOG("BOOT_FLOW READ_ONLY_PROBE_BEGIN count=%lu", mAmplifierCount);
 
     for (size_t i = 0; i < mAmplifierCount; ++i) {
+        CIRRUS_LOG("BOOT_FLOW AMP_INSPECT_BEGIN index=%lu", i);
         probeAmplifier(mAmplifiers[i]);
+        CIRRUS_LOG("BOOT_FLOW AMP_INSPECT_END index=%lu", i);
     }
 
     publishStatistics();
@@ -1688,7 +1712,7 @@ void CirrusAudioFixup::runReadOnlyProbe() {
         dumpTraceBuffer();
     }
 
-    CIRRUS_LOG("read-only probe complete");
+    CIRRUS_LOG("BOOT_FLOW READ_ONLY_PROBE_END");
 }
 
 bool CirrusAudioFixup::supportedHdaFormat(uint16_t format) { return cirrus::platform::hda::HDAStreamWatcher::isFormatSupported(format); }

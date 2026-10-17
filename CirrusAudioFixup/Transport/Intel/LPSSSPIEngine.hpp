@@ -164,6 +164,10 @@ public:
             return kIOReturnUnsupported;
         uint64_t budgetUs = wireUs * 2 + 10000;
         uint64_t started = mWindow.nowUs();
+        // The elapsed-time deadline is primary. Independently bound completed
+        // polling iterations as well, so a stalled clock cannot spin forever.
+        // Progress may omit a delay, hence two iterations per transmitted byte.
+        uint64_t pollsRemaining = budgetUs + uint64_t(length) * 2 + 256;
 
         mTouched = true;
         // Deassert function reset only, preserving the independent DMA reset.
@@ -199,6 +203,8 @@ public:
 
         size_t sent = 0, received = 0;
         while (received < length) {
+            if (!pollsRemaining--)
+                return finish(kIOReturnTimeout, inactive, gate, external);
             size_t previousSent = sent, previousReceived = received;
             status = mWindow.read32(kStatus);
             if (status == 0xffffffffU)
@@ -225,6 +231,8 @@ public:
                 mWindow.delayUs(1);
         }
         do {
+            if (!pollsRemaining--)
+                return finish(kIOReturnTimeout, inactive, gate, external);
             status = mWindow.read32(kStatus);
             if (status == 0xffffffffU)
                 return finish(kIOReturnNoDevice, inactive, gate, external, true);

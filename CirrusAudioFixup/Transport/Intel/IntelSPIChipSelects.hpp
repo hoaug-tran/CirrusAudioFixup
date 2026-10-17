@@ -9,16 +9,20 @@ namespace cirrus::transport::intel {
 class IntelSPIChipSelects {
 public:
     static constexpr size_t kCapacity = 16;
+    using Trace = void (*)(IOService*, const char*, IOReturn);
     IntelSPIChipSelects() = default;
     IntelSPIChipSelects(const IntelSPIChipSelects&) = delete;
     IntelSPIChipSelects& operator=(const IntelSPIChipSelects&) = delete;
     ~IntelSPIChipSelects() { shutdown(); }
-    IOReturn bind(IOACPIPlatformDevice* controller, IOService* owner) {
+    IOReturn bind(IOACPIPlatformDevice* controller, IOService* owner, Trace trace = nullptr) {
         if (!controller || !owner || mOwner)
             return kIOReturnBadArgument;
         mOwner = owner;
+        mTrace = trace;
         ACPIDeviceProperties properties;
+        report("CS_DSD_BEGIN");
         auto result = properties.load(controller);
+        report("CS_DSD_END", result);
         if (result != kIOReturnSuccess)
             return result;
         auto* object = properties.get("cs-gpios");
@@ -52,7 +56,9 @@ public:
             if (!source)
                 return kIOReturnNotFound;
             OSObject* crs = nullptr;
+            report("CS_CRS_BEGIN");
             result = source->evaluateObject("_CRS", &crs);
+            report("CS_CRS_END", result);
             auto* bytes = OSDynamicCast(OSData, crs);
             ACPIGPIOResource gpio{};
             const bool decoded = result == kIOReturnSuccess && bytes &&
@@ -71,16 +77,22 @@ public:
         }
         // Verify the complete topology before changing any output. Every
         // bound CS is set inactive; reset pins are never borrowed as CS.
+        report("CS_INACTIVE_BEGIN");
         for (size_t i = 0; i < mCount; ++i)
-            if (mLines[i].gpio && (result = mLines[i].output.setActive(false)) != kIOReturnSuccess)
+            if (mLines[i].gpio && (result = mLines[i].output.setActive(false)) != kIOReturnSuccess) {
+                report("CS_INACTIVE_END", result);
                 return result;
+            }
+        report("CS_INACTIVE_END");
         return kIOReturnSuccess;
     }
     size_t count() const { return mCount; }
     bool usesGPIO(size_t index) const { return index < mCount && mLines[index].gpio; }
     uint16_t pin(size_t index) const { return index < mCount ? mLines[index].pin : 0; }
     SPIChipSelect* select(uint32_t index) { return index < mCount && mLines[index].gpio ? &mLines[index].output : nullptr; }
-    IOReturn validate() const {
+    // Firmware evaluation may sleep or acquire the ACPI interpreter lock.
+    // The owner calls this before taking its SPI transaction lock.
+    IOReturn validatePower() const {
         for (size_t i = 0; i < mCount; ++i) {
             if (!mLines[i].gpio)
                 continue;
@@ -89,11 +101,23 @@ public:
             if ((provider->getDeviceStatus() & 3) != 3 || (provider->validateObject("_PSC") == kIOReturnSuccess &&
                                                            (provider->evaluateInteger("_PSC", &power) != kIOReturnSuccess || power)))
                 return kIOReturnNotReady;
+        }
+        return kIOReturnSuccess;
+    }
+    // Only register reads: safe inside the serialized transaction region.
+    IOReturn validateOutputs() const {
+        for (size_t i = 0; i < mCount; ++i) {
+            if (!mLines[i].gpio)
+                continue;
             const auto result = mLines[i].output.validate();
             if (result != kIOReturnSuccess)
                 return result;
         }
         return kIOReturnSuccess;
+    }
+    IOReturn validate() const {
+        const auto result = validatePower();
+        return result == kIOReturnSuccess ? validateOutputs() : result;
     }
     void shutdown() {
         for (size_t i = mCount; i > 0; --i) {
@@ -108,9 +132,14 @@ public:
         }
         mCount = 0;
         mOwner = nullptr;
+        mTrace = nullptr;
     }
 
 private:
+    void report(const char* stage, IOReturn result = kIOReturnSuccess) const {
+        if (mTrace)
+            mTrace(mOwner, stage, result);
+    }
     struct Line final : IntelGPIOWindow {
         IOACPIPlatformDevice* provider{nullptr};
         IOMemoryMap* map{nullptr};
@@ -157,10 +186,14 @@ private:
             line.opened = true;
         }
         line.pin = pin;
+        report("GPIO_MAP_BEGIN");
         line.map = provider->mapDeviceMemoryWithIndex(pad.memoryIndex);
+        report("GPIO_MAP_END", line.map ? kIOReturnSuccess : kIOReturnNoResources);
         if (!line.map || !line.map->getVirtualAddress())
             return kIOReturnNoResources;
+        report("GPIO_MMIO_VALIDATE_BEGIN");
         result = line.output.bind(line, line.map->getLength(), pad, true);
+        report("GPIO_MMIO_VALIDATE_END", result);
         if (result == kIOReturnSuccess)
             line.gpio = true;
         return result;
@@ -168,5 +201,6 @@ private:
     Line mLines[kCapacity];
     size_t mCount{0};
     IOService* mOwner{nullptr};
+    Trace mTrace{nullptr};
 };
 }

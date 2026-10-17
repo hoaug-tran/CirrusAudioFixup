@@ -13,6 +13,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-gpio-binding-") as directory:
 #include "Transport/Intel/IntelSPIChipSelects.hpp"
 using namespace cirrus::transport;
 using namespace cirrus::transport::intel;
+std::vector<std::string> stages;
+void trace(IOService*,const char* stage,IOReturn){stages.push_back(stage);}
 OSArray* array(std::initializer_list<OSObject*> values){return make<OSArray>(std::vector<OSObject*>(values));}
 OSObject* number(unsigned n){return make<OSNumber>(n);}
 OSArray* properties(OSObject* cs){
@@ -27,7 +29,14 @@ int main(){
  const char path[]="\\_SB.GPI0";crs.insert(crs.end(),path,path+sizeof(path));crs[19]=crs.size();crs[1]=crs.size()-3;crs.insert(crs.end(),{0x79,0});
  amp.values["_CRS"]=make<OSData>(crs);auto* dsd=properties(array({number(0),&amp,number(0),number(0),number(0)}));spi.values["_DSD"]=dsd;
  mem->r[0]=0x940000;mem->r[3]=0x700;const auto pad=0x700+19*16;mem->r[pad/4]=0x84000201;mem->r[0x110/4]=1U<<19;
- {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(0)==nullptr&&selects.select(1));
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,trace)==0&&selects.select(0)==nullptr&&selects.select(1));
+  assert(stages==std::vector<std::string>({"CS_DSD_BEGIN","CS_DSD_END","CS_CRS_BEGIN","CS_CRS_END",
+   "GPIO_MAP_BEGIN","GPIO_MAP_END","GPIO_MMIO_VALIDATE_BEGIN","GPIO_MMIO_VALIDATE_END","CS_INACTIVE_BEGIN","CS_INACTIVE_END"}));
+  const auto firmwareCalls=gpio.firmwareCalls;
+  assert(selects.validateOutputs()==0&&gpio.firmwareCalls==firmwareCalls);
+  gpio.values["_PSC"]=number(3);assert(selects.validateOutputs()==0&&gpio.firmwareCalls==firmwareCalls);
+  assert(selects.validatePower()==kIOReturnNotReady&&gpio.firmwareCalls>firmwareCalls);
+  gpio.values["_PSC"]=number(0);
   assert(selects.bind(&spi,&owner)==kIOReturnBadArgument);
   assert(selects.select(1)->setActive(true)==0&&mem->r[pad/4]==0x84000200);
   assert(selects.select(1)->setActive(false)==0);gpio.values["_PSC"]=number(3);assert(selects.validate()==kIOReturnNotReady);

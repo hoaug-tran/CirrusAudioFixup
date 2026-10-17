@@ -14,7 +14,7 @@ The opt-in ACPI SPI personality resolves `_CRS` sources and binds native
 controllers. Both buses use the shipping registered amplifier runtime for
 bring-up, firmware, group playback and PM. Unknown boards remain read-only;
 writable operation requires exact verified board and firmware bindings.
-The experimental HP 103C89C6 profile uses captured native/GPIO CS wiring, internal boost and matched channel firmware. Native macOS load and physical SPI playback are untested. See [HP evidence and target gates](hp_spi_bringup.md). No writable ASUS profile is supplied.
+Driver-owned ACPI discovery resolves endpoints, channels and internal boost independently of OEM and controller path, with exact resource matching. The 103C89C6 dump is the present integration evidence, not a universal HP profile. Native macOS load and physical SPI playback are untested. See [HP evidence and target gates](hp_spi_bringup.md). No writable ASUS profile is supplied.
 A CPU vendor does not identify a controller or supply board tuning.
 
 | Driver | Source support | Limits / remaining work |
@@ -291,3 +291,5 @@ References:
 - https://developer.apple.com/documentation/kernel/ioservice/1811164-waitformatchingservice
 - https://github.com/torvalds/linux/blob/master/drivers/mfd/intel-lpss-pci.c
 - https://code.googlesource.com/linux/torvalds/linux/+/78273df7f646f8daf2604ec714bea0897cd03aae/sound/pci/hda/cs35l41_hda_property.c
+
+See [the configuration and binary evidence audit](platform_evidence_audit.md) for the separation of driver reuse, firmware properties, resource identity and unimplemented topologies.

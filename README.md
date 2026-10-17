@@ -10,7 +10,7 @@
 
 **Open-source macOS kernel extension with an extensible amplifier runtime over I2C and SPI. The implemented silicon driver is CS35L41.**
 
-Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered drivers for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; An experimental HP ZBook Fury 16 G9 (103C89C6) profile now uses the captured GPIO CS and internal boost configuration; native macOS load and physical SPI playback validation remain pending. ASUS profiles remain pending. See [SPI development status](docs/spi_support.md).
+Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered drivers for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; Driver-owned ACPI property discovery now supplies internal-boost CS35L41 configurations without per-laptop headers or fixed controller paths; matching firmware resources remain required, and the captured 103C89C6 case supplies the current integration evidence; native macOS load and physical SPI playback validation remain pending. ASUS profiles remain pending. See [SPI development status](docs/spi_support.md).
 
 The shared register-map, endpoint, board/firmware identity, lifecycle and driver contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon drivers are registered in `Devices/AmplifierDrivers.hpp`.
 

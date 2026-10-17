@@ -67,7 +67,7 @@ I2C uses an owned VoodooI2C controller adapter and one driver-formatted
 Verified manifests match actual subsystem/HID and endpoint identity before
 writable binding. `-cirrusro` preserves read-only maps, including on verified
 boards. Legacy Lenovo authorization continues to gate its existing reset and
-firmware selection. No shipped writable ASUS/HP profile is inferred.
+firmware selection. No writable profile is inferred from an OEM name. Native SPI can obtain a module-owned configuration from evaluated ACPI properties only when matching resources and supported electrical semantics exist.
 
 A profile can supply exact immutable `firmwareBundles`. A driver may explicitly
 opt into `FirmwareFormat::Deferred` for its existing identity-aware discovery
@@ -477,3 +477,7 @@ warnings; this does not establish physical compatibility across macOS releases.
 A `PlatformProfile` declares its identity source. Existing profiles use audio PCI identity; the exact HP SPI profile selects amplifier ACPI `_SUB`. `BoardConfiguration::useBoardFirmwareIdentity` explicitly opts into that verified board identity for firmware selection. Other profiles retain existing codec-identity behavior. No global subsystem translation is inferred from the CPU, codec model or transport.
 
 Controller modules still own provider resources. Intel LPSS borrows the generic `SPIChipSelect` contract for each external selection, while the Intel module resolves ACPI GPIO resources and retains/maps the documented GPIO family. Unsupported GPIO providers fail binding rather than falling back to a native CS. See [HP SPI bring-up](hp_spi_bringup.md) for the current target validation boundary.
+
+## Firmware-property discovery
+
+`BoardDiscovery` is an optional AMP-registration contract. The host provides evaluated firmware properties and discovered endpoints; the module owns interpretation and the returned configuration. Its lifetime extends through driver teardown. CS35L41 uses this path for internal-boost HDA properties, independent of OEM name and ACPI controller path. Other modules can supply different parsers and configuration schemas. Exact property corrections are silicon-owned data. Filenames are asset provenance, not endpoint identities. See [evidence, implementation and limits](platform_evidence_audit.md).

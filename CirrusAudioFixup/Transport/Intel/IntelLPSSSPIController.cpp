@@ -16,7 +16,8 @@ void IntelLPSSSPIController::traceStage(IOService* owner, const char* stage, IOR
             owner->setProperty("Cirrus_Intel_SPI_Stage", stage);
             owner->setProperty("Cirrus_Intel_SPI_Stage_Return", uint64_t(uint32_t(result)), 32);
         }
-        CIRRUS_LOG("BOOT_FLOW Intel_SPI %s ret=0x%08X", stage, uint32_t(result));
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X",
+                   static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0), stage, uint32_t(result));
     }
 #else
     (void)owner;
@@ -145,7 +146,8 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
         mTracedSelects |= selectBit;
         traceStage(mOwner, "FIRST_TRANSFER_BEGIN");
 #if defined(KERNEL)
-        CIRRUS_LOG("BOOT_FLOW Intel_SPI endpoint cs=%u mode=%u hz=%u bytes=%lu", endpoint.chipSelect, endpoint.mode,
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu endpoint cs=%u mode=%u hz=%u bytes=%lu",
+                   static_cast<unsigned long long>(mOwner ? mOwner->getRegistryEntryID() : 0), endpoint.chipSelect, endpoint.mode,
                    endpoint.clockHz, length);
 #endif
     }
@@ -166,7 +168,8 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
     IOLockLock(mLock);
 #if defined(KERNEL)
     if (trace)
-        CIRRUS_LOG("BOOT_FLOW Intel_SPI FIRST_TRANSFER_LOCK_END");
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu FIRST_TRANSFER_LOCK_END",
+                   static_cast<unsigned long long>(mOwner ? mOwner->getRegistryEntryID() : 0));
 #endif
     IOReturn result = kIOReturnNotReady;
     if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {

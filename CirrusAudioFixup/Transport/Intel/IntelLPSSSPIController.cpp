@@ -16,8 +16,8 @@ void IntelLPSSSPIController::traceStage(IOService* owner, const char* stage, IOR
             owner->setProperty("Cirrus_Intel_SPI_Stage", stage);
             owner->setProperty("Cirrus_Intel_SPI_Stage_Return", uint64_t(uint32_t(result)), 32);
         }
-        CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X",
-                   static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0), stage, uint32_t(result));
+        CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X", static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0),
+                   stage, uint32_t(result));
     }
 #else
     (void)owner;
@@ -46,8 +46,8 @@ void IntelLPSSSPIController::MMIOWindow::stage(const char* phase, IOReturn resul
 #if defined(KERNEL)
     // The engine may run under the transaction lock. Log only; do not acquire
     // registry/property locks or evaluate firmware from this callback.
-    CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X",
-               static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0), phase, uint32_t(result));
+    CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X", static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0),
+               phase, uint32_t(result));
 #else
     (void)phase;
     (void)result;
@@ -64,6 +64,101 @@ bool IntelLPSSSPIController::pciIsD0() const {
     // capability means there is no PCI D-state register to inspect.
     (void)mPCI->findPCICapability(kIOPCIPowerManagementCapability, &offset);
     return !offset || (offset <= 0xf8 && (mPCI->configRead16(static_cast<uint8_t>(offset + 4)) & 3U) == 0);
+}
+
+IOReturn IntelLPSSSPIController::acquirePower() {
+    traceStage(mOwner, "POWER_REQUEST_BEGIN");
+    if (!mPowerClient) {
+        mPowerClient = new IOService;
+        if (!mPowerClient)
+            return kIOReturnNoMemory;
+        if (!mPowerClient->init()) {
+            mPowerClient->release();
+            mPowerClient = nullptr;
+            return kIOReturnNoMemory;
+        }
+        if (!mPowerClient->attach(mPCI)) {
+            mPowerClient->release();
+            mPowerClient = nullptr;
+            return kIOReturnNotReady;
+        }
+        mPowerClient->PMinit();
+        mPowerStates[0].version = 1;
+        mPowerStates[1].version = 1;
+        mPowerStates[1].capabilityFlags = kIOPMPowerOn | kIOPMDeviceUsable;
+        mPowerStates[1].inputPowerRequirement = kIOPMPowerOn;
+        auto result = mPowerClient->registerPowerDriver(mPowerClient, mPowerStates, 2);
+        if (result != kIOReturnSuccess)
+            return result;
+        mPCI->joinPMtree(mPowerClient);
+    }
+    const auto result = mPowerClient->changePowerStateTo(1);
+    traceStage(mOwner, "POWER_REQUEST_END", result);
+    if (result != kIOReturnSuccess)
+        return result;
+    // The request is asynchronous. Poll configuration space only, with a
+    // completed-iteration bound independent of the monotonic clock. Never
+    // evaluate firmware or wait on PM while holding the SPI transaction lock.
+    for (unsigned attempt = 0; attempt < 50; ++attempt) {
+        const bool domainReady = (mPowerClient->currentCapability() & kIOPMDeviceUsable) != 0;
+        if (domainReady && pciIsD0()) {
+            traceStage(mOwner, "POWER_D0_READY");
+            return kIOReturnSuccess;
+        }
+        // Firmware can leave PMCSR in D3hot while IOPCIFamily already reports
+        // its logical On state (observed on the target). A PM vote alone then
+        // need not cause a physical transition. Only after the child has been
+        // granted power, request D0 through the standard PCI PM capability.
+        // Preserve other control bits and never write 1 to W1C PME_Status.
+        if (domainReady && mPCI->configRead16(0) == 0x8086 && mPCI->configRead16(2) == mDeviceId) {
+            uint8_t offset = 0;
+            (void)mPCI->findPCICapability(kIOPCIPowerManagementCapability, &offset);
+            if (offset && offset <= 0xf8) {
+                const auto pmcsrOffset = uint8_t(offset + 4);
+                const uint16_t before = mPCI->configRead16(pmcsrOffset);
+                if (before != 0xffff && (before & 3U)) {
+                    // A D3hot exit may reset configuration unless the function
+                    // advertises No_Soft_Reset. Do not reuse cached BAR resources
+                    // on such hardware without a PCI-family restore contract.
+                    if ((before & 3U) == 3U && !(before & 8U)) {
+                        traceStage(mOwner, "PCI_D0_CONFIG_RESTORE_REQUIRED", kIOReturnNotReady);
+                        return kIOReturnNotReady;
+                    }
+#if defined(KERNEL)
+                    if (gCirrusDebug)
+                        mOwner->setProperty("Cirrus_Intel_SPI_PMCSR_Before_D0", uint64_t(before), 32);
+#endif
+                    traceStage(mOwner, "PCI_D0_TRANSITION_BEGIN");
+                    mPCI->configWrite16(pmcsrOffset, before & uint16_t(~0x8003U));
+                    // D3hot -> D0 requires recovery before BAR/MMIO access.
+                    IOSleep(10);
+#if defined(KERNEL)
+                    if (gCirrusDebug)
+                        mOwner->setProperty("Cirrus_Intel_SPI_PMCSR_After_D0", uint64_t(mPCI->configRead16(pmcsrOffset)), 32);
+#endif
+                    traceStage(mOwner, "PCI_D0_TRANSITION_END", pciIsD0() ? kIOReturnSuccess : kIOReturnNotReady);
+                    // One hardware request per acquisition, not 50 writes to
+                    // a device that refuses the transition.
+                    if (!pciIsD0())
+                        return kIOReturnNotReady;
+                }
+            }
+        }
+        IOSleep(10);
+    }
+    traceStage(mOwner, "POWER_D0_TIMEOUT", kIOReturnTimeout);
+    return kIOReturnTimeout;
+}
+
+void IntelLPSSSPIController::releasePower() {
+    if (!mPowerClient)
+        return;
+    traceStage(mOwner, "POWER_RELEASE_BEGIN");
+    mPowerClient->PMstop();
+    mPowerClient->detach(mPCI);
+    mPowerClient->release();
+    mPowerClient = nullptr;
+    traceStage(mOwner, "POWER_RELEASE_END");
 }
 
 IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
@@ -112,9 +207,10 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         owner->setProperty("Cirrus_Intel_SPI_PCI_Command", uint64_t(mPCI->configRead16(kIOPCIConfigCommand)), 32);
     }
 #endif
-    if (!pciIsD0()) {
+    const auto powerResult = acquirePower();
+    if (powerResult != kIOReturnSuccess) {
         shutdown();
-        return reject("INTEL_CONTROLLER_NOT_D0", kIOReturnNotReady);
+        return reject("INTEL_CONTROLLER_POWER_REQUEST_FAILED", powerResult);
     }
     mMemoryWasEnabled = (mPCI->configRead16(kIOPCIConfigCommand) & 2U) != 0;
     mPCI->setMemoryEnable(true);
@@ -210,12 +306,22 @@ void IntelLPSSSPIController::suspend() {
     else
         mEngine.markOffline();
     IOLockUnlock(mLock);
+    if (mPowerClient)
+        (void)mPowerClient->changePowerStateTo(0);
 }
 
 IOReturn IntelLPSSSPIController::resume() {
     if (!mLock)
         return kIOReturnNotReady;
     traceStage(mOwner, "RESUME_BEGIN");
+    const auto pciPowerResult = acquirePower();
+    if (pciPowerResult != kIOReturnSuccess) {
+        IOLockLock(mLock);
+        mEngine.markOffline();
+        IOLockUnlock(mLock);
+        traceStage(mOwner, "RESUME_PCI_POWER_FAILED", pciPowerResult);
+        return pciPowerResult;
+    }
 #if defined(KERNEL)
     const auto powerResult = mChipSelects.validatePower();
     if (powerResult != kIOReturnSuccess) {
@@ -274,6 +380,7 @@ void IntelLPSSSPIController::shutdown() {
     if (mPCI) {
         if (mMemoryChanged && pciIsD0())
             mPCI->setMemoryEnable(mMemoryWasEnabled);
+        releasePower();
         mPCI->close(mOwner);
         mPCI->release();
         mPCI = nullptr;

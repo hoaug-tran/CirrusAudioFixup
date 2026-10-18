@@ -1,5 +1,5 @@
 // PCI/MMIO owner for profiled Intel LPSS SPI controller families.
-// The enclosing IOService supplies PCI D0 and quiesces clients before teardown.
+// An owned PM child requests PCI power; the enclosing service quiesces clients.
 // No automatic PCI/ACPI matching or amplifier board profile is implied.
 #pragma once
 
@@ -18,7 +18,7 @@ public:
     ~IntelLPSSSPIController() override;
 
     // Borrow owner, retain/open PCI and map BAR0. Caller must have verified
-    // ownership/wiring and arranged PCI D0. No bus mastering/DMA is enabled.
+    // ownership/wiring. PCI D0 is requested and verified before BAR access.
     IOReturn bind(IOPCIDevice* pci, IOService* owner);
 #if defined(KERNEL)
     IOReturn configureChipSelects(IOACPIPlatformDevice* controller, IOService* owner) {
@@ -61,6 +61,8 @@ private:
     };
 
     bool pciIsD0() const;
+    IOReturn acquirePower();
+    void releasePower();
     static void traceStage(IOService* owner, const char* stage, IOReturn result = kIOReturnSuccess);
     uint16_t mDeviceId{0};
     LPSSSPIProfile mProfile{};
@@ -73,6 +75,8 @@ private:
 #endif
     IOPCIDevice* mPCI{nullptr};
     IOService* mOwner{nullptr};
+    IOService* mPowerClient{nullptr};
+    IOPMPowerState mPowerStates[2]{};
     IOMemoryMap* mMap{nullptr};
     IOLock* mLock{nullptr};
     bool mMemoryWasEnabled{false};

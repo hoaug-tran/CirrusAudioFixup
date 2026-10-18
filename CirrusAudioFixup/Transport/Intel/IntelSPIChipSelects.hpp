@@ -15,7 +15,7 @@ public:
     IntelSPIChipSelects(const IntelSPIChipSelects&) = delete;
     IntelSPIChipSelects& operator=(const IntelSPIChipSelects&) = delete;
     ~IntelSPIChipSelects() { shutdown(); }
-    IOReturn bind(IOACPIPlatformDevice* controller, IOService* owner, Trace trace = nullptr) {
+    IOReturn bind(IOACPIPlatformDevice* controller, IOService* owner, Trace trace = nullptr, bool captureReset = false) {
         if (!controller || !owner || mOwner)
             return kIOReturnBadArgument;
         mOwner = owner;
@@ -103,11 +103,15 @@ public:
                 owner->setProperty("Cirrus_SPI_CS_GPIO_Source", gpio.source);
                 owner->setProperty("Cirrus_SPI_CS_GPIO_Pin", uint64_t(gpio.pin), 32);
             }
-            source->release();
-            if (!provider)
+            if (!provider) {
+                source->release();
                 return decoded ? kIOReturnNotFound : kIOReturnUnsupported;
+            }
             result = bindLine(line, provider, gpio.pin);
             provider->release();
+            if (result == kIOReturnSuccess && captureReset)
+                observeReset(source);
+            source->release();
             if (result != kIOReturnSuccess) {
                 publishEvidence();
                 return result;
@@ -193,6 +197,82 @@ public:
     }
 
 private:
+    // Observe only firmware-described reset pads in an already owned/mapped
+    // GPIO community. No new provider opens, mappings, output changes or reset
+    // pulses are permitted by this diagnostic, including in read-only mode.
+    void observeReset(IOACPIPlatformDevice* source) {
+        ACPIDeviceProperties properties;
+        const auto result = properties.load(source);
+        mOwner->setProperty("Cirrus_SPI_Reset_Properties_Return", uint64_t(uint32_t(result)), 32);
+        mOwner->setProperty("Cirrus_SPI_Reset_Properties_Reason", properties.reason());
+        mOwner->setProperty("Cirrus_SPI_Reset_Properties_Source", properties.source());
+        auto* tuples = OSDynamicCast(OSArray, properties.get("reset-gpios"));
+        mOwner->setProperty("Cirrus_SPI_Reset_Status", "PROPERTIES_UNAVAILABLE");
+        if (result != kIOReturnSuccess)
+            return;
+        if (!tuples || !tuples->getCount() || tuples->getCount() % 4 || tuples->getCount() > kCapacity * 4) {
+            mOwner->setProperty("Cirrus_SPI_Reset_Status", "MISSING_OR_INVALID_REFERENCE");
+            return;
+        }
+        for (unsigned i = 0; i < tuples->getCount(); i += 4) {
+            char key[80]{};
+            const auto publish = [&](const char* field, uint32_t value) {
+                snprintf(key, sizeof(key), "Cirrus_SPI_Reset_%u_%s", i / 4, field);
+                mOwner->setProperty(key, uint64_t(value), 32);
+            };
+            auto* resource = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
+            auto* pin = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
+            auto* low = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
+            if (!resource || !pin || !low || resource->unsigned64BitValue() > 0xffff || pin->unsigned64BitValue() > 0xffff ||
+                low->unsigned64BitValue() > 1) {
+                mOwner->setProperty("Cirrus_SPI_Reset_Status", "INVALID_REFERENCE");
+                return;
+            }
+            auto* device = resolveACPIReference(source, tuples->getObject(i));
+            OSObject* crs = nullptr;
+            const auto crsResult = device ? device->evaluateObject("_CRS", &crs) : kIOReturnNotFound;
+            auto* bytes = OSDynamicCast(OSData, crs);
+            ACPIGPIOResource gpio{};
+            const bool decoded = crsResult == kIOReturnSuccess && bytes &&
+                                 parseACPIGPIOResource(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(),
+                                                       resource->unsigned32BitValue(), pin->unsigned32BitValue(), gpio);
+            auto* provider = decoded ? resolveACPIDevice(device, gpio.source) : nullptr;
+            OSSafeReleaseNULL(crs);
+            OSSafeReleaseNULL(device);
+            publish("CRS_Return", uint32_t(crsResult));
+            const char* state = "NO_OWNED_COMMUNITY";
+            if (provider) {
+                publish("Pin", gpio.pin);
+                publish("ActiveLow", low->unsigned32BitValue());
+                for (size_t j = 0; j < mCount; ++j) {
+                    auto& line = mLines[j];
+                    IntelGPIOPad pad{};
+                    if (line.provider != provider || !line.gpio || !lookupIntelGPIOPad(line.identity, gpio.pin, pad) ||
+                        pad.memoryIndex != line.memoryIndex)
+                        continue;
+                    IntelGPIOOutput observer;
+                    const auto observed = observer.bind(line, line.map->getLength(), pad, low->unsigned32BitValue() != 0);
+                    const auto& evidence = observer.evidence();
+                    publish("Return", uint32_t(observed));
+                    publish("Config", evidence.config);
+                    publish("Offset", evidence.offset);
+                    publish("Ownership", evidence.ownership);
+                    publish("LockTx", evidence.lockTx);
+                    state = evidence.reason;
+                    if (observed == kIOReturnSuccess) {
+                        publish("PhysicalLevel", evidence.config & 1U);
+                        publish("LogicalLevel", (evidence.config & 1U) ^ low->unsigned32BitValue());
+                        state = "OBSERVED_WITHOUT_WRITES";
+                    }
+                    break;
+                }
+                provider->release();
+            }
+            snprintf(key, sizeof(key), "Cirrus_SPI_Reset_%u_Status", i / 4);
+            mOwner->setProperty(key, state);
+        }
+        mOwner->setProperty("Cirrus_SPI_Reset_Status", "REFERENCE_SCAN_COMPLETE");
+    }
     void report(const char* stage, IOReturn result = kIOReturnSuccess) const {
         if (mOwner) {
             mOwner->setProperty("Cirrus_Intel_SPI_CS_Stage", stage);
@@ -206,6 +286,8 @@ private:
         IOMemoryMap* map{nullptr};
         IntelGPIOOutput output;
         uint16_t pin{0};
+        uint8_t memoryIndex{0};
+        char identity[16]{};
         bool gpio{false}, opened{false};
         uint32_t read32(uint32_t offset) override {
             const auto value = *reinterpret_cast<volatile uint32_t*>(map->getVirtualAddress() + offset);
@@ -244,6 +326,10 @@ private:
         const char* identity = physical ? physical->getCStringNoCopy() : hid ? hid->getCStringNoCopy() : nullptr;
         mOwner->setProperty("Cirrus_SPI_GPIO_Physical_HID", identity ? identity : "UNAVAILABLE");
         const bool supported = result == kIOReturnSuccess && hid && lookupIntelGPIOPad(identity, pin, pad);
+        if (supported) {
+            snprintf(line.identity, sizeof(line.identity), "%s", identity);
+            line.memoryIndex = pad.memoryIndex;
+        }
         OSSafeReleaseNULL(object);
         const auto status = provider->getDeviceStatus();
         mOwner->setProperty("Cirrus_SPI_GPIO_Device_Status", uint64_t(status), 32);

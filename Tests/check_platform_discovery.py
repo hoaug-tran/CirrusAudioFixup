@@ -13,11 +13,13 @@ with tempfile.TemporaryDirectory(prefix="cirrus-platform-discovery-") as directo
     source = r'''
 #define KERNEL 1
 #include "Fixture.hpp"
+#include "Diagnostics/ACPIObjectEvidence.hpp"
 #include "Platform/PlatformProfile.hpp"
 #include "Platform/AmplifierDriverRegistry.hpp"
 #include "Transport/ACPIPlatformProperties.hpp"
 #include "Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp"
 using namespace cirrus;
+bool gCirrusDebug=true;
 bool resourceAvailable=true;unsigned callbacks=0;
 bool resources(uint16_t,uint16_t,uint32_t){return resourceAvailable;}
 platform::DiscoveredBoard* discover(const platform::BoardDiscoveryContext& context,const char*& reason){
@@ -28,7 +30,7 @@ struct Native {
                                {core::BusTransportType::SPI,"\\_SB.NEW.SPI8",0,false,1,4000000,0}};
  size_t count()const{return 2;}core::BusEndpoint endpoint(size_t i)const{return endpoints[i];}
 };
-class CirrusAudioFixup {
+class CirrusAudioFixup : public IOService {
 public:
  static constexpr size_t kMaxAmplifiers=16;
  Native mNativeSPI;
@@ -36,8 +38,6 @@ public:
  platform::PlatformProfile mDiscoveredProfile{};
  platform::DiscoveredBoard* mDiscoveredBoard=nullptr;
  uint32_t mPlatformSubsystemId=0x103c89c6;bool mPlatformAuthorized=false;
- std::map<std::string,std::string> strings;
- void setProperty(const char* name,const char* value){strings[name]=value;}
  void discoverPlatformConfiguration(IOACPIPlatformDevice*,const platform::AmplifierDriverRegistration&);
  ~CirrusAudioFixup(){delete mDiscoveredBoard;}
 };
@@ -68,6 +68,16 @@ int main(){
   assert(!strcmp(board.amplifiers[0].endpoint.controllerPath,service.mNativeSPI.endpoints[0].controllerPath));
   assert(package->refs==1);
  }
+ // Captured macOS success/NULL requires the AMP adapter as well as SPI/GPIO.
+ amp.dsdNullResult=true;
+ {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
+  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Reason"]=="DSD_EMPTY_RESULT");}
+ auto* version=make<OSArray>(std::vector<OSObject*>{make<OSString>("cirrus,acpi-adapter-version"),make<OSNumber>(1)});
+ entries->v.push_back(version);amp.values["CSDP"]=package;
+ {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
+  assert(service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Source"]=="CSDP");
+  assert(service.strings["Cirrus_Platform_DSD_Status"]=="COMPLETE");}
+ amp.dsdNullResult=false;amp.values.erase("CSDP");entries->v.pop_back();
  {CirrusAudioFixup service;resourceAvailable=false;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&!service.mDiscoveredBoard);
   assert(service.strings["Cirrus_Platform_Discovery"]=="CS35L41_GENERIC_TUNING_UNAVAILABLE");resourceAvailable=true;}

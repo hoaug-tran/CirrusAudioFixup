@@ -8,6 +8,7 @@
 //
 
 #include "CirrusAudioFixup.hpp"
+#include "Diagnostics/ACPIObjectEvidence.hpp"
 #include "Diagnostics/FailureNames.hpp"
 #include "Support/CPUIdentity.hpp"
 #include "Transport/ACPIPlatformProperties.hpp"
@@ -529,6 +530,14 @@ void CirrusAudioFixup::resolvePlatformProfile() {
 void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi, const cirrus::platform::AmplifierDriverRegistration& definition) {
     cirrus::transport::ACPIDeviceProperties properties;
     const IOReturn propertyReturn = properties.load(acpi);
+    setProperty("Cirrus_Platform_Properties_Return", uint64_t(uint32_t(propertyReturn)), 32);
+    setProperty("Cirrus_Platform_Properties_Reason", properties.reason());
+    setProperty("Cirrus_Platform_Properties_Source", properties.source());
+    setProperty("Cirrus_Platform_DSD_Validate_Return", uint64_t(uint32_t(properties.validationReturn())), 32);
+    setProperty("Cirrus_Platform_DSD_Evaluate_Return", uint64_t(uint32_t(properties.evaluationReturn())), 32);
+    setProperty("Cirrus_Platform_DSD_Adapter_Return", uint64_t(uint32_t(properties.adapterReturn())), 32);
+    if (gCirrusDebug)
+        cirrus::diagnostics::ACPIObjectEvidence::publish(this, "Cirrus_Platform_DSD", properties.object());
     const char* reason = "ACPI_PROPERTIES_UNAVAILABLE";
     if (propertyReturn == kIOReturnSuccess && mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI) {
         cirrus::transport::ACPIPlatformProperties source(properties);

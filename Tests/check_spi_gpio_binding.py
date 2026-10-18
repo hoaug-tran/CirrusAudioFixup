@@ -42,6 +42,40 @@ int main(){
   assert(selects.select(1)->setActive(false)==0);gpio.values["_PSC"]=number(3);assert(selects.validate()==kIOReturnNotReady);
   gpio.values["_PSC"]=number(0);assert(selects.validate()==0);}
  assert(!gpio.opened&&gpio.opens==1&&gpio.closes==1&&gpio.refs==1&&mem->refs==1&&dsd->refs==1&&amp.refs==1);
+ // Observe the shared reset reference through the existing exclusive CS map.
+ // Both logical levels must be visible without ever changing the reset pad.
+ auto resetCrs=crs;resetCrs.resize(resetCrs.size()-2);
+ auto resetResource=resetCrs;resetResource[23]=8;
+ resetCrs.insert(resetCrs.end(),resetResource.begin(),resetResource.end());
+ resetCrs.insert(resetCrs.end(),{0x79,0});amp.values["_CRS"]=make<OSData>(resetCrs);
+ auto* ampProperties=properties(array({number(0)}));
+ auto* ampEntries=OSDynamicCast(OSArray,ampProperties->getObject(1));
+ ampEntries->v.push_back(array({make<OSString>("reset-gpios"),array({&amp,number(1),number(0),number(0),&amp,number(1),number(0),number(0)})}));
+ amp.values["_DSD"]=ampProperties;const auto resetPad=0x700+8*16;
+ for(unsigned level:{0U,1U}){
+  mem->r[resetPad/4]=0x84000200|level;
+  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0&&selects.select(1));
+   assert(owner.strings["Cirrus_SPI_Reset_0_Status"]=="OBSERVED_WITHOUT_WRITES");
+   assert(owner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==level);
+   assert(owner.numbers["Cirrus_SPI_Reset_1_LogicalLevel"]==level);
+   assert(mem->r[resetPad/4]==(0x84000200|level));}
+ }
+ // A locked reset pad is reported, never unlocked or driven for diagnosis.
+ mem->r[0x114/4]=1U<<8;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
+  assert(owner.strings["Cirrus_SPI_Reset_0_Status"]=="PAD_TX_LOCKED");}
+ mem->r[0x114/4]=0;
+ auto* resetTuples=OSDynamicCast(OSArray,OSDynamicCast(OSArray,ampEntries->getObject(1))->getObject(1));
+ resetTuples->v[0]=resetTuples->v[4]=make<OSString>("\\_SB.PC00.SPI0.GSPK");
+ resetTuples->v[3]=number(1);
+ ampEntries->v.push_back(array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}));
+ amp.dsdNullResult=true;amp.values["CSDP"]=ampProperties;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
+  assert(owner.strings["Cirrus_SPI_Reset_Properties_Source"]=="CSDP");
+  assert(owner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==1&&owner.numbers["Cirrus_SPI_Reset_0_LogicalLevel"]==0);
+  assert(mem->r[resetPad/4]==0x84000201);}
+ amp.dsdNullResult=false;amp.values.erase("CSDP");
+ amp.values.erase("_DSD");amp.values["_CRS"]=make<OSData>(crs);
  // Validation failures must not be reclassified as an absent/native-only DSD.
  spi.dsdValidation=kIOReturnUnsupported;const auto opensBefore=gpio.opens;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);

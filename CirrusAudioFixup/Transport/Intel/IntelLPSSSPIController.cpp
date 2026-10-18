@@ -407,6 +407,25 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
                 for (size_t i = 0; i < length && i < 32; ++i)
                     snprintf(header + i * 2, 3, "%02x", tx[i]);
             mOwner->setProperty("Cirrus_SPI_Transfer_TX_First32", header);
+            char incoming[65]{}, key[80]{};
+            if (rx && result == kIOReturnSuccess)
+                for (size_t i = 0; i < length && i < 32; ++i)
+                    snprintf(incoming + i * 2, 3, "%02x", rx[i]);
+            mOwner->setProperty("Cirrus_SPI_Transfer_RX_First32", incoming);
+            mOwner->setProperty("Cirrus_SPI_Transfer_RX_Status", !rx                          ? "NOT_REQUESTED"
+                                                                 : result == kIOReturnSuccess ? "COMPLETE"
+                                                                                              : "TRANSFER_FAILED");
+            mOwner->setProperty("Cirrus_SPI_Transfer_Actual_Hz", uint64_t(mEngine.actualClockHz()), 32);
+            // Keep the first frame for each endpoint instead of overwriting
+            // CS0 evidence when CS1 is probed. Failed buffers are never read.
+            if (trace) {
+                snprintf(key, sizeof(key), "Cirrus_SPI_CS_%u_First_TX", endpoint.chipSelect);
+                mOwner->setProperty(key, header);
+                snprintf(key, sizeof(key), "Cirrus_SPI_CS_%u_First_RX", endpoint.chipSelect);
+                mOwner->setProperty(key, incoming);
+                snprintf(key, sizeof(key), "Cirrus_SPI_CS_%u_First_Return", endpoint.chipSelect);
+                mOwner->setProperty(key, uint64_t(uint32_t(result)), 32);
+            }
         }
 #endif
     }

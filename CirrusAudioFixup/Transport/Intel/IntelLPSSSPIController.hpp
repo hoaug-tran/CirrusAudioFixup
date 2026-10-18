@@ -7,6 +7,7 @@
 #include <IOKit/IOService.h>
 #include <IOKit/pci/IOPCIDevice.h>
 #if defined(KERNEL)
+#include "Support/Logging.hpp"
 #include "Transport/Intel/IntelSPIChipSelects.hpp"
 #endif
 
@@ -23,7 +24,7 @@ public:
 #if defined(KERNEL)
     IOReturn configureChipSelects(IOACPIPlatformDevice* controller, IOService* owner) {
         traceStage(owner, "CHIP_SELECT_BIND_BEGIN");
-        const auto result = mChipSelects.bind(controller, owner, traceStage);
+        const auto result = mChipSelects.bind(controller, owner, traceStage, gCirrusDebug);
         traceStage(owner, "CHIP_SELECT_BIND_END", result);
         if (owner) {
             owner->setProperty("Cirrus_Intel_SPI_GPIO_Bind_Return", uint64_t(uint32_t(result)), 32);

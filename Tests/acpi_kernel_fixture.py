@@ -37,16 +37,22 @@ struct OSArray:OSObject {std::vector<OSObject*> v;explicit OSArray(std::vector<O
 struct IORegistryEntry:OSObject {std::string path;static const void* getPlane(const char*){return reinterpret_cast<void*>(1);}
  static IORegistryEntry* getRegistryRoot(){return nullptr;}IORegistryEntry* getParentEntry(const void*){return nullptr;}
  bool getPath(char* out,int* n,const void*){if(path.size()+1>unsigned(*n))return false;strcpy(out,path.c_str());return true;}};
-class IOService:public IORegistryEntry {};
+class IOService:public IORegistryEntry {public:
+ std::map<std::string,std::string> strings;std::map<std::string,uint64_t> numbers;
+ void setProperty(const char* k,const char* v){strings[k]=v;}
+ void setProperty(const char* k,uint64_t v,unsigned){numbers[k]=v;}
+ void setProperty(const char*,OSObject*){}
+};
 inline std::vector<IORegistryEntry*> devices;
 constexpr unsigned kIORegistryIterateRecursively=1;
 struct IORegistryIterator {unsigned i=0;static IORegistryIterator* iterateOver(IORegistryEntry*,const void*,unsigned){return new IORegistryIterator;}
  IORegistryEntry* getNextObject(){return i<devices.size()?devices[i++]:nullptr;}void release(){delete this;}};
 struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t getLength(){return sizeof(r);}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
 class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObject*> values;IOMemoryMap* map=nullptr;bool opened=false;unsigned opens=0,closes=0,firmwareCalls=0;
+ IOReturn dsdValidation=0,dsdEvaluation=0;
  OSObject* metaCast(const char* n)override{return !strcmp(n,"IOACPIPlatformDevice")?this:nullptr;}
- IOReturn validateObject(const char* n){++firmwareCalls;return values.count(n)?0:kIOReturnNotFound;}
- IOReturn evaluateObject(const char* n,OSObject** out){auto i=values.find(n);if(i==values.end())return kIOReturnNotFound;*out=i->second;(*out)->retain();return 0;}
+ IOReturn validateObject(const char* n){++firmwareCalls;if(!strcmp(n,"_DSD")&&dsdValidation)return dsdValidation;return values.count(n)?0:kIOReturnNotFound;}
+ IOReturn evaluateObject(const char* n,OSObject** out){if(!strcmp(n,"_DSD")&&dsdEvaluation)return dsdEvaluation;auto i=values.find(n);if(i==values.end())return kIOReturnNotFound;*out=i->second;(*out)->retain();return 0;}
  IOReturn evaluateInteger(const char* n,uint32_t* out){++firmwareCalls;auto v=OSDynamicCast(OSNumber,values[n]);if(!v)return kIOReturnIOError;*out=v->v;return 0;}
  unsigned getDeviceStatus(){++firmwareCalls;return 15;}bool isOpen(){return opened;}bool open(IOService*){opened=true;++opens;return true;}
  void close(IOService*){assert(opened);opened=false;++closes;}

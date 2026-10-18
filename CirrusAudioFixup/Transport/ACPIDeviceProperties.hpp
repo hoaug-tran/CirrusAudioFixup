@@ -71,40 +71,73 @@ public:
     ACPIDeviceProperties(const ACPIDeviceProperties&) = delete;
     ACPIDeviceProperties& operator=(const ACPIDeviceProperties&) = delete;
     ~ACPIDeviceProperties() { OSSafeReleaseNULL(mObject); }
+    const char* reason() const { return mReason; }
+    IOReturn validationReturn() const { return mValidationReturn; }
+    IOReturn evaluationReturn() const { return mEvaluationReturn; }
+    unsigned failureIndex() const { return mFailureIndex; }
+    OSObject* object() const { return mObject; }
+    static const char* objectType(OSObject* object) {
+        if (!object)
+            return "NONE";
+        if (OSDynamicCast(OSArray, object))
+            return "OSArray";
+        if (OSDynamicCast(OSData, object))
+            return "OSData";
+        if (OSDynamicCast(OSString, object))
+            return "OSString";
+        if (OSDynamicCast(OSNumber, object))
+            return "OSNumber";
+        if (support::acpiDeviceCast(object))
+            return "IOACPIPlatformDevice";
+        return "OTHER";
+    }
     IOReturn load(IOACPIPlatformDevice* device) {
         if (!device || mObject)
-            return kIOReturnBadArgument;
-        if (device->validateObject("_DSD") != kIOReturnSuccess)
+            return fail("INVALID_LOAD_ARGUMENT", kIOReturnBadArgument);
+        mValidationReturn = device->validateObject("_DSD");
+        if (mValidationReturn == kIOReturnNotFound) {
+            mReason = "DSD_ABSENT";
             return kIOReturnSuccess;
-        const auto result = device->evaluateObject("_DSD", &mObject);
+        }
+        // An evaluation/namespace failure is not proof that every CS is native.
+        if (mValidationReturn != kIOReturnSuccess)
+            return fail("DSD_VALIDATION_FAILED", mValidationReturn);
+        mEvaluationReturn = device->evaluateObject("_DSD", &mObject);
+        if (mEvaluationReturn != kIOReturnSuccess)
+            return fail("DSD_EVALUATION_FAILED", mEvaluationReturn);
         auto* root = OSDynamicCast(OSArray, mObject);
-        if (result != kIOReturnSuccess || !root || root->getCount() > 64 || (root->getCount() & 1))
-            return result == kIOReturnSuccess ? kIOReturnUnsupported : result;
+        if (!root)
+            return fail("DSD_ROOT_TYPE", kIOReturnUnsupported);
+        if (root->getCount() > 64 || (root->getCount() & 1))
+            return fail("DSD_ROOT_SIZE", kIOReturnUnsupported);
         static constexpr uint8_t uuid[] = {0x14, 0xd8, 0xff, 0xda, 0xba, 0x6e, 0x8c, 0x4d, 0x8a, 0x91, 0xbc, 0x9b, 0xbf, 0x4a, 0xa3, 0x01};
         for (unsigned i = 0; i < root->getCount(); i += 2) {
+            mFailureIndex = i;
             auto* id = OSDynamicCast(OSData, root->getObject(i));
             if (!id || id->getLength() != sizeof(uuid))
-                return kIOReturnUnsupported;
+                return fail("DSD_UUID_TYPE_OR_SIZE", kIOReturnUnsupported);
             if (memcmp(id->getBytesNoCopy(), uuid, sizeof(uuid)))
                 continue;
             if (mProperties)
-                return kIOReturnUnsupported;
+                return fail("DSD_DUPLICATE_UUID", kIOReturnUnsupported);
             mProperties = OSDynamicCast(OSArray, root->getObject(i + 1));
             if (!mProperties || mProperties->getCount() > 128)
-                return kIOReturnUnsupported;
+                return fail("DSD_PROPERTIES_TYPE_OR_SIZE", kIOReturnUnsupported);
             for (unsigned j = 0; j < mProperties->getCount(); ++j) {
+                mFailureIndex = j;
                 auto* pair = OSDynamicCast(OSArray, mProperties->getObject(j));
                 auto* key = pair && pair->getCount() == 2 ? OSDynamicCast(OSString, pair->getObject(0)) : nullptr;
                 if (!key)
-                    return kIOReturnUnsupported;
+                    return fail("DSD_PROPERTY_PAIR_OR_KEY", kIOReturnUnsupported);
                 for (unsigned k = 0; k < j; ++k) {
                     auto* previous = OSDynamicCast(OSArray, mProperties->getObject(k));
                     auto* previousKey = OSDynamicCast(OSString, previous->getObject(0));
                     if (key->isEqualTo(previousKey))
-                        return kIOReturnUnsupported;
+                        return fail("DSD_DUPLICATE_KEY", kIOReturnUnsupported);
                 }
             }
         }
+        mReason = mProperties ? "DSD_READY" : "DSD_PROPERTIES_UUID_ABSENT";
         return kIOReturnSuccess;
     }
     OSObject* get(const char* name) const {
@@ -118,7 +151,15 @@ public:
     }
 
 private:
+    IOReturn fail(const char* reason, IOReturn result) {
+        mReason = reason;
+        mProperties = nullptr;
+        return result;
+    }
     OSObject* mObject{nullptr};
     OSArray* mProperties{nullptr};
+    const char* mReason{"NOT_LOADED"};
+    IOReturn mValidationReturn{kIOReturnNotReady}, mEvaluationReturn{kIOReturnNotReady};
+    unsigned mFailureIndex{0};
 };
 }

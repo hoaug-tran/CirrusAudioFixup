@@ -42,6 +42,27 @@ int main(){
   assert(selects.select(1)->setActive(false)==0);gpio.values["_PSC"]=number(3);assert(selects.validate()==kIOReturnNotReady);
   gpio.values["_PSC"]=number(0);assert(selects.validate()==0);}
  assert(!gpio.opened&&gpio.opens==1&&gpio.closes==1&&gpio.refs==1&&mem->refs==1&&dsd->refs==1&&amp.refs==1);
+ // Validation failures must not be reclassified as an absent/native-only DSD.
+ spi.dsdValidation=kIOReturnUnsupported;const auto opensBefore=gpio.opens;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="DSD_VALIDATION_FAILED");}
+ spi.dsdValidation=0;spi.dsdEvaluation=kIOReturnUnsupported;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported&&selects.count()==0);
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="DSD_EVALUATION_FAILED");
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Object_Type"]=="NONE");}
+ spi.dsdEvaluation=0;
+ assert(gpio.opens==opensBefore);
+ auto* invalidRoot=make<OSData>(std::vector<uint8_t>{1,2});spi.values["_DSD"]=invalidRoot;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="DSD_ROOT_TYPE");
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Object_Type"]=="OSData");}
+ assert(invalidRoot->refs==1);spi.values["_DSD"]=dsd;
+ auto* duplicate=properties(array({number(0)}));
+ auto* entries=OSDynamicCast(OSArray,duplicate->getObject(1));entries->v.push_back(entries->getObject(0));
+ spi.values["_DSD"]=duplicate;
+ {ACPIDeviceProperties props;assert(props.load(&spi)==kIOReturnUnsupported);
+  assert(!strcmp(props.reason(),"DSD_DUPLICATE_KEY")&&props.get("cs-gpios")==nullptr);}
+ spi.values["_DSD"]=dsd;
  // Namespace string references use the same resolved device as object references.
  spi.values["_DSD"]=properties(array({number(0),make<OSString>("GSPK"),number(0),number(0),number(1)}));
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);}

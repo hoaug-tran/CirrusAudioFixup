@@ -22,16 +22,39 @@ public:
         ACPIDeviceProperties properties;
         report("CS_DSD_BEGIN");
         auto result = properties.load(controller);
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Validate_Return", uint64_t(uint32_t(properties.validationReturn())), 32);
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Evaluate_Return", uint64_t(uint32_t(properties.evaluationReturn())), 32);
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Object_Type", ACPIDeviceProperties::objectType(properties.object()));
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Failure_Index", uint64_t(properties.failureIndex()), 32);
+        // Preserve only bounded shape evidence, not arbitrary firmware objects
+        // or live device references, in the service-failure snapshot.
+        auto* root = OSDynamicCast(OSArray, properties.object());
+        if (root) {
+            owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Root_Count", uint64_t(root->getCount()), 32);
+            if (root->getCount()) {
+                auto* uuid = root->getObject(0);
+                owner->setProperty("Cirrus_Intel_SPI_CS_DSD_UUID_Type", ACPIDeviceProperties::objectType(uuid));
+                auto* bytes = OSDynamicCast(OSData, uuid);
+                if (bytes && bytes->getLength() <= 16)
+                    owner->setProperty("Cirrus_Intel_SPI_CS_DSD_UUID", bytes);
+            }
+        }
         report("CS_DSD_END", result);
         if (result != kIOReturnSuccess)
             return result;
         auto* object = properties.get("cs-gpios");
+        owner->setProperty("Cirrus_Intel_SPI_CS_Value_Type", ACPIDeviceProperties::objectType(object));
         if (!object)
             return kIOReturnSuccess;
         auto* values = OSDynamicCast(OSArray, object);
+        if (values)
+            owner->setProperty("Cirrus_Intel_SPI_CS_Value_Count", uint64_t(values->getCount()), 32);
         if (!values || !values->getCount() || values->getCount() > kCapacity * 4)
             return kIOReturnUnsupported;
         for (unsigned i = 0; i < values->getCount();) {
+            owner->setProperty("Cirrus_Intel_SPI_CS_Value_Index", uint64_t(i), 32);
+            owner->setProperty("Cirrus_Intel_SPI_CS_Entry_Type", ACPIDeviceProperties::objectType(values->getObject(i)));
             if (mCount == kCapacity)
                 return kIOReturnUnsupported;
             auto& line = mLines[mCount++];
@@ -137,6 +160,10 @@ public:
 
 private:
     void report(const char* stage, IOReturn result = kIOReturnSuccess) const {
+        if (mOwner) {
+            mOwner->setProperty("Cirrus_Intel_SPI_CS_Stage", stage);
+            mOwner->setProperty("Cirrus_Intel_SPI_CS_Stage_Return", uint64_t(uint32_t(result)), 32);
+        }
         if (mTrace)
             mTrace(mOwner, stage, result);
     }

@@ -29,7 +29,8 @@ with tempfile.TemporaryDirectory(prefix='cirrus-native-spi-') as directory:
 #include <cstddef>
 #include "Diagnostics/DiagnosticTypes.hpp"
 constexpr int kIOReturnBadArgument=-1,kIOReturnNotReady=-2,kIOReturnNotFound=-3,kIOReturnUnsupported=-4,kIOReturnNoMemory=-5,kIOReturnNotPermitted=-6,kIOReturnTimeout=-7;
-inline void IOSleep(unsigned){}
+inline unsigned fixtureSleptMs=0;
+inline void IOSleep(unsigned ms){fixtureSleptMs+=ms;}
 ''')
  (p/'IOKit/IORegistryEntry.h').write_text(r'''
 #pragma once
@@ -261,6 +262,13 @@ bool rejectNative=false,failNativeResume=false;
 class FixtureNativeSPI final : public cirrus::transport::NativeSPIControllerOwner,public cirrus::transport::SPIController {
  bool active=true;
 public:
+ static inline std::vector<bool> gpioLevels;
+ static inline int gpioPrepareResult=0,gpioWriteResult=0;
+ static inline bool simulateHeldReset=false;
+ IOReturn prepareGPIOGroup(IOACPIPlatformDevice*,const char* property)override{
+  assert(!strcmp(property,"reset-gpios"));return gpioPrepareResult;
+ }
+ IOReturn writeGPIOGroup(bool level)override{gpioLevels.push_back(level);if(!gpioWriteResult)simulateHeldReset=!level;return gpioWriteResult;}
  FixtureNativeSPI(){++nativeCreates;}~FixtureNativeSPI(){++nativeDestroys;}
  cirrus::transport::SPIController& controller()override{return *this;}
  void suspend()override{active=false;++nativeSuspends;}
@@ -269,7 +277,7 @@ public:
  IOReturn exchange(const cirrus::transport::SPIEndpoint&,const uint8_t*,uint8_t*,size_t)override{return kIOReturnUnsupported;}
  IOReturn command(const cirrus::transport::SPIEndpoint& endpoint,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n)override{
   if(!active)return kIOReturnNotReady;
-  if(n)for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[endpoint.chipSelect]>>(24-8*i)):0;
+  if(n)for(size_t i=0;i<n;++i)rx[i]=n==4&&!simulateHeldReset?uint8_t(probeIDs[endpoint.chipSelect]>>(24-8*i)):0;
   else {++writeTransfers;writes.emplace_back(tx,tx+tn);}return 0;
  }
 };
@@ -467,6 +475,34 @@ int main(){
  assert(host.bind(&amp,&owner,format)==0);bindings[1].endpoint.spiMode=1;
  assert(host.configureAuthorized(registry,board,board.identity,"TESTAMP")==kIOReturnNotPermitted);
  assert(!host.registers(0)->write(4,1)&&!host.registers(1)->write(4,1));bindings[1].endpoint.spiMode=0;host.shutdown();
+ // Firmware reset is silicon-owned and cannot execute on discovery/read-only
+ // maps, even if the board/registration is valid. Release follows assertion
+ // failure without erasing the original error.
+ cirrus::platform::FirmwareResetSequence resetContract{"reset-gpios",false,2,2};
+ auto resetD1=d1,resetD2=d2;resetD1.firmwareReset=resetD2.firmwareReset=&resetContract;
+ AmplifierDriverRegistry resetRegistry;assert(resetRegistry.add(resetD1)&&resetRegistry.add(resetD2));
+ for(bool writable:{false,true}){
+  NativeSPIHost resetHost;assert(resetHost.bind(&amp,&owner,format,createCustomSPI)==0);
+  FixtureNativeSPI::gpioLevels.clear();
+  FixtureNativeSPI::simulateHeldReset=true;fixtureSleptMs=0;
+  uint32_t resetIdentity=0;assert(resetHost.registers(0)->read(0,&resetIdentity)&&resetIdentity==0);
+  assert(resetHost.prepareHardware(&amp)==kIOReturnNotPermitted);
+  assert(resetHost.configureAuthorized(resetRegistry,board,board.identity,"TESTAMP",writable)==0);
+  assert(resetHost.prepareHardware(&amp)==(writable?0:kIOReturnNotPermitted));
+  assert(FixtureNativeSPI::gpioLevels==(writable?std::vector<bool>{false,true}:std::vector<bool>{}));
+  assert(fixtureSleptMs==(writable?4U:0U));
+  assert(resetHost.registers(0)->read(0,&resetIdentity));
+  assert(resetIdentity==(writable?probeIDs[resetHost.endpoint(0).spiChipSelect]:0));
+  if(writable){
+   FixtureNativeSPI::gpioLevels.clear();FixtureNativeSPI::gpioPrepareResult=kIOReturnNotPermitted;
+   assert(resetHost.prepareHardware(&amp)==kIOReturnNotPermitted&&FixtureNativeSPI::gpioLevels.empty());
+   FixtureNativeSPI::gpioPrepareResult=0;FixtureNativeSPI::gpioWriteResult=kIOReturnNotReady;
+   assert(resetHost.prepareHardware(&amp)==kIOReturnNotReady&&FixtureNativeSPI::gpioLevels==std::vector<bool>({false,true}));
+   FixtureNativeSPI::gpioWriteResult=0;
+  }
+  resetHost.shutdown();
+  FixtureNativeSPI::simulateHeldReset=false;
+ }
 
  // Registry-only AMP extension through the actual IOService: the two arbitrary
  // IDs have no Core/AmplifierDescriptors entry and different framing. This is

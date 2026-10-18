@@ -12,7 +12,13 @@ class IntelSPIControllerOwner final : public NativeSPIControllerOwner {
 public:
     IOReturn bind(IOPCIDevice* pci, IOService* owner) { return mController.bind(pci, owner); }
 #if defined(KERNEL)
-    IOReturn configureChipSelects(IOACPIPlatformDevice* target, IOService* owner) { return mController.configureChipSelects(target, owner); }
+    IOReturn configureChipSelects(IOACPIPlatformDevice* target, IOService* owner) {
+        return mController.configureChipSelects(target, owner);
+    }
+    IOReturn prepareGPIOGroup(IOACPIPlatformDevice* source, const char* property) override {
+        return mController.prepareGPIOGroup(source, property);
+    }
+    IOReturn writeGPIOGroup(bool level) override { return mController.writeGPIOGroup(level); }
 #endif
     const char* bindFailureReason() const { return mController.bindFailureReason(); }
     uint32_t initialCapabilities() const { return mController.initialCapabilities(); }

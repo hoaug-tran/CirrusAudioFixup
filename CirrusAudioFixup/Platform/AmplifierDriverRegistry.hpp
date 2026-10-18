@@ -25,6 +25,13 @@ struct AmplifierDriverContext {
     const char* platformContract{nullptr};
     AmplifierHost* host{nullptr};
 };
+// Silicon-owned logical GPIO levels and delays; the transport resolves the
+// firmware group and owns its pads. No controller addresses or pins belong here.
+struct FirmwareResetSequence {
+    const char* property;
+    bool assertedLevel;
+    uint32_t assertionMs, settleMs;
+};
 struct AmplifierDriverRegistration {
     const char* name;
     const char* acpiHid;
@@ -43,6 +50,7 @@ struct AmplifierDriverRegistration {
     void (*inspect)(const AmplifierDriverContext&){nullptr};
     bool (*validDebugPhase)(const char*){nullptr};
     DiscoveredBoard* (*discoverBoard)(const BoardDiscoveryContext&, const char*& reason){nullptr};
+    const FirmwareResetSequence* firmwareReset{nullptr};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if (bus == core::BusTransportType::I2C && (transportMask & 1))
             return &i2cFormat;

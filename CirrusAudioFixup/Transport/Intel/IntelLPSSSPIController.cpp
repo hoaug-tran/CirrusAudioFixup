@@ -347,6 +347,27 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     return result;
 }
 
+#if defined(KERNEL)
+IOReturn IntelLPSSSPIController::writeGPIOGroup(bool level) {
+    if (!mLock)
+        return kIOReturnNotReady;
+    const auto power = mChipSelects.validatePower();
+    if (power != kIOReturnSuccess)
+        return power;
+    traceStage(mOwner, level ? "GPIO_GROUP_HIGH_BEGIN" : "GPIO_GROUP_LOW_BEGIN");
+    IOLockLock(mLock);
+    const auto result = mWindow.base && pciIsD0() ? mChipSelects.writeGPIOGroup(level) : kIOReturnNotReady;
+    IOLockUnlock(mLock);
+    mChipSelects.publishGPIOGroupEvidence();
+    traceStage(mOwner, level ? "GPIO_GROUP_HIGH_END" : "GPIO_GROUP_LOW_END", result);
+    if (mOwner) {
+        mOwner->setProperty("Cirrus_SPI_GPIO_Group_Level", uint64_t(level), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Group_Return", uint64_t(uint32_t(result)), 32);
+    }
+    return result;
+}
+#endif
+
 IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
     if (!mLock)
         return kIOReturnNotReady;

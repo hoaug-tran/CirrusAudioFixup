@@ -388,6 +388,18 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
         return true;
     if (!mPlatformAuthorized)
         return false;
+    if (mNativeSPI.bound()) {
+        setProperty("Cirrus_SPI_Reset_Sequence", "BEGIN");
+        const auto result = mNativeSPI.prepareHardware(cirrus::support::acpiDeviceCast(mProvider));
+        setProperty("Cirrus_SPI_Reset_Sequence_Return", uint64_t(uint32_t(result)), 32);
+        setProperty("Cirrus_SPI_Reset_Sequence", result == kIOReturnSuccess ? "COMPLETE" : "FAILED");
+        if (result != kIOReturnSuccess) {
+            recordAttachmentFailure("RESET", mNativeSPI.failure().reason, result);
+            mPlatformAuthorized = false;
+            setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+        }
+        return result == kIOReturnSuccess;
+    }
     const cirrus::platform::ResetControllerQuirk* quirkPtr = mPlatformProfile ? mPlatformProfile->resetQuirk : nullptr;
     if (quirkPtr) {
         const cirrus::platform::ResetControllerQuirk& quirk = *quirkPtr;
@@ -934,6 +946,15 @@ bool CirrusAudioFixup::start(IOService* provider) {
         bool hardwareResetVerified = performPlatformHardwareReset();
         CIRRUS_LOG("BOOT_FLOW RESET_POLICY_END verified=%u", unsigned(hardwareResetVerified));
         if (!hardwareResetVerified) {
+            if (mNativeSPI.bound()) {
+#if defined(KERNEL)
+                retainFailedServiceEvidence(this);
+#endif
+                teardownCommunication();
+                mProvider = nullptr;
+                super::stop(provider);
+                return false;
+            }
             CIRRUS_LOG("Platform hardware reset not asserted or verified; continuing with ACPI and I2C soft reset");
         }
 
@@ -1988,7 +2009,10 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
         publishDriverVerdict();
         return true;
     }
-    performPlatformHardwareReset();
+    if (!performPlatformHardwareReset() && mNativeSPI.bound()) {
+        publishDriverVerdict();
+        return true;
+    }
     IOSleep(15);
     if (mNativeSPI.bound())
         detectNativeSPIAmplifiers();

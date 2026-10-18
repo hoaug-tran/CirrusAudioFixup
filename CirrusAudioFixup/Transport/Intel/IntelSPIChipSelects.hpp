@@ -180,7 +180,121 @@ public:
         const auto result = validatePower();
         return result == kIOReturnSuccess ? validateOutputs() : result;
     }
+    // Prepare every firmware reference before changing any level. Shared pins
+    // are acquired once; a GPIO group cannot borrow a chip-select pad or a
+    // community not already exclusively owned by this controller owner.
+    IOReturn prepareGPIOGroup(IOACPIPlatformDevice* source, const char* property) {
+        clearGPIOGroup();
+        if (!source || !property || !mOwner)
+            return kIOReturnBadArgument;
+        const auto reject = [&](IOReturn result) {
+            clearGPIOGroup();
+            return result;
+        };
+        auto result = validatePower();
+        if (result != kIOReturnSuccess)
+            return result;
+        ACPIDeviceProperties properties;
+        result = properties.load(source);
+        if (result != kIOReturnSuccess)
+            return result;
+        auto* tuples = OSDynamicCast(OSArray, properties.get(property));
+        if (!tuples || !tuples->getCount() || tuples->getCount() % 4 || tuples->getCount() > kCapacity * 4)
+            return kIOReturnUnsupported;
+        for (unsigned i = 0; i < tuples->getCount(); i += 4) {
+            auto* resource = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
+            auto* pin = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
+            auto* low = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
+            if (!resource || !pin || !low || resource->unsigned64BitValue() > 0xffff || pin->unsigned64BitValue() > 0xffff ||
+                low->unsigned64BitValue() > 1)
+                return reject(kIOReturnUnsupported);
+            auto* device = resolveACPIReference(source, tuples->getObject(i));
+            OSObject* crs = nullptr;
+            const auto crsResult = device ? device->evaluateObject("_CRS", &crs) : kIOReturnNotFound;
+            auto* bytes = OSDynamicCast(OSData, crs);
+            ACPIGPIOResource gpio{};
+            const bool decoded = crsResult == kIOReturnSuccess && bytes &&
+                                 parseACPIGPIOResource(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(),
+                                                       resource->unsigned32BitValue(), pin->unsigned32BitValue(), gpio);
+            auto* provider = decoded ? resolveACPIDevice(device, gpio.source) : nullptr;
+            OSSafeReleaseNULL(crs);
+            OSSafeReleaseNULL(device);
+            if (!provider)
+                return reject(kIOReturnUnsupported);
+            Line* mapped = nullptr;
+            IntelGPIOPad pad{};
+            bool collision = false;
+            for (size_t j = 0; j < mCount; ++j) {
+                auto& line = mLines[j];
+                if (line.provider != provider || !line.gpio)
+                    continue;
+                collision |= line.pin == gpio.pin;
+                if (lookupIntelGPIOPad(line.identity, gpio.pin, pad) && pad.memoryIndex == line.memoryIndex)
+                    mapped = &line;
+            }
+            provider->release();
+            if (collision || !mapped)
+                return reject(collision ? kIOReturnNotPermitted : kIOReturnUnsupported);
+            bool duplicate = false;
+            for (size_t j = 0; j < mGPIOCount; ++j)
+                if (mGPIO[j].line->provider == mapped->provider && mGPIO[j].pin == gpio.pin) {
+                    if (mGPIO[j].activeLow != bool(low->unsigned32BitValue()))
+                        return reject(kIOReturnBadArgument);
+                    duplicate = true;
+                }
+            if (duplicate)
+                continue;
+            auto& output = mGPIO[mGPIOCount++];
+            output.line = mapped;
+            output.pin = gpio.pin;
+            output.activeLow = low->unsigned32BitValue() != 0;
+            // Resolve again for the chosen map if another line was visited.
+            if (!lookupIntelGPIOPad(mapped->identity, gpio.pin, pad))
+                return reject(kIOReturnUnsupported);
+            result = output.output.bind(*mapped, mapped->map->getLength(), pad, output.activeLow);
+            mOwner->setProperty("Cirrus_SPI_GPIO_Group_Prepare_Pin", uint64_t(gpio.pin), 32);
+            mOwner->setProperty("Cirrus_SPI_GPIO_Group_Prepare_Return", uint64_t(uint32_t(result)), 32);
+            mOwner->setProperty("Cirrus_SPI_GPIO_Group_Prepare_Reason", output.output.evidence().reason);
+            if (result != kIOReturnSuccess)
+                return reject(result);
+        }
+        mOwner->setProperty("Cirrus_SPI_GPIO_Group_Unique_Pins", uint64_t(mGPIOCount), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Group_Property", property);
+        return kIOReturnSuccess;
+    }
+    void publishGPIOGroupEvidence() const {
+        if (!mOwner)
+            return;
+        for (size_t i = 0; i < mGPIOCount; ++i) {
+            const auto& e = mGPIO[i].output.evidence();
+            char key[80]{};
+            const char* fields[]{"Pin", "Offset", "Config", "Written", "Readback"};
+            const uint32_t values[]{mGPIO[i].pin, e.offset, e.config, e.written, e.readback};
+            for (unsigned j = 0; j < 5; ++j) {
+                snprintf(key, sizeof(key), "Cirrus_SPI_GPIO_Group_%u_%s", unsigned(i), fields[j]);
+                mOwner->setProperty(key, uint64_t(values[j]), 32);
+            }
+            snprintf(key, sizeof(key), "Cirrus_SPI_GPIO_Group_%u_Reason", unsigned(i));
+            mOwner->setProperty(key, e.reason);
+        }
+    }
+    IOReturn writeGPIOGroup(bool logicalLevel) {
+        if (!mGPIOCount)
+            return kIOReturnNotReady;
+        for (size_t i = 0; i < mGPIOCount; ++i) {
+            const auto result = mGPIO[i].output.validate();
+            if (result != kIOReturnSuccess)
+                return result;
+        }
+        for (size_t i = 0; i < mGPIOCount; ++i) {
+            const auto result = mGPIO[i].output.setActive(logicalLevel);
+            if (result != kIOReturnSuccess)
+                return result;
+        }
+        return kIOReturnSuccess;
+    }
     void shutdown() {
+        clearGPIOGroup();
         for (size_t i = mCount; i > 0; --i) {
             auto& line = mLines[i - 1];
             line.output.unbind();
@@ -197,6 +311,11 @@ public:
     }
 
 private:
+    void clearGPIOGroup() {
+        for (size_t i = 0; i < mGPIOCount; ++i)
+            mGPIO[i].output.unbind();
+        mGPIOCount = 0;
+    }
     // Observe only firmware-described reset pads in an already owned/mapped
     // GPIO community. No new provider opens, mappings, output changes or reset
     // pulses are permitted by this diagnostic, including in read-only mode.
@@ -206,6 +325,7 @@ private:
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Return", uint64_t(uint32_t(result)), 32);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Reason", properties.reason());
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Source", properties.source());
+        mOwner->setProperty("Cirrus_SPI_Reset_Observed_When", "CHIP_SELECT_BIND_BEFORE_RESET");
         auto* tuples = OSDynamicCast(OSArray, properties.get("reset-gpios"));
         mOwner->setProperty("Cirrus_SPI_Reset_Status", "PROPERTIES_UNAVAILABLE");
         if (result != kIOReturnSuccess)
@@ -374,6 +494,14 @@ private:
         return result;
     }
     Line mLines[kCapacity];
+    struct GPIOOutput {
+        IntelGPIOOutput output;
+        Line* line{nullptr};
+        uint16_t pin{0};
+        bool activeLow{false};
+    };
+    GPIOOutput mGPIO[kCapacity];
+    size_t mGPIOCount{0};
     size_t mCount{0};
     IOService* mOwner{nullptr};
     Trace mTrace{nullptr};

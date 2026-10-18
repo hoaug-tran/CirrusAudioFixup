@@ -52,6 +52,28 @@ int main(){
  auto* ampEntries=OSDynamicCast(OSArray,ampProperties->getObject(1));
  ampEntries->v.push_back(array({make<OSString>("reset-gpios"),array({&amp,number(1),number(0),number(0),&amp,number(1),number(0),number(0)})}));
  amp.values["_DSD"]=ampProperties;const auto resetPad=0x700+8*16;
+ // Replay the captured held-low shared reset. Preparing the group must not
+ // drive it; the explicit logical low/high sequence releases it once.
+ mem->r[resetPad/4]=0x44000200;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);
+  assert(selects.prepareGPIOGroup(&amp,"reset-gpios")==0);
+  assert(owner.numbers["Cirrus_SPI_GPIO_Group_Unique_Pins"]==1&&mem->r[resetPad/4]==0x44000200);
+  assert(selects.writeGPIOGroup(false)==0&&mem->r[resetPad/4]==0x44000200);
+  assert(selects.writeGPIOGroup(true)==0&&mem->r[resetPad/4]==0x44000201);
+  assert(mem->r[pad/4]==0x84000201);
+  selects.shutdown();assert(selects.writeGPIOGroup(false)==kIOReturnNotReady);}
+ // Reject reset/CS aliases before writing; a locked shared reset must not be
+ // bypassed. A failure preparing the second tuple cannot drive the first.
+ auto* groupTuples=OSDynamicCast(OSArray,OSDynamicCast(OSArray,ampEntries->getObject(1))->getObject(1));
+ groupTuples->v[5]=number(0);
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);
+  assert(selects.prepareGPIOGroup(&amp,"reset-gpios")==kIOReturnNotPermitted);
+  assert(selects.writeGPIOGroup(false)==kIOReturnNotReady&&mem->r[resetPad/4]==0x44000201);}
+ groupTuples->v[5]=number(1);mem->r[0x114/4]=1U<<8;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);
+  assert(selects.prepareGPIOGroup(&amp,"reset-gpios")==kIOReturnNotPermitted);
+  assert(selects.writeGPIOGroup(false)==kIOReturnNotReady&&mem->r[resetPad/4]==0x44000201);}
+ mem->r[0x114/4]=0;
  for(unsigned level:{0U,1U}){
   mem->r[resetPad/4]=0x84000200|level;
   {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0&&selects.select(1));

@@ -22,6 +22,10 @@ public:
     // ownership/wiring. PCI D0 is requested and verified before BAR access.
     IOReturn bind(IOPCIDevice* pci, IOService* owner);
 #if defined(KERNEL)
+    IOReturn prepareGPIOGroup(IOACPIPlatformDevice* source, const char* property) {
+        return mChipSelects.prepareGPIOGroup(source, property);
+    }
+    IOReturn writeGPIOGroup(bool level);
     IOReturn configureChipSelects(IOACPIPlatformDevice* controller, IOService* owner) {
         traceStage(owner, "CHIP_SELECT_BIND_BEGIN");
         const auto result = mChipSelects.bind(controller, owner, traceStage, gCirrusDebug);

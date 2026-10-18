@@ -153,6 +153,7 @@ public:
             return fail("BOARD_AUTHORIZATION_REJECTED", kIOReturnNotPermitted);
         mFailure = {};
         core::RegisterMap* prepared[ACPISPIResources::kMaxEndpoints]{};
+        const platform::FirmwareResetSequence* reset = nullptr;
         IOReturn result = kIOReturnSuccess;
         for (size_t i = 0; i < mCount; ++i) {
             const auto e = endpoint(i);
@@ -171,6 +172,13 @@ public:
                 result = fail("NO_REGISTERED_SPI_DRIVER", kIOReturnUnsupported, i, e.controllerPath, binding->siliconId);
                 break;
             }
+            // A shared firmware group needs one consistent silicon contract
+            // across all endpoints. Reject mixed semantics before any GPIO IO.
+            if (i && reset != definition->firmwareReset) {
+                result = fail("INCONSISTENT_GPIO_RESET_CONTRACT", kIOReturnUnsupported, i);
+                break;
+            }
+            reset = definition->firmwareReset;
             if (!mPorts[i]) {
                 result = fail("REGISTER_FORMAT_UNAVAILABLE", kIOReturnUnsupported, i, e.controllerPath);
                 break;
@@ -191,6 +199,41 @@ public:
             mRegisters[i] = prepared[i];
         }
         mAuthorized = true;
+        mWritable = allowWrites;
+        mResetSequence = reset;
+        return kIOReturnSuccess;
+    }
+    IOReturn prepareHardware(IOACPIPlatformDevice* source) {
+        if (!mAuthorized || !mWritable)
+            return fail("GPIO_RESET_NOT_AUTHORIZED", kIOReturnNotPermitted);
+        if (!mResetSequence)
+            return kIOReturnSuccess;
+        const auto& reset = *mResetSequence;
+        if (!source || !reset.property || !*reset.property || !reset.assertionMs || !reset.settleMs || reset.assertionMs > 100 ||
+            reset.settleMs > 100)
+            return fail("INVALID_GPIO_RESET_CONTRACT", kIOReturnBadArgument);
+        NativeSPIControllerOwner* gpioOwner = nullptr;
+        for (size_t i = 0; i < mControllers; ++i) {
+            const auto result = mOwners[i]->prepareGPIOGroup(source, reset.property);
+            if (result == kIOReturnSuccess) {
+                gpioOwner = mOwners[i];
+                break;
+            }
+            if (result != kIOReturnUnsupported)
+                return fail("GPIO_RESET_PREPARE_FAILED", result, i);
+        }
+        if (!gpioOwner)
+            return fail("GPIO_RESET_PROVIDER_UNSUPPORTED", kIOReturnUnsupported);
+        auto result = gpioOwner->writeGPIOGroup(reset.assertedLevel);
+        if (result == kIOReturnSuccess)
+            IOSleep(reset.assertionMs);
+        // Best-effort release even if assertion failed partway through a group.
+        const auto released = gpioOwner->writeGPIOGroup(!reset.assertedLevel);
+        if (result == kIOReturnSuccess)
+            result = released;
+        if (result != kIOReturnSuccess)
+            return fail("GPIO_RESET_SEQUENCE_FAILED", result);
+        IOSleep(reset.settleMs);
         return kIOReturnSuccess;
     }
     void suspend() {
@@ -227,6 +270,8 @@ public:
         mCount = mControllers = 0;
         mResources = {};
         mAuthorized = false;
+        mWritable = false;
+        mResetSequence = nullptr;
         memset(mPaths, 0, sizeof(mPaths));
         memset(mSlots, 0, sizeof(mSlots));
     }
@@ -394,6 +439,8 @@ private:
     ACPISPIResources mResources{};
     size_t mCount{0}, mControllers{0};
     bool mAuthorized{false};
+    bool mWritable{false};
+    const platform::FirmwareResetSequence* mResetSequence{nullptr};
     IOACPIPlatformDevice* mTargets[ACPISPIResources::kMaxEndpoints]{};
     NativeSPIControllerOwner* mOwners[ACPISPIResources::kMaxEndpoints]{};
     SPIController* mBus[ACPISPIResources::kMaxEndpoints]{};

@@ -16,6 +16,7 @@ public:
     virtual void write32(uint32_t offset, uint32_t value) = 0;
     virtual uint64_t nowUs() = 0;
     virtual void delayUs(uint32_t delay) = 0;
+    virtual void stage(const char*, IOReturn = kIOReturnSuccess) {}
 };
 
 class LPSSSPIEngine {
@@ -53,31 +54,61 @@ public:
         mProfile = profile;
         if (!mProfile.rootClockHz)
             return kIOReturnBadArgument;
+        mWindow.stage("PRIVATE_STATE_BEGIN");
         uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
-        uint32_t status = mWindow.read32(kStatus);
         mInitialCapabilities = caps;
-        mInitialStatus = status;
-        if (caps == 0xffffffffU || status == 0xffffffffU || ((caps >> 4) & 0xf) != 2)
+        if (caps == 0xffffffffU || ((caps >> 4) & 0xf) != 2) {
+            mWindow.stage("PRIVATE_STATE_END", kIOReturnUnsupported);
             return kIOReturnUnsupported;
-        if (status & kBusy)
-            return kIOReturnBusy;
+        }
         uint32_t selectMask = (caps >> 9) & 0xf;
         // Native CS pins are enabled consecutively from CS0. Do not invent
         // GPIO chip selects or silently select a disabled output.
-        if (!selectMask || (selectMask & (selectMask + 1)))
+        if (!selectMask || (selectMask & (selectMask + 1))) {
+            mWindow.stage("PRIVATE_STATE_END", kIOReturnUnsupported);
             return kIOReturnUnsupported;
+        }
         mSelectCount = 0;
         for (uint32_t bits = selectMask; bits; bits >>= 1)
             ++mSelectCount;
-        mSavedControl0 = mWindow.read32(kControl0);
-        mSavedControl1 = mWindow.read32(kControl1);
+        // LPSS private registers remain separate from the clocked SSP block.
+        // Linux intel-lpss prepares reset, then spi-pxa2xx enables its clock
+        // before touching SSP registers. Preserve the independently owned DMA
+        // reset and fractional clock fields; never reset the whole function.
         mSavedSelect = mWindow.read32(kChipSelect);
         mSavedClock = mWindow.read32(kClock);
         mSavedGate = mWindow.read32(kClockGate);
         mSavedReset = mWindow.read32(kReset);
+        if (mSavedSelect == 0xffffffffU || mSavedClock == 0xffffffffU || mSavedGate == 0xffffffffU || mSavedReset == 0xffffffffU) {
+            mWindow.stage("PRIVATE_STATE_END", kIOReturnNoDevice);
+            return kIOReturnNoDevice;
+        }
+        mWindow.stage("PRIVATE_STATE_END");
+        mWindow.stage("FUNCTION_PREPARE_BEGIN");
+        const auto prepared = prepareHardware();
+        mWindow.stage("FUNCTION_PREPARE_END", prepared);
+        if (prepared != kIOReturnSuccess) {
+            restorePrerequisites();
+            return prepared;
+        }
+        mWindow.stage("SSP_CONTEXT_BEGIN");
+        const uint32_t status = mWindow.read32(kStatus);
+        mInitialStatus = status;
+        if (status == 0xffffffffU || (status & kBusy)) {
+            mWindow.stage("SSP_CONTEXT_END", status == 0xffffffffU ? kIOReturnNoDevice : kIOReturnBusy);
+            restorePrerequisites();
+            return status == 0xffffffffU ? kIOReturnNoDevice : kIOReturnBusy;
+        }
+        mSavedControl0 = mWindow.read32(kControl0);
+        mSavedControl1 = mWindow.read32(kControl1);
         mSavedTimeout = mWindow.read32(0x28);
         mSavedProtocol = mWindow.read32(0x2c);
-        // Capture hardware state before any write. DMA remains untouched.
+        if (mSavedControl0 == 0xffffffffU || mSavedControl1 == 0xffffffffU || mSavedTimeout == 0xffffffffU || mSavedProtocol == 0xffffffffU) {
+            mWindow.stage("SSP_CONTEXT_END", kIOReturnNoDevice);
+            restorePrerequisites();
+            return kIOReturnNoDevice;
+        }
+        mWindow.stage("SSP_CONTEXT_END");
         mInitialized = true;
         mOnline = true;
         return kIOReturnSuccess;
@@ -88,7 +119,7 @@ public:
     bool online() const { return mInitialized && mOnline; }
 
     void suspend() {
-        if (online() && mTouched)
+        if (online() && mTouched && hardwareReady())
             quiesce();
         mOnline = false;
     }
@@ -96,15 +127,22 @@ public:
     void markOffline() { mOnline = false; }
     void abandon() {
         mInitialized = mOnline = mTouched = false;
+        mClockChanged = mResetChanged = false;
         mSelectCount = 0;
     }
 
     IOReturn resume() {
         if (!mInitialized)
             return kIOReturnNotReady;
+        mOnline = false;
         uint32_t caps = mProfile.capabilities ? mWindow.read32(kCapabilities) : 0x220;
         if (caps == 0xffffffffU || ((caps >> 4) & 0xf) != 2 || ((caps >> 9) & 0xf) != ((1U << mSelectCount) - 1))
             return kIOReturnUnsupported;
+        mWindow.stage("RESUME_FUNCTION_PREPARE_BEGIN");
+        const auto prepared = prepareHardware();
+        mWindow.stage("RESUME_FUNCTION_PREPARE_END", prepared);
+        if (prepared != kIOReturnSuccess)
+            return prepared;
         mOnline = true;
         return kIOReturnSuccess;
     }
@@ -112,17 +150,16 @@ public:
     // Must run in D0 after clients have stopped. Leave the SSP disabled and
     // CS inactive; restoring an old enabled SSP could restart stale traffic.
     void shutdown() {
-        if (online() && mTouched) {
+        if (online() && mTouched && hardwareReady()) {
             quiesce();
             mWindow.write32(kControl1, mSavedControl1);
             mWindow.write32(0x28, mSavedTimeout);
             mWindow.write32(0x2c, mSavedProtocol);
             mWindow.write32(kControl0, mSavedControl0 & ~kEnabled);
             mWindow.write32(kChipSelect, mSavedSelect | 3U);
-            mWindow.write32(kClock, mSavedClock);
             mWindow.write32(kClockGate, mSavedGate);
-            mWindow.write32(kReset, mSavedReset);
         }
+        restorePrerequisites();
         mInitialized = mOnline = mTouched = false;
     }
 
@@ -132,6 +169,12 @@ public:
         if (!tx || !length || length > kMaxFrameBytes || !endpoint.clockHz || endpoint.mode > 3 ||
             (!external && endpoint.chipSelect >= mSelectCount))
             return kIOReturnBadArgument;
+        // Power/context loss must go through resume. Do not read SSP first,
+        // nor attempt to repair reset/clock in the middle of a transfer.
+        if (!hardwareReady()) {
+            markOffline();
+            return kIOReturnNotReady;
+        }
         uint32_t status = mWindow.read32(kStatus);
         if (status == 0xffffffffU) {
             markOffline();
@@ -170,9 +213,6 @@ public:
         uint64_t pollsRemaining = budgetUs + uint64_t(length) * 2 + 256;
 
         mTouched = true;
-        // Deassert function reset only, preserving the independent DMA reset.
-        mWindow.write32(kReset, mWindow.read32(kReset) | 3U);
-        mWindow.write32(kClock, clock | 1U);
         uint32_t gate = mWindow.read32(kClockGate);
         if (mProfile.forceClockGate)
             mWindow.write32(kClockGate, (gate & ~3U) | 3U);
@@ -248,6 +288,35 @@ public:
     }
 
 private:
+    bool hardwareReady() {
+        const uint32_t reset = mWindow.read32(kReset), clock = mWindow.read32(kClock);
+        return reset != 0xffffffffU && clock != 0xffffffffU && (reset & 3U) == 3U && (clock & 1U);
+    }
+    IOReturn prepareHardware() {
+        const uint32_t reset = mWindow.read32(kReset), clock = mWindow.read32(kClock);
+        if (reset == 0xffffffffU || clock == 0xffffffffU)
+            return kIOReturnNoDevice;
+        if ((reset & 3U) != 3U) {
+            mResetChanged = true;
+            mWindow.write32(kReset, reset | 3U);
+            if ((mWindow.read32(kReset) & 3U) != 3U)
+                return kIOReturnNotReady;
+        }
+        if (!(clock & 1U)) {
+            mClockChanged = true;
+            mWindow.write32(kClock, clock | 1U);
+        }
+        return hardwareReady() ? kIOReturnSuccess : kIOReturnNotReady;
+    }
+    void restorePrerequisites() {
+        if ((mClockChanged || mResetChanged) && mWindow.read32(kClock) != 0xffffffffU && mWindow.read32(kReset) != 0xffffffffU) {
+            if (mClockChanged)
+                mWindow.write32(kClock, mSavedClock);
+            if (mResetChanged)
+                mWindow.write32(kReset, mSavedReset);
+        }
+        mClockChanged = mResetChanged = false;
+    }
     IOReturn drainRx() {
         for (unsigned i = 0; i < 256; ++i) {
             uint32_t status = mWindow.read32(kStatus);
@@ -305,6 +374,7 @@ private:
     LPSSSPIProfile mProfile{LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300};
     RegisterWindow& mWindow;
     bool mInitialized{false}, mOnline{false}, mTouched{false};
+    bool mClockChanged{false}, mResetChanged{false};
     uint32_t mSelectCount{0}, mActualClockHz{0};
     uint32_t mSavedControl0{0}, mSavedControl1{0}, mSavedSelect{0};
     uint32_t mSavedClock{0}, mSavedGate{0}, mSavedReset{0};

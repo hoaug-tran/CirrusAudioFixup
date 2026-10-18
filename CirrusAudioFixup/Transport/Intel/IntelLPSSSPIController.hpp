@@ -52,9 +52,11 @@ private:
     class MMIOWindow final : public RegisterWindow {
     public:
         volatile uint8_t* base{nullptr};
+        IOService* owner{nullptr};
         uint32_t read32(uint32_t offset) override;
         void write32(uint32_t offset, uint32_t value) override;
         uint64_t nowUs() override;
+        void stage(const char*, IOReturn = kIOReturnSuccess) override;
         void delayUs(uint32_t delay) override { IODelay(delay); }
     };
 

@@ -36,6 +36,7 @@ struct Window : RegisterWindow {
     std::vector<std::pair<uint32_t,uint32_t>> writes;
     unsigned busyTail=0,assertions=0,deassertions=0,failAfter=0;
     bool selected=false,stuck=false,forceBusy=false,overrun=false,missing=false,staleForever=false,frozenClock=false;
+    bool guardPower=false,blockReset=false,blockClock=false;
     Window() {
         regs[E::kCapabilities/4]=0x20|(3<<9);
         regs[E::kChipSelect/4]=3;
@@ -44,6 +45,7 @@ struct Window : RegisterWindow {
         regs[E::kReset/4]=7;
     }
     uint32_t read32(uint32_t o) override {
+        if(guardPower&&o<0x200)assert((regs[E::kReset/4]&3)==3&&(regs[E::kClock/4]&1));
         ++time;
         if(o==E::kStatus) {
             if(missing || (failAfter && bytes.size()>=failAfter)) return 0xffffffff;
@@ -58,7 +60,9 @@ struct Window : RegisterWindow {
         return regs[o/4];
     }
     void write32(uint32_t o,uint32_t v) override {
+        if(guardPower&&o<0x200)assert((regs[E::kReset/4]&3)==3&&(regs[E::kClock/4]&1));
         ++time;writes.emplace_back(o,v);
+        if((blockReset&&o==E::kReset)||(blockClock&&o==E::kClock))return;
         if(o==E::kStatus) return;
         if(o==E::kChipSelect) {
             bool next=(v&3)==1;
@@ -106,6 +110,23 @@ void inactive(const Window& w) {
     assert(w.regs[E::kClockGate/4]==0x80);
 }
 int main() {
+    {
+        Window cold;cold.guardPower=true;cold.regs[E::kReset/4]=4;cold.regs[E::kClock/4]=0;
+        E engine(cold);assert(engine.initialize()==0);
+        assert(cold.regs[E::kReset/4]==7&&(cold.regs[E::kClock/4]&1));
+        engine.suspend();cold.regs[E::kReset/4]=4;cold.regs[E::kClock/4]=0;
+        assert(engine.resume()==0&&cold.regs[E::kReset/4]==7&&(cold.regs[E::kClock/4]&1));
+        cold.regs[E::kReset/4]=4;uint8_t tx[10]{},rx[10]{};
+        assert(engine.exchange({0,1000000,0},tx,rx,10)==kIOReturnNotReady&&!engine.online());
+        engine.shutdown();assert(cold.regs[E::kReset/4]==4&&cold.regs[E::kClock/4]==0);
+    }
+    for(bool clockFailure:{false,true}){
+        Window cold;cold.guardPower=true;cold.blockReset=!clockFailure;cold.blockClock=clockFailure;
+        cold.regs[E::kReset/4]=4;cold.regs[E::kClock/4]=0;
+        E engine(cold);assert(engine.initialize()==kIOReturnNotReady&&!engine.online());
+        for(auto entry:cold.writes)assert(entry.first>=0x200); // No SSP access when reset/clock readback failed.
+        assert(cold.regs[E::kReset/4]==4&&cold.regs[E::kClock/4]==0);
+    }
     for (uint16_t id : {uint16_t(0x9d29),uint16_t(0x1ac2),uint16_t(0xa32a),uint16_t(0x51aa),uint16_t(0x7aaa)}) {
         LPSSSPIProfile profile{}; assert(lookupLPSSSPIProfile(0x8086,id,profile));
         Window w; E engine(w); assert(engine.initialize(profile)==0);

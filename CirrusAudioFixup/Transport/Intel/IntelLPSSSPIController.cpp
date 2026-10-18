@@ -42,6 +42,17 @@ uint64_t IntelLPSSSPIController::MMIOWindow::nowUs() {
     absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
     return ns / 1000;
 }
+void IntelLPSSSPIController::MMIOWindow::stage(const char* phase, IOReturn result) {
+#if defined(KERNEL)
+    // The engine may run under the transaction lock. Log only; do not acquire
+    // registry/property locks or evaluate firmware from this callback.
+    CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X",
+               static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0), phase, uint32_t(result));
+#else
+    (void)phase;
+    (void)result;
+#endif
+}
 
 IntelLPSSSPIController::~IntelLPSSSPIController() { shutdown(); }
 
@@ -127,6 +138,7 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         return reject(reason, kIOReturnNoResources);
     }
     mWindow.base = reinterpret_cast<volatile uint8_t*>(mMap->getVirtualAddress());
+    mWindow.owner = owner;
     traceStage(owner, "MMIO_INITIALIZE_BEGIN");
     IOReturn result = mEngine.initialize(mProfile);
     traceStage(owner, "MMIO_INITIALIZE_END", result);
@@ -247,6 +259,7 @@ void IntelLPSSSPIController::shutdown() {
     else
         mEngine.abandon();
     mWindow.base = nullptr;
+    mWindow.owner = nullptr;
     // All borrowers were joined by the owner. Provider close/release may enter
     // IOKit or firmware: do not call them under our private transaction lock.
     if (mLock)

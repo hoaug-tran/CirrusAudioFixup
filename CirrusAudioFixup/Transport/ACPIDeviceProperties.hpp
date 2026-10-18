@@ -98,18 +98,18 @@ public:
         if (!device || mObject)
             return fail("INVALID_LOAD_ARGUMENT", kIOReturnBadArgument);
         mValidationReturn = device->validateObject("_DSD");
-        if (mValidationReturn == kIOReturnNotFound) {
+        // Apple may report generic Error rather than NotFound for a missing
+        // object. Only an explicit, schema-validated adapter can recover that
+        // condition; never reinterpret it as native-only CS wiring.
+        if (mValidationReturn != kIOReturnSuccess) {
             const auto adapter = loadAdapter(device);
-            if (adapter == kIOReturnNotFound) {
+            if (mValidationReturn == kIOReturnNotFound && adapter == kIOReturnNotFound) {
                 mReason = "DSD_ABSENT";
                 return kIOReturnSuccess;
             }
             if (adapter != kIOReturnSuccess)
-                return fail("ADAPTER_EVALUATION_FAILED", adapter);
-        } else {
-            // An evaluation/namespace failure is not proof that every CS is native.
-            if (mValidationReturn != kIOReturnSuccess)
                 return fail("DSD_VALIDATION_FAILED", mValidationReturn);
+        } else {
             mEvaluationReturn = device->evaluateObject("_DSD", &mObject);
             mNativeObjectType = objectType(mObject);
             // Some macOS ACPI conversions discard reference-bearing packages.

@@ -80,6 +80,25 @@ int main(){
   array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}),
   array({make<OSString>("cirrus,gpio-controller-hid"),make<OSString>("INTC1056")})})});
  gpio.values["CSDP"]=identity;
+ // Captured xGwGcq: absent GPIO _DSD validates as generic Error, not NotFound.
+ for(auto error:{kIOReturnError,kIOReturnUnsupported,kIOReturnNotReady,kIOReturnNotFound}){
+  gpio.dsdValidation=error;
+  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
+  assert(owner.strings["Cirrus_SPI_GPIO_Properties_Source"]=="CSDP");
+  assert(owner.numbers["Cirrus_SPI_GPIO_DSD_Validate_Return"]==uint32_t(error));
+ }
+ gpio.dsdValidation=kIOReturnError;gpio.values.erase("CSDP");
+ const auto beforeMissing=gpio.opens;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnError);}
+ assert(gpio.opens==beforeMissing&&!gpio.opened&&gpio.refs==1);
+ gpio.values["CSDP"]=identity;
+ auto* identityEntries=OSDynamicCast(OSArray,identity->getObject(1));
+ auto* identityVersion=OSDynamicCast(OSArray,identityEntries->getObject(0));
+ identityVersion->v[1]=number(2);
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
+ assert(gpio.opens==beforeMissing&&!gpio.opened);
+ identityVersion->v[1]=number(1);
+ gpio.dsdValidation=0;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
  assert(owner.strings["Cirrus_SPI_GPIO_HID"]=="INT3450");
  assert(owner.strings["Cirrus_SPI_GPIO_Physical_HID"]=="INTC1056");

@@ -20,7 +20,7 @@ def install(tmp):
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnUnsupported=-3,kIOReturnNoDevice=-4,kIOReturnIOError=-5,kIOReturnNotPermitted=-6,
-kIOReturnNotFound=-7,kIOReturnExclusiveAccess=-8,kIOReturnNoResources=-9,kIOReturnTimeout=-10;
+kIOReturnNotFound=-7,kIOReturnExclusiveAccess=-8,kIOReturnNoResources=-9,kIOReturnTimeout=-10,kIOReturnError=-11;
 struct OSObject {unsigned refs=1;virtual ~OSObject()=default;virtual OSObject* metaCast(const char*){return nullptr;}
  void retain(){++refs;}void release(){assert(refs>1);--refs;}};
 inline std::vector<std::unique_ptr<OSObject>> arena;

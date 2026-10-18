@@ -53,6 +53,23 @@ private:
     public:
         volatile uint8_t* base{nullptr};
         IOService* owner{nullptr};
+        bool capture{false}, initializing{false};
+        struct Access {
+            uint32_t offset{0}, value{0};
+            bool write{false};
+        };
+        Access accesses[64]{};
+        uint64_t accessCount{0};
+        const char* lastPhase{"NONE"};
+        const char* firstFailedPhase{nullptr};
+        IOReturn firstPhaseReturn{kIOReturnSuccess};
+        void record(uint32_t offset, uint32_t value, bool write) {
+            if (!capture)
+                return;
+            accesses[accessCount % 64] = {offset, value, write};
+            ++accessCount;
+        }
+        void publish() const;
         uint32_t read32(uint32_t offset) override;
         void write32(uint32_t offset, uint32_t value) override;
         uint64_t nowUs() override;

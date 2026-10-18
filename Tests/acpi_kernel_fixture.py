@@ -3,7 +3,7 @@
 def install(tmp):
     for name in ("IOKit", "IOKit/acpi", "IOKit/pci", "libkern/c++"):
         (tmp / name).mkdir(parents=True, exist_ok=True)
-    for name in ("IOKit/IOLib.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
+    for name in ("IOKit/IOLib.h", "IOKit/IOService.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
                  "IOKit/pci/IOPCIDevice.h", "libkern/c++/OSArray.h", "libkern/c++/OSData.h",
                  "libkern/c++/OSNumber.h", "libkern/c++/OSString.h"):
         (tmp / name).write_text('#pragma once\n#include "Fixture.hpp"\n')
@@ -12,6 +12,7 @@ def install(tmp):
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <string>
@@ -50,9 +51,10 @@ struct IORegistryIterator {unsigned i=0;static IORegistryIterator* iterateOver(I
 struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t getLength(){return sizeof(r);}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
 class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObject*> values;IOMemoryMap* map=nullptr;bool opened=false;unsigned opens=0,closes=0,firmwareCalls=0;
  IOReturn dsdValidation=0,dsdEvaluation=0;
+ bool dsdNullResult=false;
  OSObject* metaCast(const char* n)override{return !strcmp(n,"IOACPIPlatformDevice")?this:nullptr;}
  IOReturn validateObject(const char* n){++firmwareCalls;if(!strcmp(n,"_DSD")&&dsdValidation)return dsdValidation;return values.count(n)?0:kIOReturnNotFound;}
- IOReturn evaluateObject(const char* n,OSObject** out){if(!strcmp(n,"_DSD")&&dsdEvaluation)return dsdEvaluation;auto i=values.find(n);if(i==values.end())return kIOReturnNotFound;*out=i->second;(*out)->retain();return 0;}
+ IOReturn evaluateObject(const char* n,OSObject** out){if(!strcmp(n,"_DSD")){if(dsdEvaluation)return dsdEvaluation;if(dsdNullResult){*out=nullptr;return 0;}}auto i=values.find(n);if(i==values.end())return kIOReturnNotFound;*out=i->second;(*out)->retain();return 0;}
  IOReturn evaluateInteger(const char* n,uint32_t* out){++firmwareCalls;auto v=OSDynamicCast(OSNumber,values[n]);if(!v)return kIOReturnIOError;*out=v->v;return 0;}
  unsigned getDeviceStatus(){++firmwareCalls;return 15;}bool isOpen(){return opened;}bool open(IOService*){opened=true;++opens;return true;}
  void close(IOService*){assert(opened);opened=false;++closes;}

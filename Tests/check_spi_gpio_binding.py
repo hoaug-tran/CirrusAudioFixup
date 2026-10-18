@@ -63,6 +63,51 @@ int main(){
  {ACPIDeviceProperties props;assert(props.load(&spi)==kIOReturnUnsupported);
   assert(!strcmp(props.reason(),"DSD_DUPLICATE_KEY")&&props.get("cs-gpios")==nullptr);}
  spi.values["_DSD"]=dsd;
+ // Captured macOS behavior: _DSD evaluates successfully but returns NULL.
+ // The explicit data-only adapter preserves references as namespace strings.
+ auto* bridge=properties(array({number(0),make<OSString>("\\_SB.PC00.SPI0.GSPK"),number(0),number(0),number(0)}));
+ auto* bridgeEntries=OSDynamicCast(OSArray,bridge->getObject(1));
+ bridgeEntries->v.push_back(array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}));
+ spi.dsdNullResult=true;spi.values["CSDP"]=bridge;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
+ assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Source"]=="CSDP");
+ assert(owner.strings["Cirrus_SPI_DSD_Status"]=="COMPLETE");
+ // A changed compatibility HID does not select a physical register layout.
+ // Only explicit versioned metadata can preserve the original identity.
+ gpio.values["_HID"]=make<OSString>("INT3450");
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
+ auto* identity=array({dsd->getObject(0),array({
+  array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}),
+  array({make<OSString>("cirrus,gpio-controller-hid"),make<OSString>("INTC1056")})})});
+ gpio.values["CSDP"]=identity;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
+ assert(owner.strings["Cirrus_SPI_GPIO_HID"]=="INT3450");
+ assert(owner.strings["Cirrus_SPI_GPIO_Physical_HID"]=="INTC1056");
+ assert(owner.numbers["Cirrus_SPI_GPIO_1_Revision"]==0x940000);
+ // No fixed controller or amplifier namespace is required by the adapter.
+ spi.path="IOACPIPlane:/_SB/NEW/SPI8";amp.path=spi.path+"/AMPS";
+ auto* cs=OSDynamicCast(OSArray,OSDynamicCast(OSArray,bridgeEntries->getObject(0))->getObject(1));
+ cs->v[1]=make<OSString>("\\_SB.NEW.SPI8.AMPS");
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);}
+ spi.path="IOACPIPlane:/_SB/PC00/SPI0";amp.path=spi.path+"/GSPK";
+ cs->v[1]=make<OSString>("\\_SB.PC00.SPI0.GSPK");
+ auto* version=OSDynamicCast(OSArray,bridgeEntries->getObject(1));version->v[1]=number(2);
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="ADAPTER_VERSION_UNSUPPORTED");}
+ version->v[1]=number(1);
+ spi.dsdEvaluation=kIOReturnUnsupported;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);}
+ spi.dsdEvaluation=0;
+ // A malformed native object is rejected, never hidden by the adapter.
+ spi.dsdNullResult=false;spi.values["_DSD"]=invalidRoot;
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
+ spi.values["_DSD"]=dsd;
+ gpio.values.erase("CSDP");gpio.values["_HID"]=make<OSString>("INTC1056");
+ spi.dsdNullResult=false;spi.values.erase("CSDP");
+ // Package cycles/deep/oversized payloads cannot make diagnostic traversal loop.
+ auto* cycle=array({});cycle->v.push_back(cycle);
+ cirrus::diagnostics::ACPIObjectEvidence::publish(&owner,"Cirrus_Test",cycle);
+ assert(owner.strings["Cirrus_Test_Status"]=="PARTIAL_LIMIT"&&owner.numbers["Cirrus_Test_Nodes"]<=256);
  // Namespace string references use the same resolved device as object references.
  spi.values["_DSD"]=properties(array({number(0),make<OSString>("GSPK"),number(0),number(0),number(1)}));
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);}

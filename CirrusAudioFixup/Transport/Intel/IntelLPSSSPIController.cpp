@@ -15,6 +15,23 @@ void IntelLPSSSPIController::traceStage(IOService* owner, const char* stage, IOR
         if (owner) {
             owner->setProperty("Cirrus_Intel_SPI_Stage", stage);
             owner->setProperty("Cirrus_Intel_SPI_Stage_Return", uint64_t(uint32_t(result)), 32);
+            auto* count = OSDynamicCast(OSNumber, owner->getProperty("Cirrus_SPI_Boot_Event_Count"));
+            const unsigned index = count ? count->unsigned32BitValue() : 0;
+            if (index < 128) {
+                char key[80]{}, value[192]{};
+                uint64_t ns = 0;
+                absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
+                snprintf(key, sizeof(key), "Cirrus_SPI_Boot_Event_%03u", index);
+                snprintf(value, sizeof(value), "uptime_us=%llu stage=%s ret=0x%08x", static_cast<unsigned long long>(ns / 1000), stage,
+                         uint32_t(result));
+                owner->setProperty(key, value);
+                owner->setProperty("Cirrus_SPI_Boot_Event_Count", uint64_t(index + 1), 32);
+            } else
+                owner->setProperty("Cirrus_SPI_Boot_Event_Status", "PARTIAL_LIMIT");
+            if (result != kIOReturnSuccess && !owner->getProperty("Cirrus_SPI_First_Controller_Error")) {
+                owner->setProperty("Cirrus_SPI_First_Controller_Error", stage);
+                owner->setProperty("Cirrus_SPI_First_Controller_Return", uint64_t(uint32_t(result)), 32);
+            }
         }
         CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu %s ret=0x%08X", static_cast<unsigned long long>(owner ? owner->getRegistryEntryID() : 0),
                    stage, uint32_t(result));
@@ -27,14 +44,57 @@ void IntelLPSSSPIController::traceStage(IOService* owner, const char* stage, IOR
 }
 
 uint32_t IntelLPSSSPIController::MMIOWindow::read32(uint32_t offset) {
+#if defined(KERNEL)
+    if (initializing && capture)
+        CIRRUS_LOG("BOOT_FLOW SPI_MMIO_READ_BEGIN offset=0x%03x", offset);
+#endif
     uint32_t value = *reinterpret_cast<volatile uint32_t*>(base + offset);
     OSSynchronizeIO();
+    record(offset, value, false);
+#if defined(KERNEL)
+    if (initializing && capture)
+        CIRRUS_LOG("BOOT_FLOW SPI_MMIO_READ_END offset=0x%03x value=0x%08x", offset, value);
+#endif
     return value;
 }
 
 void IntelLPSSSPIController::MMIOWindow::write32(uint32_t offset, uint32_t value) {
+#if defined(KERNEL)
+    if (initializing && capture)
+        CIRRUS_LOG("BOOT_FLOW SPI_MMIO_WRITE_BEGIN offset=0x%03x value=0x%08x", offset, value);
+#endif
     *reinterpret_cast<volatile uint32_t*>(base + offset) = value;
     OSSynchronizeIO();
+    record(offset, value, true);
+#if defined(KERNEL)
+    if (initializing && capture)
+        CIRRUS_LOG("BOOT_FLOW SPI_MMIO_WRITE_END offset=0x%03x", offset);
+#endif
+}
+
+void IntelLPSSSPIController::MMIOWindow::publish() const {
+#if defined(KERNEL)
+    if (!capture || !owner)
+        return;
+    const uint32_t count = accessCount < 64 ? uint32_t(accessCount) : 64;
+    owner->setProperty("Cirrus_SPI_MMIO_Total", accessCount, 64);
+    owner->setProperty("Cirrus_SPI_MMIO_Retained", uint64_t(count), 32);
+    owner->setProperty("Cirrus_SPI_MMIO_Status", accessCount > 64 ? "LAST_64" : "COMPLETE");
+    owner->setProperty("Cirrus_SPI_Engine_Last_Phase", lastPhase);
+    if (firstFailedPhase) {
+        owner->setProperty("Cirrus_SPI_Engine_First_Error", firstFailedPhase);
+        owner->setProperty("Cirrus_SPI_Engine_First_Return", uint64_t(uint32_t(firstPhaseReturn)), 32);
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint64_t sequence = accessCount - count + i;
+        const auto& entry = accesses[sequence % 64];
+        char key[80]{}, value[128]{};
+        snprintf(key, sizeof(key), "Cirrus_SPI_MMIO_%02u", i);
+        snprintf(value, sizeof(value), "seq=%llu %s offset=0x%03x value=0x%08x", static_cast<unsigned long long>(sequence),
+                 entry.write ? "WRITE" : "READ", entry.offset, entry.value);
+        owner->setProperty(key, value);
+    }
+#endif
 }
 
 uint64_t IntelLPSSSPIController::MMIOWindow::nowUs() {
@@ -43,6 +103,11 @@ uint64_t IntelLPSSSPIController::MMIOWindow::nowUs() {
     return ns / 1000;
 }
 void IntelLPSSSPIController::MMIOWindow::stage(const char* phase, IOReturn result) {
+    lastPhase = phase;
+    if (result != kIOReturnSuccess && !firstFailedPhase) {
+        firstFailedPhase = phase;
+        firstPhaseReturn = result;
+    }
 #if defined(KERNEL)
     // The engine may run under the transaction lock. Log only; do not acquire
     // registry/property locks or evaluate firmware from this callback.
@@ -69,7 +134,9 @@ bool IntelLPSSSPIController::pciIsD0() const {
 IOReturn IntelLPSSSPIController::acquirePower() {
     traceStage(mOwner, "POWER_REQUEST_BEGIN");
     if (!mPowerClient) {
+        traceStage(mOwner, "POWER_CLIENT_ALLOC_BEGIN");
         mPowerClient = new IOService;
+        traceStage(mOwner, "POWER_CLIENT_ALLOC_END", mPowerClient ? kIOReturnSuccess : kIOReturnNoMemory);
         if (!mPowerClient)
             return kIOReturnNoMemory;
         if (!mPowerClient->init()) {
@@ -77,20 +144,29 @@ IOReturn IntelLPSSSPIController::acquirePower() {
             mPowerClient = nullptr;
             return kIOReturnNoMemory;
         }
-        if (!mPowerClient->attach(mPCI)) {
+        traceStage(mOwner, "POWER_CLIENT_ATTACH_BEGIN");
+        const bool attached = mPowerClient->attach(mPCI);
+        traceStage(mOwner, "POWER_CLIENT_ATTACH_END", attached ? kIOReturnSuccess : kIOReturnNotReady);
+        if (!attached) {
             mPowerClient->release();
             mPowerClient = nullptr;
             return kIOReturnNotReady;
         }
+        traceStage(mOwner, "POWER_CLIENT_INIT_BEGIN");
         mPowerClient->PMinit();
+        traceStage(mOwner, "POWER_CLIENT_INIT_END");
         mPowerStates[0].version = 1;
         mPowerStates[1].version = 1;
         mPowerStates[1].capabilityFlags = kIOPMPowerOn | kIOPMDeviceUsable;
         mPowerStates[1].inputPowerRequirement = kIOPMPowerOn;
+        traceStage(mOwner, "POWER_CLIENT_REGISTER_BEGIN");
         auto result = mPowerClient->registerPowerDriver(mPowerClient, mPowerStates, 2);
+        traceStage(mOwner, "POWER_CLIENT_REGISTER_END", result);
         if (result != kIOReturnSuccess)
             return result;
+        traceStage(mOwner, "POWER_CLIENT_JOIN_BEGIN");
         mPCI->joinPMtree(mPowerClient);
+        traceStage(mOwner, "POWER_CLIENT_JOIN_END");
     }
     const auto result = mPowerClient->changePowerStateTo(1);
     traceStage(mOwner, "POWER_REQUEST_END", result);
@@ -102,6 +178,12 @@ IOReturn IntelLPSSSPIController::acquirePower() {
     for (unsigned attempt = 0; attempt < 50; ++attempt) {
         const bool domainReady = (mPowerClient->currentCapability() & kIOPMDeviceUsable) != 0;
         if (domainReady && pciIsD0()) {
+#if defined(KERNEL)
+            if (gCirrusDebug) {
+                mOwner->setProperty("Cirrus_SPI_Power_Wait_Attempts", uint64_t(attempt + 1), 32);
+                mOwner->setProperty("Cirrus_SPI_Power_Client_Capability", uint64_t(mPowerClient->currentCapability()), 32);
+            }
+#endif
             traceStage(mOwner, "POWER_D0_READY");
             return kIOReturnSuccess;
         }
@@ -205,6 +287,8 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
         if (pmOffset && pmOffset <= 0xf8)
             owner->setProperty("Cirrus_Intel_SPI_PMCSR", uint64_t(mPCI->configRead16(uint8_t(pmOffset + 4))), 32);
         owner->setProperty("Cirrus_Intel_SPI_PCI_Command", uint64_t(mPCI->configRead16(kIOPCIConfigCommand)), 32);
+        owner->setProperty("Cirrus_SPI_PCI_BAR0_Before", uint64_t(mPCI->configRead32(kIOPCIConfigBaseAddress0)), 32);
+        owner->setProperty("Cirrus_SPI_PCI_BAR1_Before", uint64_t(mPCI->configRead32(kIOPCIConfigBaseAddress0 + 4)), 32);
     }
 #endif
     const auto powerResult = acquirePower();
@@ -215,6 +299,13 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     mMemoryWasEnabled = (mPCI->configRead16(kIOPCIConfigCommand) & 2U) != 0;
     mPCI->setMemoryEnable(true);
     mMemoryChanged = true;
+#if defined(KERNEL)
+    if (gCirrusDebug) {
+        owner->setProperty("Cirrus_SPI_PCI_BAR0_After", uint64_t(mPCI->configRead32(kIOPCIConfigBaseAddress0)), 32);
+        owner->setProperty("Cirrus_SPI_PCI_BAR1_After", uint64_t(mPCI->configRead32(kIOPCIConfigBaseAddress0 + 4)), 32);
+        owner->setProperty("Cirrus_SPI_PCI_Command_After", uint64_t(mPCI->configRead16(kIOPCIConfigCommand)), 32);
+    }
+#endif
     if (!(mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {
         shutdown();
         return reject("INTEL_CONTROLLER_MEMORY_ENABLE_FAILED", kIOReturnNotReady);
@@ -225,6 +316,8 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
 #if defined(KERNEL)
     if (gCirrusDebug && mMap)
         owner->setProperty("Cirrus_Intel_SPI_BAR0_Length", uint64_t(mMap->getLength()), 64);
+    if (gCirrusDebug && mMap)
+        owner->setProperty("Cirrus_SPI_BAR_Physical", uint64_t(mMap->getPhysicalAddress()), 64);
 #endif
     if (!mMap || mMap->getLength() < LPSSSPIEngine::kMinimumWindowBytes || !mMap->getVirtualAddress()) {
         const char* reason = !mMap                                                    ? "INTEL_CONTROLLER_BAR_MAPPING_FAILED"
@@ -235,8 +328,17 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     }
     mWindow.base = reinterpret_cast<volatile uint8_t*>(mMap->getVirtualAddress());
     mWindow.owner = owner;
+#if defined(KERNEL)
+    mWindow.capture = gCirrusDebug;
+#endif
+    mWindow.accessCount = 0;
+    mWindow.lastPhase = "NONE";
+    mWindow.firstFailedPhase = nullptr;
+    mWindow.initializing = true;
     traceStage(owner, "MMIO_INITIALIZE_BEGIN");
     IOReturn result = mEngine.initialize(mProfile);
+    mWindow.initializing = false;
+    mWindow.publish();
     traceStage(owner, "MMIO_INITIALIZE_END", result);
     if (result != kIOReturnSuccess) {
         shutdown();
@@ -290,6 +392,24 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
 #endif
     }
     IOLockUnlock(mLock);
+    if (trace || result != kIOReturnSuccess) {
+        mWindow.publish();
+#if defined(KERNEL)
+        mChipSelects.publishEvidence();
+        if (gCirrusDebug && mOwner) {
+            mOwner->setProperty("Cirrus_SPI_Transfer_CS", uint64_t(endpoint.chipSelect), 32);
+            mOwner->setProperty("Cirrus_SPI_Transfer_Hz", uint64_t(endpoint.clockHz), 32);
+            mOwner->setProperty("Cirrus_SPI_Transfer_Mode", uint64_t(endpoint.mode), 32);
+            mOwner->setProperty("Cirrus_SPI_Transfer_Bytes", uint64_t(length), 64);
+            mOwner->setProperty("Cirrus_SPI_Transfer_Return", uint64_t(uint32_t(result)), 32);
+            char header[65]{};
+            if (tx)
+                for (size_t i = 0; i < length && i < 32; ++i)
+                    snprintf(header + i * 2, 3, "%02x", tx[i]);
+            mOwner->setProperty("Cirrus_SPI_Transfer_TX_First32", header);
+        }
+#endif
+    }
     if (trace)
         traceStage(mOwner, "FIRST_TRANSFER_END", result);
     return result;

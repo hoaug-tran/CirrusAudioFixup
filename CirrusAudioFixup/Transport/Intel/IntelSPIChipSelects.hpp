@@ -1,6 +1,7 @@
 // Resolve controller cs-gpios without embedding board IDs or GPIO numbers.
 // The SPI owner keeps GPIO providers/maps alive and serializes every frame/PM.
 #pragma once
+#include "Diagnostics/ACPIObjectEvidence.hpp"
 #include "Transport/ACPIDeviceProperties.hpp"
 #include "Transport/ACPIGPIOResources.hpp"
 #include "Transport/Intel/IntelGPIOOutput.hpp"
@@ -22,7 +23,11 @@ public:
         ACPIDeviceProperties properties;
         report("CS_DSD_BEGIN");
         auto result = properties.load(controller);
+        diagnostics::ACPIObjectEvidence::publish(owner, "Cirrus_SPI_DSD", properties.object());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Source", properties.source());
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Native_Object_Type", properties.nativeObjectType());
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Adapter_Return", uint64_t(uint32_t(properties.adapterReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Validate_Return", uint64_t(uint32_t(properties.validationReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Evaluate_Return", uint64_t(uint32_t(properties.evaluationReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Object_Type", ACPIDeviceProperties::objectType(properties.object()));
@@ -73,6 +78,9 @@ public:
             if (!resource || !pin || !low || resource->unsigned64BitValue() > 0xffff || pin->unsigned64BitValue() > 0xffff ||
                 low->unsigned64BitValue() > 1)
                 return kIOReturnUnsupported;
+            owner->setProperty("Cirrus_SPI_CS_Resource_Index", resource->unsigned64BitValue(), 64);
+            owner->setProperty("Cirrus_SPI_CS_Pin_Index", pin->unsigned64BitValue(), 64);
+            owner->setProperty("Cirrus_SPI_CS_Active_Low", low->unsigned64BitValue(), 64);
             // SPI endpoint polarity is active-low; ACPI's GPIO flag is not a
             // replacement for SpiSerialBus polarity (Linux spi-cs-high policy).
             auto* source = resolveACPIReference(controller, values->getObject(i));
@@ -81,6 +89,7 @@ public:
             OSObject* crs = nullptr;
             report("CS_CRS_BEGIN");
             result = source->evaluateObject("_CRS", &crs);
+            diagnostics::ACPIObjectEvidence::publish(owner, "Cirrus_SPI_CS_CRS", crs);
             report("CS_CRS_END", result);
             auto* bytes = OSDynamicCast(OSData, crs);
             ACPIGPIOResource gpio{};
@@ -89,13 +98,20 @@ public:
                                                        resource->unsigned32BitValue(), pin->unsigned32BitValue(), gpio);
             OSSafeReleaseNULL(crs);
             auto* provider = decoded ? resolveACPIDevice(source, gpio.source) : nullptr;
+            owner->setProperty("Cirrus_SPI_CS_CRS_Decoded", uint64_t(decoded), 32);
+            if (decoded) {
+                owner->setProperty("Cirrus_SPI_CS_GPIO_Source", gpio.source);
+                owner->setProperty("Cirrus_SPI_CS_GPIO_Pin", uint64_t(gpio.pin), 32);
+            }
             source->release();
             if (!provider)
                 return decoded ? kIOReturnNotFound : kIOReturnUnsupported;
             result = bindLine(line, provider, gpio.pin);
             provider->release();
-            if (result != kIOReturnSuccess)
+            if (result != kIOReturnSuccess) {
+                publishEvidence();
                 return result;
+            }
             i += 4;
         }
         // Verify the complete topology before changing any output. Every
@@ -104,10 +120,28 @@ public:
         for (size_t i = 0; i < mCount; ++i)
             if (mLines[i].gpio && (result = mLines[i].output.setActive(false)) != kIOReturnSuccess) {
                 report("CS_INACTIVE_END", result);
+                publishEvidence();
                 return result;
             }
         report("CS_INACTIVE_END");
+        publishEvidence();
         return kIOReturnSuccess;
+    }
+    void publishEvidence() const {
+        if (!mOwner)
+            return;
+        for (size_t i = 0; i < mCount; ++i) {
+            const auto& e = mLines[i].output.evidence();
+            char key[96]{};
+            snprintf(key, sizeof(key), "Cirrus_SPI_GPIO_%u_Reason", unsigned(i));
+            mOwner->setProperty(key, e.reason);
+            const char* names[] = {"Revision", "Padbar", "Ownership", "LockTx", "Config", "Offset", "Written", "Readback"};
+            const uint32_t values[] = {e.revision, e.padbar, e.ownership, e.lockTx, e.config, e.offset, e.written, e.readback};
+            for (unsigned j = 0; j < 8; ++j) {
+                snprintf(key, sizeof(key), "Cirrus_SPI_GPIO_%u_%s", unsigned(i), names[j]);
+                mOwner->setProperty(key, uint64_t(values[j]), 32);
+            }
+        }
     }
     size_t count() const { return mCount; }
     bool usesGPIO(size_t index) const { return index < mCount && mLines[index].gpio; }
@@ -188,10 +222,33 @@ private:
         auto result = provider->evaluateObject("_HID", &object);
         auto* hid = OSDynamicCast(OSString, object);
         IntelGPIOPad pad{};
-        const bool supported = result == kIOReturnSuccess && hid && lookupIntelGPIOPad(hid->getCStringNoCopy(), pin, pad);
+        mOwner->setProperty("Cirrus_SPI_GPIO_HID", hid ? hid->getCStringNoCopy() : "UNAVAILABLE");
+        mOwner->setProperty("Cirrus_SPI_GPIO_HID_Return", uint64_t(uint32_t(result)), 32);
+        ACPIDeviceProperties native;
+        const auto nativeResult = native.load(provider);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Return", uint64_t(uint32_t(nativeResult)), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Reason", native.reason());
+        mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Source", native.source());
+        diagnostics::ACPIObjectEvidence::publish(mOwner, "Cirrus_SPI_GPIO_DSD", native.object());
+        if (nativeResult != kIOReturnSuccess) {
+            OSSafeReleaseNULL(object);
+            return nativeResult;
+        }
+        auto* physical = nativeResult == kIOReturnSuccess ? OSDynamicCast(OSString, native.get("cirrus,gpio-controller-hid")) : nullptr;
+        // Explicit firmware metadata may preserve physical identity when the
+        // compatibility HID was changed for another client. Never alias HIDs.
+        const char* identity = physical ? physical->getCStringNoCopy() : hid ? hid->getCStringNoCopy() : nullptr;
+        mOwner->setProperty("Cirrus_SPI_GPIO_Physical_HID", identity ? identity : "UNAVAILABLE");
+        const bool supported = result == kIOReturnSuccess && hid && lookupIntelGPIOPad(identity, pin, pad);
         OSSafeReleaseNULL(object);
-        if (!supported || (provider->getDeviceStatus() & 3) != 3)
+        const auto status = provider->getDeviceStatus();
+        mOwner->setProperty("Cirrus_SPI_GPIO_Device_Status", uint64_t(status), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Profile_Supported", uint64_t(supported), 32);
+        if (!supported || (status & 3) != 3)
             return kIOReturnUnsupported;
+        mOwner->setProperty("Cirrus_SPI_GPIO_Memory_Index", uint64_t(pad.memoryIndex), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Pad", uint64_t(pad.pad), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_Group", uint64_t(pad.group), 32);
         uint32_t power = 0;
         if (provider->validateObject("_PSC") == kIOReturnSuccess &&
             (provider->evaluateInteger("_PSC", &power) != kIOReturnSuccess || power))
@@ -208,6 +265,7 @@ private:
         line.provider = provider;
         provider->retain();
         if (!alreadyOpen) {
+            mOwner->setProperty("Cirrus_SPI_GPIO_Already_Open", uint64_t(provider->isOpen()), 32);
             if (provider->isOpen() || !provider->open(mOwner))
                 return kIOReturnExclusiveAccess;
             line.opened = true;

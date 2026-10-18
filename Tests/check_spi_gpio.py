@@ -61,11 +61,15 @@ int main(){
  for(auto o:w.writes)assert(o==unsigned(off));
  auto n=w.writes.size();w.r[0x114/4]=1U<<19;
  assert(line.setActive(true)==kIOReturnNotPermitted&&w.writes.size()==n);
+ assert(!strcmp(line.evidence().reason,"PAD_TX_LOCKED"));
  w.r[0x114/4]=0;w.r[(0xa0+8)/4]=1U<<12;
  assert(line.setActive(true)==kIOReturnNotPermitted&&w.writes.size()==n);
+ assert(!strcmp(line.evidence().reason,"PAD_NOT_HOST_OWNED"));
  w.r[(0xa0+8)/4]=0;w.r[off/4]|=1U<<8;
  assert(line.setActive(true)==kIOReturnNotPermitted&&w.writes.size()==n);
+ assert(!strcmp(line.evidence().reason,"PAD_NOT_GPIO_OUTPUT"));
  w.r[off/4]=0x84000201;w.blocked=true;assert(line.setActive(true)==kIOReturnIOError);
+ assert(!strcmp(line.evidence().reason,"PAD_WRITE_READBACK_FAILED"));
  line.unbind();assert(line.setActive(false)==kIOReturnNotReady);
  Window shortMap;IntelGPIOOutput invalid;assert(invalid.bind(shortMap,0x710,pad,true)==kIOReturnUnsupported);
 }

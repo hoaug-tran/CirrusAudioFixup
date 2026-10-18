@@ -5,6 +5,7 @@
 	};
 	objectVersion = 56;
 	objects = {
+67B8A9CD12704F0DA86390BA = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIObjectEvidence.hpp"; sourceTree = "<group>";};
 1BF3A8D39570B9D4030EDF80 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "acpi_kernel_fixture.py"; sourceTree = "<group>";};
 6A12FEBC78457916CD62CEDB = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_platform_discovery.py"; sourceTree = "<group>";};
 4A6AFA34854DBE7CD379F8B6 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PropertyQuirks.hpp"; sourceTree = "<group>";};
@@ -272,6 +273,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			isa = PBXGroup;
 			children = (
                 6A9F6AC950CEE5FC9E124C03,
+                67B8A9CD12704F0DA86390BA,
                 1EC86071840BB16D5072B690,
                 AA98911D63E8F93259AEBE62,
 				F020B0C511BE7C8145385429,

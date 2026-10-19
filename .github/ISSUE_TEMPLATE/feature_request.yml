@@ -1,0 +1,52 @@
+name: Improvement request
+description: Propose a driver, tool, documentation or workflow improvement
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use **Bug report** for an existing failure and **Hardware support** for a new board or amplifier.
+        Describe the problem first. More gain, forced boost values or a target percentage of Windows sound quality are not sufficient requirements without measurements and a supported configuration.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and checked the current README.
+          required: true
+        - label: This request describes a concrete use case and does not duplicate a bug or hardware request.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Amplifier runtime or playback
+        - I2C or SPI communication
+        - Diagnostics or collectors
+        - Build, tests or release workflow
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What are you trying to do, and what is missing today? Include the affected machine/build or workflow when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected behavior
+      description: Describe the result and how someone could check that it works. Keep one proposal per issue.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and alternatives
+      description: Link relevant code, upstream documentation, measurements or an example. Explain any existing workaround. Clearly separate observed behavior from a proposed design.
+    validations:
+      required: true

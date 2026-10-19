@@ -2,481 +2,508 @@
 
 # CirrusAudioFixup
 
+**Cirrus Logic smart amplifier support for macOS.**
+
+I2C and SPI - Intel and AMD - x86_64
+
 [![Build](https://github.com/hoaug-tran/CirrusAudioFixup/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/hoaug-tran/CirrusAudioFixup/actions/workflows/build.yml)
-[![macOS](https://img.shields.io/badge/target-Big_Sur_to_Tahoe-blue?style=flat-square)](#macos-compatibility)
-[![Hardware](https://img.shields.io/badge/reference-Lenovo_Legion_7-orange?style=flat-square)](#hardware-and-macos-scope)
-[![Platform](https://img.shields.io/badge/subsystem-AppleACPI_%2F_VoodooI2C_%2F_HDA-orange?style=flat-square)](#how-it-works)
-[![License](https://img.shields.io/badge/license-Non--Commercial-lightgrey?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/hoaug-tran/CirrusAudioFixup?style=flat-square&color=5865a0)](https://github.com/hoaug-tran/CirrusAudioFixup/releases)
+[![macOS](https://img.shields.io/badge/macOS-Ventura_13_%7C_Sequoia_15-2f6f91?style=flat-square)](#macos-compatibility)
+[![License](https://img.shields.io/badge/license-non--commercial-555555?style=flat-square)](LICENSE)
 
-**Open-source macOS kernel extension with an extensible amplifier runtime over I2C and SPI. The implemented silicon driver is CS35L41.**
-
-Native SPI supports profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 command controllers. The shipping service uses registered drivers for bring-up, firmware, grouped playback, interrupts and suspend/resume on both buses. Writable operation requires a verified board profile; Driver-owned ACPI property discovery now supplies internal-boost CS35L41 configurations without per-laptop headers or fixed controller paths; matching firmware resources remain required, and the captured 103C89C6 case supplies the current integration evidence; native macOS load and physical SPI playback validation remain pending. ASUS profiles remain pending. See [SPI development status](docs/spi_support.md).
-
-The shared register-map, endpoint, board/firmware identity, lifecycle and driver contracts are documented in [extensible driver foundation](docs/extensible_driver.md). The shipping service uses these contracts; future silicon drivers are registered in `Devices/AmplifierDrivers.hpp`.
-
-Reference platform: **Lenovo Legion 7 16ACHg6 · Realtek ALC287 · AMD**
-
-[Quick start](#installation) • [Hardware status](#hardware-and-macos-scope) • [How it works](#how-it-works) • [Boot arguments](#boot-arguments) • [Diagnostics](#diagnostics) • [Documentation hub](#documentation-hub)
+[Download](https://github.com/hoaug-tran/CirrusAudioFixup/releases) · [Installation](#installation) · [Supported hardware](#supported-hardware) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
 
 </div>
 
----
-
-CirrusAudioFixup is an x86_64 macOS kernel extension for the I2C-connected CS35L41 speaker amplifiers used by the reference Lenovo Legion configuration. It handles amplifier setup, firmware upload and playback power transitions. AppleALC and the host audio driver still provide the audio device and PCM route.
-
 > [!CAUTION]
-> **Hardware and speaker safety**
+> **First boot: add these boot arguments before loading the kext:**
 >
-> Incorrect boost settings or speaker tuning can damage the hardware. Keep a known-good EFI, begin at low volume, and read the [bring-up guide](docs/safe_bringup_protocol.md) before testing a new configuration. DSP bypass removes acoustic protection; it is not a safe default for an unknown board.
+> ```text
+> -cirrusro -cirrusdbg
+> ```
+>
+> Read-only mode skips amplifier writes, platform reset and playback. Follow the [first-boot checks](#4-first-boot-inspect-only) before removing `-cirrusro`. Keep a working backup EFI.
+>
+> Speaker tuning and boost must match the board. Leave `-cirrusnodsp` unset: it disables DSP speaker protection.
 
-> [!IMPORTANT]
-> **Free and non-commercial software**
->
-> See [LICENSE](LICENSE) for distribution terms. Do not sell the software or include it in paid EFI bundles. Paid system-setup services are permitted when no fee is charged for this software itself.
+> [!WARNING]
+> **Disclaimer:** Use at your own risk. The software is provided without warranty; the authors and copyright holders accept no liability for damage or data loss arising from its use. See [LICENSE](LICENSE).
+
+CirrusAudioFixup enables internal speakers driven by Cirrus Logic smart amplifiers on macOS. It handles amplifier initialization, DSP firmware, speaker tuning, playback and sleep/wake over I2C or native SPI.
+
+**CS35L41 is currently supported over I2C and SPI.** The driver framework allows support for additional Cirrus amplifier families; the [support table](#amplifier-families) lists their current status.
+
+AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the amplifiers on that route. Firmware and tuning are embedded in the kext, with no separate firmware installation or userspace service.
 
 ---
 
-## Table of contents
+<details>
+<summary><strong>Contents</strong></summary>
 
-- [Why this kext exists](#why-this-kext-exists)
-- [Hardware and macOS scope](#hardware-and-macos-scope)
-  - [macOS compatibility](#macos-compatibility)
-  - [Tahoe: restore the host audio stack](#tahoe-restore-and-validate-the-host-audio-stack-first)
+- [Supported hardware](#supported-hardware)
+- [macOS compatibility](#macos-compatibility)
+- [Sound compared with Windows](#sound-compared-with-windows)
+- [Identify I2C or SPI](#identify-i2c-or-spi)
+- [Requirements](#requirements)
 - [Installation](#installation)
+- [Update or remove](#update-or-remove)
 - [How it works](#how-it-works)
-  - [What the driver does](#what-the-driver-does)
 - [Boot arguments](#boot-arguments)
-- [Diagnostics](#diagnostics)
-- [Debug and Release builds](#debug-and-release-builds)
-- [Building and testing](#building-and-testing)
-- [Documentation hub](#documentation-hub)
-- [Troubleshooting guide](#troubleshooting-guide)
-- [Porting another board or amplifier](#porting-another-board-or-amplifier)
-- [Sources and license](#sources-and-license)
+- [Status and diagnostics](#status-and-diagnostics)
+- [Troubleshooting](#troubleshooting)
+- [Collect Windows or Linux data](#collect-windows-or-linux-data)
+- [Adding hardware support](#adding-hardware-support)
+- [Build from source](#build-from-source)
+- [Documentation](#documentation)
+- [Sources and acknowledgments](#sources-and-acknowledgments)
+- [License](#license)
 
----
+</details>
 
-## Why this kext exists
+## Supported hardware
 
-On the reference Legion, the onboard Realtek codec supplies digital audio to two CS35L41 amplifiers. Configuring the codec alone does not initialize the amplifier power stages or load their DSP firmware.
+### Amplifier families
 
-The two paths have different responsibilities:
+| Amplifier | Support status | Scope |
+| --- | --- | --- |
+| **CS35L41** | **Supported** | Revision B2; I2C and SPI; supported board profiles and matching firmware |
+| CS35L45 | Not yet supported | Requires a dedicated amplifier driver |
+| CS35L51 | Not yet supported | Requires a dedicated amplifier driver |
+| CS35L56 | Not yet supported | Requires a dedicated amplifier driver |
+| Other Cirrus amplifiers | Not yet supported | Additional families can use the shared framework |
 
-| Path | Owner | Responsibility |
-| :--- | :--- | :--- |
-| Host audio and codec route | AppleHDA + AppleALC | Expose the audio device and configure the PCM route |
-| Amplifier control | CirrusAudioFixup + custom VoodooI2C | Reset, register access, firmware, tuning and playback power transitions |
-| Audio signal | Codec ASP/I2S connection | Carry sample data and clocks to the amplifiers |
+Additional families need their own driver, board configuration and firmware.
 
-CirrusAudioFixup observes the host output stream and manages the amplifier lifecycle. It does not replace the codec driver or implement Lenovo/Nahimic user-space effects.
+### Working laptop configurations
 
----
+| Laptop | Board identity | Bus | Status |
+| --- | --- | --- | --- |
+| **Lenovo Legion 7 16ACHg6 (2021)** | `17AA:3847` | I2C | **Working** |
+| **Lenovo Legion 5 Pro 16ACH6H (2021)** | `17AA:382B` | I2C | **Working** |
+| **HP ZBook Fury 16 G9** | `103C:89C6` | SPI | **Working** |
 
-## Hardware and macOS scope
+<details>
+<summary><strong>Other boards and controller support</strong></summary>
 
-The implemented driver is CS35L41. The current personality matches a `VoodooI2CDeviceNub` whose `IOName` is `CLSA0100`. Hardware initialization additionally requires HDA PCI subsystem identity `17AA:382B` or `17AA:3847` before the reference GPIO reset. Missing or different identity blocks initialization; firmware overrides do not override this wiring policy. Both configured amplifiers must be discovered before either is initialized.
-
-| Configuration | What the source currently provides |
+| Configuration | Status |
 | --- | --- |
-| Lenovo Legion 7 16ACHg6, SSID `17AA:3847` | Reference stereo profile, AMD `AMDI0030` reset quirk, embedded firmware and left/right tuning |
-| Lenovo Legion 5 Pro 16ACH6H, SSID `17AA:382B` | Explicit translation to the `17AA:3847` resource; validate speaker and boost equivalence on the actual machine |
-| `CLSA0101` / unknown `CSC3551` | Automatic initialization disabled; `CSC3551` transport is selected from ACPI serial-bus resources |
-| HP `CSC3551`, ACPI `_SUB=103C89C6` | Experimental SPI profile: native/GPIO CS, internal boost, matched R/L firmware; [target validation required](docs/hp_spi_bringup.md) |
-| Other Intel or AMD boards | Porting required: provider, reset wiring, audio route, boost circuit and tuning must be verified |
-| CS35L45 / CS35L51 / CS35L56 / other amplifier models | No implemented driver; unknown models are rejected before initialization |
-| Realtek ALC codecs | Managed by AppleALC and the host audio stack, not by this kext |
+| Other `CSC3551` boards | ACPI discovery available for supported properties; matching embedded firmware and board validation required |
+| `CLSA0101` or an unknown legacy Lenovo identity | Automatic initialization disabled |
+| Intel LPSS SPI | Supported SPT, BXT, CNL and TGL PCI profiles; controller identity selects the register family and root clock |
+| AMD SPI | `AMDI0061` and `AMDI0062`, V1/V2 command controllers; mode 0 |
+| SPI chip select | Native or supported GPIO-backed chip select, selected from firmware resources |
+| SoundWire | Not supported |
+| Apple silicon | Not supported |
 
-The reference profiles specify two endpoints: left `0x40` and right `0x41`. The service and runtime can own up to 16 endpoints; this capacity does not enable additional CS35L41 audio channels. Each driver and verified board must define its channel routing and tuning.
+Native SPI uses the built-in controller drivers and does **not** require VoodooI2C. I2C requires the addressed-transfer interface in the custom provider. Controller support alone does not establish that a laptop's speaker wiring and tuning are supported.
 
-The HDA gate accepts 48 kHz stereo PCM with 16-, 20- or 24-bit samples. The amplifier uses fixed ASP slot timing. A 44.1 kHz *hardware stream* is rejected; CoreAudio may resample a 44.1 kHz source before it reaches HDA.
+</details>
 
-### macOS compatibility
+<details>
+<summary><strong>Speakers, headphones and microphone</strong></summary>
 
-Both Xcode configurations target macOS 11.0 and build only for x86_64. This is a build target, not a claim that every OS and board combination has passed playback testing.
+| Endpoint | Responsible driver | Configuration notes |
+| --- | --- | --- |
+| Internal speakers | CirrusAudioFixup + host codec route | Working on the configurations listed above; DSP firmware and tuning are loaded by this kext |
+| 3.5 mm headphones | AppleHDA + AppleALC | Jack routing and detection belong to the codec layout; CirrusAudioFixup follows the speaker-output state |
+| Internal microphone | AppleHDA + AppleALC | Input routing and gain are configured by the codec driver |
+| HDMI / DisplayPort audio | Host audio stack and GPU configuration | Independent of the internal speaker amplifier driver |
 
-| macOS | Compatibility status |
+AppleALC must configure the actual speaker output path for the machine. A matching codec name or a visible audio device alone is not enough: the route must reach the codec output feeding the Cirrus amplifiers.
+
+</details>
+
+## macOS compatibility
+
+| macOS | Status |
 | --- | --- |
-| Big Sur 11 | Deployment target; target-machine load, playback and power testing still required |
-| Monterey 12 | Compatibility target; target-machine validation still required |
-| Ventura 13 | Original deployment floor; the current changes still need target-machine validation |
-| Sonoma 14 | Compatibility target; target-machine validation still required |
-| Sequoia 15 | Compatibility target; target-machine validation still required |
-| Tahoe 26 | Conditional target; the AppleHDA dependency needs a working, validated solution |
+| Big Sur 11 | Minimum build deployment target |
+| Monterey 12 | Within the deployment range; no confirmed test result listed here |
+| **Ventura 13** | **Confirmed working** |
+| **Sonoma 14** | Within the deployment range; no confirmed test result listed here |
+| **Sequoia 15** | **Confirmed working** |
+| Tahoe 26 | Requires a working host audio stack; no confirmed test result listed here |
 
-[MacKernelSDK](https://github.com/acidanthera/MacKernelSDK) supports targeting older XNU kernels with current Xcode. The source uses IOKit/KPI dependencies at the Big Sur generation. Building against those headers does not prove that a kext loads, that its transport works, or that speakers play on a particular OS.
+Builds target **x86_64**. Confirmed OS support applies to the working hardware configurations, not every laptop containing a Cirrus amplifier.
 
 ### Tahoe: restore and validate the host audio stack first
 
-[AppleALC upstream](https://github.com/acidanthera/AppleALC#features) notes that macOS 26 removed AppleHDA in DP2. For the AppleHDA/AppleALC route used by this project, restore a compatible AppleHDA using a patch maintained for your exact OS build, then verify that AppleHDA and AppleALC load and the codec exposes the intended speaker route. Having AppleHDA on disk is not sufficient.
+CirrusAudioFixup needs an operational HDA controller and codec route. It does not install or restore AppleHDA. If the host audio stack is absent or incompatible, resolve that first; amplifier initialization cannot create the missing codec route. VoodooHDA combinations are not validated by this project.
 
-[Dortania's Tahoe guide](https://github.com/dortania/OpenCore-Install-Guide/blob/master/extras/tahoe.md) describes AppleHDA restoration and the security/root-volume caveats. OCLP and community patches are external audio-stack solutions, not dependencies installed or validated by CirrusAudioFixup. Upstream OCLP targets supported Mac models; do not assume its patch policy applies unchanged to a Hackintosh. Follow the patch project's requirements and recheck the audio stack after an OS update. This README does not prescribe SIP changes or a particular patch bundle.
+## Sound compared with Windows
 
-CirrusAudioFixup's PCI fallback can locate an HDA controller, but cannot replace AppleHDA, create a CoreAudio device or program the codec route. A restored host stack makes Tahoe a feasible test target; it does not establish tested amplifier support on every Intel or AMD system.
+Windows sound depends on more than the amplifier driver. The manufacturer supplies speaker tuning, device calibration and, on some systems, extra processing such as EQ, loudness control, limiting or Nahimic effects. These can run in the amplifier DSP or in the [Windows audio effects chain](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/audio-processing-object-architecture).
 
-VoodooHDA with CirrusAudioFixup has not been tested. A running HDA descriptor alone does not establish compatible codec routing, BCLK, ASP timing or power transitions. No compatibility or incompatibility claim is made for that combination.
+CirrusAudioFixup loads the matching amplifier firmware and speaker tuning and applies supported calibration when available. It does not reproduce the complete OEM Windows effects chain, so the same laptop can sound different in macOS even with matching amplifier firmware.
 
-Tahoe still lists [supported Intel Macs](https://support.apple.com/en-us/122867). AMD systems separately depend on suitable OpenCore CPU patches; [AMD Vanilla](https://github.com/AMD-OSX/AMD_Vanilla#supported-macos-versions) lists Big Sur through Tahoe. Neither fact establishes amplifier compatibility on an arbitrary Intel or AMD laptop. Apple silicon and native AMD macOS support are outside this project's scope.
+Third-party EQ or convolution software on macOS can bring the tonal balance closer to Windows when configured from measured speaker response or correctly decoded OEM filter settings. A raw Windows DSP or calibration dump is not a ready-to-use EQ preset: amplifier calibration belongs in the matching driver/firmware path, and Windows effects need a compatible macOS equivalent.
 
----
+The result depends on the speaker, profile, listening level and effects used. Matching sound needs a level-matched comparison; this project does not claim a fixed percentage of Windows sound quality.
+
+## Identify I2C or SPI
+
+The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 uses **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
+
+If CirrusAudioFixup is already attached in macOS, run:
+
+```bash
+ioreg -lw0 -p IOService -r -c CirrusAudioFixup | grep '"Cirrus_Bus"'
+```
+
+`"Cirrus_Bus" = "I2C"` means I2C; `"SPI"` means SPI. No output means the service was not found or did not publish the property. `ACPI_UNRESOLVED` means resource detection failed, not that either bus was selected.
+
+Before installing, boot Linux with its working Cirrus driver and run:
+
+```bash
+for bus in i2c spi; do
+    for device in /sys/bus/"$bus"/devices/*; do
+        [ -L "$device/driver" ] || continue
+        driver=$(readlink -f "$device/driver") || continue
+        case "$driver" in
+            *cs35l*) printf '%s: %s\n' "$bus" "${device##*/}" ;;
+        esac
+    done
+done
+```
+
+The first field identifies the bus of each bound Cirrus device. If nothing appears, the Linux driver may not be bound. Use `sudo bash Tools/collect_audio_amp_linux.sh` to collect the device and ACPI information; do not guess which bus to configure. The driver selects the bus automatically once it has valid resources.
+
+## Requirements
+
+| Component | I2C | SPI |
+| --- | --- | --- |
+| OpenCore with a working macOS installation | Required | Required |
+| Lilu **1.7.2 or newer** | Required | Required |
+| Working AppleHDA + AppleALC with the correct speaker route | Required for the supported audio path | Required for the supported audio path |
+| Custom VoodooI2C addressed-transfer provider | Required | Not required |
+| Supported serial-bus controller and ACPI resources | Required | Required |
+| Matching board configuration, firmware and speaker tuning | Required | Required |
+
+The I2C provider is available in **[hoaug-tran/VoodooI2C, branch `main`](https://github.com/hoaug-tran/VoodooI2C/tree/main)**. It exposes `VoodooI2CTransferToAddress`, the interface used by this driver. The fork's `master` branch is not interchangeable with `main` for this interface. Use the compatible provider and controller components for your platform; the VoodooI2C version number alone does not establish compatibility.
+
+> [!IMPORTANT]
+> Supported machines do not need an amplifier SSID override, a bus-selection argument or DSP bypass for normal playback. AppleALC must provide the correct speaker route first; CirrusAudioFixup then manages the amplifiers on that path.
 
 ## Installation
 
-For a new build, use the artifacts for the exact commit you intend to test, or a versioned [release](https://github.com/hoaug-tran/CirrusAudioFixup/releases). Do not mix a Debug kext and symbols from different commits.
+### 1. Get the kext
 
-> [!NOTE]
-> **Prebuilt bundle and current artifacts**
->
-> The checked-in [docs/Kexts.zip](docs/Kexts.zip) is a historical bundle. Its plists contain CirrusAudioFixup 1.0.0, AppleALC 1.9.9 and VoodooI2C 2.9.1. It does not contain the current 1.0.1 changes, and its version numbers do not establish compatibility with another macOS release.
+Download the appropriate package from **[Releases](https://github.com/hoaug-tran/CirrusAudioFixup/releases)**. Use **Release** for everyday use and **Debug** when collecting detailed diagnostics. Development builds are available from [Actions](https://github.com/hoaug-tran/CirrusAudioFixup/actions/workflows/build.yml).
 
-### Required components
+Firmware is already compiled into `CirrusAudioFixup.kext`. Do not copy `.wmfw`, `.bin` or `.bincfg` files into the EFI partition or macOS filesystem for runtime loading.
 
-| Component | Role |
-| :--- | :--- |
-| Lilu 1.7.2 or newer + AppleALC | Lilu is a direct link dependency for audio event hooks; AppleALC patches the codec in a compatible AppleHDA stack |
-| Custom VoodooI2C | Addressed amplifier transfers through `VoodooI2CTransferToAddress` |
-| CirrusAudioFixup | CS35L41 initialization and playback power control |
-| VirtualSMC | Part of the wider Hackintosh setup, not a direct driver link dependency |
+### 2. Configure OpenCore
 
-> [!WARNING]
-> **Custom I2C transport required**
->
-> Use [hoaug-tran/VoodooI2C](https://github.com/hoaug-tran/VoodooI2C). A provider without the addressed platform function cannot carry this driver's amplifier transactions. Preserve the controller/plugins needed by your machine; this is not an instruction to remove unrelated I2C plugins.
+Copy `CirrusAudioFixup.kext` to `EFI/OC/Kexts` and add this entry under `Kernel → Add`:
 
-### OpenCore configuration
-
-Prepare the existing OpenCore audio stack:
-
-1. Install a compatible Lilu and AppleALC build for your OS. VirtualSMC belongs to the wider Hackintosh setup.
-2. Install the [custom VoodooI2C fork](https://github.com/hoaug-tran/VoodooI2C) that implements the addressed `VoodooI2CTransferToAddress` platform function. Keep the controller and plugin configuration required by that fork and your machine.
-3. Add CirrusAudioFixup after VoodooI2C in `Kernel -> Add`. Each entry needs the correct bundle, executable and plist paths.
-4. Make sure the amplifier nub appears in the IOService plane with `IOName=CLSA0100`. Do not assume every laptop places it under the same ACPI path.
-5. Configure the reference ALC287 route with `alcid=16`, or the equivalent four-byte `layout-id` value `10 00 00 00`. Other codecs and boards need their own route.
-
-CirrusAudioFixup directly depends on Lilu for its IOAudioFamily event hooks. AppleALC also requires Lilu. The custom I2C provider is accessed through a platform function, not a linked `VoodooI2CTransferToAddress` symbol.
-
-Begin with `-cirrusro -cirrusdbg` when checking a new installation. Confirm the provider, silicon identity and resource selection before allowing initialization or playback. See the [bring-up guide](docs/safe_bringup_protocol.md) for stage-by-stage checks.
-
----
-
-## How it works
-
-The control bus configures the amplifiers. Audio samples reach them through the codec's serial audio connection, not through the driver's I2C transfers.
-
-```mermaid
-flowchart TD
-    subgraph Host["Host audio stack"]
-        Apps["Applications / system sounds"] --> Audio["CoreAudio"]
-        Audio --> HDA["AppleHDA + host HDA controller"]
-        ALC["AppleALC codec patches"] -.-> HDA
-        HDA --> Codec["Realtek codec / speaker route"]
-    end
-
-    subgraph Control["Amplifier control"]
-        HDA -.->|Output descriptor observation| Watcher["CirrusAudioFixup HDA monitor"]
-        Watcher --> Lifecycle["Initialization / playback / power lifecycle"]
-        Lifecycle --> I2C["Custom VoodooI2C addressed transfers"]
-    end
-
-    subgraph Speakers["Reference CS35L41 stereo pair"]
-        Left["Left amplifier · 0x40"] --> LS["Left speaker"]
-        Right["Right amplifier · 0x41"] --> RS["Right speaker"]
-    end
-
-    Codec -- "ASP/I2S samples and clocks" --> Left
-    Codec -- "ASP/I2S samples and clocks" --> Right
-    I2C -- "I2C register / DSP access" --> Left
-    I2C -- "I2C register / DSP access" --> Right
-```
-
-### What the driver does
-
-During startup, the service selects a board profile, validates the requested debug phase and performs the permitted board reset. Read-only and probe-only modes skip that reset. Silicon identity is checked before initialization.
-
-Initialization dispatches by model. The CS35L41 path resets the chip, waits for OTP boot, applies trim and errata, configures clocks and ASP, selects channel tuning, uploads firmware and checks the DSP. It finishes in verified muted idle. No other model is routed through that sequence.
-
-HDA stream checks validate controller state, stream tag and format; multiple running output streams are treated as ambiguous. IOAudioFamily events control recognized output transitions. The compatibility timer uses 100 ms for a running stream and 50 ms otherwise. The retained PCI service and BAR mapping are reused until suspend, removal, invalid topology or teardown.
-
-Runtime preparation and cleanup advance through a CS35L41 state machine.
-Pending acknowledgements use a 1 ms timer and monotonic deadlines, without
-sleeping inside the monitor. Both endpoints must be prepared before output
-is unmuted; a failed commit rolls back the pair. Recognized headphone idle
-stops the timer after bounded cleanup. I2C calls remain synchronous, and PM
-quiesce and firmware initialization still use their synchronous paths.
-See the [runtime transition design](docs/runtime_transition_design.md).
-
-Playback requires more than HDA RUN. The monitor verifies PLL, DSP/mailbox, power acknowledgements and output registers before marking a channel active. Stream loss, read failures and protection faults trigger cleanup. Most faults remain latched. An isolated PLL failure can retry after a cooldown, at most three times before a successful start resets the retry count.
-
-Sleep and stop share the workloop gate with the timer. Suspend attempts mute, power-down and DSP halt, then releases the HDA cache. Wake repeats software-reset initialization and firmware staging. It does not repeat the board GPIO reset performed by `start()`.
-
-Output switching uses IOAudioFamily events when both hooks and the built-in output selector are available. The driver observes completed selector updates and engine state changes. It keeps the original handlers and schedules amplifier work on its own workloop.
-
-Selecting headphones or stopping the engine mutes the speakers and stops the periodic timer. Selecting internal speakers starts preparation without the previous recovery cooldown. Stream readiness has up to 40 short retry intervals; hardware operations have their own bounded waits. Active speaker playback retains periodic protection checks.
-
-`Cirrus_Audio_Event_Mode` reports `IOAUDIO_FAMILY_EVENTS`, `IOAUDIO_HOOKS_WAITING_FOR_OUTPUT`, or `HDA_TIMER_FALLBACK`. The current event binding recognizes `ispk` and `hdpn` on one built-in engine. Other selector identities or unavailable hooks retain the HDA timer fallback. Event hooks and audible switching latency still need target-machine validation.
-
-Register and heartbeat checks do not measure the PCM signal, speaker excursion or audible output. A successful verdict must still be checked against the actual route and speakers.
-
-### Driver execution lifecycle
-
-```mermaid
-flowchart TD
-    Attach["Attach / select board profile"] --> Mode{"Requested mode"}
-    Mode -- "Read-only" --> Snapshot["Identity / register snapshot · no initialization"]
-    Mode -- "Normal or staged" --> Init["Permitted reset / model dispatch / silicon initialization"]
-    Init --> Stage{"Selected debug boundary?"}
-    Stage -- "Yes" --> Halt["Stop at phase · playback disabled"]
-    Stage -- "No" --> Idle["Verified muted idle"]
-    Idle --> Gate{"Usable output stream + runtime checks?"}
-    Gate -- "Yes" --> Active["Verified active registers · route still needs validation"]
-    Active -- "Stream stops" --> Cleanup["Mute / power-down / verify cleanup"]
-    Cleanup --> Idle
-    Active -- "Fault" --> Fault["Record first/latest failure / attempt cleanup"]
-    Fault --> Policy["Latch fault · bounded retry only for isolated PLL failure"]
-    Idle -- "Sleep" --> Suspend["Suspend / release HDA cache"]
-    Suspend -- "Wake" --> Init
-```
-
-The diagram summarizes the normal lifecycle; named debug phases can stop within initialization. Read-only and `probe` phase skip board reset. Wake repeats software initialization, not the startup GPIO toggle.
-
----
-
-## Boot arguments
-
-Flags with a value of `0` are treated as disabled. Debug builds enable routine logging by default; `-cirrusdbg=0` does not override that build default.
-
-| Argument | Actual behavior |
+| Key | Value |
 | --- | --- |
-| `-cirrusoff` | Reject attachment before hardware initialization |
-| `-cirrusirq` | Experimental reference-board GPIO84 protection IRQ, with polling backup; disabled by default until target delivery and sleep/wake validation |
-| `-cirrusdbg` | Enable routine `IOLog` messages in Release; already enabled by default in Debug |
-| `-cirrusro` | Force read-only probing: skip GPIO reset, initialization and register writes; normal boot selects SPI or I2C automatically from ACPI `_CRS` |
-| `-cirrusnodsp` | Skip firmware and coefficient upload; use the explicit DAC bypass path without DSP acoustic protection |
-| `-cirrusphase=<name>` | Stop after a selected initialization stage; playback stays disabled |
-| `-cirruslegacyprobe` | Permit read-only fixed-address discovery outside automatic profile policy; never invent endpoints or authorize initialization |
-| `-cirrusprobe` | Record the flag in `CirrusBootArgParsed`; currently does not enable a separate transaction-log mode |
-| `-cirrusdelay=<ms>` | Set the read-only snapshot delay, default 100 ms. Does not replace the normal 15 ms startup wait |
-| `-cirrusdiag` | Enable additional initialization register snapshots and CRC checks; essential runtime checks remain active without it |
-| `-cirruscompact` | Shorten register snapshot text by omitting register names; the readable-register set is unchanged |
-| `-cirrusdumptrace` | Publish `Cirrus_Trace_Dump` during the read-only snapshot. Failure trace properties are captured separately |
-| `-cirrusnocal` | Skip measured calibration injection. Firmware and channel tuning still upload in DSP mode |
-| `-cirrusssid=<value>` | Override the detected subsystem ID for resource selection; does not verify speaker compatibility |
-| `-cirrusspkid=<value>` | Override speaker ID selection; the embedded reference resource uses speaker ID 1 |
-| `-cirruscalr0=<value>` | Fallback measured R0 value for either channel when no EFI calibration is available |
-| `-cirruscalr0l=<value>` | Left-channel measured R0 override; takes precedence over the shared value |
-| `-cirruscalr0r=<value>` | Right-channel measured R0 override; takes precedence over the shared value |
-| `-cirruscalstatus=<value>` | Calibration status for boot-argument calibration, default 1 |
-| `-cirruscalambient=<value>` | Required measured ambient value when supplying R0 through boot arguments |
+| `BundlePath` | `CirrusAudioFixup.kext` |
+| `ExecutablePath` | `Contents/MacOS/CirrusAudioFixup` |
+| `PlistPath` | `Contents/Info.plist` |
+| `Enabled` | `True` |
+| `Arch` | `x86_64` |
 
-Valid phases are `probe`, `otp`, `errata`, `clock`, `asp`, `gpio`, `platform`, `firmware` and `dsp`. Unknown names, including legacy numeric phase names, reject startup before reset. The `firmware` phase stops before DSP boot; the `dsp` phase halts the core after boot checks.
+Load `Lilu.kext` before `AppleALC.kext` and `CirrusAudioFixup.kext`.
 
-Calibration values must come from the hardware's calibration procedure and use the firmware's units. Do not copy an impedance value from another laptop. Missing measured calibration is reported as `NOT_AVAILABLE`; `READY_DSP` does not certify measured calibration or validate the acoustic tuning.
+| Your amplifier bus | What to load |
+| --- | --- |
+| **I2C** | Lilu → AppleALC → custom VoodooI2C → CirrusAudioFixup |
+| **SPI** | Lilu → AppleALC → CirrusAudioFixup; VoodooI2C is not needed for the amplifier |
 
----
+For I2C, install the complete [custom VoodooI2C package](https://github.com/hoaug-tran/VoodooI2C/tree/main) and load CirrusAudioFixup after VoodooI2C. See [how to identify the bus](#identify-i2c-or-spi) if you are unsure.
 
-## Diagnostics
+Keep existing ACPI and controller configuration required by the machine. No fixed namespace such as `_SB.I2C0` is required across all supported boards. Remove duplicate CirrusAudioFixup entries and validate the OpenCore configuration after changing it.
 
-Inspect the driver service, not just its ACPI device:
+### 3. Verify AppleALC and the speaker route
+
+AppleHDA and AppleALC must provide the output path feeding the amplifiers. Working headphones or a visible audio device do not prove the internal speaker route is correct.
+
+Use the **[codec dump and AppleALC route guide](docs/codec_route.md)** to:
+
+- Save the HDA codec dump from Linux on the same machine.
+- Match its converter, selector/mixer and output pin nodes against the active files in [AppleALC Resources](https://github.com/acidanthera/AppleALC/tree/master/Resources).
+- Check `Info.plist`, `PathMapRef`, `PathMapID` and `NodeID`, then select the intended output in macOS.
+
+Choose the route from the machine's connections; do not copy an audio configuration based only on the codec name.
+
+### 4. First boot: inspect only
+
+Add these arguments to your existing OpenCore boot arguments, then restart:
+
+```text
+-cirrusro -cirrusdbg
+```
+
+No speaker output from this kext is expected yet. Run:
 
 ```bash
 ioreg -lw0 -p IOService -r -c CirrusAudioFixup
-sudo /usr/bin/log show --last 1h --style syslog --info --debug --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
-sudo /usr/bin/log stream --level debug --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
+sudo bash Tools/collect_macos.sh
 ```
 
-The first log command reads the retained last hour; adjust the interval if needed. The second watches new messages until Ctrl-C. Neither recreates messages that were not retained. Empty `ioreg` output means no matching service was found, not a successful health check. Release routine messages require `-cirrusdbg` at boot. Use the collector and its kernel-buffer fallback when the unified log is empty. See [diagnostic collection and audio feedback](docs/diagnostics.md) for expected results and microphone-pop checks.
+Open `cirrus-fixup-ioreg.txt` in the report folder on your Desktop. For the supported two-amplifier configurations, check:
 
-The `Cirrus_Build_Configuration` property identifies Debug or Release. CI bundle plists also carry the build commit and configuration. Check them when comparing logs or reporting a panic.
-
-| Driver verdict | Meaning |
+| Field | Expected result |
 | --- | --- |
-| `READY_DSP` | Present amplifiers passed initialization and DSP checks; audible output and measured calibration remain separate |
-| `READY_BYPASS_EXPLICIT` | Initialization completed with explicit DSP bypass; acoustic protection is absent |
-| `DEBUG_PHASE_HALTED` | Initialization stopped at the requested debug boundary; playback is disabled |
-| `FAULT_LATCHED` | An initialization, I/O, DSP, protection or playback fault is retained |
-| `FAILED_INIT` | Initialization readiness was not established |
-| `OUTPUT_DISABLED_DSP_UNVERIFIED` | Initialization state does not establish a usable DSP or explicit bypass |
-| `READ_ONLY` | Diagnostic attachment without initialization or register writes |
-| `SUSPENDED` | Service is in its low-power state |
+| Laptop and board identity | Match a row in [working laptop configurations](#working-laptop-configurations) |
+| `Cirrus_Driver_Verdict` | `READ_ONLY` |
+| `Cirrus_Bus` | `I2C` for the listed Lenovo systems; `SPI` for the listed HP system |
+| `Cirrus_Detected_Amplifiers` | `2` |
+| `Cirrus_I2C_0_DeviceID` / `Cirrus_I2C_1_DeviceID`, or the corresponding `Cirrus_SPI_*_DeviceID` fields | Both `0x35A40` (decimal `219712`) |
+| The corresponding `_0_Probe_Return` and `_1_Probe_Return` fields | Both `0` (successful reads) |
+| `Cirrus_Attach_First_Reason` | Absent or `NONE` |
+| `Cirrus_Diag_FirstFailure_*` | Absent or `OK`; any named failure needs investigation |
 
-Per-channel `Cirrus_Playback_Verdict_left/right` values describe playback:
+**Stop if a device is missing, an ID differs or a read fails.** Keep the report and open an issue. If the service or required fields are absent, the check is incomplete; do not treat blank output as a pass.
 
-- `SAFE_IDLE_VERIFIED`: the driver's idle register checks passed.
-- `ACTIVE_REGISTERS_VERIFIED_ROUTE_UNCONFIRMED`: active register checks passed; downstream routing and sound remain unconfirmed.
-- `CLEANUP_UNVERIFIED`: cleanup did not establish the expected idle state.
-- `FAULT_LATCHED_OUTPUT_DISABLED`: a fault remains and output cleanup was verified.
+These checks identify the control path and amplifiers. Firmware and DSP are not loaded in read-only mode. Only proceed with a supported board configuration; a different laptop with the same chip needs its own verified setup. If the captured probe log includes the revision, CS35L41 B2 is `0xB2`; other revisions are not supported.
 
-Read `Cirrus_Diag_FirstFailure_*`, `Cirrus_Diag_LatestFailure_*`, `Cirrus_HDA_Status` and the trace properties together. The first failure records the original problem; a later cleanup failure must not replace it. The full failure list lives in [DiagnosticTypes.hpp](CirrusAudioFixup/Diagnostics/DiagnosticTypes.hpp).
+### 5. Enable playback
 
-Collect evidence before rebooting:
+Remove `-cirrusro`, keep `-cirrusdbg`, and restart. Leave `-cirrusnodsp` unset. Select the internal speaker output, then check these values after initialization:
+
+| Check | Expected result |
+| --- | --- |
+| `Cirrus_Driver_Verdict` | `READY_DSP`; `READ_ONLY` or `READY_BYPASS_EXPLICIT` is not the intended normal mode |
+| Both amplifier endpoints | Present, with no recorded initialization or protection failure |
+| Selected output | Internal speakers; 48 kHz stereo hardware stream in Audio MIDI Setup |
+| Listening test | Left and right channels work at low volume |
+
+Then check pause/resume, headphones, microphone activation and sleep/wake. Stop if there is loud popping, distortion or a fault verdict. Save a report before rebooting. Once testing is complete, remove `-cirrusdbg` if Release logging is no longer needed.
+
+## Update or remove
+
+**Update:** save the working kext and OpenCore configuration, replace the complete `CirrusAudioFixup.kext` bundle, then repeat the first-boot checks. Verify the loaded version after restarting; replacing a file does not change the driver already running.
+
+**Disable:** add `-cirrusoff` and restart, or set the CirrusAudioFixup `Kernel → Add` entry to `Enabled = False`. To remove it, disable the entry before deleting its bundle. Internal speakers that depend on this driver will stop working.
+
+Use a restart to change drivers; the Lilu hooks do not support live unloading. If startup fails, boot the backup EFI and restore the previous bundle and configuration.
+
+## How it works
+
+The audio path and the control path serve different purposes:
+
+```mermaid
+flowchart TD
+    A[Applications and system audio] --> B[CoreAudio]
+    B --> C[AppleHDA with AppleALC codec routing]
+    C --> D[HDA controller and codec]
+    D -->|ASP / I2S audio samples| E[Cirrus smart amplifiers]
+    E --> F[Internal speakers]
+    D -.->|Output stream and route state| G[CirrusAudioFixup runtime]
+    G --> H[Amplifier driver]
+    H --> I[I2C via custom VoodooI2C]
+    H --> J[Native Intel or AMD SPI]
+    I -->|Registers and firmware| E
+    J -->|Registers and firmware| E
+```
+
+I2C and SPI transfer register commands and firmware; they do not carry the speaker PCM stream. The shared runtime coordinates the amplifier group, while the CS35L41 driver owns its register map, firmware handling and power sequence.
+
+<details>
+<summary><strong>Initialization and playback sequence</strong></summary>
+
+| Stage | Driver behavior |
+| --- | --- |
+| Discover | Match the provider, serial-bus resources and approved board identity; require the configured endpoints |
+| Initialize | Release authorized reset, verify CS35L41 identity and revision, unpack OTP trims and apply B2 errata |
+| Configure | Set clocks, ASP, GPIO functions and the board's supported boost topology |
+| Load DSP | Select matching firmware and channel coefficients, parse their memory layout, upload and verify DSP state |
+| Prepare playback | Observe the supported HDA output; prepare the amplifier group while muted |
+| Commit playback | Verify power and signal-path registers before unmuting; roll back the group on failure |
+| Stop | Mute, pause the DSP as required, power down and verify idle |
+| Sleep / wake | Quiesce amplifiers and release controller resources; re-establish initialization and firmware state on wake |
+
+Runtime power, PLL and mailbox waits progress through timed phases. Protection and I/O failures disable output and remain recorded. Recovery is limited to supported transient PLL loss; it does not discard unrelated failures.
+
+</details>
+
+### Current audio limits
+
+The CS35L41 HDA gate accepts **48 kHz stereo PCM with 16-, 20- or 24-bit samples**. ASP uses a **3.072 MHz bit clock, 32-bit slots and 24-bit words**. CoreAudio can resample music or application audio before it reaches the hardware; a 44.1 kHz hardware stream is not accepted.
+
+Current board discovery supports one or two CS35L41 endpoints with distinct left/right channel positions. Supported configurations include the Lenovo external-boost profile and supported ACPI internal-boost configurations. Four-amplifier boards, shared boost and external boost with a separate VSPK switch are not currently supported. CS35L41 A0/B0 revisions are not enabled.
+
+## Boot arguments
+
+**Use `-cirrusro -cirrusdbg` for the first boot.** After checking the hardware and removing read-only mode, a supported configuration needs no CirrusAudioFixup arguments for normal playback. AppleALC still needs the correct codec route.
+
+| Argument | When to use it |
+| --- | --- |
+| `-cirrusoff` | Disable attachment while isolating a boot or driver problem |
+| `-cirrusdbg` | Enable routine driver logs in a Release build; Debug already enables them |
+| `-cirrusro` | Inspect hardware without amplifier register writes, platform reset or normal initialization; playback stays disabled |
+| `-cirrusnodsp` | Test the direct DAC path during controlled bring-up; skips DSP firmware and removes DSP acoustic protection |
+
+For a diagnostic capture, start with `-cirrusdbg`. Use `-cirrusdbg -cirrusro` when the board has not been validated. Remove diagnostic arguments after testing.
+
+Stage stops, register-dump options, speaker identity and measured-calibration overrides are documented in the **[complete boot argument reference](docs/boot_arguments.md)**. They are not a recommended preset for normal use.
+
+## Status and diagnostics
+
+### Inspect the driver
+
+```bash
+ioreg -lw0 -p IOService -r -c CirrusAudioFixup
+sudo kmutil showloaded
+system_profiler SPAudioDataType
+```
+
+Query the `CirrusAudioFixup` service in **IOService**. A matching ACPI node alone does not establish successful attachment. If the service is absent, inspect loaded kexts, provider attachment and kernel logs first.
+
+| Property | What to inspect |
+| --- | --- |
+| `Cirrus_Driver_Verdict` | Overall initialization and power state |
+| `Cirrus_Detected_Amplifiers` | Discovered count; compare with the configured topology |
+| `Cirrus_Communication_Status` / `Cirrus_Amplifier_Status` | Transport readiness versus amplifier readiness |
+| `Cirrus_Playback_Verdict_<channel>` | Per-amplifier playback state |
+| `Cirrus_Diag_FirstFailure_<channel>` | Original failure, preserved through later cleanup |
+| `Cirrus_Attach_First_*` / `Cirrus_Attach_Latest_*` | Attachment stage, reason and original return value |
+| `Cirrus_Speaker_ID_<channel>` / `Cirrus_Speaker_ID_Source_<channel>` | Speaker identity and its source |
+| `Cirrus_Calibration_Status_<channel>` | Whether measured calibration was applied or unavailable |
+| `Cirrus_Build_Configuration` | Debug or Release; compare the loaded build with the intended artifact |
+
+Use the channel suffixes actually published by the service; the Lenovo reference uses `left` and `right`.
+
+See the [verdict reference](docs/diagnostics.md#driver-and-playback-verdicts) for initialization and playback states. `READY_DSP` confirms DSP initialization; listen to both channels to check actual output.
+
+### Capture a report
+
+Use a Debug build, or add `-cirrusdbg` to a Release build and reboot. From the repository folder, run:
 
 ```bash
 sudo bash Tools/collect_macos.sh
 ```
 
-Run this from the repository root on the affected macOS installation. The script prints its output directory and records command exit codes and empty output in `status.txt`; it does not create a ZIP archive. Some optional tools or properties can be absent. Review collected NVRAM and hardware identifiers before sharing them. A missing controller, unsupported format or ambiguous stream should be investigated in the audio stack before forcing another firmware SSID.
+The collector saves a directory and ZIP on your Desktop. It reads IORegistry, loaded kexts, unified logs and the available kernel buffers. Check `status.txt` for missing or failed captures.
 
----
+`log stream` and `log show` only return messages available through unified logging. They can be empty even when the kext is loaded; they do not guarantee complete boot logs. See [manual log capture and fallbacks](docs/diagnostics.md#retained-logs-and-live-messages).
 
-## Debug and Release builds
+## Troubleshooting
 
-The two builds intentionally use the same hardware sequencing, checks, fault recorder and recovery limits. Do not remove safety checks or allow additional boost settings in Release.
+| Problem | Checks |
+| --- | --- |
+| No internal speaker output | Confirm AppleALC provides the correct speaker route, then check dependencies, driver service and both amplifier verdicts |
+| I2C provider missing or transfers fail | Use the custom provider's `main` branch; check controller components, ACPI resources and native I/O errors |
+| SPI initialization fails | Check controller identity, PCI association, ACPI endpoint/chip-select/reset resources and transfer failures |
+| Only one speaker works | Verify endpoint count, channel positions and separate left/right coefficients |
+| Firmware is missing | Check board and speaker identity against embedded resources; an unrelated SSID override does not supply compatible firmware |
+| Playback is rejected | Check the actual HDA stream is supported 48 kHz stereo and the speaker output is selected |
+| No sound after wake | Capture power, communication, HDA and amplifier state immediately after wake; verify firmware initialization repeated |
+| Click or pop during output/microphone changes | Capture before/after state and timestamps; check codec routing and playback transitions together; stop repeated testing if the pop is loud |
+| DSP bypass changes loudness or tone | Verify matching program and speaker tuning; bypass is not a sound-quality mode |
+| Microphone clips | Check codec input gain and routing in AppleALC; amplifier gain does not control the microphone |
 
-| Setting | Debug | Release |
+For a named failure, use the [failure-code reference](docs/diagnostics.md#failure-codes) and keep the first native I/O error.
+
+## Collect Windows or Linux data
+
+Use these tools when checking a new machine, comparing OEM settings or reporting a problem. They collect evidence; they do not install drivers or convert Windows effects into macOS presets.
+
+| System | Tool | Default output |
 | --- | --- | --- |
-| Compiler optimization | `-O0` | `-Os` |
-| Routine logging at attachment | Enabled | Disabled; enable with `-cirrusdbg` |
-| Error logging | Enabled | Enabled |
-| Deep register diagnostics | Explicit `-cirrusdiag` | Explicit `-cirrusdiag` |
-| Debug information | Matching dSYM | Matching dSYM for optimized code |
-| Installed-product stripping | Disabled | Disabled |
-| Hardware safety checks | Unchanged | Unchanged |
+| Windows | [Collect-AudioAMP-Windows.ps1](Tools/Collect-AudioAMP-Windows.ps1) | New folder and ZIP in Documents |
+| Linux | [collect_audio_amp_linux.sh](Tools/collect_audio_amp_linux.sh) | New folder and `.tar.gz` in the invoking user's home directory |
 
-CI verifies binary/dSYM UUIDs and packages symbols separately in `SYMBOLS.zip`. Keep the symbols for the exact build; an optimized Release panic still needs matching symbols. There are no Debug-only panic assertions in the current driver.
+**Windows:** open Windows PowerShell as Administrator in the repository folder:
 
-Branch pushes produce test artifacts. Public releases require a new matching `vX.Y.Z` tag whose commit belongs to `main`, matching plist versions and a changelog entry. Tags on unmerged development branches cannot publish releases. Versioned assets include checksums and build metadata. Existing releases are not overwritten.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collect-AudioAMP-Windows.ps1
+```
 
----
-
-## Building and testing
-
-Use Xcode on macOS and the configured [MacKernelSDK](https://github.com/acidanthera/MacKernelSDK). From the repository root:
-
-Clone the same SDK revision used by CI once, before building:
+**Linux:** run from the repository folder:
 
 ```bash
+sudo bash Tools/collect_audio_amp_linux.sh
+```
+
+Windows collects audio/AMP devices, installed INF files, selected registry settings, recent events and the named Cirrus EFI calibration variable when available. Linux collects audio devices, codec dumps, bus/controller information, ACPI tables, available amplifier regmap snapshots and audio logs. Neither guarantees a complete DSP-memory dump or every OEM setting.
+
+Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when matching driver/firmware files are needed. Both default to a 24 MiB collection budget and record missing or skipped data in `status.json`. See [collector options](docs/audio_collectors.md) for output paths, limits and optional tracing.
+
+## Adding hardware support
+
+For a new board or amplifier family, start with the [driver framework and porting guide](docs/extensible_driver.md#adding-hardware-support). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
+
+## Build from source
+
+### Dependencies and build
+
+Use macOS with Xcode, its command-line developer tools, Python 3 and Git. The project targets x86_64 and pins its kernel SDK and Lilu headers:
+
+```bash
+git clone https://github.com/hoaug-tran/CirrusAudioFixup.git
+cd CirrusAudioFixup
+
 git clone https://github.com/acidanthera/MacKernelSDK.git MacKernelSDK
-git -C MacKernelSDK checkout --detach 7af1933c27aefcbdf4809ee44478829aad30f9c1
+git -C MacKernelSDK checkout 7af1933c27aefcbdf4809ee44478829aad30f9c1
+
 git clone https://github.com/acidanthera/Lilu.git Lilu
-git -C Lilu checkout --detach e4748cc081bf060302c7d3c44a643ce1d11b7e1d
+git -C Lilu checkout e4748cc081bf060302c7d3c44a643ce1d11b7e1d
+
+bash Tools/build_macos.sh
 ```
 
-If an SDK checkout already exists, inspect its state before changing its revision. The project uses its kernel headers and x86_64 libkmod rather than the SDK bundled with Xcode.
+Check out the intended CirrusAudioFixup branch or tag before building. The script runs host regressions, builds Debug and Release, verifies bundle metadata, x86_64 architecture, kernel class metadata and matching dSYM UUIDs. It does not install or load the result.
 
-```bash
-xcodebuild -project CirrusAudioFixup.xcodeproj \
-  -target CirrusAudioFixup -configuration Release -sdk macosx \
-  CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO \
-  CONFIGURATION_BUILD_DIR="$PWD/build/Release" build
-```
+| Configuration | Optimization | Routine logging | Output |
+| --- | --- | --- | --- |
+| Release | `-Os` | Enabled with `-cirrusdbg` | `build/Local-Release/CirrusAudioFixup.kext` |
+| Debug | `-O0` | Enabled by default | `build/Local-Debug/CirrusAudioFixup.kext` |
 
-Repeat with `Debug` and `build/Debug` for the diagnostic build. These are unsigned OpenCore-injection artifacts, not a standalone macOS installer.
+Both builds retain diagnostic symbols and matching dSYMs. Essential identity, firmware, protection and playback checks remain enabled in both configurations.
 
-Host tests require Python 3, Bash and a C++17 compiler available as `g++` (Bash is included with macOS; on Windows the tools test uses Git for Windows Bash):
+### Host tests
 
 ```bash
 python3 Tests/run.py
-# Optional Windows package audit tool regression:
-python3 Tests/run.py --audit
 ```
 
-Tests are development tools and are not shipped inside the kext. The maintained suite is shared by local builds and CI; temporary fixtures are removed after each test. CI runs on pushes to every branch, pull requests and manual runs. Successful builds package Release, Debug and matching symbols as downloadable workflow artifacts with seven-day retention. Public release publication requires a matching version tag; release assets remain attached to the release.
+Fixtures cover register access, firmware parsing, OTP/errata, controller ownership, ACPI discovery, calibration, playback transitions, PM and failure rollback. Some tests deliberately inject errors; judge the result by assertions and exit status. C++ compilers and shell tools are required. Sanitizer variants run where supported; Windows explicitly skips unavailable ASan/UBSan runtimes.
 
-Injected failures deliberately print errors. Check each process's exit code and final PASS result. These tests exercise production code with mocked buses and IOKit objects; they cannot establish a real I2C transaction, loaded kext or speaker output.
+Host tests establish tested source behavior. Load compatibility, physical stereo output and sleep/wake must also be checked with the resulting macOS bundle.
 
-Before declaring a board/OS combination supported, record the commit, macOS build, CPU/platform, audio codec/layout, VoodooI2C build and firmware/tuning identity. Test cold boot, quiet idle, low-volume stereo playback, repeated start/stop, headphone switching and sleep/wake. Capture both channel verdicts and first/latest failures. See [CONTRIBUTING.md](CONTRIBUTING.md).
+## Documentation
 
-The completed source fixes and remaining validation work are listed in [audit_status.md](docs/audit_status.md).
+| Guide | Contents |
+| --- | --- |
+| [Boot argument reference](docs/boot_arguments.md) | All supported options, stage stops and measured overrides |
+| [Codec dump and speaker routing](docs/codec_route.md) | Linux codec dump and AppleALC resource comparison |
+| [Windows and Linux collectors](docs/audio_collectors.md) | Collection commands, output files and options |
+| [Diagnostics](docs/diagnostics.md) | Service inspection, collection and output/input transition checks |
+| [Board bring-up](docs/safe_bringup_protocol.md) | Read-only discovery, staged initialization and hardware checks |
+| [Driver framework](docs/extensible_driver.md) | Registration, endpoint ownership and module boundaries |
+| [Runtime transitions](docs/runtime_transition_design.md) | Grouped playback, deadlines and rollback |
+| [Register reference](docs/register_reference.md) | Linux constants, register addresses, tables and payload hashes |
+| [I2C provider](docs/i2c_provider.md) | Required provider interface and request layout |
+| [Native SPI](docs/spi_support.md) | Controller families, chip select, transfer limits and power handling |
+| [Contributing](CONTRIBUTING.md) | Code conventions and validation requirements |
+| [Changelog](CHANGELOG.md) | Version changes |
 
----
+## Sources and acknowledgments
 
-## Documentation hub
+Thanks to **Cirrus Logic**, the **Linux ALSA/ASoC contributors**, **Acidanthera**, the **VoodooI2C team**, and everyone contributing hardware tests, logs and fixes.
 
-| Document | What to use it for |
-| :--- | :--- |
-| [Bring-up and diagnostic checks](docs/safe_bringup_protocol.md) | Read-only inspection, staged initialization, playback checks and fallback |
-| [Diagnostic collection and audio feedback](docs/diagnostics.md) | Command results, microphone-pop evidence and loudness/DSP comparisons |
-| [Audit status](docs/audit_status.md) | Addressed findings, verification boundaries and remaining work |
-| [Linux parity audit](docs/linux_parity_audit.md) | Firmware, gain, lifecycle differences and remaining parity gaps |
-| [Windows reference audit](docs/windows_driver_audit.md) | OEM payload identity, registry settings and disassembly evidence |
-| [Runtime transition design](docs/runtime_transition_design.md) | Start/stop phases, stereo barrier, deadlines and completion boundaries |
-| [Contributing](CONTRIBUTING.md) | Hardware evidence, code conventions, tests and release requirements |
-| [Changelog](CHANGELOG.md) | Source changes by version |
-| [Historical prebuilt bundle](docs/Kexts.zip) | Archived components; not the current source build |
-| [Reference EFI](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh) | Legion board configuration and project context |
+### Driver and platform references
 
----
+| Source | Used for |
+| --- | --- |
+| [Linux CS35L41 HDA driver](https://github.com/torvalds/linux/blob/v6.12/sound/pci/hda/cs35l41_hda.c) | Firmware selection and HDA amplifier lifecycle |
+| [Linux CS35L41 board properties](https://github.com/torvalds/linux/blob/v6.12/sound/pci/hda/cs35l41_hda_property.c) | Board identities, speaker configuration and property corrections |
+| [Linux CS35L41 library](https://github.com/torvalds/linux/blob/v6.12/sound/soc/codecs/cs35l41-lib.c) and [register definitions](https://github.com/torvalds/linux/blob/v6.12/include/sound/cs35l41.h) | OTP trims, B2 errata, boost and register definitions |
+| [Linux Cirrus DSP support](https://github.com/torvalds/linux/tree/v6.12/drivers/firmware/cirrus) | WMFW formats and DSP control/memory handling |
+| [Intel LPSS](https://github.com/torvalds/linux/blob/v6.12/drivers/mfd/intel-lpss-pci.c), [SPI drivers](https://github.com/torvalds/linux/tree/v6.12/drivers/spi) and [AMD SPI](https://github.com/torvalds/linux/blob/v6.12/drivers/spi/spi-amd.c) | Native controller profiles and transfer behavior |
+| [linux-firmware](https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/cirrus) and matching OEM packages | Program firmware and board/speaker coefficients |
 
-## Troubleshooting guide
+### macOS projects
 
-### Internal speakers remain silent
+- [Lilu](https://github.com/acidanthera/Lilu) - kernel patching and integration framework.
+- [AppleALC](https://github.com/acidanthera/AppleALC) - host codec support.
+- [MacKernelSDK](https://github.com/acidanthera/MacKernelSDK) - kernel headers and build support.
+- [VoodooI2C](https://github.com/VoodooI2C/VoodooI2C) - I2C controller framework; [the custom provider fork](https://github.com/hoaug-tran/VoodooI2C/tree/main) supplies the addressed-transfer interface used here.
+- [OpenCorePkg](https://github.com/acidanthera/OpenCorePkg) - bootloader and kernel extension injection.
 
-1. Confirm the intended host output device and codec layout. On Tahoe, validate the restored AppleHDA stack first.
-2. Check that the custom I2C provider is loaded and that the CirrusAudioFixup service appears in IOService.
-3. Inspect both channels' verdicts and first/latest failures. HDA RUN or `READY_DSP` alone does not prove speaker output.
-4. Save the collector report before rebooting. Do not force another laptop's SSID or raise gain to bypass an unexplained failure.
+## License
 
-### Speakers pop when the microphone opens
-
-This is a reported first-activation symptom, not an established layout-id or kext defect. Follow the [microphone transition checks](docs/diagnostics.md#first-microphone-activation-causes-a-speaker-pop) and compare timestamped pre/post state. Stop if the pop is loud; do not repeatedly reproduce it at high volume.
-
-### Sound is louder without DSP or another component
-
-Identify exactly what was disabled. The same volume slider position does not establish matched acoustic levels. Firmware tuning, amplifier gain and user-space effects affect different parts of the chain. See [loudness, EQ and DSP bypass](docs/diagnostics.md#louder-sound-eq-and-dsp-bypass). Bypass is not a recommended permanent fix.
-
-### No sound after sleep or wake
-
-Collect the service properties and logs after wake, before another reboot. Compare the power state, initialization verdict, HDA status and both channels' first/latest failures. Wake must re-establish the software initialization and firmware state; a retained controller or an output descriptor alone is insufficient.
-
-> [!TIP]
-> **One report, both channels**
->
-> Run `sudo bash Tools/collect_macos.sh` from the repository root. Keep `status.txt` and the raw files together. Empty query output is evidence to investigate, not a successful health check.
-
----
-
-## Porting another board or amplifier
-
-Start with read-only evidence from macOS and a working Linux configuration. Record ACPI HID, I2C endpoints, silicon/revision, HDA subsystem ID, reset wiring, boost topology and speaker/tuning IDs.
-
-For CS35L41, add a board profile and matching personality only after checking that evidence. An SSID override alone is not a port. Validate the reference audio route and each channel separately.
-
-The import utility uses `--bin-l` and `--bin-r`. Validate first:
-
-Firmware and tuning are compiled into the kext executable. Runtime does not read
-firmware from the EFI partition or macOS filesystem and does not require a helper.
-This packaging choice does not remove the Lilu, I2C-provider or host-audio dependencies.
-
-```bash
-python3 Tools/import_firmware.py --codec cs35l41 --ssid 0x103C89B5 \
-  --wmfw path/to/cs35l41-dsp1-spk-prot-103c89b5.wmfw \
-  --bin-l path/to/left.bin --bin-r path/to/right.bin \
-  --spkid 1 --validate-only
-```
-
-Replace the example SSID and every `path/to/...` argument with your actual resource identity and files. This checks basic container headers and alignment, not complete block parsing, DSP identity, board compatibility or runtime validation. Invalid right-channel input must fail just like invalid left-channel input. Omitting `--bin-r` deliberately reuses left-channel tuning; do that only when the source profile specifies identical tuning. Review the import utility before using its write mode and keep a recoverable source commit.
-
-If the matching Linux profile provides companion gain parameters, add
-`--bincfg-l path/to/left.bincfg --bincfg-r path/to/right.bincfg` to that command.
-These paths are build-time inputs, not installation paths. The CS35L41 parser
-checks the signature, version, sizes, entry count and gain range before import.
-Each channel's omitted companion uses the Linux default PCM gain code 17.
-Unlike BIN reuse, a missing right BINCFG never inherits the left gain override.
-Remove `--validate-only` to import a new profile after reviewing its identity.
-Existing board/speaker entries and resource symbols reject import without changes;
-replace an existing profile explicitly in source after reviewing its resources.
-Generated arrays carry SHA-256 comments for byte identity, not proof of authenticity.
-
-For another amplifier model, implement `AmplifierLifecycleHooks`, silicon identity/access rules and bus formats, then register its factory in `Devices/AmplifierDrivers.hpp`. Add its silicon descriptor and matching IOService personality where needed, plus a verified board manifest and exact firmware/tuning bindings. Common bring-up, playback coordination and PM dispatch do not need a new model switch. Reset/trim, clocks, power, DSP parsing, IRQ handling and fault recovery remain driver responsibilities. See [the driver contract](docs/extensible_driver.md).
-
----
-
-## Sources and license
-
-The [volume, EQ and calibration audit](docs/acoustic_parity_audit.md) separates
-embedded DSP tuning from host volume and Nahimic effects. It records OEM payload
-comparisons, calibration validation and the limits of acoustic parity claims.
-
-The [Windows reference audit](docs/windows_driver_audit.md) records byte-identical
-OEM firmware and Veco left/right coefficients for the `17AA3847 / spkid1` profile.
-The OEM configured gain is also 17.5 dB. These checks establish resource identity,
-not matching Windows effects, volume curves or measured acoustic output.
-
-Register definitions and sequencing draw on the Linux CS35L41 HDA/ASoC drivers. This is a macOS port with board-specific behavior, not a claim of bit-for-bit parity with every upstream path. Firmware and tuning resources are embedded in [Firmware.hpp](CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Firmware.hpp); preserve their provenance and applicable licenses when replacing them.
-
-See the [CS35L41 parity audit](docs/linux_parity_audit.md) for corrected reset/unmute values and remaining differences. DSP playback uses Linux's default PCM gain of 17.5 dB unless its selected channel has an embedded `.bincfg` override. Digital amplifier volume stays at 0 dB. The existing reference resource has no companion gain override. The Windows OEM effects chain is not reproduced or verified here. A matching volume-slider position does not establish equal loudness or EQ.
-
-See [LICENSE](LICENSE) for the non-commercial distribution terms. Paid system-setup services are permitted under the license when no fee is charged for this software itself; selling the software or paid EFI bundles is not.
-
-Maintained by [Tran Kinh Hoang](https://github.com/hoaug-tran). Thanks to the VoodooI2C team, Acidanthera, Cirrus Logic and the Linux audio maintainers for their code and documentation. The [reference EFI](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh) and its [historical audio issue](https://github.com/hoaug-tran/Lenovo-Legion-7-16ACHG6-Hackintosh/issues/2) provide board context, not a validation matrix for every macOS release.
-
-Driver module naming and ownership conventions: [kernel driver naming](docs/kernel_driver_naming.md).
+Free for non-commercial use. See [LICENSE](LICENSE).

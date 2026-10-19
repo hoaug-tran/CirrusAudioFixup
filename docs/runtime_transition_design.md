@@ -1,7 +1,6 @@
 # CS35L41 runtime transitions
 
-This describes the runtime source changes made on 2026-10-10. It is not a
-latency measurement or a macOS hardware support declaration.
+Playback starts muted, waits for both channels and cancels if the host route changes. This page describes ordering and deadlines; the numbers are not measured audio-switching latency.
 
 ## Ownership and execution
 
@@ -74,23 +73,7 @@ The provider's addressed transfer is still synchronous. A deadline cannot
 interrupt that call; it is checked when control returns. These numbers do not
 guarantee end-to-end audio switching within a specific duration.
 
-## Plan completion boundaries
-
-| Work item | Source status | Remaining evidence or work |
-| --- | --- | --- |
-| Runtime transition state machine | Implemented for playback start and cleanup | PM quiesce, initialization and transport remain synchronous |
-| Coordinated stereo preparation | Implemented readiness barrier and pair rollback | Physical stereo timing and switching latency |
-| IRQ, faults and sleep/hibernate | Existing masked status checks and synchronous sleep/wake retained | Opt-in reference protection IRQ with polling backup; runtime hibernate/regcache parity is not implemented |
-| Windows analysis | Mailbox helper and direct callers inspected | Full caller semantics, tuning selection, volume ramp, calibration and IRQ/hibernate reconstruction remain incomplete |
-| Driver separation | Runtime register phases extracted and unsupported models rejected | Firmware discovery/upload/boot and several helpers remain service-owned |
-| Target verification | Local Debug/Release bundles and prior Debug target playback | New bundle boot, timing comparison, sleep/wake and wider OS/board matrix |
-
-The current host is macOS. Local Xcode Debug and Release bundles are checked
-for metadata, architecture, matching dSYM UUID and OpenCore vtable layout.
-The earlier fixed Debug bundle has target playback evidence; each subsequent
-bundle still needs its own boot and switching measurements.
-
-## Preparation overhead and measurement
+## Preparation timing
 
 Pending preparation skips the recurring active-health/logging sweep. Its phase
 checks, protection observation and stereo commit checks remain required.
@@ -107,8 +90,7 @@ volume, firmware and boot options; report distributions, not one fastest sample.
 
 ## Provider review
 
-The supplied custom source at `/Users/hoaug/Documents/VoodooI2C` exports addressed
-combined transfers. DeviceNub interrupt APIs forward to its GPIO pin or ACPI
+The [custom I2C provider](i2c_provider.md) exports addressed combined transfers. DeviceNub interrupt APIs forward to its GPIO pin or ACPI
 interrupt. The target snapshot declares GPIO pin 84, GPIO IRQ mode 3. Controller
 power changes serialize against the I2C bus lock, disable the bus and its controller
 interrupt during suspend, and reinitialize on wake.
@@ -119,7 +101,7 @@ function and polarity, paired-source dispatch, acknowledgement, and safe suspend
 ordering. GPIO1 drives the existing external-supply sequence and must not be
 repurposed as an interrupt. Linux hibernate also depends on boost topology and
 DSP wake/retry semantics; copying only its mailbox command is insufficient.
-`-cirrusirq` now enables a reference-only shared protection IRQ path with polling
+`-cirrusirq` enables a reference-only shared protection IRQ path with polling
 backup. It requires GPIO mode, pin 84 and IRQ type 3. It applies the captured
 GPIO2 open-drain function and protection mask, preserves GPIO1, restores polling
 masks on setup failure, disables delivery before PM/teardown, and reconfigures on
@@ -132,7 +114,7 @@ The local Linux capture (`CS35L41_AIO`) shows both amps sharing GPIO84, GPIO pad
 `0x02000000`, GPIO2 control `0x81000001`, and IRQ1 mask `0x7FFD7E3F`. Its IRQ
 counter is zero, so registration is supported but observed fault delivery is not.
 Runtime hibernate still needs implementation and target wake validation; it is
-not a completed P3 item.
+not implemented.
 
 ## Regression coverage
 
@@ -142,11 +124,6 @@ a delayed right endpoint, a failed second commit, elapsed PUP/PDN deadlines,
 late I2C mailbox responses, unsupported-model rejection and idle without I2C.
 Single-transfer fault sweeps cover start and asynchronous runtime cleanup.
 The existing firmware, PM, calibration and protection suites remain required.
-
-The final host run passed all 14 check suites and the firmware reproducer.
-Start sweeps covered 117 and 123 transfer positions; cleanup sweeps covered
-34 and 36 positions for the two firmware branches. Debug and Release main
-objects compiled as x86_64 Mach-O relocatables targeting macOS 11.
 
 Host mocks cannot verify bus latency, speaker excursion, acoustic response,
 interrupt delivery or whether the IOAudioFamily hooks load on target macOS.

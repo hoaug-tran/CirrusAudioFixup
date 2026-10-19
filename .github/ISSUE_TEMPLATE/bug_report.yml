@@ -1,100 +1,106 @@
 name: Bug report
-description: Report a boot, attach, I2C, HDA, DSP, or playback problem
+description: A reproducible boot, I2C/SPI, audio, power, build or collector problem
 title: "[Bug]: "
 labels: ["type: bug", "status: needs-logs"]
 body:
   - type: markdown
     attributes:
       value: |
-        Before submitting an issue, review the [Safe Bring-up Protocol](docs/safe_bringup_protocol.md) and confirm whether the failure occurs in bypass mode (`-cirrusnodsp`) or DSP mode.
-        If possible, run `sudo bash Tools/collect_macos.sh` and attach the generated diagnostic archive to this report.
+        Report one problem per issue. For a new board or amplifier, use **Hardware support** instead.
+        Read the [README](https://github.com/hoaug-tran/CirrusAudioFixup#readme). First-boot checks use `-cirrusro -cirrusdbg`; do not enable DSP bypass, force another board's SSID or raise gain just to complete this form.
+        On the affected macOS installation, run `sudo bash Tools/collect_macos.sh` from the repository folder and keep the Desktop ZIP with `status.txt`. Unified logs can be empty; the report's IORegistry and kernel-buffer captures also matter.
   - type: checkboxes
-    id: safety
+    id: checks
     attributes:
-      label: Safety check
+      label: Before submitting
       options:
-        - label: I can boot without CirrusAudioFixup if this kext breaks boot.
+        - label: I searched existing issues and read the supported hardware and installation sections.
           required: true
-        - label: I am using a custom VoodooI2C build with VoodooI2CTransferToAddress.
+        - label: I describe what I actually tested and mark unavailable data instead of guessing values.
           required: true
-        - label: I am using a known AppleALC layout for my HDA route.
+        - label: I reviewed attachments for personal data and did not include an entire EFI folder.
           required: true
-  - type: input
-    id: macos
+  - type: dropdown
+    id: problem_type
     attributes:
-      label: macOS version
-      placeholder: "14.7, 15.0, ..."
+      label: Problem type
+      options:
+        - Boot failure or kernel panic
+        - Driver does not attach or an amplifier is missing
+        - No sound or only one speaker works
+        - Headphone, output or microphone transition
+        - Sleep or wake
+        - Sound quality or loudness
+        - Build, packaging or release artifact
+        - Collector or diagnostics
+        - Documentation error
+        - Other reproducible problem
     validations:
       required: true
   - type: input
-    id: laptop
+    id: system
     attributes:
-      label: Laptop model
-      placeholder: "Vendor model, board id if known"
-    validations:
-      required: true
-  - type: input
-    id: cpu
-    attributes:
-      label: CPU platform
-      placeholder: "Intel or AMD, generation if known"
-    validations:
-      required: true
-  - type: input
-    id: hda
-    attributes:
-      label: HDA codec and subsystem id
-      placeholder: "10ec:0287, subsystem 17aa:3847"
-    validations:
-      required: true
-  - type: input
-    id: i2c
-    attributes:
-      label: ACPI match and I2C addresses
-      placeholder: "CLSA0100, 0x40, 0x41"
+      label: Machine and operating system
+      description: Exact model, CPU and macOS version/build. For a build or collector problem, give the actual host OS instead.
+      placeholder: "Manufacturer/model; CPU; OS version and build"
     validations:
       required: true
   - type: textarea
-    id: kexts
+    id: build
     attributes:
-      label: Kext list and load order
-      description: Include Lilu, AppleALC, VoodooI2C, and CirrusAudioFixup versions or commits.
-      render: text
+      label: CirrusAudioFixup build
+      description: Version, Debug or Release, download/build source, and commit or CI artifact link. State any local changes and confirm which bundle was loaded. Do not write only latest.
+      placeholder: "Version/configuration; tag or commit; release/CI link or local build; local changes"
+    validations:
+      required: true
+  - type: dropdown
+    id: bus
+    attributes:
+      label: Amplifier control bus
+      description: Use Cirrus_Bus, Linux driver binding or ACPI evidence. CSC3551 and CPU vendor alone do not identify the bus.
+      options:
+        - I2C
+        - SPI
+        - Not detected yet
+        - Not applicable to this build, tool or documentation problem
     validations:
       required: true
   - type: textarea
-    id: bootargs
+    id: audio_hardware
     attributes:
-      label: Boot arguments
-      render: text
+      label: Audio hardware
+      description: For driver/audio failures, give known codec ID, HDA subsystem ID, amplifier model/revision and ACPI HID/_SUB. Include I2C addresses or SPI controller/chip selects if known. Attach the report rather than inventing missing IDs.
+      placeholder: "Codec and HDA SSID; amplifier and revision; ACPI identity; endpoints; unknown fields"
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Loaded configuration
+      description: Give relevant boot arguments, OpenCore version, and Lilu/AppleALC/CirrusAudioFixup versions/load order. For I2C include the custom VoodooI2C source/build; SPI does not require it. State any HDA restoration patch and whether AppleALC exposes the intended speaker route. For non-runtime issues, write not applicable and explain.
+      placeholder: "Boot arguments; relevant kexts and order; provider if I2C; speaker route working/missing/unknown; other audio patches"
     validations:
       required: true
   - type: textarea
-    id: problem
+    id: reproduce
     attributes:
-      label: What happened
-      description: State expected result and actual result.
+      label: Steps, expected result and actual result
+      description: Describe the trigger, frequency and what changed. Give the last working build if this is a regression. For sound comparisons, identify the output, volume/effects settings and comparison method; a slider percentage alone is not a matched level.
+      placeholder: |
+        Steps:
+        Expected:
+        Actual and frequency:
+        Last working build, if any:
     validations:
       required: true
   - type: textarea
-    id: logs
+    id: evidence
     attributes:
-      label: Required logs
-      description: Paste the output from README log commands.
-      render: text
+      label: Evidence from the affected build
+      description: Attach the macOS collector ZIP, or a build/collector error log for host-side failures. For a panic or failed boot, attach the panic report/photo and the tested build identity. If collection is impossible, paste the exact command/error and explain why. Do not substitute logs from another build or only say no logs.
+      placeholder: "Drop the files here. Point to the failure time, first failure and relevant channel/endpoint. If unavailable, explain the blocker and include the command error."
     validations:
       required: true
   - type: textarea
-    id: ioreg
+    id: comparisons
     attributes:
-      label: IORegistry evidence
-      description: Include Cirrus_* properties and the VoodooI2C device node.
-      render: text
-    validations:
-      required: true
-  - type: textarea
-    id: notes
-    attributes:
-      label: Extra notes
-      description: Linux codec dump, pin config, AppleALC layout, or firmware source if relevant.
-      render: text
+      label: Other results, if available
+      description: Existing Linux/Windows reports or tests without this kext can help isolate the problem. State not tested where appropriate; extra bypass or fault-injection tests are not required.

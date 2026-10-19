@@ -1,86 +1,90 @@
 name: Hardware support
-description: Request support for a new laptop, HDA codec, or amplifier profile
+description: Request support for a new board or Cirrus amplifier
 title: "[Hardware]: "
 labels: ["type: hardware-support", "status: needs-logs"]
 body:
   - type: markdown
     attributes:
       value: |
-        New hardware support needs real registry data, HDA route data, and firmware evidence. Do not request support based only on laptop model name.
+        A model name alone is not enough to add hardware support. Include data from the actual machine.
+        Check [supported hardware](https://github.com/hoaug-tran/CirrusAudioFixup#supported-hardware) first. For a failure on an already supported configuration, use **Bug report**.
+        Linux: `sudo bash Tools/collect_audio_amp_linux.sh`
+        Windows PowerShell as Administrator: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collect-AudioAMP-Windows.ps1`
+        macOS, if bootable: `sudo bash Tools/collect_macos.sh`
+        See [collector instructions](https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/audio_collectors.md). Do not force a different board identity or copy another speaker's tuning to test compatibility.
   - type: checkboxes
-    id: scope
+    id: checks
     attributes:
-      label: Scope check
+      label: Before submitting
       options:
-        - label: I understand support is not automatic and may require code changes.
+        - label: I searched existing hardware requests and checked the current support list.
           required: true
-        - label: I can test debug builds and recover from boot failure.
+        - label: The attached data comes from this machine; unknown identities and untested results are marked clearly.
           required: true
-        - label: I will not submit firmware or tuning files from an unknown source.
+        - label: I reviewed attachments for personal data and can identify the source of any supplied firmware.
           required: true
   - type: input
-    id: laptop
+    id: system
     attributes:
-      label: Laptop model
-      placeholder: "Vendor model and board id"
-    validations:
-      required: true
-  - type: input
-    id: cpu
-    attributes:
-      label: CPU platform
-      placeholder: "Intel or AMD, generation if known"
-    validations:
-      required: true
-  - type: input
-    id: hda
-    attributes:
-      label: HDA codec id and subsystem id
-      placeholder: "vendor:device, subsystem vendor:device"
-    validations:
-      required: true
-  - type: input
-    id: acpi
-    attributes:
-      label: ACPI device name under VoodooI2C
-      placeholder: "CLSA0100, CSC3551, ..."
-    validations:
-      required: true
-  - type: input
-    id: amps
-    attributes:
-      label: Amplifier model and I2C addresses
-      placeholder: "CS35L41 at 0x40 and 0x41"
+      label: Exact machine and CPU
+      placeholder: "Manufacturer, full model/board name, CPU"
     validations:
       required: true
   - type: textarea
-    id: applealc
+    id: operating_systems
     attributes:
-      label: AppleALC route
-      description: Layout id, converter NID, speaker pin NID, and evidence.
-      render: text
+      label: Operating systems and current audio behavior
+      description: Give Linux/Windows/macOS versions actually tested and whether both speakers, headphones and microphone work in each. For Windows comparisons, note OEM effects if known. State the CirrusAudioFixup build/mode if already tested, or not installed.
+    validations:
+      required: true
+  - type: dropdown
+    id: bus
+    attributes:
+      label: Amplifier control bus
+      description: Identify it from the collector, driver binding or ACPI resources; do not infer it from the CPU or ACPI HID alone.
+      options:
+        - I2C
+        - SPI
+        - SoundWire
+        - Not identified yet
     validations:
       required: true
   - type: textarea
-    id: linux
+    id: identity
     attributes:
-      label: Linux evidence
-      description: Codec dump, dmesg snippets, ACPI node, or known Linux driver binding.
-      render: text
+      label: Codec, amplifier and endpoint identities
+      description: Give known codec/HDA SSID, amplifier model/revision, ACPI HID/_SUB, endpoint count, and I2C addresses or SPI controller/chip selects. Include the identity source. If the model or an ID is unknown, say so and point to the relevant collector file.
+      placeholder: "Codec/HDA SSID; amplifier/revision; ACPI identity; bus/controller/endpoints; source files; unknown fields"
     validations:
       required: true
   - type: textarea
-    id: ioreg
+    id: reports
     attributes:
-      label: macOS IORegistry evidence
-      render: text
+      label: Machine reports
+      description: Attach at least one Linux or Windows collector archive from this machine; Linux codec/ACPI data is preferred for routing and bus resources. Include macOS data if available. Identify which OS produced each archive. If collection failed, supply its exact error and any partial output; a product-spec screenshot alone is insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: route
+    attributes:
+      label: macOS speaker route
+      description: State whether AppleALC exposes the intended output and what route evidence is available. If checked, identify the codec dump and matching AppleALC source/resources. Otherwise say not checked or macOS not bootable. Do not assume the route is correct because headphones work.
     validations:
       required: true
   - type: textarea
     id: firmware
     attributes:
-      label: Firmware and tuning source
-      description: State whether you have real matching .wmfw and .bin files, and where they came from.
-      render: text
+      label: Firmware, speaker tuning and board configuration
+      description: Give the OEM package/version or Linux firmware/kernel source, filenames and hashes when available. Include known channel mapping, speaker ID, reset GPIO and boost topology from evidence. Distinguish measured calibration from coefficients. Say not available for missing data; do not fill in values from another laptop.
     validations:
-      required: false
+      required: true
+  - type: dropdown
+    id: testing
+    attributes:
+      label: Follow-up testing available
+      options:
+        - I can test macOS builds and have a working recovery EFI
+        - I can provide Linux or Windows data but cannot test macOS builds yet
+        - I need help collecting further data
+    validations:
+      required: true

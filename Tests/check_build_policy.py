@@ -56,9 +56,11 @@ assert 'switch (amp.model)' not in driver
 from production_source_fixture import source as production_source
 driver=production_source()
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
+boot_reference = (ROOT / "docs/boot_arguments.md").read_text(encoding="utf-8")
 source_flags = set(re.findall(r'"(-cirrus[a-z0-9]+)"', driver))
-documented_flags = set(re.findall(r'^\| `(-cirrus[a-z0-9]+)(?:=[^`]*)?`', readme, re.M))
+documented_flags = set(re.findall(r'^\| `(-cirrus[a-z0-9]+)(?:=[^`]*)?`', readme + '\n' + boot_reference, re.M))
 assert source_flags == documented_flags, f"Boot-argument reference differs: {source_flags ^ documented_flags}"
+assert '"-cirrusprobe"' not in driver and 'CirrusBootArgParsed' not in driver
 assert 'os_log' not in readme and '100% Working' not in readme
 
 for name in ("stopPlayback", "pollRegisterBit", "sendMailboxCommand"):

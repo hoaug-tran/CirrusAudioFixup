@@ -1,4 +1,4 @@
-# Attachment and support matrix — 2026-10-12
+# Attachment and bus support
 
 CPU vendor is metadata, not authorization or communication selection. A usable
 path requires a matched provider, an implemented controller contract, a registered
@@ -81,31 +81,3 @@ phases retain the existing AMP-write and initialization boundaries.
 Failed `start()` can leave no attached service node. Inspect the essential kernel
 startup/failure log as well as IORegistry; absence of an AMP node is not proof that
 the AMP itself is unsupported. See [diagnostics](diagnostics.md).
-
-## Live baseline observed without changes
-
-This machine reports `AuthenticAMD`, Ryzen 9 5900HX, the Lenovo CLSA0100 profile,
-PCI subsystem `17AA382B`, and `READY_DSP` with left/right firmware status `READY`.
-The loaded CirrusAudioFixup UUID is `2564C407-4ED3-379A-8693-8C529B52434D`; VoodooI2C
-2.9.1 has UUID `379C7711-B1CA-3D28-B9D5-A4E5A311894D`. This is an older loaded bundle,
-not the new attachment fixes. No kext was installed/reloaded and no hardware reset,
-playback stress or reboot was performed for this audit. New-build cold boot,
-playback, headphone switching and sleep/wake still require target validation.
-
-
-The maintained suite now includes `check_attachment.py` for bounded CPU metadata,
-null/unknown debug phases, first/latest native failures, typed indices, rate limits
-and saturated counters. The matrix tests compile real log arguments so a disabled
-mock logger cannot hide malformed format strings or missing variables. Controller
-PM publication is exercised through the production service wrappers.
-
-
-Final checks: 28 maintained suites plus the optional Windows audit pass, including
-normal and sanitizer matrix/ownership tests. Debug and Release, pinned formatter,
-plist/metadata, OpenCore vtables, x86_64 and binary/dSYM UUID gates pass. The SDK's
-existing kmod deployment-floor linker warnings remain unchanged.
-
-| Build | UUID | Executable SHA-256 |
-| --- | --- | --- |
-| Debug | `2AC040FD-DC11-3A9B-ADFF-A8F406E98179` | `42ae4a3cc1640adabbd0857cc2e1f765bd8a76fb0aa9a706e82c94e9d06f21c3` |
-| Release | `B4DF25A4-940B-3D06-8BEB-84426A8C7A78` | `5ce466def34b6a6022c3953879f96bd2b2e40e1730bc735be64c442359eb7cb2` |

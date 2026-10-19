@@ -31,10 +31,18 @@ Nếu vượt ngân sách, script vẫn ghi metadata và kế hoạch nhưng **k
 .\Collect-HP-CS35L41.ps1 -MaxPayloadMB 1024
 ```
 
-`-PlanOnly` kiểm tra lựa chọn và hash package, bỏ qua registry/log/calibration và copy payload. `-NoZip` giữ thư mục kết quả. `-EventDays` mặc định 3 ngày, nhận 1–30; `-OutputRoot` đổi nơi lưu. Mỗi lần chạy tạo thư mục mới.
+| Tham số | Cách dùng |
+| --- | --- |
+| `-PlanOnly` | Xem lựa chọn và hash package; không thu registry/log/calibration hoặc copy payload |
+| `-MaxPayloadMB <số>` | Đổi ngân sách payload; mặc định 512 MiB |
+| `-NoZip` | Giữ thư mục kết quả, không tạo ZIP |
+| `-EventDays <số>` | Chọn khoảng log 1–30 ngày; mặc định 3 |
+| `-OutputRoot <thư mục>` | Đổi thư mục lưu; mỗi lần chạy tạo kết quả mới |
 
 Đọc `status.csv` trước khi gửi kết quả: mã 2 nghĩa là có dữ liệu thiếu, lỗi hoặc giới hạn đã chạm; không chạy Administrator thường thiếu ánh xạ DriverStore. Mục `UNAVAILABLE` ghi rõ dữ liệu không hiện diện, không phải bằng chứng phần cứng hỏng. Windows cũ dùng tài nguyên CIM nếu không có tùy chọn PnPUtil tương ứng. Không còn tham số export mọi driver.
 
 ZIP có thể chứa định danh thiết bị, đường dẫn và cấu hình âm thanh; xem lại trước khi chia sẻ. Dữ liệu thu thập hỗ trợ phân tích driver, không tự chứng minh kext macOS đã phát tiếng hoặc hỗ trợ đầy đủ một máy.
+
+Để gửi báo cáo gọn với ngân sách mặc định 24 MiB, dùng [tool Windows chung](audio_collectors.md#windows). Tool trong trang này dành cho việc phân tích đầy đủ các package đã chọn.
 
 Tham khảo: [PnPUtil](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/pnputil-command-syntax), [Get-WindowsDriver](https://learn.microsoft.com/en-us/powershell/module/dism/get-windowsdriver?view=windowsserver2025-ps), [extension INF](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/using-an-extension-inf-file).

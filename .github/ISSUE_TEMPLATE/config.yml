@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Read the README first
+  - name: Installation and supported hardware
     url: https://github.com/hoaug-tran/CirrusAudioFixup#readme
-    about: Check status, first boot notes, and required logs before opening an issue.
+    about: Check first-boot values, bus detection and the AppleALC speaker route.
+  - name: Collect a useful report
+    url: https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/diagnostics.md
+    about: macOS logs and IORegistry, with links to Windows and Linux collection.
+  - name: Contribution requirements
+    url: https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/CONTRIBUTING.md
+    about: Read the source, testing and hardware evidence requirements before opening a PR.

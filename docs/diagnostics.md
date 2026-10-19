@@ -38,23 +38,42 @@ for Intel/AMD, I2C/SPI and unsupported-controller/AMP combinations.
 
 ## Retained logs and live messages
 
+This project writes `IOLog` messages with the prefix `CirrusAudioFixup:`. Routine messages require a Debug build or `-cirrusdbg` in Release, enabled before rebooting. The `--debug` option to `log show` does not enable the driver's own logging.
+
+To watch a failure as it happens, start the stream first, reproduce the problem, then press Ctrl-C:
+
+```bash
+sudo /usr/bin/log stream --level debug --style syslog \
+  --predicate 'process == "kernel" AND eventMessage CONTAINS[c] "CirrusAudioFixup"'
+```
+
+To inspect messages retained from the last hour:
+
 ```bash
 sudo /usr/bin/log show --last 1h --style syslog --info --debug \
-  --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
-sudo /usr/bin/log stream --level debug --style syslog \
-  --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
+  --predicate 'process == "kernel" AND eventMessage CONTAINS[c] "CirrusAudioFixup"'
 ```
 
-The first command reads the retained last hour; the second watches new messages until Ctrl-C. An empty result can mean no matching messages were retained, routine logging was disabled, or the service did not attach. It does not mean playback passed. Including debug messages cannot recover messages already discarded. Apple's [logging documentation](https://developer.apple.com/documentation/os/viewing-log-messages) explains retained versus streamed messages. Inspect `log help show` and `log help stream` on the affected OS if options are rejected.
+Neither command guarantees a result. Live streaming does not retrieve earlier messages, and historical queries cannot recover messages that were not saved. Empty output does not prove the kext failed to load or that playback passed. If the narrow filter is empty, inspect unfiltered kernel messages and the driver's IORegistry properties before concluding that no diagnostics exist.
 
-The collector requests logs since boot with `--last boot`. If that query fails, it preserves the error and separately retries the last hour in `kernel-log-fallback.txt`. An empty successful query does not trigger a retry. Kernel-buffer fallbacks are:
+The [InsanelyMac logging discussion](https://www.insanelymac.com/forum/topic/348957-stupid-question-viewing-acpi-smcbatterymanager-debug-logs/) describes live and historical kernel-log queries. The older [darwin-drivers IOLog discussion](https://groups.google.com/g/darwin-drivers/c/OdyfY6b9Jwk) includes Apple's explanation of legacy logging through the unified system. These are useful references, not a guarantee of retention on every macOS build. Apple's [logging guide](https://developer.apple.com/documentation/os/viewing-log-messages) covers log viewing.
+
+### Kernel-buffer fallbacks
+
+Run soon after the failure and before rebooting:
 
 ```bash
-sudo /sbin/dmesg
-/usr/sbin/sysctl -n kern.msgbuf
+sudo /sbin/dmesg > "$HOME/Desktop/cirrus-dmesg.txt"
+sudo /usr/sbin/sysctl -n kern.msgbuf > "$HOME/Desktop/cirrus-msgbuf.txt"
 ```
 
-Availability, permissions and retained buffer contents vary; neither is guaranteed to contain the whole boot. The collector records errors rather than treating a missing buffer as a driver fault.
+Save the complete output before filtering. Permissions, availability and buffer retention vary; these commands can fail or contain only recent messages. They cannot reconstruct an overwritten boot log. The collector captures both sources and their exit statuses separately.
+
+The collector uses `kern.boottime` to calculate a start time for `log show --start`. If that query fails or the start time is unavailable, it keeps the error and tries the last hour in `kernel-log-fallback.txt`. An empty successful query does not trigger that retry; the independent IORegistry and kernel-buffer captures are still retained.
+
+### Lilu logging is separate
+
+Lilu documents `-liludbgall` and `liludump=N` for its own debug logging. CirrusAudioFixup currently calls `IOLog` directly, rather than Lilu's logging wrapper. Do not assume a Lilu dump contains all CirrusAudioFixup messages or that Lilu's flags replace `-cirrusdbg`. See [Lilu's logging options](https://github.com/acidanthera/Lilu#configuration).
 
 ## Save a report before rebooting
 
@@ -67,13 +86,12 @@ collector returns ownership to that user and grants owner read/write access
 (and directory traversal), including partial captures. Existing Desktop files
 are not modified. Direct root execution uses the logged-in console account.
 
-
-It prints an evidence directory, not an archive. Read `status.txt` and the raw files: an exit status of zero from `ioreg` still permits no matching service. Some optional NVRAM properties, registry planes or developer tools may be absent. Review boot arguments, calibration data and hardware identifiers before sharing. The Desktop directory persists across reboot; retain it with the matching bundle identity and dSYM.
+It prints the ZIP path after packaging and keeps the capture directory, including partial results. Read `status.txt` and the raw files: an exit status of zero from `ioreg` still permits no matching service. Some optional NVRAM properties, registry planes or developer tools may be absent. Review boot arguments, calibration data and hardware identifiers before sharing. The Desktop directory persists across reboot; retain it with the matching bundle identity and dSYM.
 
 To also identify the bundle being tested, pass its actual path as the sole argument. For a local Release build:
 
 ```bash
-sudo bash Tools/collect_macos.sh "$PWD/build/Release/CirrusAudioFixup.kext"
+sudo bash Tools/collect_macos.sh "$PWD/build/Local-Release/CirrusAudioFixup.kext"
 ```
 
 This inspects that file; it does not prove the loaded extension is the same binary. Compare its version/build metadata with the service and your OpenCore entry. `dwarfdump` and `nm` require developer tools and may fail on a machine without them. An unsigned OpenCore bundle may have no code signature; that observation alone is not a load failure.
@@ -120,7 +138,7 @@ fallback or latched-fault state. Polling health remains enabled. Registration is
 not proof that interrupts were delivered; do not manufacture a speaker short or
 overtemperature to test it. IRQ is disabled by default pending target validation.
 
-## Diagnostic readiness audit (2026-10-12)
+## Diagnostic properties
 
 Debug defaults to verbose logging; Release enables it with `-cirrusdbg`.
 `-cirrusdumptrace` explicitly enables transfer history even without verbosity.
@@ -173,19 +191,19 @@ not requested. A later chip-level snapshot can update latest history without
 replacing that first trace. The maintained test executes both nested reporting
 steps explicitly.
 
-Research reference: the upstream [Linux dynamic-debug documentation](https://www.kernel.org/doc/html/v6.12/admin-guide/dynamic-debug-howto.html)
-describes explicit activation of debug call sites. This audit applies the same
+Reference: the upstream [Linux dynamic-debug documentation](https://www.kernel.org/doc/html/v6.12/admin-guide/dynamic-debug-howto.html)
+describes explicit activation of debug call sites. The driver uses the same
 policy distinction to the existing macOS driver verbosity switch; it does not
 claim Linux jump-label patching or zero instruction overhead on macOS.
 
-## Runtime telemetry follow-up (2026-10-13)
+## Runtime properties
 
 All 32-bit service properties narrow values before widening to the IORegistry
 number argument. Negative native returns therefore appear as raw 32-bit codes
 (e.g. `0xE00002BC`) rather than sign-extended 64-bit decimal values. Internal
 IOReturns, failure decisions and trace native returns are unchanged.
 
-`Cirrus_Runtime_Stage` and `Cirrus_Runtime_<index>_Stage` now follow actual
+`Cirrus_Runtime_Stage` and `Cirrus_Runtime_<index>_Stage` follow actual
 coordinator lifecycle transitions rather than remaining bringup snapshots.
 `Cirrus_Runtime_Count` is the number of bound driver instances; each slot's
 `Bound` field distinguishes live state from retained historical evidence.
@@ -207,3 +225,47 @@ release history available. IRQ failures publish native `IRQ_Return` per slot and
 refresh the aggregate fault verdict immediately. Chip/report faults and the
 coordinator's lifecycle stage are distinct observations; consult both rather than
 assuming a Ready coordinator means an unfaulted chip.
+
+## Driver and playback verdicts
+
+### Driver
+
+| Verdict | Meaning |
+| --- | --- |
+| `READY_DSP` | Configured amplifiers initialized with validated firmware and live DSP state |
+| `READY_BYPASS_EXPLICIT` | Explicit DSP bypass; acoustic protection firmware is not running |
+| `READ_ONLY` | Inspection mode; normal initialization and writes disabled |
+| `WAITING_FOR_CODEC_IDENTITY` | Firmware selection is waiting for codec identity publication |
+| `INCOMPLETE_TOPOLOGY` | A configured amplifier endpoint is missing |
+| `UNSUPPORTED_PLATFORM` | Board initialization is not authorized by the supported configuration |
+| `DEBUG_PHASE_HALTED` | Initialization intentionally stopped at a requested stage |
+| `FAILED_INIT` | Initialization did not complete |
+| `FAULT_LATCHED` | A runtime or initialization fault blocks normal operation |
+| `SUSPENDED` | The driver is in its low-power state |
+
+### Playback
+
+| Verdict | Meaning |
+| --- | --- |
+| `SAFE_IDLE_VERIFIED` | Idle power state verified |
+| `ACTIVE_REGISTERS_VERIFIED_ROUTE_UNCONFIRMED` | Active amplifier registers verified; physical output still needs a listening check |
+| `CLEANUP_UNVERIFIED` | Cleanup could not establish the expected idle state |
+| `FAULT_LATCHED_OUTPUT_DISABLED` | Playback disabled after a recorded failure |
+
+## Failure codes
+
+| Code | Meaning and next check |
+| --- | --- |
+| `PROVIDER_MISSING` | Required communication provider unavailable |
+| `I2C_TRANSFER` / `SPI_TRANSFER` | Bus operation failed; retain its native I/O result |
+| `RESET_GPIO` / `RESET_WRITE` | Authorized reset operation failed |
+| `DEVICE_ID` | Silicon identity did not match a supported amplifier |
+| `OTP_TIMEOUT` / `OTP_BOOT_ERROR` | OTP initialization failed |
+| `FIRMWARE_MISSING` | No matching program/coefficient resource available |
+| `FIRMWARE_PARSE` / `COEFFICIENT_PARSE` | Firmware structure or mapping rejected |
+| `FIRMWARE_UPLOAD` / `COEFFICIENT_UPLOAD` | Transfer failed while loading program or coefficients |
+| `DSP_BOOT` / `DSP_MAILBOX` | DSP boot or command acknowledgment failed |
+| `PLL_UNLOCKED` | Expected audio clock lock was not established |
+| `POWER_UP_TIMEOUT` / `POWER_DOWN_TIMEOUT` | Power transition did not finish within its deadline |
+| `AMP_PROTECTION` | Amplifier protection reported a fault |
+| `PLAYBACK_INVARIANT` / `IDLE_INVARIANT` | Readback did not match the expected active/idle configuration |

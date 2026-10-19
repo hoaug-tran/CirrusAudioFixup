@@ -1,6 +1,6 @@
-# CS35L41 and Intel LPSS SPI development
+# Native SPI support
 
-Branch: `feat/cs35l41-spi-support`. Board integrations: [ASUS issue #2](https://github.com/hoaug-tran/CirrusAudioFixup/issues/2), [HP issue #3](https://github.com/hoaug-tran/CirrusAudioFixup/issues/3).
+Native SPI uses built-in Intel and AMD controller modules. The supported HP board is listed in [README](../README.md#working-laptop-configurations); controller support alone does not validate another laptop.
 
 The transport layer is independent of CPU and board. Native drivers currently
 implement Intel LPSS SPT/BXT/CNL PCI controller families and AMD AMDI0061/
@@ -15,22 +15,22 @@ controller sources and bind native controllers. Both buses use the shipping
 registered amplifier runtime for bring-up, firmware, group playback and PM.
 Unknown boards remain read-only; writable operation requires exact verified
 board and firmware bindings.
-Driver-owned ACPI discovery resolves endpoints, channels and internal boost independently of OEM and controller path, with exact resource matching. The 103C89C6 dump is the present integration evidence, not a universal HP profile. Native macOS load and physical SPI playback are untested. See [HP evidence and target gates](hp_spi_bringup.md). No writable ASUS profile is supplied.
+Driver-owned ACPI discovery resolves endpoints, channels and internal boost independently of OEM and controller path, with exact resource matching. The 103C89C6 dump is the present integration evidence, not a universal HP profile. The listed HP configuration has working playback; other controller/board combinations need their own tests. See [HP evidence and target gates](hp_spi_bringup.md). No writable ASUS profile is supplied.
 A CPU vendor does not identify a controller or supply board tuning.
 
 | Driver | Source support | Limits / remaining work |
 | --- | --- | --- |
 | Intel LPSS SPT | PCI/MMIO owner + PIO | One native CS, 120 MHz root; hardware untested |
 | Intel LPSS BXT | PCI/MMIO owner + PIO | Capabilities/native CS, 100 MHz root; hardware untested |
-| Intel LPSS CNL/TGL | PCI/MMIO owner + PIO | Capabilities/native CS, 120/100 MHz root; hardware untested |
+| Intel LPSS CNL/TGL | PCI/MMIO owner + PIO | Capabilities/native CS, 120/100 MHz root; TGL 7AAA used by the supported HP board |
 | AMD AMDI0061/0062 | ACPI/MMIO owner + command FIFO | Mode 0, 64-byte frames, 0.8–100 MHz; hardware untested |
 | Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/drivers |
-| Intel INTC1056/INTC1085 GPIO CS | Implemented for existing GPIO outputs | Evaluated ACPI mapping, exclusive provider, hardware ownership/TX lock and readback guards; target untested |
+| Intel INTC1056/INTC1085 GPIO CS | Implemented for existing GPIO outputs | Evaluated ACPI mapping, exclusive provider, hardware ownership/TX lock and readback guards; INTC1056 used by the supported HP board |
 | Other controllers / GPIO families | Not implemented | Need documented register driver and ownership/power behavior |
-| ACPI SPI IOService discovery | Implemented, automatic | Selected from `_CRS`; `-cirrusro` remains an optional forced read-only diagnostic mode; hardware validation ongoing |
-| SPI amplifier lifecycle/playback | Connected to shipping driver runtime | Experimental HP 103C89C6 configuration included; native macOS and physical validation pending; no ASUS profile |
+| ACPI SPI IOService discovery | Implemented, automatic | Selected from `_CRS`; use `-cirrusro -cirrusdbg` for first-boot inspection; hardware validation ongoing |
+| SPI amplifier lifecycle/playback | Connected to shipping driver runtime | HP 103C89C6 configuration included; no ASUS profile |
 
-## Research and base selection
+## Controller selection
 
 Intel 7AAA is listed by Linux v6.12 `intel-lpss-pci.c` under `tgl_spi_info`:
 100 MHz root clock, LPSS_CNL_SSP controller register layout. The bus implementation
@@ -39,13 +39,9 @@ handling. Intel Serial IO SPI is distinct from the flash/PCH SPI controller.
 The generic endpoint `clockHz` is the peripheral maximum, not the root clock.
 The LPSS fractional divider can reduce the actual SSP input below its profile root clock.
 
-No verifiable open-source VoodooSPI controller/API for this device was found
-in this investigation. Code does not assume that VoodooI2C exposes SPI or call
-Apple private SPI classes. The new native base is implemented directly against
-the controller register model; Linux supplies reference facts and quirks, not
-an IOKit-compatible driver. Linux driver implementation code is not included.
+The controller modules use their documented register models. They do not depend on an Apple private SPI interface. Linux provides controller and protocol references.
 
-Pinned references:
+## References
 
 - [Intel PCI identity and root clock](https://github.com/torvalds/linux/blob/v6.12/drivers/mfd/intel-lpss-pci.c)
 - [LPSS reset and private clock](https://github.com/torvalds/linux/blob/v6.12/drivers/mfd/intel-lpss.c)
@@ -177,15 +173,15 @@ Identity reads, applicable silicon trim/errata, DSP memory transfers, mailbox
 and playback sequences can be reused behind a SPI adapter when validated for
 the exact silicon and board. The byte framing changes inside the adapter.
 
-HP and Lenovo use different power topologies. The HP 103C89C6 board configuration now supplies internal boost (1 uH, 4500 mA, 24 uF), Right/Left ordering and captured firmware resources. Shared transport/runtime code does not contain an HP model branch. The profile uses exact amplifier ACPI `_SUB` identity rather than translating a conflicting HDA controller/codec SSID. See [HP bring-up](hp_spi_bringup.md) for provenance and limits.
+HP and Lenovo use different power topologies. The HP 103C89C6 board configuration supplies internal boost (1 uH, 4500 mA, 24 uF), Right/Left ordering and captured firmware resources. Shared transport/runtime code does not contain an HP model branch. The profile uses exact amplifier ACPI `_SUB` identity rather than translating a conflicting HDA controller/codec SSID. See [HP bring-up](hp_spi_bringup.md) for provenance and limits.
 
-## Remaining integration and hardware checks
+## Checks after driver changes
 
 1. Build the modified tree on macOS and validate the loaded bundle/provider identities.
 2. Confirm evaluated `cs-gpios`, GPIO ownership/D0, CS0 native and CS1 GPIO, and both read-only chip IDs.
 3. Confirm firmware-released shared reset and platform/boost readback while muted; no per-AMP shared-reset pulse is implemented.
 4. Validate matched channel firmware, calibration status and codec -> ASP -> amplifier route/clocks.
-5. Exercise physical Right/Left, headphone switching, cold boot, quiet idle and sleep/wake before advertising machine support.
+5. Exercise physical Right/Left, headphone switching, cold boot, quiet idle and sleep/wake on the exact bundle being tested.
 
 ## Verification
 
@@ -204,15 +200,15 @@ Maintained regressions:
 - `check_intel_spi_lifecycle.py`: production PCI owner against IOKit mocks,
   including ownership, D0/BAR failures, suspend, release and repeat bind.
 
-Each SPI suite runs normally and with ASan/UBSan. They are included in
+SPI suites run normally and use ASan/UBSan where the host toolchain supports them. Windows skips unavailable sanitizer runtimes explicitly. They are included in
 `Tests/run.py`. Debug and Release Xcode builds compile the native controller
 sources into the kext. These checks do not validate electrical signals, real
 Intel FIFO timing, physical PCI sleep transitions, firmware tuning or acoustic
-output. No HP load/playback result has been obtained yet.
+output. Retest the exact bundle after driver changes; host fixtures do not establish hardware playback.
 
 ## Native SPI runtime capture
 
-Add `-cirrusdbg` to inspect automatic ACPI SPI attachment for the `CSC3551` personality. Add `-cirrusro` only when intentionally suppressing reset and amplifier writes.
+Add `-cirrusdbg` to inspect automatic ACPI SPI attachment for the `CSC3551` personality. Start a new installation with `-cirrusro -cirrusdbg` before enabling initialization.
 `NativeSPIHost` reads `_CRS`, resolves absolute/relative/parent AML paths against
 IOACPIPlane, associates Intel PCI devices by their `acpi-device`, and binds the
 existing Intel/AMD native owners. It supports up to 16 resource endpoints and
@@ -241,7 +237,6 @@ resources, partial rollback and PM failures, normally and with ASan/UBSan.
 `check_transport.py` also exercises the production IOService register dispatch,
 verifying that native accesses bypass I2C frames, preserve errors and honor sleep/stop.
 
-
 ## Registered SPI amplifier executor
 
 `SPIAmplifierManager` connects native Intel/AMD controller ownership to
@@ -253,7 +248,7 @@ registers. The executor supports firmware, grouped playback, shutdown-before-
 controller-suspend, controller-resume-before-bring-up and explicit confirmed
 power-loss recovery. Failure evidence survives driver teardown.
 
-The shipping IOService now binds its production CS35L41 driver through the
+The shipping IOService binds its production CS35L41 driver through the
 owned `AmplifierManager` using native SPI ports. Its existing firmware parser,
 calibration and power sequences execute through those ports. The standalone
 executor remains available for other owners. Tests exercise actual service
@@ -261,36 +256,3 @@ binding on both buses, registry dispatch, reversed channel ordering, read-only
 maps, group commit/cancellation, PM and failure cleanup. HP assets come from the supplied Linux capture; no ASUS tuning
 profile is supplied. Controller families and GPIO CS outside the implementation
 table remain unsupported; host tests do not establish physical playback.
-
-
-## Intel ACPI/PCI startup audit (2026-10-14)
-
-The HP capture identifies CSC3551 under an ACPI SPI controller with PCI identity
-8086:7AAA. Its captured `_CRS` decodes two SPI endpoints (CS0/CS1, 4 MHz, mode 0).
-This resource fixture is maintained in `check_acpi_spi`; it does not authorize a
-board profile or GPIO writes. Upstream Linux associates 7AAA with the 100 MHz
-LPSS CNL-family contract, matching the existing controller profile.
-
-The macOS capture available at that audit proved service creation and ACPI decoding, but stopped
-at PCI association. It does not prove why the PCI query failed at that instant.
-The default controller composition now uses PCI/ACPI identity contracts instead
-of CPU brand. For a controller without a supported ACPI-only contract, the host
-can wait at most five seconds for its exact ACPI path to be published as a PCI
-service. It rechecks identity and uniqueness afterward. Custom factories are not
-subjected to this default wait. Publication, timeout, duplicate arrival, wrong
-class, ownership balance and CPU-independent selection are regression-covered.
-
-Debug snapshots retain failed-service state before teardown, initial/current PCI
-query counts, lookup result, raw `_CRS`, bounded `_DSD` with normalized ACPI
-reference paths, and Intel bind stage/PMCSR/BAR/capability/status evidence. Quiet
-Release omits Bootstrap audit snapshots; functional chip-select binding evaluates `_DSD` in both builds. The wait is functional startup policy, not a
-debug-only behavior.
-
-The 2026-10-17 Ubuntu capture supplies the previously missing `_DSD` and GPIO runtime evidence: native CS0, GPIO CS1 and shared reset. The new implementation/profile and remaining macOS gates are documented in [HP bring-up](hp_spi_bringup.md). DeviceSelection alone still does not identify native-CS wiring.
-
-References:
-- https://developer.apple.com/documentation/kernel/ioservice/1811164-waitformatchingservice
-- https://github.com/torvalds/linux/blob/master/drivers/mfd/intel-lpss-pci.c
-- https://code.googlesource.com/linux/torvalds/linux/+/78273df7f646f8daf2604ec714bea0897cd03aae/sound/pci/hda/cs35l41_hda_property.c
-
-See [the configuration and binary evidence audit](platform_evidence_audit.md) for the separation of driver reuse, firmware properties, resource identity and unimplemented topologies.

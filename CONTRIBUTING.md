@@ -4,38 +4,40 @@ Changes to this driver can affect amplifier power rails and speaker output. Keep
 
 ---
 
-## General Principles
+## Before changing the driver
 
 > [!IMPORTANT]
-> **Boot & Hardware Safety First:**
+> **Hardware checks:**
 > - Never submit unverified firmware, aggressive gain boosts, or experimental voltage changes without real hardware validation.
 > - Do not broaden `Info.plist` matches or add placeholder entries without verified IORegistry dumps and an emergency rollback plan.
 > - Keep pull requests focused on a single feature, bugfix, or hardware target.
 
 ---
 
-## Adding Support for New Hardware
+## Issues and pull requests
 
-When submitting support for a new laptop model or amplifier configuration, please open a PR or Issue with the following details:
+Use the issue forms for reproducible bugs, new hardware or concrete improvements. Include the exact build and evidence from the affected machine. Do not report only latest, assume a bus from an OEM name, or present an untested result as passed.
 
-1. **Platform Details**: Laptop model name, CPU platform (e.g., AMD Cezanne / Intel Tiger Lake).
-2. **Audio Hardware Identifiers**:
-   - Audio Codec ID & Subsystem ID (SSID, e.g., `17AA:3847`).
-   - ACPI Device Name under VoodooI2C (e.g., `CLSA0100` or `CSC3551`).
-   - Amplifier model (e.g., Cirrus Logic CS35L41) and I2C target addresses (e.g., `0x40`, `0x41`).
-   - AppleALC layout-id and tested audio path (Converter NID to Speaker Pin NID).
-3. **Dumps & Evidence**:
-   - ACPI table dump (`DSDT` / `SSDT`).
-   - Linux ALSA codec dump (`/proc/asound/card*/codec#*`).
-   - IORegistry dump containing active `Cirrus_*` properties.
-   - Source of firmware (`.wmfw`) and channel tuning (`.bin`) from upstream `linux-firmware`, including resource identity. Tuning coefficients are not measured per-speaker calibration.
-   - Exact macOS build, host audio stack and any AppleHDA restoration patch/version. VoodooHDA combinations remain untested unless accompanied by new evidence.
+Normal change PRs target `develop`; identify release PRs separately. Use the PR template to explain the problem, result, source references and checks. Documentation-only changes do not need a new hardware run. Driver and board changes must separate host/build evidence from actual loaded-bundle and speaker tests.
+
+## Adding support for new hardware
+
+Use the Hardware support form and include:
+
+- Exact machine, CPU and OS versions actually tested.
+- Codec/HDA subsystem identity and amplifier model/revision, if known.
+- I2C or SPI evidence, ACPI HID/_SUB, controller and endpoints. Do not assume every amplifier is a VoodooI2C device.
+- A Linux or Windows report from the new general collectors, plus macOS IORegistry if available. Include collection errors and partial output where necessary.
+- AppleALC speaker-route evidence from the codec dump and matching resources; mark an unverified route explicitly.
+- Matching firmware/tuning source and hashes, known speaker/channel/reset/boost data, and whether measured calibration is available. Missing values must stay unknown.
+
+Read [collector options](docs/audio_collectors.md) and [codec route checks](docs/codec_route.md). Do not force another board's SSID, substitute channel tuning or disable DSP protection merely to complete a report.
 
 ---
 
-## Coding Standards & Kernel Constraints
+## Code conventions
 
-### C++ & XNU Kernel Environment
+### C++ and the kernel
 
 - **Standard**: C++17.
 - **Constraints**:
@@ -45,7 +47,7 @@ When submitting support for a new laptop model or amplifier configuration, pleas
   - Use `#pragma once` for all internal header files.
   - No raw `new` / `delete` outside of IOKit memory allocation helpers (`IOLockAlloc`, `IOMalloc`, `IOFree`).
 
-### Code Style & Naming Conventions
+### Style and naming
 
 Place comments above the statement or declaration they describe. Explain
 ownership, thread context, hardware ordering and failure handling where those
@@ -80,7 +82,7 @@ struct is not required.
 | `Transport/` | Bus/provider transactions and controller ownership | `I2CController`, `I2CRegisterBus`, `VoodooI2CProvider`, `NativeSPIHost` |
 | `Transport/Intel/`, `Transport/AMD/` | Documented controller families | `IntelLPSSSPIController`, `AMDSPIController` |
 | `Platform/` | Board identity, resources, driver selection and owned runtime | `BoardConfiguration`, `AmplifierDriverRegistry`, `AmplifierManager` |
-| `Devices/<Model>/` | Silicon registers, framing, errata, lifecycle and resources | `CS35L41DriverFactory`, `CS35L41SPIRegisterIO` |
+| `Devices/Amplifiers/<Model>/` | Silicon registers, framing, errata, lifecycle and resources | `CS35L41DriverFactory`, `CS35L41SPIRegisterIO` |
 | `Firmware/<Format>/` | Format-specific parser, mapping and upload | `WMFWParser`, `WMFWMemoryMapper`, `WMFWUploader` |
 | `Diagnostics/`, `Support/` | Transfer evidence and small kernel utilities | `DiagnosticTracer`, `Logging` |
 
@@ -91,99 +93,39 @@ registers as universal. `AmplifierModel` describes speaker AMP silicon, distinct
 from the Realtek HDA codec. `AmplifierDevice` retains register-level helpers;
 shipping lifecycle ownership lives in `AmplifierManager` and driver hooks.
 
-### Framework target
+### Driver boundaries
 
-Adding a register-controlled AMP should require its `Devices/<Model>` driver,
-registry definition and verified board/firmware data. It should not require a
-silicon branch, new register sequence or descriptor allowlist in the service.
-Each driver owns its implementation and state; `AmplifierHost` supplies common
-board authorization, boot/resource policy, route observations and diagnostic
-publication. The production CS35L41 driver owns its live state, firmware parsing,
-silicon operations, protection and playback helpers. Its factory consumes only
-`RegisterIO`, `AmplifierHost`, board bindings and immutable asset views. No
-service-member callback or service cast is part of the AMP template.
+Keep silicon registers, firmware and lifecycle in the amplifier module. Keep controller ownership, framing and PM in transport modules. The service supplies discovery, verified board bindings and serialized runtime coordination. Read the [framework guide](docs/extensible_driver.md) before adding a module.
 
-AMP factories and destructors perform no hardware I/O. The serialized runtime calls
-safe shutdown before destroying drivers, then releases host/port/map/controller
-resources. A driver can report readiness and pending resources through
-`AmplifierReport` and `prepareBringUpRetry`; pending polling must not reset hardware.
-Resource completion re-enters group bring-up using the same owned driver objects.
-Original diagnostics and cleanup failures must survive teardown/rebind. Traced
-register views preserve operation sources and precious-register diagnostic policy.
+Factories and destructors perform no hardware I/O. Shutdown completes before drivers and their borrowed register ports are released. Preserve the original failure when cleanup also fails.
 
-A provider-backed communication adapter implements the existing controller
-transaction contract and is selected by verified platform data. AMP code consumes
-`RegisterIO`; it must not learn provider ABI, CPU vendor or bus framing. Factory
-failure does not silently select another communication implementation.
-Native SPI modules implement `NativeSPIControllerOwner` and return their owned
-transaction port and PM methods through a `spiControllerFactory`. The host retains
-ACPI targets, shares one owner per target and releases register maps/buses before
-owners. Intel/AMD binding and D0 policy stay in their modules; new owners do not
-require a controller branch in `NativeSPIHost`. Native
-MMIO/DMA owners still need resource, arbitration and PM contracts; SoundWire needs
-its separate stream/controller subsystem. Host fixture extensions are not shipping
-hardware support.
+Keep published boot arguments, IORegistry properties and provider ABI stable unless the change includes a migration. IOKit entry classes retain the names used by their metaclasses and personalities.
 
-IOKit entry classes keep their established globally scoped names because
-`OSMetaClass`, personalities and loader symbols use those identities. Keep
-boot arguments, IORegistry property keys and the custom VoodooI2C request ABI
-stable during source renaming. Changes to those interfaces need their own
-migration. Existing silicon helper implementations may still live in the service
-translation unit; their names must expose that silicon scope.
+### Documentation and comments
 
-These are this project's C++/IOKit conventions, not a universal kernel folder
-standard. Apple [IOService source](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/IOKit/IOService.h)
-uses named C++ service interfaces; Linux's [coding style](https://docs.kernel.org/process/coding-style.html#naming)
-requires descriptive global identifiers, while its [CS35L41 I2C driver](https://github.com/torvalds/linux/blob/master/sound/soc/codecs/cs35l41-i2c.c)
-keeps silicon/bus binding separate. Apply those responsibilities without importing
-Linux C spelling rules into this C++ kext. Run `Tests/check_source_layout.py` and
-the complete host/build checks after moving or renaming files.
-
-### Documentation & Comments
-
-- Write clean, expressive, and self-documenting code.
-- Use comments where they provide real engineering value: explaining non-obvious hardware quirks, silicon errata workarounds, timing constraints, or datasheet references.
-- Avoid leaving dead, commented-out code blocks or trivial comments that merely repeat what the code does.
+- Put comments on their own lines above the relevant code. Explain ownership, hardware ordering, units, errata or failure behavior when the code alone is unclear. Keep source and revision references next to hardware constants.
+- Do not leave commented-out code, fix history, progress notes or comments that repeat the statement. Use the same plain wording in documentation; keep changelog entries in CHANGELOG.md.
 
 ---
 
-## Validation & Required Checks
+## Validation
 
 Run from the repository root. Host tests need Python 3, Bash and a C++17 compiler named `g++`. Validate both Debug and Release; their logging defaults differ, but hardware checks must remain the same.
 
-### 1. Run Host Python Test Suite
+### 1. Run the maintained host suite
 
 ```bash
-python3 Tests/reproduce_host.py
-python3 Tests/check_registers.py
-python3 Tests/check_transport.py
-python3 Tests/check_extensible_core.py
-python3 Tests/check_cs35l41_driver.py
-python3 Tests/check_amd_spi.py
-python3 Tests/check_amd_spi_lifecycle.py
-python3 Tests/check_acpi_spi.py
-python3 Tests/check_spi_transport.py
-python3 Tests/check_intel_spi.py
-python3 Tests/check_intel_spi_lifecycle.py
-python3 Tests/check_diagnostics.py
-python3 Tests/check_hda.py
-python3 Tests/check_calibration.py
-python3 Tests/check_bringup.py
-python3 Tests/check_runtime.py
-python3 Tests/check_audio_events.py
-python3 Tests/check_architecture.py
-python3 Tests/check_release.py
-python3 Tests/check_build_policy.py
-python3 Tests/check_tools.py
-python3 Tests/check_tuning.py
-python3 Tests/check_windows_payloads.py
+python3 Tests/run.py
 ```
+
+Use `python3 Tests/run.py --audit` when the optional Windows package-audit checks are relevant. The runner lists the maintained suites; do not replace it with an old hand-picked subset.
+
 > [!NOTE]
 > Tests include intentional fault-injection sweeps. Intermittent `ERROR` log messages in the test output are expected; the suite must finish with exit code `0` and print `PASS`.
 
 ### 2. Build on macOS
 
-Prepare the pinned MacKernelSDK and Lilu checkouts using the [build instructions](README.md#building-and-testing). Do not replace modified dependency checkouts without review.
+Prepare the pinned MacKernelSDK and Lilu checkouts using the [build instructions](README.md#build-from-source). Do not replace modified dependency checkouts without review.
 
 ```bash
 xcodebuild -project CirrusAudioFixup.xcodeproj \
@@ -215,7 +157,19 @@ EFI and begin hardware validation at low volume.
 
 Include first microphone activation after idle/wake in transition tests. Use the [diagnostic guide](docs/diagnostics.md) to record timestamps and pre/post state. Do not label a pop as a layout defect without isolating its source. Report acoustic differences separately from register readiness and compare loudness at matched levels.
 
-## License & Attribution
+## License and attribution
 
 - This project is licensed under the **CirrusAudioFixup Non-Commercial License** ([LICENSE](LICENSE)).
 - When adapting register sequences or driver logic from upstream Linux drivers (such as `cs35l41-hda`, `cs35l41-lib`, or `wm_adsp`), preserve upstream copyright notices and attribution.
+
+## Project layout
+
+| Path | Contents |
+| --- | --- |
+| `CirrusAudioFixup/Core` | Shared register, endpoint and lifecycle contracts |
+| `CirrusAudioFixup/Devices/Amplifiers` | Per-family amplifier drivers and resources |
+| `CirrusAudioFixup/Platform` | Board discovery, driver registry and HDA integration |
+| `CirrusAudioFixup/Transport` | I2C, native SPI, ACPI and controller access |
+| `Tests` | Maintained host regressions and fixtures |
+| `Tools` | Build, collection, import and release tools |
+| `docs` | Hardware guides and technical references |

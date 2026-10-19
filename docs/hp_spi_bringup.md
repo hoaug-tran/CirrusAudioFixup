@@ -1,8 +1,8 @@
 # HP ZBook Fury 16 G9 SPI bring-up
 
-## Evidence and diagnosis
+The supported configuration uses CS35L41 B2, Intel LPSS SPI and internal boost. The table below records the Linux capture used to define the board configuration. It does not identify a later macOS build.
 
-Source baseline: `7c45427`, branch `feat/cs35l41-spi-support`, with existing local changes retained. The supplied `CS35L41_UBUNTU_20261017-211223_8438.zip` is a Linux runtime reference, not a macOS success report.
+## Board data
 
 | Evidence inside the archive | Observation |
 | --- | --- |
@@ -26,14 +26,14 @@ The audio-controller/codec SSID is a separate identity source from the amplifier
 - `Transport/ACPIDeviceProperties.hpp` owns `_DSD` data and resolves object, AML and IOACPIPlane reference paths. `ACPIGPIOResources.hpp` decodes evaluated GPIO resources with bounds/index/checksum checks. Unevaluated AML zero pins are never treated as live GPIO numbers.
 - `Transport/Intel/IntelSPIChipSelects.hpp` resolves GPIO selections and owns exclusive GPIO provider opens/maps. `IntelGPIOOutput.hpp` contains the INTC1056/INTC1085 family mapping, resource indices and register constraints. It changes only TX state on an existing host-owned GPIO output; it does not unlock or remux pads. Other GPIO controller families fail binding. GPIO ownership is currently exclusive per SPI owner; sharing a GPIO provider across independent consumers needs a separate pin-arbitration implementation.
 - `LPSSSPIEngine` borrows a generic `SPIChipSelect` for external selections. Native CS stays inactive throughout GPIO frames. Selection and transfer run under the same controller lock. Assertion failures, frame failures and release failures propagate; a failed release takes the engine offline. Known inaccessible SPI MMIO is not written during cleanup.
-- `Platform/BoardDiscovery.hpp` defines optional driver-owned property discovery. `Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp` derives channels, GPIO functions and power from evaluated `_DSD` and endpoints from `_CRS`, owning copies of the paths. No per-laptop header or fixed SPI path is used. `Hardware/PropertyQuirks.hpp` retains the documented subsystem electrical correction. See [configuration and binary evidence audit](platform_evidence_audit.md).
+- `Platform/BoardDiscovery.hpp` defines optional driver-owned property discovery. `Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp` derives channels, GPIO functions and power from evaluated `_DSD` and endpoints from `_CRS`, owning copies of the paths. No per-laptop header or fixed SPI path is used. `Hardware/PropertyQuirks.hpp` retains the documented subsystem electrical correction.
 - `AmplifierBinding` carries an immutable driver-owned configuration view. The CS35L41 factory checks its schema, size and electrical limits before creating a writable runtime. `PowerConfiguration.hpp` implements the silicon-specific internal boost coefficients and readback, with GLOBAL_EN required off before programming.
 - Muted preparation, group commit, periodic checks, synchronous cleanup, asynchronous shutdown and wake use the selected power topology. The existing external path remains the default for legacy bindings.
 - The shared reset GPIO is not pulsed per amplifier. This path requires firmware to leave reset released, proves access through both identity probes, and uses individual silicon software resets. A held-low/reset ownership problem must be diagnosed on the target; no HP reset MMIO offset is hardcoded.
 
 ## Firmware provenance
 
-The three protection assets below were imported with `Tools/import_firmware.py` from `firmware/original/cirrus/` in the supplied archive. Calibration firmware and other boards' tuning were not substituted. Speaker ID 0 is the board-generic resource key; it is not an invented measured speaker identity.
+The three protection assets below were imported with `Tools/import_firmware.py` from `firmware/original/cirrus/` in the supplied archive. Calibration firmware and other boards' tuning were not substituted. These filenames omit a speaker ID and are explicitly marked generic in the resource schema. Physical speaker ID 0 is a different identity.
 
 | Asset | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -45,13 +45,11 @@ The existing parser/uploader validates WMFW and per-channel coefficients. Existi
 
 ## Verification and target sequence
 
-New maintained checks: `check_spi_chip_select`, `check_spi_gpio`, `check_spi_gpio_binding`, `check_cs35l41_power`, `check_platform_configuration`, `check_platform_discovery`. They exercise production mapping/ownership and state machines, captured pad/boost values, exact identity selection (including conflicting PCI SSID), channel order, asset SHA-256, invalid inputs, transfer faults and cleanup. Existing tests cover group rollback, firmware/calibration parsing, native controller PM and legacy playback. Sanitizer host checks and target-SDK syntax checks are source evidence only.
-
-The Windows investigation ran the host suite in WSL Ubuntu with GCC and its ASan/UBSan runtimes. Test launchers named `clang++` used a temporary GCC compatibility alias; this is not an Apple Clang execution claim. Separate Windows Clang target-SDK syntax checks used macOS 11, kernel/freestanding mode, no RTTI/exceptions, and both DEBUG=0/1 for all six production translation units.
+Relevant checks: `check_spi_chip_select`, `check_spi_gpio`, `check_spi_gpio_binding`, `check_cs35l41_power`, `check_platform_configuration`, `check_platform_discovery`. They exercise production mapping/ownership and state machines, captured pad/boost values, exact identity selection (including conflicting PCI SSID), channel order, asset SHA-256, invalid inputs, transfer faults and cleanup. Existing tests cover group rollback, firmware/calibration parsing, native controller PM and legacy playback. Sanitizer host checks and target-SDK syntax checks are source evidence only.
 
 Build the exact modified tree on macOS with `bash Tools/build_macos.sh`; retain Debug/Release bundles, matching dSYMs and metadata. Build/load evidence must identify the current configuration-discovery revision; earlier CI bundles do not validate this refactor. Earlier bundle UUIDs in project history do not identify this tree.
 
-1. Boot target with `-cirrusdbg` only. Automatic `_CRS` selection must report SPI, controller association/bind, CS map count 2, CS0 native, CS1 GPIO pin from evaluated ACPI, completed reset sequence, and both 35A40/B2 identity reads. Keep fallback EFI available.
+1. Start with `-cirrusro -cirrusdbg` and check both chip IDs. After the [first-boot checks](../README.md#4-first-boot-inspect-only), remove `-cirrusro` to test initialization. Automatic `_CRS` selection must report SPI, controller association/bind, CS map count 2, CS0 native, CS1 GPIO pin from evaluated ACPI, completed reset sequence, and both 35A40/B2 identity reads. Keep fallback EFI available.
 2. If full initialization reaches `platform`, confirm ACPI SSID, two correct channels, muted output, boost coefficient readback and no playback publication before platform validation completes. Use `-cirrusphase=platform` only when intentionally stopping at that boundary.
 3. Remove the phase halt for firmware/DSP, then playback at low volume. Record physical Right/Left separately, headphones, idle transitions and cold boot. Capture the actual loaded kext identity and HDA/ASP route/clocks.
 4. Test sleep/wake with both GPIO/SPI providers accessible before transfers. GPIO mux, locks or power state changes are checked again; a failure keeps playback stopped.

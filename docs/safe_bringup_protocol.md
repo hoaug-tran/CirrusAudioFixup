@@ -9,10 +9,10 @@ Keep a known-good EFI that disables CirrusAudioFixup and can boot independently.
 Use these boot arguments for the first diagnostic boot:
 
 ```text
--cirrusro -cirrusdbg -cirrusdumptrace
+-cirrusro -cirrusdbg
 ```
 
-Read-only mode skips board GPIO reset, amplifier initialization and register writes. It reads device identity and registers through I2C combined transfers; those reads still transmit an address prefix. It does not monitor HDA playback or initialize the DSP.
+Read-only mode skips board GPIO reset, amplifier initialization and register writes. It reads device identity through I2C or SPI. Read transactions still send an address prefix and configure the selected bus controller. It does not monitor HDA playback or initialize the DSP.
 
 Inspect the actual driver service:
 
@@ -23,7 +23,7 @@ sudo bash Tools/collect_macos.sh
 
 Check the provider and ACPI HID, detected amplifier count, silicon/revision and both channels' first/latest failures. Keep the collector output before rebooting. Zero detected amplifiers is a discovery problem, not permission to force initialization.
 
-The shipped personality matches `CLSA0100` only. A staged `CSC3551` profile does not make that device attach automatically.
+The shipped amplifier personalities include `CLSA0100` for the supported Lenovo I2C path and `CSC3551` for ACPI serial-bus discovery. A matching HID alone does not authorize a board.
 
 ## 2. Check initialization boundaries
 
@@ -47,24 +47,24 @@ A PLL may not lock while the HDA route is idle because BCLK is absent. This does
 
 ## 3. Validate the audio route and matching DSP profile
 
-For the reference ALC287 layout, use `alcid=16` and the required custom VoodooI2C build. Other boards need their own verified route and speaker tuning.
+Verify AppleALC against the machine's [codec dump and speaker route](codec_route.md). I2C also needs the [custom provider](i2c_provider.md). Use matching board and channel tuning; do not copy another laptop's audio configuration.
 
 Remove the phase argument only after checking the selected firmware and left/right coefficient resources. Keep `-cirrusdbg` while testing:
 
 ```text
-alcid=16 -cirrusdbg
+-cirrusdbg
 ```
 
 Before playback, inspect:
 
 ```bash
 ioreg -lw0 -p IOService -r -c CirrusAudioFixup
-sudo /usr/bin/log show --last 1h --style syslog --info --debug --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
+sudo bash Tools/collect_macos.sh
 ```
 
 `READY_DSP` means the driver's initialization and DSP checks passed. It does not certify measured speaker calibration or a correct acoustic profile. Inspect `Cirrus_Calibration_Status_left/right` separately. Missing measurements are reported; never fill them with guessed values.
 
-On Tahoe, first establish a working host audio stack. AppleALC upstream notes that AppleHDA was removed from macOS 26 DP2. The kext's PCI scanner cannot replace the missing codec driver or CoreAudio device. See the [compatibility section](../README.md#macos-compatibility).
+On Tahoe, first establish a working host audio stack. The kext's PCI scanner cannot replace the missing codec driver or CoreAudio device. See the [compatibility section](../README.md#macos-compatibility).
 
 ### Controlled bypass testing
 
@@ -82,7 +82,7 @@ Also test the first microphone activation after idle and after wake, with playba
 
 I/O, initialization, DSP and protection faults remain latched. Only an isolated PLL failure may receive bounded automatic retries. Repeated faults need investigation, not repeated forced reboots.
 
-Record the exact commit, build configuration, macOS build, CPU/platform, codec layout, I2C provider build and firmware/tuning IDs. Both Debug and Release need this validation; their safety checks are the same.
+Record the exact commit, build configuration, macOS build, CPU/platform, codec layout, I2C provider or native SPI controller build and firmware/tuning IDs. Both Debug and Release need this validation; their safety checks are the same.
 
 ## If a test fails
 

@@ -1,75 +1,69 @@
-## Summary
+<!-- Keep one purpose per PR. Use develop for normal changes; identify release PRs separately. Remove sections that do not apply and explain skipped checks. Do not mark tests you have not run as passed. -->
 
-- What changed:
-- Why it is needed:
-- Hardware tested:
+## Problem and result
 
-## Type
+- Problem or linked issue:
+- Behavior before / after:
+- Why this change fixes it:
 
-- [ ] Bug fix
-- [ ] Hardware support
-- [ ] Firmware or tuning resource
+## Scope
+
+- [ ] Driver, playback or power management
+- [ ] Board support or firmware/tuning
+- [ ] I2C or native SPI
 - [ ] HDA or AppleALC integration
-- [ ] VoodooI2C transport
-- [ ] Documentation
-- [ ] Tests only
+- [ ] Collectors or diagnostics
+- [ ] Build, tests or release workflow
+- [ ] Documentation only
 
-## Safety
+## Checks and results
 
-- [ ] `Info.plist` matching stays boot-safe.
-- [ ] No broad hardware match was added without IORegistry proof.
-- [ ] No fake firmware or tuning entry was added.
-- [ ] New firmware resources are scoped to the correct amplifier family.
-- [ ] Failure path leaves amplifiers in a safe state.
+Give the tested commit/artifact, commands, host OS and actual results. Link CI output where available. Write **not run** with a reason for missing checks.
 
-## Required tests
+| Check | Result and evidence |
+| --- | --- |
+| Maintained host tests: `python3 Tests/run.py` | |
+| macOS Debug and Release bundles: `bash Tools/build_macos.sh` | |
+| Relevant collector, parser or documentation checks | |
 
-Paste commands and result.
+The macOS build script already runs the host suite. Do not repeat it just to fill this table. For documentation-only changes, check links and examples; a new hardware run is not required. For collector changes, state which OS/tool paths actually ran. A Windows host test or Mach-O object compile is not a native linked/loaded kext test.
 
-```text
-python3 Tests/reproduce_host.py
-python3 Tests/check_registers.py
-python3 Tests/check_transport.py
-python3 Tests/check_diagnostics.py
-python3 Tests/check_hda.py
-python3 Tests/check_calibration.py
-python3 Tests/check_bringup.py
-python3 Tests/check_runtime.py
-```
+## Hardware results
 
-## Build check
+<!-- Required for driver, board, firmware, transport or audio-path changes. For other changes, remove this section and state why hardware tests do not apply. -->
 
-Paste command and result.
+- Machine, CPU and macOS version/build:
+- Exact loaded kext version/configuration/commit or CI artifact; local changes:
+- Bus and how identified; I2C provider build or native SPI controller/chip selects:
+- Amplifier model/revision, ACPI HID/_SUB, codec/HDA SSID and channel mapping:
+- AppleALC speaker-route evidence and relevant boot arguments:
+- Firmware/tuning identity and measured-calibration availability:
+- Collector archive, failure time and first failure, if any:
 
-```text
-xcodebuild -project CirrusAudioFixup.xcodeproj -target CirrusAudioFixup -configuration Release -sdk macosx CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO build
-```
+| Case | Result / not tested |
+| --- | --- |
+| Cold boot, attachment and expected endpoint count | |
+| DSP initialization and low-volume left/right playback | |
+| Playback start/stop and idle | |
+| Headphone/output switching and first microphone activation | |
+| Sleep/wake and playback after wake | |
 
-## Hardware evidence
+For shared runtime/transport changes, report coverage of the existing Lenovo I2C and HP SPI paths separately. Name any untested path. Keep host fault-injection results separate from physical tests; do not deliberately provoke speaker protection faults on hardware to fill this table.
 
-Required for hardware or playback changes:
+## Source and failure handling
 
-- Laptop model:
-- CPU platform:
-- HDA codec id:
-- HDA subsystem id:
-- ACPI match name:
-- Amplifier model:
-- I2C addresses:
-- AppleALC layout:
-- Firmware profile:
+<!-- For register, board, firmware, calibration or controller changes. Remove for changes that do not touch these areas. -->
 
-## Logs
+- Upstream/OEM source: revision, file/lines or package identity. Explain changed addresses, masks, timings and board-specific values.
+- Resource changes: filenames/hashes, physical speaker identity versus generic tuning, left/right selection and source/license notices.
+- Failure/cleanup behavior: what happens on a failed read/write, timeout, partial group start, suspend or removal; supporting tests.
+- Recovery: how the previous working EFI/build can be restored. List remaining boot, speaker or compatibility risks.
 
-Paste relevant output:
+## Review checklist
 
-```text
-log show --last boot --style syslog --predicate 'eventMessage CONTAINS "CirrusAudioFixup"'
-ioreg -lw0 | grep -E 'Cirrus_(Driver|Diag|Trace|Playback|HDA|DSP|PCI|SSID)'
-```
+- [ ] The diff contains only this change; no generated binaries, logs, machine dumps, unrelated formatting or private data.
+- [ ] Source references and failure-handling evidence are included where hardware behavior changes.
+- [ ] README, boot-argument reference and changelog match any changed public behavior.
+- [ ] Test/build/hardware results above describe the actual tested artifact; skipped checks and limits are explicit.
 
-## Risk notes
-
-- Boot risk:
-- Speaker safety risk:
-- Rollback path:
+<!-- Release PRs: also state the version, source/target branches and build/physical test evidence. Verify Info.plist, CHANGELOG and tag identity; do not publish a release from this template alone. -->

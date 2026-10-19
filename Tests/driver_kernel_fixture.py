@@ -27,6 +27,7 @@ inline void IOSleep(unsigned n){fixtureTimeMs+=n;}
 inline uint64_t mach_absolute_time(){return fixtureTimeMs*1000000;}
 inline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* n){*n=t;}
 inline size_t strlcpy(char* d,const char* s,size_t n){size_t l=strlen(s);if(n){size_t c=std::min(l,n-1);memcpy(d,s,c);d[c]=0;}return l;}
+inline size_t strlcat(char* d,const char* s,size_t n){size_t used=0;while(used<n&&d[used])++used;if(used==n)return n+strlen(s);return used+strlcpy(d+used,s,n-used);}
 ''',
 'IOKit/IOService.h':r'''
 #pragma once

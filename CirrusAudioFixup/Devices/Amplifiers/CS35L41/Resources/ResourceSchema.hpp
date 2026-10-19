@@ -24,4 +24,7 @@ struct FirmwareResource {
     size_t tuningRightSize{0};
     const char* tuningLeftName{nullptr};
     const char* tuningRightName{nullptr};
+    // Linux has both spkid0 and filenames without a speaker ID. Never encode
+    // both identities as integer zero. Generic assets are an explicit choice.
+    bool genericSpeaker{false};
 };

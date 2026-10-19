@@ -1002,9 +1002,6 @@ bool CirrusAudioFixup::start(IOService* provider) {
     }
     CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=1");
 
-    bool probeEnabled = bootArgEnabled("-cirrusprobe");
-    setProperty("CirrusBootArgParsed", probeEnabled ? kOSBooleanTrue : kOSBooleanFalse);
-
     if (bootArgEnabled("-cirrusro")) {
         CIRRUS_LOG("CirrusAudioFixup starting in READ-ONLY PROBE mode");
         uint32_t delayMs = 100;
@@ -1804,7 +1801,8 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
         return false;
     if (mHdaPci && (mHdaPci->isInactive() || mHdaPci->configRead16(kIOPCIConfigVendorID) == 0xFFFF))
         clearHdaCache();
-    IOService* audioCtrl = mHdaPci ? mHdaPci : getAudioController();
+    const bool usingCachedController = mHdaPci != nullptr;
+    IOService* audioCtrl = usingCachedController ? mHdaPci : getAudioController();
     if (!audioCtrl) {
         if (mHdaState.missCount < 20 && ++mHdaState.missCount == 20) {
             for (size_t i = 0; i < mAmplifierCount; ++i) {
@@ -1829,12 +1827,15 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
         ;
     if (!pciDev) {
         publishStatus("NOT_A_PCI_CONTROLLER");
-        audioCtrl->release();
+        if (usingCachedController)
+            clearHdaCache();
+        else
+            audioCtrl->release();
         return false;
     }
     if (pciDev->isInactive() || pciDev->configRead16(kIOPCIConfigVendorID) == 0xFFFF) {
         publishStatus("CONTROLLER_UNAVAILABLE");
-        if (mHdaPci)
+        if (usingCachedController)
             clearHdaCache();
         else
             audioCtrl->release();

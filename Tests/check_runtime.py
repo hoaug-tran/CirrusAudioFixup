@@ -611,7 +611,7 @@ int main() {
                 assert((result==PlaybackProgress::Failed)==!ready);
             }
         }
-        for (auto phase : {ShutdownPhase::Pdn, ShutdownPhase::Output, ShutdownPhase::Pause}) {
+        for (auto phase : {ShutdownPhase::Pdn, ShutdownPhase::Pause}) {
             for (bool ready : {false,true}) {
                 CirrusAudioFixup polled;
                 polled.regs[0x10010]=ready?0x00800000:0;

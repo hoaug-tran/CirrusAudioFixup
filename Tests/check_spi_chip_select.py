@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Replay mixed native/GPIO CS through the production LPSS FIFO engine."""
 from pathlib import Path
 import subprocess
@@ -78,7 +79,7 @@ int main(){
  e.suspend();assert(e.exchange({1,4000000,0},tx,rx,10,&s)==kIOReturnNotReady&&s.calls.size()==n);
 }
 ''')
-    for flags in ([], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]):
+    for flags in sanitizer_flags():
         exe = tmp / "test"
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),

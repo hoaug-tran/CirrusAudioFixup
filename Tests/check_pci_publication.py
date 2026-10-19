@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Exercise the production PCI association method, including late publication."""
 from pathlib import Path
 import subprocess
@@ -89,7 +90,7 @@ with tempfile.TemporaryDirectory() as folder:
     for name in ['IOKit/IORegistryEntry.h','IOKit/acpi/IOACPIPlatformDevice.h','IOKit/pci/IOPCIDevice.h']:
         f=p/name;f.parent.mkdir(parents=True,exist_ok=True);f.write_text('')
     cpp=p/'publication.cpp';cpp.write_text(fixture+method+checks)
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         binary=p/'publication'
         subprocess.run(['clang++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I',folder,'-I',str(root/'CirrusAudioFixup'),str(cpp),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)

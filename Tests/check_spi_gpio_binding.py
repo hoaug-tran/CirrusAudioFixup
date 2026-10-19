@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Run production _DSD -> evaluated _CRS -> GPIO provider/map ownership."""
 from pathlib import Path
 import subprocess
@@ -119,6 +120,12 @@ int main(){
  {ACPIDeviceProperties props;assert(props.load(&spi)==kIOReturnUnsupported);
   assert(!strcmp(props.reason(),"DSD_DUPLICATE_KEY")&&props.get("cs-gpios")==nullptr);}
  spi.values["_DSD"]=dsd;
+ // A retained package may be malformed after validation; lookup must fail closed.
+ {ACPIDeviceProperties props;assert(props.load(&spi)==kIOReturnSuccess);
+  assert(props.get(nullptr)==nullptr);
+  auto* retained=OSDynamicCast(OSArray,dsd->getObject(1));
+  auto* saved=retained->v[0];retained->v[0]=nullptr;
+  assert(props.get("cs-gpios")==nullptr);retained->v[0]=saved;}
  // Captured macOS behavior: _DSD evaluates successfully but returns NULL.
  // The explicit data-only adapter preserves references as namespace strings.
  auto* bridge=properties(array({number(0),make<OSString>("\\_SB.PC00.SPI0.GSPK"),number(0),number(0),number(0)}));
@@ -203,7 +210,7 @@ int main(){
  assert(!gpio.opened&&gpio.refs==1&&mem->refs==1);
 }
 ''')
-    for flags in ([], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]):
+    for flags in sanitizer_flags():
         exe = tmp / "test"
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),

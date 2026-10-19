@@ -150,7 +150,9 @@ public:
                     return fail("DSD_PROPERTY_PAIR_OR_KEY", kIOReturnUnsupported);
                 for (unsigned k = 0; k < j; ++k) {
                     auto* previous = OSDynamicCast(OSArray, mProperties->getObject(k));
-                    auto* previousKey = OSDynamicCast(OSString, previous->getObject(0));
+                    auto* previousKey = previous && previous->getCount() == 2 ? OSDynamicCast(OSString, previous->getObject(0)) : nullptr;
+                    if (!previousKey)
+                        return fail("DSD_PROPERTY_PAIR_OR_KEY", kIOReturnUnsupported);
                     if (key->isEqualTo(previousKey))
                         return fail("DSD_DUPLICATE_KEY", kIOReturnUnsupported);
                 }
@@ -165,9 +167,13 @@ public:
         return kIOReturnSuccess;
     }
     OSObject* get(const char* name) const {
+        if (!name)
+            return nullptr;
         for (unsigned i = 0; mProperties && i < mProperties->getCount(); ++i) {
             auto* pair = OSDynamicCast(OSArray, mProperties->getObject(i));
-            auto* key = OSDynamicCast(OSString, pair->getObject(0));
+            auto* key = pair && pair->getCount() == 2 ? OSDynamicCast(OSString, pair->getObject(0)) : nullptr;
+            if (!key)
+                return nullptr;
             if (key->isEqualTo(name))
                 return pair->getObject(1);
         }

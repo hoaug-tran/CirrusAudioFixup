@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Exercise Intel LPSS FIFO engine and CS35L41 frames against a register model."""
 from pathlib import Path
 import subprocess
@@ -241,7 +242,7 @@ int main() {
     assert(unplug.engine.exchange(ep,tx,rx,32)==kIOReturnNoDevice&&!unplug.engine.online());
 }
 ''')
-    for flags in [[], ['-fsanitize=address,undefined','-fno-omit-frame-pointer']]:
+    for flags in sanitizer_flags():
         exe=tmp/'intel-spi-test'
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
                         '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),

@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-tools-") as directory:
     left.write_bytes(b"WMDR" + bytes(12))
     right.write_bytes(left.read_bytes())
     command = [sys.executable, str(tool), "--codec", "cs35l41", "--ssid", "0x17aa3847",
-               "--wmfw", str(firmware), "--bin-l", str(left)]
+               "--wmfw", str(firmware), "--bin-l", str(left), "--bin-r", str(left), "--spkid", "1"]
     def run(arguments, expected):
         result = subprocess.run(command + arguments, capture_output=True, text=True)
         assert (result.returncode == 0) == expected, result.stdout + result.stderr
@@ -74,6 +74,63 @@ int main() {{
     imported = header.read_text(encoding='utf-8')
     assert 'l0_bincfg), nullptr, 0,' in imported and 'r0_bincfg' not in imported
     compile_profile(17)
+
+    # No guessed speaker ID; physical ID 0 can coexist with explicit generic
+    # tuning and a shared byte-identical WMFW. Duplicates fail transactionally.
+    command = command[:-2]
+    header.write_text('const FirmwareResource cs35l41Firmware[] = {\n};\n', encoding='utf-8')
+    run(["--firmware", str(header)], False)
+    run(["--generic-speaker", "--firmware", str(header)], True)
+    run(["--spkid", "0", "--firmware", str(header)], True)
+    stable = header.read_bytes()
+    run(["--generic-speaker", "--firmware", str(header)], False)
+    run(["--spkid", "0", "--firmware", str(header)], False)
+    assert header.read_bytes() == stable
+    # Omission of the right channel is not an implicit symmetric profile.
+    original_command = command
+    right_index = command.index('--bin-r')
+    command = command[:right_index] + command[right_index+2:]
+    symmetric = tmp/'Symmetric.hpp'
+    symmetric.write_text('const FirmwareResource cs35l41Firmware[] = {\n};\n', encoding='utf-8')
+    run(["--spkid", "1", "--firmware", str(symmetric)], False)
+    run(["--spkid", "1", "--symmetric-tuning", "--firmware", str(symmetric)], True)
+    command = original_command
+    cpp = tmp / 'identity.cpp'
+    cpp.write_text('#include <cassert>\n#include "Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp"\n'
+                   '#include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"\n'
+                   + header.read_text() + '''
+int main(){
+ using cirrus::devices::amplifiers::cs35l41::selectFirmwareResource;
+ auto* zero=selectFirmwareResource(cs35l41Firmware,2,0x17aa,0x3847,0);
+ auto* one=selectFirmwareResource(cs35l41Firmware,2,0x17aa,0x3847,1);
+ auto* unknown=selectFirmwareResource(cs35l41Firmware,2,0x17aa,0x3847,UINT32_MAX);
+ assert(zero&&!zero->genericSpeaker&&zero->spkid==0);
+ assert(one&&one->genericSpeaker&&unknown==one&&zero!=one);
+}
+''', encoding='utf-8')
+    exe = tmp / 'identity.exe'
+    subprocess.run(['g++','-std=c++17','-I',str(ROOT/'CirrusAudioFixup'),str(cpp),'-o',str(exe)],check=True)
+    subprocess.run([str(exe)],check=True)
+
+    # The default location must follow the production amplifier directory.
+    # Exercise an isolated checkout so this test cannot change shipped assets.
+    isolated = tmp/'checkout'
+    isolated_tool = isolated/'Tools/import_firmware.py'
+    isolated_tool.parent.mkdir(parents=True)
+    shutil.copyfile(tool, isolated_tool)
+    default_header = isolated/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Firmware.hpp'
+    default_header.parent.mkdir(parents=True)
+    default_header.write_text('const FirmwareResource cs35l41Firmware[] = {\n};\n')
+    unusual = tmp/'coeff,{source}.bin'
+    unusual.write_bytes(left.read_bytes())
+    isolated_command = [sys.executable,str(isolated_tool),*command[2:],
+                        '--bin-l',str(unusual),'--generic-speaker']
+    result = subprocess.run(isolated_command,capture_output=True,text=True)
+    assert result.returncode == 0, result.stdout+result.stderr
+    saved = default_header.read_bytes()
+    result = subprocess.run(isolated_command,capture_output=True,text=True)
+    assert result.returncode != 0 and 'already exists' in result.stderr
+    assert default_header.read_bytes() == saved
 
 collector = ROOT / "Tools/collect_macos.sh"
 source = collector.read_text(encoding="utf-8")

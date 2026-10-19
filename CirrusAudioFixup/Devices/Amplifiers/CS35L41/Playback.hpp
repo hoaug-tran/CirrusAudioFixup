@@ -17,7 +17,7 @@ namespace cirrus::devices::amplifiers::cs35l41 {
 
 enum class PlaybackPhase : uint8_t { Idle, Resume, Power, Pup, Output, Pll, Prepared, Active, Failed };
 enum class PlaybackProgress : uint8_t { Pending, Prepared, Failed };
-enum class ShutdownPhase : uint8_t { Idle, Pdn, Output, Pause, Finish, Complete, Failed };
+enum class ShutdownPhase : uint8_t { Idle, Pdn, Pause, Finish, Complete, Failed };
 
 struct ShutdownTransition {
     ShutdownPhase phase{ShutdownPhase::Idle};
@@ -89,7 +89,7 @@ public:
     // Runtime shutdown yields for PDN and DSP acknowledgements. The service
     // retains a synchronous quiesce path for IOKit PM acknowledgement and
     // final teardown, where a pending timer cannot outlive the provider.
-    static PlaybackProgress shutdown(core::RegisterIO& io, ShutdownTransition& state, uint64_t now, bool dspAlive, uint32_t firmwareVersion,
+    static PlaybackProgress shutdown(core::RegisterIO& io, ShutdownTransition& state, uint64_t now, bool dspAlive, uint32_t,
                                      uint64_t (*clock)() = nullptr, const PowerConfiguration& power = kLegacyPowerConfiguration) {
         using namespace diagnostics;
         auto failed = [&](DiagnosticFailure failure, uint32_t reg, uint32_t actual = 0) {
@@ -159,23 +159,17 @@ public:
             }
             update(0x2018, 1, 0);
             if (dspAlive) {
-                if (firmwareVersion > 0x001C00) {
-                    write(0x13020, registers::kCmdMailboxSpeakerOutputDisable);
-                    state.phase = ShutdownPhase::Output;
-                } else {
-                    write(0x13020, registers::kCmdMailboxPause);
-                    state.phase = ShutdownPhase::Pause;
-                }
+                write(0x13020, registers::kCmdMailboxPause);
+                state.phase = ShutdownPhase::Pause;
                 state.deadlineMs = sampleTime(now, clock) + 5;
             } else {
                 state.phase = ShutdownPhase::Finish;
             }
             return PlaybackProgress::Pending;
         }
-        case ShutdownPhase::Output:
         case ShutdownPhase::Pause: {
             uint32_t status = 0;
-            uint32_t expected = state.phase == ShutdownPhase::Pause ? registers::kStatusMailboxPaused : registers::kStatusMailboxRunning;
+            uint32_t expected = registers::kStatusMailboxPaused;
             bool readable = io.read(0x13004, &status);
             bool error = status == 0xFFFFFFFFU || status == 0x00FFFFFFU;
             if (readable && !error && status != expected && sampleTime(now, clock) < state.deadlineMs)
@@ -183,14 +177,8 @@ public:
             bool acknowledged = readable && !error && status == expected;
             if (!acknowledged)
                 failed(DIAG_DSP_MAILBOX, 0x13004, status);
-            if (state.phase == ShutdownPhase::Output) {
-                write(0x13020, registers::kCmdMailboxPause);
-                state.phase = ShutdownPhase::Pause;
-                state.deadlineMs = sampleTime(now, clock) + 5;
-            } else {
-                state.haltDsp = !acknowledged;
-                state.phase = ShutdownPhase::Finish;
-            }
+            state.haltDsp = !acknowledged;
+            state.phase = ShutdownPhase::Finish;
             return PlaybackProgress::Pending;
         }
         case ShutdownPhase::Finish: {
@@ -235,17 +223,18 @@ public:
                                           {0x4C00, dsp ? 0x32U : 8U},
                                           {0x4C20, 0x18},
                                           {0x4C24, 0x19},
-                                          {0x4C28, dsp ? 0x28U : 0x32U},
-                                          {0x4C2C, dsp ? 0x29U : 0x33U},
+                                          {0x4C28, dsp ? 0x28U : 0U},
+                                          {0x4C2C, dsp ? 0x29U : 0U},
                                           {0x4C40, 8},
                                           {0x4C44, dsp ? 8U : 9U},
                                           {0x4C48, 0x18},
                                           {0x4C4C, 0x19},
-                                          {0x4C50, dsp ? power.dspSupplyMonitorSource() : 0x20U}};
+                                          {0x4C50, dsp ? power.dspSupplyMonitorSource() : 0x20U},
+                                          {0x4C54, dsp ? 0x29U : 0x21U}};
             for (const auto& item : common)
                 if (!io.write(item[0], item[1]))
                     return fail(state, DIAG_PLAYBACK_INVARIANT, item[0], item[1]);
-            if (dsp && (!io.write(0x4C54, 0x21) || !io.write(0x4C58, 0x3A) || !io.write(0x4C5C, 0x3B) || !io.updateBits(0x2018, 0x3000, 0x3000)))
+            if (dsp && (!io.write(0x4C58, 0x3A) || !io.write(0x4C5C, 0x3B) || !io.updateBits(0x2018, 0x3000, 0x3000)))
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
             if (dsp) {
                 if (!io.write(0x13020, registers::kCmdMailboxResume))
@@ -367,9 +356,20 @@ public:
             fail(state, (irq & registers::kMaskProtectionFault) ? diagnostics::DIAG_AMP_PROTECTION : diagnostics::DIAG_PLAYBACK_INVARIANT);
             return false;
         }
-        const uint32_t signalPath[][2] = {{0x4804, 0x21}, {0x4808, 0x20200200}, {0x4830, 0x18}, {0x4840, 0x18}, {0x4C40, 8},
-                                          {0x4C44, 8},    {0x4C48, 0x18},       {0x4C4C, 0x19}, {0x4C50, power.dspSupplyMonitorSource()}, {0x4C54, 0x21}};
-        for (unsigned i = 0; i < (dsp ? 10U : 4U); ++i) {
+        const uint32_t signalPath[][2] = {{0x4804, 0x21},
+                                          {0x4808, 0x20200200},
+                                          {0x4830, 0x18},
+                                          {0x4840, 0x18},
+                                          {0x4C40, 8},
+                                          {0x4C44, dsp ? 8U : 9U},
+                                          {0x4C48, 0x18},
+                                          {0x4C4C, 0x19},
+                                          {0x4C50, dsp ? power.dspSupplyMonitorSource() : 0x20U},
+                                          {0x4C54, dsp ? 0x29U : 0x21U},
+                                          {0x4C28, dsp ? 0x28U : 0U},
+                                          {0x4C2C, dsp ? 0x29U : 0U},
+                                          {0x480C, dsp ? 3U : 2U}};
+        for (unsigned i = 0; i < sizeof(signalPath) / sizeof(signalPath[0]); ++i) {
             uint32_t actual = 0;
             if (!io.read(signalPath[i][0], &actual) || actual != signalPath[i][1]) {
                 fail(state, diagnostics::DIAG_PLAYBACK_INVARIANT, signalPath[i][0], signalPath[i][1], actual);

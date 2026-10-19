@@ -41,7 +41,7 @@ struct Properties:cirrus::platform::PlatformProperties {
  }
 };
 bool allowResources=true;
-bool assets(uint16_t,uint16_t,uint32_t speaker){return allowResources&&speaker==0;}
+bool assets(uint16_t,uint16_t,uint32_t speaker){return allowResources&&speaker==UINT32_MAX;}
 using namespace cirrus;
 using namespace devices::amplifiers::cs35l41;
 platform::DiscoveredBoard* resolve(Properties& p,platform::BoardIdentity identity={0x103c,0x89c6,"CSC3551"}){
@@ -137,7 +137,7 @@ int main(){
  amp.sub.value="INVALID";audio.ssid=0x103c89c6;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
  amp.sub.value="103C8CA4";service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
  // Selecting HP first must not leak its identity, topology or channels into
- // either previously supported Lenovo board, even with a conflicting _SUB.
+ // either approved Lenovo board, even with a conflicting _SUB.
  for(auto ssid:{0x17aa382bU,0x17aa3847U}){
   amp.hid.value="CLSA0100";amp.sub.value="103C89C6";audio.ssid=ssid;service.resolvePlatformProfile();
   assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==ssid);

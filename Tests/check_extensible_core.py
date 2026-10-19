@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Production generic register maps, board identity, assets and lifecycle failures."""
 from pathlib import Path
 import tempfile,subprocess
@@ -122,7 +123,8 @@ int main(){
  assert(invalidAddress.command(payload,2,payload,4)==kIOReturnBadArgument&&i2c.calls==1);
  using namespace cirrus::platform;
  AmplifierBinding bindings[2];bindings[0].endpoint={BusTransportType::SPI,"\\_SB.SPI1",0,false,1,1000000,0};
- bindings[0].siliconId=0x35a40;bindings[0].tuningResource="board-left";
+ assert(bindings[0].speakerId==UINT32_MAX);
+ bindings[0].speakerId=0;bindings[0].siliconId=0x35a40;bindings[0].tuningResource="board-left";
  bindings[1]=bindings[0];bindings[1].endpoint.spiChipSelect=0;bindings[1].channelIndex=1;
  BoardIdentity identity{0x103c,0x89c6,"CSC3551"};BoardConfiguration board{identity,bindings,2,true,true,true};
  assert(board.permits(identity));auto wrong=identity;wrong.subsystemDevice=0x8ca4;assert(!board.permits(wrong));
@@ -201,6 +203,7 @@ int main(){
  }
  // Fictional mixed-silicon fixtures: no ASUS/HP board support is registered.
  AmplifierBinding mixed[2];
+ mixed[0].speakerId=mixed[1].speakerId=0;
  mixed[0].endpoint={BusTransportType::SPI,"\\_SB.SPI1",0,false,0,1000000,0};
  mixed[0].siliconId=0x1111;mixed[0].tuningResource="fixture-left";mixed[0].acpiHid="SPIAMP";
  mixed[1].endpoint={BusTransportType::I2C,"\\_SB.I2C1",0x40,false,0,0,0};
@@ -288,7 +291,7 @@ int main(){
  assert(fault.suspend()==-200&&broken.cleanups==1&&fault.status().cleanupResult==-200);
 }
 ''')
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
         subprocess.run([str(p/'test')],check=True)
 print('PASS configurable register formats, policy, lock/RMW, endpoint/firmware identity and lifecycle rollback')

@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Link the complete independent production driver and factory; audit ownership.
 
 Only kernel resources and bus responses are fake. Real silicon, firmware lookup,
@@ -42,6 +43,7 @@ struct Host:platform::AmplifierHost {
     diagnostics::DiagnosticState diag{};
     bool alive=true,allow=true,bypass=true,capturing=false,readOnly=false;
     std::string phase;std::map<std::string,std::string> properties;
+    std::map<std::string,uint32_t> arguments;
     unsigned captures=0,publications=0;
     bool authorized()const override{assert(alive);return allow;}
     const char* name()const override{return "owned-driver";}
@@ -49,6 +51,10 @@ struct Host:platform::AmplifierHost {
     const diagnostics::DiagnosticState& diagnostics()const override{return diag;}
     bool bootArgEnabled(const char* s)const override{return (bypass && !strcmp(s,"-cirrusnodsp"))||(readOnly&&!strcmp(s,"-cirrusro"));}
     bool bootArgStrEquals(const char* s,const char* v)const override{return !strcmp(s,"-cirrusphase") && phase==v;}
+    bool parseBootArgument(const char* s,void* out,size_t size)const override{
+        auto it=arguments.find(s);if(it==arguments.end()||size!=sizeof(uint32_t))return false;
+        memcpy(out,&it->second,size);return true;
+    }
     bool stopAfterDebugStage(const char* s)override{return phase==s;}
     bool debugHalted()const override{return !phase.empty();}
     void setDiagnosticStage(cirrus::diagnostics::DriverStage s)override{assert(alive);diag.stage=s;}
@@ -77,6 +83,26 @@ struct Fixture {
     void bind(){assert(runtime.bind(registry,&context,1)==0);}
 };
 int main(){
+    // Exercise the real resource-discovery path, not a copied selector.
+    for(int speaker:{-1,0,1,256}){
+        Fixture f;f.host.bypass=false;f.host.arguments["-cirrusssid"]=0x17aa3847;
+        f.binding.speakerId=UINT32_MAX;
+        f.assets.target.speakerId=UINT32_MAX;
+        if(speaker>=0)f.host.arguments["-cirrusspkid"]=unsigned(speaker);
+        f.bind();(void)f.runtime.bringUp();
+        const auto& props=f.host.properties;
+        if(speaker<0){assert(props.at("Cirrus_Speaker_ID_Source_owned-driver")=="UNKNOWN");
+            assert(props.at("Cirrus_Phase5A_Status_owned-driver")=="SPEAKER_ID_REQUIRED");}
+        if(speaker==0)assert(props.at("Cirrus_Phase5A_Status_owned-driver")=="UNSUPPORTED_SSID_OR_SPEAKER");
+        if(speaker==1)assert(props.at("Cirrus_FW_Source_owned-driver")=="EmbeddedResource");
+        if(speaker==256)assert(props.at("Cirrus_Phase5A_Status_owned-driver")=="INVALID_SPEAKER_ID_OVERRIDE");
+    }
+    {Fixture f;f.host.bypass=false;f.host.arguments["-cirrusssid"]=0x17aa3847;
+     // Existing verified reference binding supplies ID 1 without a boot-arg.
+     f.bind();(void)f.runtime.bringUp();
+     assert(f.host.properties.at("Cirrus_Speaker_ID_Source_owned-driver")=="BOARD_RESOURCE");
+     assert(f.host.properties.at("Cirrus_FW_Source_owned-driver")=="EmbeddedResource");
+    }
     {
         Fixture probe;probe.host.readOnly=true;probe.port.failFrom=3;
         CS35L41Driver driver(probe.context);driver.inspect();
@@ -175,6 +201,6 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41Driver.cpp'),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

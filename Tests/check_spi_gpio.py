@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """ACPI GPIO decoding and Intel output safety using the HP capture's pad states."""
 from pathlib import Path
 import subprocess
@@ -76,7 +77,7 @@ int main(){
  Window shortMap;IntelGPIOOutput invalid;assert(invalid.bind(shortMap,0x710,pad,true)==kIOReturnUnsupported);
 }
 ''')
-    for flags in ([], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]):
+    for flags in sanitizer_flags():
         exe = tmp / "test"
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),

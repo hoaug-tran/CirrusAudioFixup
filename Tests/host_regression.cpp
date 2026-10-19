@@ -15,10 +15,32 @@ void putLE(std::vector<uint8_t>& v, unsigned pos, uint32_t n) {
 int main() {
     using cirrus::devices::amplifiers::cs35l41::selectFirmwareResource;
     {
+        using cirrus::devices::amplifiers::cs35l41::selectChannelCoefficients;
+        uint8_t left[4]{}, right[4]{};FirmwareResource resource{};
+        resource.bin=left;resource.binSize=sizeof(left);size_t bytes=7;
+        assert(selectChannelCoefficients(resource,false,bytes)==left&&bytes==4);
+        assert(!selectChannelCoefficients(resource,true,bytes)&&bytes==0);
+        resource.binRight=right;resource.binRightSize=3;
+        assert(!selectChannelCoefficients(resource,true,bytes)&&bytes==0);
+        resource.binRightSize=4;
+        assert(selectChannelCoefficients(resource,true,bytes)==right&&bytes==4);
+        resource.isDummy=true;
+        assert(!selectChannelCoefficients(resource,false,bytes)&&bytes==0);
+    }
+    {
+        // Physical speaker 0 is a real identity, never an implicit wildcard.
+        FirmwareResource physicalZero{};
+        physicalZero.subsystemVendor=0x1234;physicalZero.subsystemDevice=0x5678;
+        assert(selectFirmwareResource(&physicalZero,1,0x1234,0x5678,0)==&physicalZero);
+        assert(!selectFirmwareResource(&physicalZero,1,0x1234,0x5678,1));
+        assert(!selectFirmwareResource(&physicalZero,1,0x1234,0x5678,UINT32_MAX));
+    }
+    {
         FirmwareResource catalog[3]{};
         catalog[0].subsystemVendor=catalog[1].subsystemVendor=catalog[2].subsystemVendor=0x1234;
         catalog[0].subsystemDevice=catalog[1].subsystemDevice=catalog[2].subsystemDevice=0x5678;
         catalog[1].spkid=1;catalog[2].spkid=2;
+        catalog[0].genericSpeaker=true;
         assert(selectFirmwareResource(catalog,3,0x1234,0x5678,1)==&catalog[1]);
         assert(selectFirmwareResource(catalog,3,0x1234,0x5678,7)==&catalog[0]);
         assert(!selectFirmwareResource(catalog,3,0x17aa,0x5678,1));
@@ -36,7 +58,7 @@ int main() {
             hp = &resource;
     }
     assert(lenovo && lenovo->spkid == 1 && lenovo->bin != lenovo->binRight);
-    assert(hp && hp->spkid == 0 && hp->bin != hp->binRight && hp->wmfwSize == 34068);
+    assert(hp && hp->genericSpeaker && hp->bin != hp->binRight && hp->wmfwSize == 34068);
     assert(hp->binSize == 4000 && hp->binRightSize == 4000);
     {
         FirmwareImage captured{};

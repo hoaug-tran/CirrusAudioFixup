@@ -6938,7 +6938,7 @@ const uint8_t cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin[] = {
 };
 
 const FirmwareResource cs35l41Firmware[] = {
-    { 0x103C, 0x89C6, 0, "cs35l41-dsp1-spk-prot-103c89c6.wmfw", "cs35l41-dsp1-spk-prot-103c89c6-l0.bin", cs35l41_dsp1_spk_prot_103c89c6_wmfw, sizeof(cs35l41_dsp1_spk_prot_103c89c6_wmfw), cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin, sizeof(cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin), cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin, sizeof(cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin), false, nullptr, 0, nullptr, 0, nullptr, nullptr },
+    { 0x103C, 0x89C6, 0, "cs35l41-dsp1-spk-prot-103c89c6.wmfw", "cs35l41-dsp1-spk-prot-103c89c6-l0.bin", cs35l41_dsp1_spk_prot_103c89c6_wmfw, sizeof(cs35l41_dsp1_spk_prot_103c89c6_wmfw), cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin, sizeof(cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin), cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin, sizeof(cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin), false, nullptr, 0, nullptr, 0, nullptr, nullptr, true },
     {0x17AA, 0x3847, 1, "cs35l41-dsp1-spk-prot-17aa3847.wmfw", "cs35l41-dsp1-spk-prot-17aa3847-spkid1.bin",
      cs35l41_dsp1_spk_prot_17aa3847_wmfw, sizeof(cs35l41_dsp1_spk_prot_17aa3847_wmfw), cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin,
      sizeof(cs35l41_dsp1_spk_prot_17aa3847_spkid1_l0_bin), cs35l41_dsp1_spk_prot_17aa3847_spkid1_r0_bin,

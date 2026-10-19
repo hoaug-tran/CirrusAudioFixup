@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Production AMD command engine with CS35L41 frames and fault injection."""
 from pathlib import Path
 import subprocess,tempfile
@@ -92,7 +93,7 @@ int main() {
  assert(clean.read32(0x20)==0&&clean.read32(0x6c)==0&&clean.read8(0x1d)==0);
 }
 ''')
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
         subprocess.run([str(p/'test')],check=True)
 print('PASS AMD V1/V2 command FIFO: CS35L41 bulk/RMW, clocks, limits, timeout and power gating; hardware untested')

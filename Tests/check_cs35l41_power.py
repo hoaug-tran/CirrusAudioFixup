@@ -13,12 +13,14 @@ with tempfile.TemporaryDirectory(prefix="cirrus-power-") as directory:
 #include <vector>
 #include <algorithm>
 #include "Devices/Amplifiers/CS35L41/Playback.hpp"
+#include "Devices/Amplifiers/CS35L41/CS35L41Device.hpp"
 using namespace cirrus::devices::amplifiers::cs35l41;
 struct Port:cirrus::core::RegisterIO {
  std::map<uint32_t,uint32_t> r;std::vector<uint32_t> writes;unsigned calls=0,failAt=0;
  bool step(){return ++calls!=failAt;}
  bool read(uint32_t reg,uint32_t* out)override{if(!step())return false;*out=r[reg];return true;}
  bool write(uint32_t reg,uint32_t value)override{
+  if(reg==0x13020)assert(value==1||value==2||value==7); // Linux CSPL commands used by this lifecycle
   if(!step())return false;
   writes.push_back(reg);
   if(reg==0x10010)r[reg]&=~value;else r[reg]=value;
@@ -32,6 +34,16 @@ struct Port:cirrus::core::RegisterIO {
  bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t)override{return false;}
 };
 int main(){
+ {Port io;io.r[0x2018]=0x3021;CS35L41Device device("helper",0x40);
+  assert(device.stopPlayback(io));
+  assert(!(io.r[0x2018]&1)&&io.r[0x6000]==0xA678&&io.r[0x6c04]==0);
+  assert(!device.powerDown(io)); // Monitor/boost still active: never claim shutdown.
+  io.r[0x2018]=0;io.r[0x2014]=0;assert(device.powerDown(io));
+  io.r[0]=UINT32_MAX;assert(!device.isAlive(io));
+  io.r[0]=registers::kValDeviceId;assert(device.isAlive(io));
+  auto before=io.calls;assert(!device.startPlayback(io)&&io.calls==before);
+  for(unsigned failure=1;failure<=4;++failure){Port broken;broken.failAt=failure;assert(!device.stopPlayback(broken));}
+ }
  const PowerConfiguration internal{BoostTopology::Internal,1000,4500,24};
  assert(internal.valid()&&internal.activePower(true)==0x3021);
  assert(kLegacyPowerConfiguration.activePower(true)==0x3001);
@@ -51,6 +63,8 @@ int main(){
  // no global power selection may leak between independent amplifier instances.
  for(bool dsp:{false,true}){
   Port legacy,explicitLegacy,hp;
+  // Seed the previous DSP path: bypass must not rely on power-on defaults.
+  for(auto* io:{&legacy,&explicitLegacy,&hp})io->r[0x4C54]=0x29;
   for(auto* io:{&legacy,&explicitLegacy,&hp})io->r[0x10098]=2;
   PlaybackTransition a{},b{},c{};
   PlaybackProgress ar=PlaybackProgress::Pending,br=ar,cr=ar;
@@ -60,14 +74,21 @@ int main(){
    if(br==PlaybackProgress::Pending)br=Playback::advance(explicitLegacy,b,now,dsp,0x2b01,nullptr,kLegacyPowerConfiguration);
   }
   assert(ar==PlaybackProgress::Prepared&&br==ar&&cr==ar);
-  assert(hp.r[0x4C50]==(dsp?0x29U:0x20U));
+  assert(hp.r[0x4C50]==(dsp?0x28U:0x20U));
   assert(legacy.r[0x4C50]==(dsp?0x29U:0x20U));
+  if(!dsp){
+   assert(hp.r[0x4C54]==0x21&&legacy.r[0x4C54]==0x21);
+   assert(hp.r[0x4C28]==0&&hp.r[0x4C2C]==0);
+   auto damaged=hp;auto transition=c;damaged.r[0x4C54]=0x29;
+   assert(!Playback::commit(damaged,transition,17<<5,false,internal));
+   assert(damaged.r[0x6000]==0xA678);
+  }
   if(dsp){
-   assert(hp.r[0x4C54]==0x21U&&legacy.r[0x4C54]==0x21U&&explicitLegacy.r[0x4C54]==0x21U);
+   assert(hp.r[0x4C54]==0x29U&&legacy.r[0x4C54]==0x29U&&explicitLegacy.r[0x4C54]==0x29U);
    assert(hp.r[0x4C58]==0x3AU&&legacy.r[0x4C58]==0x3AU&&explicitLegacy.r[0x4C58]==0x3AU);
    assert(hp.r[0x4C5C]==0x3BU&&legacy.r[0x4C5C]==0x3BU&&explicitLegacy.r[0x4C5C]==0x3BU);
    auto wrongInternal=hp;auto wrongExternal=legacy;auto ci=c;auto ai=a;
-   wrongInternal.r[0x4C54]=0x29;wrongExternal.r[0x4C54]=0x29;
+   wrongInternal.r[0x4C54]=0x21;wrongExternal.r[0x4C54]=0x21;
    assert(!Playback::commit(wrongInternal,ci,17<<5,true,internal));
    assert(!Playback::commit(wrongExternal,ai,17<<5,true));
    assert(wrongInternal.r[0x6000]==0xA678&&wrongExternal.r[0x6000]==0xA678);

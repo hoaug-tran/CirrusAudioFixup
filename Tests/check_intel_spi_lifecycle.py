@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Execute the production PCI SPI owner against IOKit lifecycle mocks."""
 from pathlib import Path
 import subprocess
@@ -177,7 +178,7 @@ int main(){
     assert(pmClients==pmStops);
 }
 ''')
-    for flags in [[],['-fsanitize=address,undefined','-fno-omit-frame-pointer']]:
+    for flags in sanitizer_flags():
         exe=tmp/'pci-test'
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
                         '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),

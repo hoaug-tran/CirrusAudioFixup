@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Execute the service's real discovery callback over evaluated ACPI packages."""
 from pathlib import Path
 import subprocess
@@ -97,7 +98,7 @@ int main(){
 }
 '''
     (tmp / "test.cpp").write_text(source)
-    for flags in ([], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]):
+    for flags in sanitizer_flags():
         exe = tmp / "test"
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)

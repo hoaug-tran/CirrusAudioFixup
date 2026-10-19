@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Production native SPI discovery, namespace lookup, ownership and PM failures."""
 from pathlib import Path
 import subprocess,tempfile
@@ -180,7 +181,7 @@ public:
  cirrus::firmware::FirmwareBundle mRuntimeFirmware[4]{};
  cirrus::platform::BoardConfiguration mRuntimeBoard{};
  template<class... Args> void recordDiagnosticFailure(Amp&,cirrus::diagnostics::DiagnosticFailure,Args...){}
- // These tests use synthetic registered drivers to audit resource ownership.
+ // Synthetic registered drivers exercise resource ownership.
  // No chip state or silicon callbacks exist in this generic service fixture.
  bool stopAfterDebugStage(const char*){assert(false);return false;}
  bool bootArgStrEquals(const char*,const char*){assert(false);return false;}
@@ -693,7 +694,7 @@ int main(){
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;
 }
 ''')
- for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+ for flags in sanitizer_flags():
   subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
   subprocess.run([str(p/'test')],check=True)
 print('PASS native SPI host: ACPI lookup, multi-controller ownership, authorized per-driver SPI formats, firmware/playback lifecycle, rollback and PM faults; hardware untested')

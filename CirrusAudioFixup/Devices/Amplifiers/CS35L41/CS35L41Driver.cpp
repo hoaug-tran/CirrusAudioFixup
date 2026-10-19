@@ -21,8 +21,9 @@ using namespace cirrus::diagnostics;
 namespace cirrus::devices::amplifiers::cs35l41 {
 bool protectionResourceAvailable(uint16_t vendor, uint16_t device, uint32_t speaker) {
     const auto* resource = selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, vendor, device, speaker);
-    return resource && !resource->isDummy && resource->wmfw && resource->wmfwSize && resource->bin && resource->binSize &&
-           resource->binRight && resource->binRightSize;
+    size_t left = 0, right = 0;
+    return resource && resource->wmfw && resource->wmfwSize && !(resource->wmfwSize % 4) &&
+           selectChannelCoefficients(*resource, false, left) && selectChannelCoefficients(*resource, true, right);
 }
 static uint64_t playbackTimeMilliseconds() {
     uint64_t nanos = 0;
@@ -623,10 +624,6 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
     }
     ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2, 1, 0, TRACE_PLAYBACK) && ok;
     if (amp.dspAlive) {
-        if (amp.firmwareIdVersion > 0x001C00) {
-            sendMailboxCommand(amp, cirrus::devices::amplifiers::cs35l41::registers::kCmdMailboxSpeakerOutputDisable,
-                               cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxRunning);
-        }
         bool paused = sendMailboxCommand(amp, cirrus::devices::amplifiers::cs35l41::registers::kCmdMailboxPause,
                                          cirrus::devices::amplifiers::cs35l41::registers::kStatusMailboxPaused);
         ok = paused && ok;
@@ -1928,7 +1925,7 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     }
 
     for (size_t q = 0; q < sizeof(kSsidQuirks) / sizeof(kSsidQuirks[0]); ++q) {
-        if (subVendor == kSsidQuirks[q].fromVendor && subDevice == kSsidQuirks[q].fromDevice) {
+        if (!amp.firmwareSubsystemId && subVendor == kSsidQuirks[q].fromVendor && subDevice == kSsidQuirks[q].fromDevice) {
             subVendor = kSsidQuirks[q].toVendor;
             subDevice = kSsidQuirks[q].toDevice;
             ssid = (uint32_t(subVendor) << 16) | subDevice;
@@ -1946,11 +1943,22 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
         CIRRUS_LOG("Explicit firmware SSID override: 0x%08X", ssid);
     }
 
-    uint32_t spkid = amp.firmwareSubsystemId ? amp.firmwareSpeakerId : 1;
+    // Unknown is not speaker 0 or 1. Specific protection coefficients require
+    // measured/verified board identity or an explicit operator selection.
+    uint32_t spkid = amp.firmwareSpeakerId;
     bool explicitSpeaker = parseBootArgument("-cirrusspkid", &spkid, sizeof(spkid));
-    // The compiled speaker default preserves the existing reference profile.
-    // It is not a GPIO/ACPI measurement of the physical speaker vendor.
-    const char* speakerSource = explicitSpeaker ? "BOOT_ARGUMENT" : amp.firmwareSubsystemId ? "BOARD_GENERIC_RESOURCE" : "COMPILED_DEFAULT_UNVERIFIED";
+    uint32_t channelSpeaker = spkid;
+    const char* channelSpeakerArgument = amp.channel == core::AudioChannel::Right ? "-cirrusspkidr" : "-cirrusspkidl";
+    if (parseBootArgument(channelSpeakerArgument, &channelSpeaker, sizeof(channelSpeaker))) {
+        spkid = channelSpeaker;
+        explicitSpeaker = true;
+    }
+    const char* speakerSource = explicitSpeaker ? "BOOT_ARGUMENT" : spkid != UINT32_MAX ? "BOARD_RESOURCE" : "UNKNOWN";
+    if (explicitSpeaker && spkid > 255) {
+        setProperty(propStatus, "INVALID_SPEAKER_ID_OVERRIDE");
+        CIRRUS_ERR("Speaker ID override outside 0..255 on %s", amp.name);
+        return;
+    }
     CIRRUS_LOG("Firmware identity %s: SSID=0x%08X speaker=%u source=%s", amp.name, ssid, spkid, speakerSource);
 
     char speakerProperty[80];
@@ -1975,10 +1983,14 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     amp.firmwareIdentityPending = false;
     amp.firmwareIdentityDeadlineMs = 0;
 
-    const FirmwareResource* foundRes = selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, uint16_t(subVendor),
-                                                             uint16_t(subDevice), spkid);
+    const FirmwareResource* foundRes =
+        selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, uint16_t(subVendor), uint16_t(subDevice), spkid);
 
     if (!foundRes) {
+        if (spkid == UINT32_MAX)
+            CIRRUS_ERR(
+                "Speaker identity unknown on %s; specific tuning requires verified speaker ID (-cirrusspkidl/-cirrusspkidr or -cirrusspkid)",
+                amp.name);
         CIRRUS_ERR("No firmware resource matched Subsystem ID 0x%08X (vendor=0x%04X, device=0x%04X, spkid=%u) on %s", ssid, subVendor,
                    subDevice, spkid, amp.name);
         if (!gCirrusDebug) {
@@ -1994,7 +2006,7 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
             IOLog(CIRRUS_LOG_PREFIX "=== END HARDWARE PROFILE DUMP ===\n");
         }
         recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING, 0, 0, ssid);
-        OSString* statusStr = OSString::withCString("UNSUPPORTED_SSID");
+        OSString* statusStr = OSString::withCString(spkid == UINT32_MAX ? "SPEAKER_ID_REQUIRED" : "UNSUPPORTED_SSID_OR_SPEAKER");
         if (statusStr) {
             setProperty(propStatus, statusStr);
             statusStr->release();
@@ -2065,8 +2077,13 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     setProperty(propFW, (uint64_t)foundRes->binSize, 32);
 
     bool isRight = amp.channel == cirrus::core::AudioChannel::Right;
-    const uint8_t* chanBin = (isRight && foundRes->binRight) ? foundRes->binRight : foundRes->bin;
-    size_t chanBinSize = (isRight && foundRes->binRight) ? foundRes->binRightSize : foundRes->binSize;
+    size_t chanBinSize = 0;
+    const uint8_t* chanBin = selectChannelCoefficients(*foundRes, isRight, chanBinSize);
+    if (!chanBin) {
+        recordDiagnosticFailure(amp, DIAG_FIRMWARE_MISSING);
+        setProperty(propStatus, "INVALID_CHANNEL_TUNING");
+        return;
+    }
 
     const uint8_t* tuningData = isRight ? foundRes->tuningRight : foundRes->tuningLeft;
     const size_t tuningSize = isRight ? foundRes->tuningRightSize : foundRes->tuningLeftSize;
@@ -2241,7 +2258,9 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
         return failBoot();
 
     uint64_t resetEnd = mach_absolute_time();
-    uint64_t resetTimeUs = (resetEnd - resetStart) / 1000;
+    uint64_t resetTimeUs = 0;
+    absolutetime_to_nanoseconds(resetEnd - resetStart, &resetTimeUs);
+    resetTimeUs /= 1000;
 
     snprintf(propName, sizeof(propName), "Cirrus_DSP_RESET_TIME_US_%s", amp.name);
     setProperty(propName, resetTimeUs, 32);
@@ -2857,19 +2876,21 @@ bool CS35L41Driver::powerUpAmplifier(AmplifierState& amp) {
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx2Source, 0x00000008) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
-        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, amp.power.dspSupplyMonitorSource()) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, amp.power.dspSupplyMonitorSource()) &&
+             ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx6Source, 0x00000029) && ok;
     } else {
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortEnables, 0x00010000) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegSerialPortHighImpedanceControl, 0x00000002) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDacPcm1Source, 0x08) && ok;
-        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx3Source, 0x00000032) && ok;
-        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx4Source, 0x00000033) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx3Source, 0) && ok;
+        ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegAspTx4Source, 0) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx1Source, 0x00000008) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx2Source, 0x00000009) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx3Source, 0x00000018) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx4Source, 0x00000019) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegDsp1Rx5Source, 0x00000020) && ok;
+        ok = writeRegister(amp, registers::kRegDsp1Rx6Source, 0x21) && ok;
     }
 
     ok = updateRegisterBits(amp, 0x00002018, 0x00000001, 0x00000000) && ok;

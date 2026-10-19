@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Exercise bounded production _CRS SPI decoding and malformed firmware data."""
 from pathlib import Path
 import tempfile, subprocess
@@ -93,7 +94,7 @@ int main() {
     }
 }
 ''')
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
         subprocess.run([str(p/'test')],check=True)
 print('PASS ACPI SPI resource decoding and bounded failures')

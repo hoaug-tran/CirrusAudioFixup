@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Attachment evidence, CPU metadata and registered debug policy boundaries."""
 from pathlib import Path
 import subprocess,tempfile
@@ -43,7 +44,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='cirrus-attachment-') as directory:
     p=Path(directory);install(p);(p/'attachment.cpp').write_text(CPP)
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['clang++','-std=c++17',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'attachment.cpp'),'-o',str(p/'attachment')],check=True)
         subprocess.run([str(p/'attachment')],check=True)
 print('PASS attach first/latest native errors, rate limits/saturation, bounded CPU identity and null/unknown debug phase policy')
@@ -106,7 +107,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='cirrus-board-wait-') as directory:
     p=Path(directory);(p/'wait.cpp').write_text(cpp+retry+checks)
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['clang++','-std=c++17',*flags,str(p/'wait.cpp'),'-o',str(p/'wait')],check=True)
         subprocess.run([str(p/'wait')],check=True)
 assert 'Author: Tran Kinh Hoang (hoaugtr)' in service

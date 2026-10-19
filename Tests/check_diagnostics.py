@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 from pathlib import Path
 import subprocess
 import tempfile
@@ -161,7 +162,7 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-trace-') as directory:
     tmp=Path(directory);cpp=tmp/'trace.cpp'
     cpp.write_text(trace_mock+extract('void CirrusAudioFixup::recordTrace(')+extract('void CirrusAudioFixup::dumpTraceBuffer(')+extract('void CirrusAudioFixup::publishStatistics()')+trace_checks)
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['clang++','-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(cpp),'-o',str(tmp/'trace')],check=True)
         subprocess.run([str(tmp/'trace')],check=True)
 print('PASS production trace: quiet no clock/allocation, bounded chronological wrap, first/latest mirror, unlocked publication and allocation fault cleanup')
@@ -205,7 +206,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='cirrus-runtime-publication-') as directory:
     p=Path(directory);(p/'publication.cpp').write_text(publication_mock+extract('bool CirrusAudioFixup::publishRuntimeStatus()')+publication_checks)
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['clang++','-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(p/'publication.cpp'),'-o',str(p/'publication')],check=True)
         subprocess.run([str(p/'publication')],check=True)
 print('PASS runtime transition publication: no steady-state writes, partial/group playback, native 32-bit failures, PM, detach/rebind and preserved root evidence')

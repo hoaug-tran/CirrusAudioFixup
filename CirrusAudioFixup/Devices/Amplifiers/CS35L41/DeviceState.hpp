@@ -22,7 +22,7 @@ struct DeviceState : cirrus::devices::amplifiers::cs35l41::SiliconState {
     uint8_t gpio1Function{0}, gpio2Function{2};
     bool explicitGPIOConfiguration{false};
     uint32_t firmwareSubsystemId{0};
-    uint32_t firmwareSpeakerId{0};
+    uint32_t firmwareSpeakerId{UINT32_MAX};
 };
 
 }

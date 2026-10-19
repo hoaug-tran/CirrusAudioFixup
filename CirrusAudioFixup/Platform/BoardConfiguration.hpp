@@ -29,11 +29,12 @@ struct AmplifierBinding {
     core::BusEndpoint endpoint{};
     uint32_t siliconId{0};
     uint32_t channelIndex{0};
-    uint32_t speakerId{0};
+    uint32_t speakerId{UINT32_MAX};
     const char* tuningResource{nullptr};
     // Optional per-device HID for mixed-silicon boards; board HID is the legacy default.
     const char* acpiHid{nullptr};
-    uint8_t interruptGpio{0}; // Zero: no configured amplifier GPIO interrupt.
+    // Zero: no configured amplifier GPIO interrupt.
+    uint8_t interruptGpio{0};
     // Immutable module-owned configuration. Only its driver interprets the
     // schema; the shared runtime must not learn silicon power/register fields.
     const void* driverConfiguration{nullptr};

@@ -133,13 +133,14 @@ public:
         ok = io.write(registers::kRegDacPcm1Source, 0x00000008) && ok;
         ok = io.write(registers::kRegAspTx1Source, 0x00000018) && ok;
         ok = io.write(registers::kRegAspTx2Source, 0x00000019) && ok;
-        ok = io.write(registers::kRegAspTx3Source, 0x00000032) && ok;
-        ok = io.write(registers::kRegAspTx4Source, 0x00000033) && ok;
+        ok = io.write(registers::kRegAspTx3Source, 0) && ok;
+        ok = io.write(registers::kRegAspTx4Source, 0) && ok;
         ok = io.write(registers::kRegDsp1Rx1Source, 0x00000008) && ok;
         ok = io.write(registers::kRegDsp1Rx2Source, 0x00000009) && ok;
         ok = io.write(registers::kRegDsp1Rx3Source, 0x00000018) && ok;
         ok = io.write(registers::kRegDsp1Rx4Source, 0x00000019) && ok;
         ok = io.write(registers::kRegDsp1Rx5Source, 0x00000020) && ok;
+        ok = io.write(registers::kRegDsp1Rx6Source, 0x00000021) && ok;
         ok = io.write(registers::kRegSerialPortHighImpedanceControl, 0x00000002) && ok;
         ok = io.write(registers::kRegSerialPortEnables, 0x00010000) && ok;
 
@@ -290,29 +291,34 @@ public:
         return ok;
     }
 
-    bool startPlayback(core::RegisterIO& io) override {
-        // Low-level helper only. The service's verified power/PLL/mailbox flow
-        // is the production entry point for enabling speaker output.
-        if (!mInitialized)
-            return false;
-
-        return io.updateBits(registers::kRegPowerControl2, 0x00000003, 0x00000000);
+    bool startPlayback(core::RegisterIO&) override {
+        // This helper lacks route, topology, firmware and pair readiness.
+        // Only CS35L41Driver's verified lifecycle may authorize playback.
+        return false;
     }
 
-    bool stopPlayback(core::RegisterIO& io) override { return io.updateBits(registers::kRegPowerControl2, 0x00000003, 0x00000003); }
+    bool stopPlayback(core::RegisterIO& io) override {
+        // Emergency mute only, not a substitute for topology-aware shutdown.
+        // AMP_EN is bit 0; setting bits 0/1 here used to enable the amplifier.
+        bool ok = io.write(registers::kRegAmplifierGainControl, 0);
+        ok = io.write(registers::kRegAmplifierDigitalVolumeControl, 0xA678) && ok;
+        return io.updateBits(registers::kRegPowerControl2, 1, 0) && ok;
+    }
 
     bool powerDown(core::RegisterIO& io) override {
-        stopPlayback(io);
-        mDspAlive = false;
-        return true;
+        const bool muted = stopPlayback(io);
+        uint32_t global = 0, power = 0;
+        const bool idle = io.read(registers::kRegPowerControl1, &global) && io.read(registers::kRegPowerControl2, &power) &&
+                          !(global & 1) && !(power & (0x3001 | registers::kMaskBoostEnable));
+        if (muted && idle)
+            mDspAlive = false;
+        return muted && idle;
     }
 
     bool isAlive(core::RegisterIO& io) override {
         uint32_t val = 0;
 
-        if (!io.read(registers::kRegDspMailbox1, &val))
-            return false;
-        return true;
+        return io.read(registers::kRegDeviceId, &val) && val == registers::kValDeviceId;
     }
 };
 

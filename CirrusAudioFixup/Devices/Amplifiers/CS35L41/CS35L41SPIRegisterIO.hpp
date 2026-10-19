@@ -2,6 +2,7 @@
 // Linux cs35l41-lib.c: 32-bit BE address/value, 16 pad bits, read flag 0x80.
 #pragma once
 #include "Core/RegisterMap.hpp"
+#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
 #include "Transport/SPIRegisterBus.hpp"
 namespace cirrus::devices::amplifiers::cs35l41 {
 class CS35L41SPIRegisterIO final : public core::RegisterIO {
@@ -26,7 +27,7 @@ public:
     static constexpr core::RegisterMapConfig config() {
         core::RegisterMapConfig c{};
         c.paddingBytes = 2;
-        c.maxRegister = 0x7ffffffc;
+        c.maxRegister = registers::kLastRegister;
         c.readFlag = 0x80;
         return c;
     }

@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Exercise production CS35L41 SPI frames, chunking and failures without hardware."""
 from pathlib import Path
 import subprocess
@@ -70,6 +71,9 @@ int main() {
     assert(c.frames.size()==2 && c.frames[0].size()==18 && c.frames[1][3]==0x0c);
     assert(data[0]==0x11 && data[12]==0x11 && data[19]==0x44);
     before=c.calls;
+    assert(!io.write(0x03804fec,0)); // Linux CS35L41_LASTREG + 4
+    assert(!io.bulkWrite(0x03804fe8,data.data(),8));
+    assert(c.calls==before); // Reject the entire range before any transfer.
     assert(!io.bulkWrite(0x7ffffffc,data.data(),8));
     assert(!io.bulkRead(1,data.data(),4));
     assert(!io.bulkRead(0,data.data(),3));
@@ -98,7 +102,7 @@ int main() {
     assert(!badClock.read(0,&value) && !badMode.read(0,&value) && c.calls==before);
 }
 ''')
-    for flags in [[], ['-fsanitize=address,undefined','-fno-omit-frame-pointer']]:
+    for flags in sanitizer_flags():
         exe = tmp/'spi-test'
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
                         '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),

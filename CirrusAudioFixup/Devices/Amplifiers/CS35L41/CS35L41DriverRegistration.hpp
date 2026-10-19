@@ -7,10 +7,10 @@
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
 
 namespace cirrus::devices::amplifiers::cs35l41 {
-constexpr bool cs35l41RegisterAccess(uint32_t reg) { return !(reg & 3) && reg <= 0x7ffffffc; }
+constexpr bool cs35l41RegisterAccess(uint32_t reg) { return !(reg & 3) && reg <= registers::kLastRegister; }
 constexpr core::RegisterMapConfig cs35l41RegisterFormat(bool spi) {
     auto format = spi ? CS35L41SPIRegisterIO::config() : core::RegisterMapConfig{};
-    format.maxRegister = 0x7ffffffc;
+    format.maxRegister = registers::kLastRegister;
     format.readable = cs35l41RegisterAccess;
     format.writable = cs35l41RegisterAccess;
     return format;

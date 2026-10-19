@@ -29,14 +29,13 @@ inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::B
     const auto& properties = context.properties;
     if (!properties.array("cirrus,dev-index", indices, context.count) ||
         !properties.array("cirrus,speaker-position", channels, context.count) ||
-        !properties.array("cirrus,boost-type", boost, context.count) ||
-        !properties.array("cirrus,gpio1-func", gpio1, context.count) ||
+        !properties.array("cirrus,boost-type", boost, context.count) || !properties.array("cirrus,gpio1-func", gpio1, context.count) ||
         !properties.array("cirrus,gpio2-func", gpio2, context.count) ||
         !properties.array("cirrus,boost-ind-nanohenry", inductor, context.count) ||
         !properties.array("cirrus,boost-peak-milliamp", peak, context.count) ||
         !properties.array("cirrus,boost-cap-microfarad", capacitor, context.count))
         return nullptr;
-    if (!available(context.identity.subsystemVendor, context.identity.subsystemDevice, 0)) {
+    if (!available(context.identity.subsystemVendor, context.identity.subsystemDevice, UINT32_MAX)) {
         reason = "CS35L41_GENERIC_TUNING_UNAVAILABLE";
         return nullptr;
     }
@@ -93,8 +92,16 @@ inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::B
         memcpy(result->controllerPaths[i], endpoint.controllerPath, strlen(endpoint.controllerPath) + 1);
         auto resolved = endpoint;
         resolved.controllerPath = result->controllerPaths[i];
-        result->bindings[i] = {resolved, registers::kValDeviceId, channels[index], 0, "speaker-protection", result->hid,
-                              uint8_t(gpio2[index] == 2 ? 2 : 0), &device, sizeof(device), kDeviceConfigurationKind};
+        result->bindings[i] = {resolved,
+                               registers::kValDeviceId,
+                               channels[index],
+                               UINT32_MAX,
+                               "speaker-protection",
+                               result->hid,
+                               uint8_t(gpio2[index] == 2 ? 2 : 0),
+                               &device,
+                               sizeof(device),
+                               kDeviceConfigurationKind};
     }
     if (!result->configuration.permits(context.identity)) {
         reason = "CS35L41_CONFIGURATION_REJECTED";

@@ -7,8 +7,15 @@ import re
 import os
 import tempfile
 import textwrap
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
+bash = shutil.which('bash')
+if sys.platform == 'win32':
+    git_bash = Path('C:/Program Files/Git/bin/bash.exe')
+    if git_bash.exists():
+        bash = str(git_bash)
+assert bash, 'bash is required for the release gate fixture'
 # Apple's -verify_arch consumes every remaining argument as an architecture.
 # The input path must precede that operation, including paths containing spaces.
 workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
@@ -45,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-release-branch-') as directory:
     git('clone', '--bare', str(repo), str(origin))
     git('clone', '-b', 'main', str(origin), str(checkout))
     for commit, allowed in ((main, True), (ancestor, True), (feature, False), ('f' * 40, False)):
-        result = subprocess.run(['bash', '-eu', '-c', gate], cwd=checkout,
+        result = subprocess.run([bash, '-eu', '-c', gate], cwd=checkout,
                                 env={**os.environ, 'GITHUB_SHA': commit}, capture_output=True, text=True)
         assert (result.returncode == 0) == allowed, result.stdout + result.stderr
 assert "xcodebuild -version |" not in workflow, "Do not close Xcode's stdout before it finishes"

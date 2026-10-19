@@ -47,6 +47,38 @@ def detect_codec_from_path(file_path):
             return candidate
     return None
 
+
+def resource_entries(table):
+    # Tokenize strings/comments before punctuation: filenames may contain
+    # commas or braces, and sizeof expressions are not table field separators.
+    tokens = re.findall(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/|[{}(),]|[^"{}(),/]+|.', table, re.S)
+    depth = parentheses = 0
+    fields, field = [], []
+    for token in tokens:
+        if token.startswith(('//', '/*')):
+            continue
+        if token == '{':
+            depth += 1
+            if depth == 2:
+                fields, field = [], []
+            continue
+        if token == '}':
+            if depth == 2:
+                yield fields + [''.join(field).strip()]
+            depth -= 1
+            continue
+        if depth != 2:
+            continue
+        if token == '(':
+            parentheses += 1
+        elif token == ')':
+            parentheses -= 1
+        if token == ',' and not parentheses:
+            fields.append(''.join(field).strip())
+            field = []
+        else:
+            field.append(token)
+
 def validate_bincfg(data):
     # Mirror the runtime parser. Validate all records before producing C++ so
     # a malformed later entry cannot leave a partially imported gain policy.
@@ -76,17 +108,24 @@ def validate_bincfg(data):
     return True, f"Valid BINCFG: PCM gain code {17 if gain is None else gain}"
 
 
-def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=None, firmware_path=None,
-                    bincfg_l_path=None, bincfg_r_path=None):
-    if ssid_str.lower().startswith('0x'):
+def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=None, codec=None, firmware_path=None,
+                    bincfg_l_path=None, bincfg_r_path=None, generic_speaker=False, symmetric_tuning=False):
+    try:
         ssid_int = int(ssid_str, 16)
-    else:
-        ssid_int = int(ssid_str, 16)
+    except (TypeError, ValueError):
+        print("ERROR: Invalid hexadecimal subsystem ID", file=sys.stderr)
+        return False
 
     sub_vendor = (ssid_int >> 16) & 0xFFFF
     sub_device = ssid_int & 0xFFFF
     ssid_hex = f"{ssid_int:08x}"
-    if not 0 <= ssid_int <= 0xFFFFFFFF or not 0 <= spkid <= 255:
+    if generic_speaker:
+        if spkid is not None:
+            print("ERROR: Generic tuning and physical speaker ID are mutually exclusive", file=sys.stderr)
+            return False
+        # Ignored only when the explicit genericSpeaker flag is true.
+        spkid = 0
+    if not 0 < ssid_int <= 0xFFFFFFFF or spkid is None or not 0 <= spkid <= 255 or not sub_vendor or not sub_device:
         print("ERROR: SSID or speaker ID outside supported range", file=sys.stderr)
         return False
     codec_name = codec.lower().strip() if codec else detect_codec_from_path(wmfw_path)
@@ -118,13 +157,15 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
     with open(bin_l_path, 'rb') as f:
         bin_l_bytes = f.read()
 
-    # An explicitly supplied right-channel file must exist. Only omission permits
-    # intentional reuse of left-channel tuning; a typo must not change the profile.
+    # Reusing another channel's protection coefficients must be explicit.
     if bin_r_path:
         with open(bin_r_path, 'rb') as f:
             bin_r_bytes = f.read()
-    else:
+    elif symmetric_tuning:
         bin_r_bytes = bin_l_bytes
+    else:
+        print("ERROR: Supply right-channel tuning or explicitly select symmetric tuning", file=sys.stderr)
+        return False
 
     wmfw_ok, wmfw_msg = validate_wmfw(wmfw_bytes)
     if not wmfw_ok:
@@ -147,7 +188,7 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
     if firmware_path is None:
         root_dir = Path(__file__).resolve().parents[1]
         codec_dir = codec_name.upper()
-        target_dir = root_dir / 'CirrusAudioFixup' / 'Devices' / codec_dir / 'Resources'
+        target_dir = root_dir / 'CirrusAudioFixup' / 'Devices' / 'Amplifiers' / codec_dir / 'Resources'
         if not target_dir.exists():
             print(f"ERROR: Resource directory for codec {codec_dir} does not exist: {target_dir}", file=sys.stderr)
             return False
@@ -157,8 +198,9 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
         content = f.read()
 
     wmfw_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_wmfw"
-    bin_l_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_spkid{spkid}_l0_bin"
-    bin_r_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_spkid{spkid}_r0_bin"
+    speaker_tag = 'generic' if generic_speaker else f'spkid{spkid}'
+    bin_l_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_{speaker_tag}_l0_bin"
+    bin_r_var_name = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_{speaker_tag}_r0_bin"
 
     if wmfw_var_name in content:
         print(f"Notice: {wmfw_var_name} already present in resources: {firmware_path}")
@@ -175,29 +217,36 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
 
     # Existing profiles are deliberate source decisions. Refuse a second entry
     # rather than reporting success while leaving old arrays/selection active.
-    identity = rf'\{{\s*0x{sub_vendor:04X}\s*,\s*0x{sub_device:04X}\s*,\s*{spkid}\s*,'
-    if re.search(identity, post_table, re.I):
-        print("ERROR: Board/speaker entry already exists; review and replace it explicitly", file=sys.stderr)
-        return False
-    for name in (wmfw_var_name, bin_l_var_name, bin_r_var_name):
-        if name in pre_table:
-            print(f"ERROR: Resource symbol already exists: {name}", file=sys.stderr)
+    for fields in resource_entries(post_table):
+        if len(fields) < 12:
+            continue
+        try:
+            same_board = int(fields[0], 0) == sub_vendor and int(fields[1], 0) == sub_device
+            same_speaker = int(fields[2], 0) == spkid
+        except ValueError:
+            continue
+        is_generic = len(fields) >= 19 and fields[18] == 'true'
+        if same_board and is_generic == generic_speaker and (generic_speaker or same_speaker):
+            print("ERROR: Board/speaker entry already exists; review and replace it explicitly", file=sys.stderr)
             return False
 
     arrays_code = []
-    if wmfw_var_name not in pre_table:
-        arrays_code.append(format_c_array(wmfw_var_name, wmfw_bytes))
-    if bin_l_var_name not in pre_table:
-        arrays_code.append(format_c_array(bin_l_var_name, bin_l_bytes))
-    if bin_r_bytes == bin_l_bytes and bin_l_var_name in pre_table:
-        pass
-    elif bin_r_var_name not in pre_table and bin_r_bytes != bin_l_bytes:
-        arrays_code.append(format_c_array(bin_r_var_name, bin_r_bytes))
+    payloads = [(wmfw_var_name, wmfw_bytes), (bin_l_var_name, bin_l_bytes)]
+    if bin_r_bytes != bin_l_bytes:
+        payloads.append((bin_r_var_name, bin_r_bytes))
+    for name, data in payloads:
+        existing = re.findall(r'\bconst\s+uint8_t\s+' + re.escape(name) + r'\[\]\s*=\s*\{(.*?)\};', pre_table, re.S)
+        if name in pre_table:
+            if len(existing) != 1 or bytes(int(v, 16) for v in re.findall(r'0x([0-9a-fA-F]{2})', existing[0])) != data:
+                print(f"ERROR: Resource symbol has different or ambiguous contents: {name}", file=sys.stderr)
+                return False
+        else:
+            arrays_code.append(format_c_array(name, data))
 
     tuning_fields = []
     tuning_names = []
     for channel, path, data in zip(('l0', 'r0'), (bincfg_l_path, bincfg_r_path), tuning_bytes):
-        symbol = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_spkid{spkid}_{channel}_bincfg"
+        symbol = f"{codec_name}_dsp1_spk_prot_{ssid_hex}_{speaker_tag}_{channel}_bincfg"
         if data is None:
             tuning_fields.extend(('nullptr', '0'))
             tuning_names.append('nullptr')
@@ -220,13 +269,10 @@ def import_firmware(ssid_str, wmfw_path, bin_l_path, bin_r_path, spkid=1, codec=
         f"{bin_l_var_name}, sizeof({bin_l_var_name}), "
         f"{bin_r_var_name if bin_r_bytes != bin_l_bytes else bin_l_var_name}, "
         f"sizeof({bin_r_var_name if bin_r_bytes != bin_l_bytes else bin_l_var_name}), false, "
-        + ', '.join(tuning_fields + tuning_names) + ' }'
+        + ', '.join(tuning_fields + tuning_names) + f', {str(generic_speaker).lower()} }}'
     )
 
-    post_table = post_table.replace(
-            table_marker + "\n",
-            table_marker + "\n" + table_entry + ",\n"
-        )
+    post_table = post_table.replace(table_marker, table_marker + "\n" + table_entry + ",", 1)
 
     updated_content = new_pre_table + post_table
 
@@ -242,10 +288,13 @@ def main():
     parser.add_argument("--ssid", required=True, help="Subsystem ID in hex (e.g. 0x17AA3847 or 17AA3847)")
     parser.add_argument("--wmfw", required=True, help="Path to .wmfw DSP firmware file")
     parser.add_argument("--bin-l", required=True, help="Path to primary channel speaker tuning .bin file")
-    parser.add_argument("--bin-r", required=False, help="Path to secondary channel speaker tuning .bin file (optional, defaults to bin-l)")
+    parser.add_argument("--bin-r", required=False, help="Path to secondary channel speaker tuning .bin file")
+    parser.add_argument("--symmetric-tuning", action="store_true", help="Explicitly authorize reuse of left coefficients for both speakers")
     parser.add_argument("--bincfg-l", help="Matching left-channel CS35L41 gain tuning; omitted means Linux default")
     parser.add_argument("--bincfg-r", help="Matching right-channel CS35L41 gain tuning; never implicitly copied from left")
-    parser.add_argument("--spkid", type=int, default=1, help="Speaker hardware identifier (default: 1)")
+    speaker_group = parser.add_mutually_exclusive_group()
+    speaker_group.add_argument("--spkid", type=int, help="Verified physical speaker identifier, including 0")
+    speaker_group.add_argument("--generic-speaker", action="store_true", help="Board-generic coefficients with no physical speaker ID")
     parser.add_argument("--firmware", required=False, help="Explicit path to codec firmware header (optional)")
     parser.add_argument("--validate-only", action="store_true", help="Validate firmware and tuning binaries without modifying codebase")
 
@@ -283,7 +332,7 @@ def main():
         sys.exit(0 if (w_ok and b_ok and br_ok and tuning_ok) else 1)
 
     success = import_firmware(args.ssid, args.wmfw, args.bin_l, args.bin_r, args.spkid, codec, args.firmware,
-                              args.bincfg_l, args.bincfg_r)
+                              args.bincfg_l, args.bincfg_r, args.generic_speaker, args.symmetric_tuning)
     sys.exit(0 if success else 1)
 
 if __name__ == '__main__':

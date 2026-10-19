@@ -1,3 +1,4 @@
+from host_build import sanitizer_flags
 """Run AMD ACPI/MMIO ownership code against failure and power-transition mocks."""
 from pathlib import Path
 import subprocess,tempfile
@@ -88,7 +89,7 @@ int main(){
  acpi.hasPSC=false;assert(bus.bind(&acpi,&owner)==0);bus.shutdown();assert(allocs==frees);
 }
 ''')
-    for flags in ([],['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
+    for flags in sanitizer_flags():
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),str(ROOT/'CirrusAudioFixup/Transport/AMD/AMDSPIController.cpp'),'-o',str(p/'test')],check=True)
         subprocess.run([str(p/'test')],check=True)
 print('PASS AMD ACPI owner: HID, exclusive access, mapping, D0, allocation cleanup and repeat bind')

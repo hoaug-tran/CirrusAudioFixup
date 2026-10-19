@@ -39,16 +39,39 @@ if [ ! -d "$evidence_desktop" ]; then
 fi
 umask 077
 output=$(/usr/bin/mktemp -d "$evidence_desktop/cirrus-evidence.XXXXXX") || exit 1
+archive="$output.zip"
+capture_failed=0
+collection_finished=0
 
 # Return partial captures too, including interrupted/error exits. Only this new
 # evidence directory is modified; existing Desktop files keep their permissions.
 finish_evidence() {
     local result=$?
+    trap - EXIT
+    if [ "$collection_finished" -ne 1 ]; then
+        printf 'INTERRUPTED exit=%s\n' "$result" >>"$output/status.txt"
+    fi
+    # Package as the recipient: ZIP entries and the ZIP itself must not inherit
+    # root-only ownership. Keep the directory even if packaging fails.
     if ! /usr/sbin/chown -R "$evidence_uid:$evidence_gid" "$output" ||
        ! /bin/chmod -R u+rwX "$output"; then
         printf 'Could not grant user access to evidence: %s\n' "$output" >&2
         result=1
     fi
+    if /usr/bin/sudo -u "$evidence_user" /usr/bin/ditto -c -k --keepParent "$output" "$archive"; then
+        if /usr/sbin/chown "$evidence_uid:$evidence_gid" "$archive" &&
+           /bin/chmod 600 "$archive" &&
+           /usr/bin/sudo -u "$evidence_user" /usr/bin/unzip -tq "$archive"; then
+            printf '\nSend: %s\n' "$archive"
+        else
+            printf 'Archive access/integrity check failed: %s\n' "$archive" >&2
+            result=1
+        fi
+    else
+        printf 'ZIP failed; evidence remains at: %s\n' "$output" >&2
+        result=1
+    fi
+    if [ "$result" -eq 0 ] && [ "$capture_failed" -ne 0 ]; then result=2; fi
     exit "$result"
 }
 trap finish_evidence EXIT
@@ -67,9 +90,29 @@ capture() {
 
     local header_size
     header_size=$(wc -c <"$output/$name.txt")
-    "$@" >>"$output/$name.txt" 2>&1
-
+    printf 'Capturing %s\n' "$name"
+    # macOS ships no timeout(1). Bound each query; a stuck diagnostic must not
+    # prevent subsequent captures or the EXIT ownership repair.
+    "$@" >>"$output/$name.txt" 2>&1 &
+    local command_pid=$!
+    (
+        sleep 120 &
+        timer_pid=$!
+        trap 'kill "$timer_pid" 2>/dev/null; exit' TERM INT
+        wait "$timer_pid"
+        if kill -0 "$command_pid" 2>/dev/null; then
+            printf '\nTIMEOUT after 120 seconds\n' >>"$output/$name.txt"
+            kill -TERM "$command_pid" 2>/dev/null
+            sleep 2
+            kill -KILL "$command_pid" 2>/dev/null
+        fi
+    ) &
+    local watchdog_pid=$!
+    wait "$command_pid"
     local result=$?
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null
+    if [ "$result" -ne 0 ]; then capture_failed=1; fi
     printf '%-30s exit=%s\n' "$name" "$result" >>"$output/status.txt"
     if [ "$(wc -c <"$output/$name.txt")" -eq "$header_size" ]; then
         printf '%-30s empty output\n' "$name" >>"$output/status.txt"
@@ -83,24 +126,12 @@ capture_shell() {
     shift
     local command="$*"
 
-    {
-        printf '$ %s\n\n' "$command"
-    } >"$output/$name.txt"
-
-    local header_size
-    header_size=$(wc -c <"$output/$name.txt")
-    /bin/bash -o pipefail -c "$command" >>"$output/$name.txt" 2>&1
-
-    local result=$?
-    printf '%-30s exit=%s\n' "$name" "$result" >>"$output/status.txt"
-    if [ "$(wc -c <"$output/$name.txt")" -eq "$header_size" ]; then
-        printf '%-30s empty output\n' "$name" >>"$output/status.txt"
-    fi
-
-    return "$result"
+    capture "$name" /bin/bash -o pipefail -c "$command"
 }
 
 capture system /usr/bin/sw_vers
+capture collector-sha256 /usr/bin/shasum -a 256 "${BASH_SOURCE[0]}"
+capture collected-at /bin/date '+%Y-%m-%dT%H:%M:%S%z'
 capture kernel /usr/bin/uname -a
 capture cpu /usr/sbin/sysctl machdep.cpu.vendor machdep.cpu.brand_string
 capture machine-model /usr/sbin/sysctl hw.model
@@ -123,6 +154,7 @@ capture pci /usr/sbin/system_profiler SPPCIDataType
 capture services /usr/sbin/ioreg -lw0 -p IOService
 capture acpi /usr/sbin/ioreg -lw0 -p IOACPIPlane
 capture power-plane /usr/sbin/ioreg -lw0 -p IOPower
+capture services-xml /usr/sbin/ioreg -a -l -p IOService
 
 capture cirrus-fixup-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c CirrusAudioFixup
 capture cirrus-bootstrap-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c CirrusAudioBootstrap -d 1
@@ -148,13 +180,22 @@ printf '%s\n' \
     >"$output/README.txt"
 
 kernel_log="$output/kernel-log.txt"
-if ! capture kernel-log /usr/bin/log show --last boot --style syslog --info --debug \
-    --predicate 'process == "kernel"'; then
+boot_seconds=$(/usr/sbin/sysctl -n kern.boottime | /usr/bin/sed -E 's/.*sec = ([0-9]+),.*/\1/')
+boot_start=$(/bin/date -r "$boot_seconds" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) || boot_start=''
+log_predicate='process == "kernel" AND (eventMessage CONTAINS[c] "Cirrus" OR eventMessage CONTAINS[c] "CS35" OR eventMessage CONTAINS[c] "CSC355" OR eventMessage CONTAINS[c] "BOOT_FLOW" OR eventMessage CONTAINS[c] "AppleALC" OR eventMessage CONTAINS[c] "Lilu" OR eventMessage CONTAINS[c] "Voodoo" OR eventMessage CONTAINS[c] "AppleHDA" OR eventMessage CONTAINS[c] "SPI" OR eventMessage CONTAINS[c] "panic" OR eventMessage CONTAINS[c] "watchdog")'
+if [ -z "$boot_start" ] || ! capture kernel-log /usr/bin/log show --start "$boot_start" --style syslog --info --debug \
+    --predicate "$log_predicate"; then
     # Preserve the failed since-boot query and try a bounded interval separately.
     capture kernel-log-fallback /usr/bin/log show --last 1h --style syslog --info --debug \
-        --predicate 'process == "kernel"'
+        --predicate "$log_predicate"
     kernel_log="$output/kernel-log-fallback.txt"
 fi
+
+printf 'collector_version=2\nstarted_boot=%s\nrecipient=%s\n' "$boot_start" "$evidence_user" >"$output/collection.txt"
+printf '%s\n' 'Collection reads existing diagnostics only; it does not load/unload kexts or probe amplifier registers.' \
+    'A service query can succeed without matching a device. Inspect IORegistry and status together.' \
+    'Exit 2 means one or more optional captures failed; send the partial ZIP too.' \
+    'A kext path identifies the supplied bundle, not proof that this exact binary is loaded.' >>"$output/README.txt"
 capture cirrus-audio-log /usr/bin/grep -Ei \
     'Cirrus|CS35|CSC3551|AppleALC|Lilu|Voodoo|SPKR' "$kernel_log"
 
@@ -165,6 +206,8 @@ if [ "$#" -gt 0 ]; then
 
     if [ ! -d "$kext" ]; then
         printf 'KEXT bundle does not exist: %s\n' "$kext" >"$output/kext-error.txt"
+        printf 'bundle exit=1 missing supplied bundle\n' >>"$output/status.txt"
+        capture_failed=1
     else
         binary="$kext/Contents/MacOS/CirrusAudioFixup"
 
@@ -180,8 +223,14 @@ if [ "$#" -gt 0 ]; then
             capture binary-imports /usr/bin/nm -u "$binary"
         else
             printf 'Binary does not exist: %s\n' "$binary" >"$output/binary-error.txt"
+            printf 'binary exit=1 missing supplied binary\n' >>"$output/status.txt"
+            capture_failed=1
         fi
     fi
+else
+    printf '%s\n' 'NOT_PROVIDED: pass the CirrusAudioFixup.kext path as the first argument to capture bundle metadata, hash and UUID.' >"$output/kext-error.txt"
+    printf 'bundle NOT_PROVIDED\n' >>"$output/status.txt"
+    capture_failed=1
 fi
 
 printf '\nEvidence saved: %s\n' "$output"
@@ -192,3 +241,4 @@ printf '  %s/dmesg.txt\n' "$output"
 printf '  %s/cirrus-audio-log.txt\n' "$output"
 printf '  %s/cirrus-fixup-ioreg.txt\n' "$output"
 printf '  %s/voodoo-i2c-ioreg.txt\n' "$output"
+collection_finished=1

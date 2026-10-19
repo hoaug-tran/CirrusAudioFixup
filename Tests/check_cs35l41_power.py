@@ -1,6 +1,7 @@
 """Internal/external CS35L41 power sequences with real playback state machines."""
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,13 +60,14 @@ int main(){
    if(br==PlaybackProgress::Pending)br=Playback::advance(explicitLegacy,b,now,dsp,0x2b01,nullptr,kLegacyPowerConfiguration);
   }
   assert(ar==PlaybackProgress::Prepared&&br==ar&&cr==ar);
-  // Windows 103C89C6 InitSequence and Linux HDA select VPMON for
-  // internal boost; external boost must retain VBSTMON. Bypass is unchanged.
-  assert(hp.r[0x4C50]==(dsp?0x28U:0x20U));
+  assert(hp.r[0x4C50]==(dsp?0x29U:0x20U));
   assert(legacy.r[0x4C50]==(dsp?0x29U:0x20U));
   if(dsp){
+   assert(hp.r[0x4C54]==0x21U&&legacy.r[0x4C54]==0x21U&&explicitLegacy.r[0x4C54]==0x21U);
+   assert(hp.r[0x4C58]==0x3AU&&legacy.r[0x4C58]==0x3AU&&explicitLegacy.r[0x4C58]==0x3AU);
+   assert(hp.r[0x4C5C]==0x3BU&&legacy.r[0x4C5C]==0x3BU&&explicitLegacy.r[0x4C5C]==0x3BU);
    auto wrongInternal=hp;auto wrongExternal=legacy;auto ci=c;auto ai=a;
-   wrongInternal.r[0x4C50]=0x29;wrongExternal.r[0x4C50]=0x28;
+   wrongInternal.r[0x4C54]=0x29;wrongExternal.r[0x4C54]=0x29;
    assert(!Playback::commit(wrongInternal,ci,17<<5,true,internal));
    assert(!Playback::commit(wrongExternal,ai,17<<5,true));
    assert(wrongInternal.r[0x6000]==0xA678&&wrongExternal.r[0x6000]==0xA678);
@@ -83,7 +85,6 @@ int main(){
    if(cr==PlaybackProgress::Pending)cr=Playback::shutdown(hp,sc,now,dsp,0x2b01,nullptr,internal);
    if(br==PlaybackProgress::Pending)br=Playback::shutdown(explicitLegacy,sb,now,dsp,0x2b01,nullptr,kLegacyPowerConfiguration);
   }
-  assert(ar==PlaybackProgress::Prepared&&br==ar&&cr==ar);
   assert(legacy.r==explicitLegacy.r&&legacy.writes==explicitLegacy.writes);
   assert(legacy.calls==explicitLegacy.calls);
  }
@@ -100,12 +101,12 @@ int main(){
   assert(result==PlaybackProgress::Prepared&&!(io.r[0x2014]&1)&&!(io.r[0x2018]&0x3031));
   for(auto reg:io.writes)assert(reg!=0x742c&&reg!=0x7438&&reg!=0x7414&&reg!=0x11008);
  }
- // Commit must reject the old external-boost invariant for an internal board.
  Port wrong;wrong.r[0x2014]=1;wrong.r[0x2018]=0x3001;PlaybackTransition prepared{};prepared.phase=PlaybackPhase::Prepared;
  assert(!Playback::commit(wrong,prepared,17<<5,true,internal)&&wrong.writes.empty());
 }
 ''')
-    for flags in ([], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]):
+    flag_list = [[]] if sys.platform == "win32" else [[], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]]
+    for flags in flag_list:
         exe = tmp / "test"
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)

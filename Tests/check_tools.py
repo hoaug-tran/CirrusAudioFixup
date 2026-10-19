@@ -99,7 +99,7 @@ if sys.platform != "darwin":
 # deliberately not invoked by this host regression.
 helpers = source[source.index("capture() {"):source.index("capture system ")]
 with tempfile.TemporaryDirectory(prefix="cirrus-capture-") as directory:
-    script = "output=.\n" + helpers + """
+    script = "output=.\ncapture_failed=0\n" + helpers + """
 capture empty true
 capture failed /bin/bash -c 'exit 7'
 capture_shell failed-pipeline 'false | true'
@@ -118,6 +118,7 @@ if sys.platform != 'win32':
     setup = source[source.index('evidence_user='):source.index('capture() {')]
     setup = setup.replace('/usr/bin/stat', 'fixture_stat').replace('/usr/bin/id', 'fixture_id').replace('/usr/bin/dscl', 'fixture_dscl')
     setup = setup.replace('/usr/sbin/chown', shutil.which('chown')).replace('/usr/bin/mktemp', shutil.which('mktemp'))
+    setup = setup.replace('/usr/bin/sudo', 'fixture_sudo')
     with tempfile.TemporaryDirectory(prefix='cirrus-desktop-') as directory:
         home = Path(directory) / 'user home'; home.mkdir()
         marker = Path(directory) / 'result-path'
@@ -125,6 +126,17 @@ if sys.platform != 'win32':
 fixture_stat(){ printf '%s\n' tester; }
 fixture_id(){ if [ "$1" = -u ]; then printf '%s\n' "$FIXTURE_UID"; else printf '%s\n' "$FIXTURE_GID"; fi; }
 fixture_dscl(){ printf 'NFSHomeDirectory: %s\n' "$FIXTURE_HOME"; }
+fixture_sudo(){
+    shift 2
+    case "$1" in
+        /usr/bin/ditto)
+            shift 4
+            python3 -c 'import sys,zipfile,pathlib; p=pathlib.Path(sys.argv[1]); z=zipfile.ZipFile(sys.argv[2],"w"); [z.write(f,str(f.relative_to(p.parent))) for f in p.rglob("*") if f.is_file()]; z.close()' "$1" "$2" ;;
+        /usr/bin/unzip)
+            python3 -c 'import sys,zipfile; assert zipfile.ZipFile(sys.argv[1]).testzip() is None' "$3" ;;
+        *) return 1 ;;
+    esac
+}
 '''
         environment = dict(os.environ, FIXTURE_HOME=str(home), FIXTURE_UID=str(os.getuid()), FIXTURE_GID=str(os.getgid()), FIXTURE_MARKER=str(marker), SUDO_USER='tester')
         environment['HOME']='/var/root'
@@ -139,4 +151,10 @@ fixture_dscl(){ printf 'NFSHomeDirectory: %s\n' "$FIXTURE_HOME"; }
             capture = output/'capture.txt'
             assert capture.stat().st_uid == os.getuid() and capture.stat().st_mode & 0o600 == 0o600
             capture.write_text('user can edit')
+            archive = Path(str(output)+'.zip')
+            assert archive.is_file() and archive.stat().st_uid == os.getuid()
+            assert archive.stat().st_mode & 0o777 == 0o600
+            import zipfile
+            with zipfile.ZipFile(archive) as bundle:
+                assert bundle.read(output.name+'/capture.txt') == b'evidence'
 print('PASS collector Desktop destination, sudo/console account resolution and user access after success/error exit')

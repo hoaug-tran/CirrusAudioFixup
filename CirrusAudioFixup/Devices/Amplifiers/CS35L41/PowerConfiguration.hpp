@@ -11,9 +11,7 @@ struct PowerConfiguration {
     BoostTopology topology{BoostTopology::ExternalWithoutSwitch};
     uint32_t inductorNanohenry{0}, peakMilliamp{0}, capacitorMicrofarad{0};
     bool internal() const { return topology == BoostTopology::Internal; }
-    // DSP supply telemetry follows the electrical topology (Linux HDA):
-    // internal boost uses VPMON, external boost uses VBSTMON.
-    uint32_t dspSupplyMonitorSource() const { return internal() ? 0x28U : 0x29U; }
+    uint32_t dspSupplyMonitorSource() const { return 0x29U; }
     uint32_t activePower(bool dsp) const { return (dsp ? 0x3001U : 1U) | (internal() ? 0x20U : 0U); }
     bool valid() const {
         if (topology == BoostTopology::ExternalWithoutSwitch)

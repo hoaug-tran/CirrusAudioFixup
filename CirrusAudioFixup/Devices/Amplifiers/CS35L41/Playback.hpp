@@ -245,7 +245,7 @@ public:
             for (const auto& item : common)
                 if (!io.write(item[0], item[1]))
                     return fail(state, DIAG_PLAYBACK_INVARIANT, item[0], item[1]);
-            if (dsp && (!io.write(0x4C54, 0x29) || !io.updateBits(0x2018, 0x3000, 0x3000)))
+            if (dsp && (!io.write(0x4C54, 0x21) || !io.write(0x4C58, 0x3A) || !io.write(0x4C5C, 0x3B) || !io.updateBits(0x2018, 0x3000, 0x3000)))
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
             if (dsp) {
                 if (!io.write(0x13020, registers::kCmdMailboxResume))
@@ -367,12 +367,8 @@ public:
             fail(state, (irq & registers::kMaskProtectionFault) ? diagnostics::DIAG_AMP_PROTECTION : diagnostics::DIAG_PLAYBACK_INVARIANT);
             return false;
         }
-        // Validate the serial format and firmware inputs once per activation.
-        // These reads belong at the muted commit boundary, not in the periodic
-        // health monitor. A valid PLL alone cannot prove that PCM and speaker
-        // telemetry still reach the inputs expected by the selected firmware.
         const uint32_t signalPath[][2] = {{0x4804, 0x21}, {0x4808, 0x20200200}, {0x4830, 0x18}, {0x4840, 0x18}, {0x4C40, 8},
-                                          {0x4C44, 8},    {0x4C48, 0x18},       {0x4C4C, 0x19}, {0x4C50, power.dspSupplyMonitorSource()}, {0x4C54, 0x29}};
+                                          {0x4C44, 8},    {0x4C48, 0x18},       {0x4C4C, 0x19}, {0x4C50, power.dspSupplyMonitorSource()}, {0x4C54, 0x21}};
         for (unsigned i = 0; i < (dsp ? 10U : 4U); ++i) {
             uint32_t actual = 0;
             if (!io.read(signalPath[i][0], &actual) || actual != signalPath[i][1]) {

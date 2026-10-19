@@ -36,7 +36,8 @@ struct AmplifierDriverRegistration {
     const char* name;
     const char* acpiHid;
     uint32_t siliconId;
-    uint8_t transportMask; // Bit 0 I2C, bit 1 SPI. No implicit SoundWire support.
+    // Bit 0 I2C, bit 1 SPI. No implicit SoundWire support.
+    uint8_t transportMask;
     core::RegisterMapConfig i2cFormat;
     core::RegisterMapConfig spiFormat;
     core::AmplifierLifecycleHooks* (*create)(const AmplifierDriverContext&);

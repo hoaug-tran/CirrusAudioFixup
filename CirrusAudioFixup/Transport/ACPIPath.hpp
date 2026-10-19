@@ -13,7 +13,8 @@ inline bool canonicalACPIPath(const char* path, char* out, size_t capacity) {
         return false;
     ++p;
     if (*p == '\\')
-        ++p; // Some IOACPIPlane roots retain the AML root prefix.
+        // Some IOACPIPlane roots retain the AML root prefix.
+        ++p;
     size_t n = 0;
     out[n++] = '\\';
     while (*p) {
@@ -27,7 +28,8 @@ inline bool canonicalACPIPath(const char* path, char* out, size_t capacity) {
             segment[bytes++] = *p++;
         }
         while (*p && *p != '/' && *p != '.')
-            ++p; // Registry location is not AML name.
+            // Registry location is not AML name.
+            ++p;
         while (bytes > 1 && segment[bytes - 1] == '_')
             --bytes;
         if (n > 1) {

@@ -1,11 +1,7 @@
-//
-// PlatformProfile.hpp
 // Board-specific amplifier endpoints and reset wiring.
 // GPIO register offsets belong to a board profile, not a CPU family. Do not
 // reuse the Legion reset quirk on another machine without checking its wiring.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 #include "Transport/NativeSPIControllerFactory.hpp"
 
@@ -82,8 +78,8 @@ static constexpr PlatformProfile kPlatformProfiles[] = {
     {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true, nullptr,
      nullptr, 0, &kLegionProtectionIRQ},
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
-    {"acpi-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 0, nullptr, false,
-     nullptr, nullptr, 0, nullptr, nullptr, nullptr, BoardIdentitySource::ACPI},
+    {"acpi-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 0, nullptr, false, nullptr, nullptr, 0, nullptr, nullptr,
+     nullptr, BoardIdentitySource::ACPI},
 };
 
 static constexpr PlatformProfile kSafeUnknownPlatform = {
@@ -124,5 +120,4 @@ inline bool permitsHardwareInitialization(const PlatformProfile& profile, uint32
 
 inline const PlatformProfile& defaultPlatformProfile() { return kSafeUnknownPlatform; }
 
-// End of the board profile definitions.
 }

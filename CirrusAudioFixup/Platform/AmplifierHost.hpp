@@ -36,7 +36,8 @@ public:
     virtual void publish(const char*, OSObject*) {}
     virtual void remove(const char*) {}
     virtual void publishVerdict() {}
-    virtual IOService* audioController() { return nullptr; } // Retained result, caller releases.
+    // Retained result, caller releases.
+    virtual IOService* audioController() { return nullptr; }
     virtual hda::HDAStreamState streamObservation() const { return {}; }
     virtual bool hasRouteEvents() const { return false; }
     virtual bool routeUnchanged(uint32_t) const { return false; }

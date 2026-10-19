@@ -1,11 +1,7 @@
-//
-// AmplifierDescriptors.hpp
 // Silicon identities accepted by this driver.
 // An enum value is not hardware support. Add an entry only after its device
 // driver and power, DSP and speaker-tuning paths have been implemented.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Core/AudioTypes.hpp"
@@ -42,5 +38,4 @@ inline bool supportsAmplifierModel(AmplifierModel model) {
     return false;
 }
 
-// End of the shared device registry.
 }

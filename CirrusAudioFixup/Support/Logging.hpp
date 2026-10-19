@@ -1,11 +1,7 @@
-//
-// Logging.hpp
 // Kernel logging and the host-test logging shim.
 // Routine logging is optional; failures remain visible in both builds.
 // Keep register sweeps behind explicit diagnostic options.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Support/BuildConfig.hpp"

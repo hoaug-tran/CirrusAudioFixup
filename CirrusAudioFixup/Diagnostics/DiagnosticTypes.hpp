@@ -1,11 +1,7 @@
-//
-// DiagnosticTypes.hpp
-// Lifecycle stages, failure records and I2C trace data.
+// Lifecycle stages, failure records and register-transfer trace data.
 // The first failure preserves the original fault. The latest failure records
 // later cleanup or retry results without erasing that starting point.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Diagnostics/TraceTypes.hpp"
@@ -97,7 +93,8 @@ enum class DiagnosticFailure : uint32_t {
     OtpBootError,
     AmpProtection,
     Calibration,
-    SpiTransfer, // Appended: preserve existing published failure numbers.
+    // Keep this value last to preserve published failure numbers.
+    SpiTransfer,
 };
 
 inline constexpr DiagnosticFailure DIAG_OK = DiagnosticFailure::Ok;

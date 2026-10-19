@@ -1,11 +1,7 @@
-//
-// Playback.hpp
 // CS35L41 muted preparation and playback commit.
 // Each advance performs one bounded phase and returns to the workloop.
 // The caller owns route cancellation, stereo coordination and rollback.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Core/RegisterIO.hpp"
@@ -258,9 +254,9 @@ public:
             if (!io.updateBits(0x2018, 1 | registers::kMaskBoostEnable, power.activePower(false)) ||
                 (!power.internal() && !io.write(0x11008, 0x8001)) || !io.write(0x10010, 0x01000000))
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
-            bool ok = power.internal() ? io.updateBits(0x2014, 1, 1) :
-                      io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0x0F) && io.write(0x742C, 0x79) &&
-                      io.write(0x7438, 0x00585941) && io.updateBits(0x2014, 1, 1);
+            bool ok = power.internal() ? io.updateBits(0x2014, 1, 1)
+                                       : io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0x0F) && io.write(0x742C, 0x79) &&
+                                             io.write(0x7438, 0x00585941) && io.updateBits(0x2014, 1, 1);
             bool locked = power.internal() || closeKeys(io);
             if (!ok || !locked)
                 return fail(state, DIAG_PLAYBACK_INVARIANT);
@@ -288,7 +284,8 @@ public:
                 state.phase = PlaybackPhase::Output;
                 state.deadlineMs = sampleTime(now, clock) + 5;
             } else {
-                bool ok = power.internal() || (io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
+                bool ok = power.internal() ||
+                          (io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
                 bool locked = power.internal() || closeKeys(io);
                 if (!ok || !locked)
                     return fail(state, DIAG_PLAYBACK_INVARIANT);

@@ -1,12 +1,14 @@
 // AMD controller ownership module. The host does not drive a power parent;
-// require observable D0 before binding and on every resume, as before extraction.
+// require observable D0 before binding and on every resume.
 #pragma once
 #include "Transport/AMD/AMDSPIController.hpp"
 #include "Transport/NativeSPIControllerOwner.hpp"
 namespace cirrus::transport::amd {
 class AMDSPIControllerOwner final : public NativeSPIControllerOwner {
     AMDSPIController mController;
-    IOACPIPlatformDevice* mTarget{nullptr}; // Borrowed host retain.
+    // Borrowed host retain.
+    IOACPIPlatformDevice* mTarget{nullptr};
+
 public:
     IOReturn bind(IOACPIPlatformDevice* target, IOService* owner, NativeSPIControllerFailure& failure) {
         if (!target || !owner) {

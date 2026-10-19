@@ -1,9 +1,5 @@
-//
-// AudioEventSource.hpp
 // IOAudioFamily observations delivered to the amplifier workloop.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include <IOKit/IOEventSource.h>
@@ -26,7 +22,7 @@ struct AudioEventState {
 // short mailbox lock; the workloop consumes the latest state, so a rapid series
 // of jack changes cannot leave a queue of obsolete power-up requests.
 // OpenCore's IOKit vtable linker requires the concrete metaclass in the global
-// namespace. Keep a namespace alias below for the driver-facing API.
+
 class CirrusAudioEventSource : public IOEventSource {
 OSDeclareDefaultStructors(CirrusAudioEventSource)
 

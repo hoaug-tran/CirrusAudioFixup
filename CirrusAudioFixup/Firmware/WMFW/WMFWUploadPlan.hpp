@@ -1,9 +1,5 @@
-//
-// WMFWUploadPlan.hpp
 // Shared upload-plan types used by the production firmware uploader.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Firmware/WMFW/WMFWFormat.hpp"

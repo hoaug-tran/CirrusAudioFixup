@@ -19,7 +19,8 @@ struct BusEndpoint {
             return i2cAddress <= (tenBitAddress ? 0x3ff : 0x7f);
         if (transport == BusTransportType::SPI)
             return spiClockHz && spiMode <= 3;
-        return false; // SoundWire needs its own discovery/transaction contract.
+        // SoundWire needs its own discovery/transaction contract.
+        return false;
     }
     bool sameDevice(const BusEndpoint& other) const {
         if (!valid() || !other.valid() || transport != other.transport || strcmp(controllerPath, other.controllerPath))

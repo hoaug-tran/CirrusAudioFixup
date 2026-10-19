@@ -1,12 +1,7 @@
-//
-// CirrusAudioFixup.cpp
 // IOKit host for registered amplifier and communication drivers.
-//
 // Hardware readiness is established by register and DSP checks. HDA stream
 // observation cannot confirm the downstream audio route or audible output.
 // See LICENSE for distribution terms.
-//
-
 #include "CirrusAudioFixup.hpp"
 #include "Diagnostics/ACPIObjectEvidence.hpp"
 #include "Diagnostics/FailureNames.hpp"
@@ -459,8 +454,9 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
         return verified;
     }
 
-    CIRRUS_LOG("No platform hardware reset quirk configured for profile %s; continuing with firmware reset state and silicon software reset",
-               mPlatformProfile ? mPlatformProfile->name : "unknown");
+    CIRRUS_LOG(
+        "No platform hardware reset quirk configured for profile %s; continuing with firmware reset state and silicon software reset",
+        mPlatformProfile ? mPlatformProfile->name : "unknown");
     return true;
 }
 
@@ -523,10 +519,12 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         if (mDiscoveredBoard->configuration.permits(identity))
             mPlatformProfile = &mDiscoveredProfile;
     }
-    mPlatformSubsystemId = mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? acpiSubsystemId : pciSubsystemId;
+    mPlatformSubsystemId =
+        mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? acpiSubsystemId : pciSubsystemId;
     mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, mPlatformSubsystemId);
     setProperty("Cirrus_Platform_ACPI_SSID", uint64_t(acpiSubsystemId), 32);
-    setProperty("Cirrus_Platform_Identity_Source", mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? "ACPI_SUB" : "AUDIO_PCI");
+    setProperty("Cirrus_Platform_Identity_Source",
+                mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? "ACPI_SUB" : "AUDIO_PCI");
     if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != mPlatformSubsystemId) {
         setProperty("Cirrus_Platform_PCI_SSID", uint64_t(uint32_t(pciSubsystemId)), 32);
         setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);
@@ -539,7 +537,8 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     OSSafeReleaseNULL(ownedHid);
 }
 
-void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi, const cirrus::platform::AmplifierDriverRegistration& definition) {
+void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
+                                                     const cirrus::platform::AmplifierDriverRegistration& definition) {
     cirrus::transport::ACPIDeviceProperties properties;
     const IOReturn propertyReturn = properties.load(acpi);
     setProperty("Cirrus_Platform_Properties_Return", uint64_t(uint32_t(propertyReturn)), 32);
@@ -558,7 +557,9 @@ void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
             endpoints[i] = mNativeSPI.endpoint(i);
         const cirrus::platform::BoardDiscoveryContext context{
             {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid},
-            endpoints, mNativeSPI.count(), source};
+            endpoints,
+            mNativeSPI.count(),
+            source};
         mDiscoveredBoard = definition.discoverBoard(context, reason);
         if (mDiscoveredBoard && mDiscoveredBoard->configuration.permits(context.identity)) {
             mDiscoveredProfile = *mPlatformProfile;
@@ -817,7 +818,7 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                         ++identitySamples;
                         uint32_t observed = 0;
                         const auto result = mNativeSPI.readDiagnostic(i, hz, *definition->format(cirrus::core::BusTransportType::SPI),
-                                                                     identityRegister, observed);
+                                                                      identityRegister, observed);
                         char detail[128]{};
                         snprintf(detail, sizeof(detail), "hz=%u reg=0x%08x value=0x%08x ret=0x%08x", hz, identityRegister, observed,
                                  uint32_t(result));
@@ -825,8 +826,8 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                         setProperty(key, detail);
                         if (result != kIOReturnSuccess)
                             ++errors;
-                        if (result == kIOReturnSuccess && (observed & identityMask) ==
-                            (configuredBinding ? configuredBinding->siliconId : definition->siliconId)) {
+                        if (result == kIOReturnSuccess &&
+                            (observed & identityMask) == (configuredBinding ? configuredBinding->siliconId : definition->siliconId)) {
                             snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Diagnostic_Match_Hz", i);
                             setProperty(key, uint64_t(hz), 32);
                         }
@@ -841,7 +842,8 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         amp = {};
         snprintf(amp.endpointLabel, sizeof(amp.endpointLabel), "spi%u", unsigned(i));
         amp.name = amp.endpointLabel;
-        amp.address = 0xff; // SPI chip-select is never an I2C slave address.
+        // SPI chip-select is never an I2C slave address.
+        amp.address = 0xff;
         amp.channel = cirrus::core::AudioChannel::MaxChannels;
         amp.registerIO = io;
         amp.endpoint = endpoint;

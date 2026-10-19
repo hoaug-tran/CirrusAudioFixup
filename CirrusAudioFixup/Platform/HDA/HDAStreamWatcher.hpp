@@ -1,11 +1,7 @@
-//
-// HDAStreamWatcher.hpp
 // HDA stream-format decoding and the playback format gate.
 // The gate accepts the clock and slot timing used by the current CS35L41
 // profile. Decoding another rate does not make that rate safe for playback.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include <stdint.h>

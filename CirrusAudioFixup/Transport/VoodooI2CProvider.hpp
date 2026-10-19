@@ -19,8 +19,8 @@ struct VoodooI2CAddressedTransfer {
     uint16_t readLength;
 };
 
-// Binary evidence for the loaded 2.9.1 custom nub (UUID/hash recorded in
-// docs/provider_abi_evidence.md). Never pack or reorder this private ABI.
+// Request layout shared with the custom provider; see docs/i2c_provider.md.
+// Never pack or reorder this private ABI.
 #if UINTPTR_MAX == UINT64_MAX
 static_assert(sizeof(VoodooI2CAddressedTransfer) == 40 && alignof(VoodooI2CAddressedTransfer) == 8, "custom provider request ABI");
 static_assert(offsetof(VoodooI2CAddressedTransfer, address) == 0 && offsetof(VoodooI2CAddressedTransfer, writeBuffer) == 8 &&
@@ -56,7 +56,8 @@ public:
     }
 
 private:
-    IOService* mProvider{nullptr}; // Borrowed through the synchronous call.
+    // Borrowed through the synchronous call.
+    IOService* mProvider{nullptr};
     uint8_t mTargetAddress{0};
     IOReturn mLastReturn{kIOReturnSuccess};
 };

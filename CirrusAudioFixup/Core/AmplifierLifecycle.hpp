@@ -60,14 +60,19 @@ public:
     virtual IOReturn configureInterrupt(bool) { return kIOReturnUnsupported; }
     virtual IOReturn handleInterrupt() { return kIOReturnUnsupported; }
     virtual BringUpDisposition disposition() const { return BringUpDisposition::Continue; }
-    virtual IOReturn identify() = 0;       // Read-only and reject unknown silicon.
-    virtual IOReturn authorizeBoard() = 0; // Exact wiring/resource/tuning validation.
+    // Read-only and reject unknown silicon.
+    virtual IOReturn identify() = 0;
+    // Exact wiring/resource/tuning validation.
+    virtual IOReturn authorizeBoard() = 0;
     virtual IOReturn initialize() = 0;
-    virtual IOReturn loadFirmware() = 0; // No-DSP drivers explicitly return success.
+    // No-DSP drivers explicitly return success.
+    virtual IOReturn loadFirmware() = 0;
     virtual IOReturn verifyReady() = 0;
-    virtual IOReturn startPlayback() = 0; // Includes board route and ready checks.
+    // Includes board route and ready checks.
+    virtual IOReturn startPlayback() = 0;
     virtual IOReturn stopPlayback() = 0;
-    virtual IOReturn safeShutdown() = 0; // Bounded, usable after partial initialization.
+    // Bounded, usable after partial initialization.
+    virtual IOReturn safeShutdown() = 0;
 };
 struct AmplifierLifecycleStatus {
     AmplifierStage stage{AmplifierStage::Detached};
@@ -234,8 +239,10 @@ AmplifierLifecycleStatus runAmplifierBringUp(Initialize& initialize, Firmware& f
     class Hooks final : public AmplifierLifecycleHooks {
     public:
         Hooks(Initialize& i, Firmware& f, Verify& v, Cleanup& c, Disposition& d) : init(i), fw(f), ready(v), shutdown(c), state(d) {}
-        IOReturn identify() override { return kIOReturnSuccess; }       // Owner already probed silicon.
-        IOReturn authorizeBoard() override { return kIOReturnSuccess; } // Owner gates before invocation.
+        // Owner already probed silicon.
+        IOReturn identify() override { return kIOReturnSuccess; }
+        // Owner gates before invocation.
+        IOReturn authorizeBoard() override { return kIOReturnSuccess; }
         IOReturn initialize() override { return init(); }
         IOReturn loadFirmware() override { return fw(); }
         IOReturn verifyReady() override { return ready(); }

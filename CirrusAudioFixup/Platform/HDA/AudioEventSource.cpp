@@ -1,10 +1,6 @@
-//
-// AudioEventSource.cpp
 // Preserve IOAudioFamily behavior and observe completed state changes.
 // Hooks remain installed until shutdown; module unload is rejected.
 // See LICENSE for distribution terms.
-//
-
 #define PRODUCT_NAME CirrusAudioFixup
 #include "AudioEventSource.hpp"
 #include <Headers/kern_api.hpp>
@@ -126,7 +122,7 @@ public:
             setProperty("Cirrus_Bootstrap_Status", "STARTED");
             setProperty("Cirrus_Build_Configuration", cirrus::support::kBuildConfiguration);
             // Keep matching/catalogue enumeration out of IOResources start.
-            // The independent timer performs the bounded audit after return.
+            // A separate timer checks matching state after start returns.
             auditLoop = IOWorkLoop::workLoop();
             auditTimer = IOTimerEventSource::timerEventSource(this, auditTick);
             if (auditLoop && auditTimer && auditLoop->addEventSource(auditTimer) == kIOReturnSuccess) {

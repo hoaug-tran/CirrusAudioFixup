@@ -1,4 +1,4 @@
-// CS35L41 module factory: no service cast, helper callbacks or borrowed chip state.
+// Construct and destroy drivers with owned CS35L41 state.
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
@@ -12,7 +12,8 @@ core::AmplifierLifecycleHooks* createDriver(const platform::AmplifierDriverConte
     DeviceConfiguration configuration;
     if (binding.siliconId != registers::kValDeviceId || !c.endpoint.sameDevice(binding.endpoint) ||
         binding.channelIndex > uint32_t(core::AudioChannel::Right) ||
-        !decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind, configuration))
+        !decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind,
+                                   configuration))
         return nullptr;
     return new CS35L41Driver(c);
 }

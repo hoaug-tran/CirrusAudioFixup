@@ -1,11 +1,7 @@
-//
-// CirrusAudioFixup.hpp
 // IOService lifecycle, endpoint resources and generic diagnostic publication.
 // The workloop serializes playback, sleep and stop. Driver-owned chip state
 // is destroyed before borrowed ports/hosts; IOKit objects use retain/release.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 #include "Transport/I2CRegisterBus.hpp"
 

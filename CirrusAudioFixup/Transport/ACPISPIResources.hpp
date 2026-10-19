@@ -111,7 +111,8 @@ inline ACPISPIResult parseACPISPIResources(const uint8_t* data, size_t length, A
             return ACPISPIResult::Unsupported;
         offset += total;
     }
-    return ACPISPIResult::Malformed; // Missing EndTag.
+    // Missing EndTag.
+    return ACPISPIResult::Malformed;
 }
 
 }

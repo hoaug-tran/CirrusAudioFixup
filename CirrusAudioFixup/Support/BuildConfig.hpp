@@ -1,12 +1,7 @@
-//
-// BuildConfig.hpp
 // CirrusAudioFixup build identity and default logging policy.
-//
 // Debug and Release use the same hardware checks and recovery limits.
 // Only the default verbosity and compiler settings differ.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 namespace cirrus::support {

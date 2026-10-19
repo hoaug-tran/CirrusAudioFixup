@@ -920,9 +920,9 @@ void CS35L41Driver::monitorCS35L41(AmplifierState& amp, const cirrus::core::Play
                     recordDiagnosticFailure(amp, DIAG_PLL_UNLOCKED, cirrus::devices::amplifiers::cs35l41::registers::kRegIrq1RawStatus3, 2,
                                             pllLockSts);
                     amp.pllRetryCooldown = 4;
-                    amp.pllRecoveryPending =
-                        globalEn && powerReadable && dspHealthy &&
-                        (pwr2 & (0x3001 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable)) == amp.power.activePower(dspMode);
+                    amp.pllRecoveryPending = globalEn && powerReadable && dspHealthy &&
+                                             (pwr2 & (0x3001 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable)) ==
+                                                 amp.power.activePower(dspMode);
                 } else {
                     recordDiagnosticFailure(amp, DIAG_PLAYBACK_INVARIANT, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl2,
                                             amp.power.activePower(dspMode), pwr2);
@@ -1104,8 +1104,7 @@ bool CS35L41Driver::sendMailboxCommand(AmplifierState& amp, UInt32 command, UInt
 
     UInt32 status = 0;
     // Check immediately, then retain the full five-millisecond retry window.
-    // Only a pending response needs a sleep; completed commands must not pay
-    // an unconditional delay on every resume, output-enable and pause.
+    // Sleep only while the command is pending.
     for (unsigned attempt = 0; attempt <= 5; ++attempt) {
         if (attempt != 0)
             IOSleep(1);
@@ -1258,7 +1257,7 @@ uint32_t CS35L41Driver::calculateRegistersCRC32(AmplifierState& amp) {
 }
 
 void CS35L41Driver::dumpAllRegisters(AmplifierState& amp) {
-    // Keep the promised read-only/probe snapshot available without verbosity.
+    // Read-only and probe modes publish snapshots without routine verbosity.
     // Normal Release discovery must not perform an unsolicited register sweep.
     if (!gCirrusDebug && !bootArgEnabled("-cirrusro") && !bootArgStrEquals("-cirrusphase", "probe"))
         return;
@@ -1329,8 +1328,8 @@ void CS35L41Driver::dumpAllRegisters(AmplifierState& amp) {
         setProperty(statusProperty, dumpStatus);
         dumpStatus->release();
     }
-    CIRRUS_LOG("BOOT_FLOW CS35L41 DUMP_END amp=%s status=%s reads=%u failures=%u first_reg=0x%08X first_ret=0x%08X", amp.name,
-               status, successCount, failedCount, firstFailedRegister, uint32_t(firstFailure));
+    CIRRUS_LOG("BOOT_FLOW CS35L41 DUMP_END amp=%s status=%s reads=%u failures=%u first_reg=0x%08X first_ret=0x%08X", amp.name, status,
+               successCount, failedCount, firstFailedRegister, uint32_t(firstFailure));
     CIRRUS_LOG("dump complete: %u registers successfully read, crc32: 0x%08X", successCount, crc);
 
     snprintf(lineBuffer, sizeof(lineBuffer), "status: %s; failed: %u; first: 0x%08X/0x%08X; crc32: 0x%08X\n", status, failedCount,
@@ -3170,15 +3169,18 @@ CS35L41Driver::CS35L41Driver(const platform::AmplifierDriverContext& context)
     amp.channel = static_cast<core::AudioChannel>(context.board.amplifiers[context.bindingIndex].channelIndex);
     const auto& binding = context.board.amplifiers[context.bindingIndex];
     DeviceConfiguration configuration;
-    if (decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind, configuration)) {
+    if (decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind,
+                                  configuration)) {
         amp.power = configuration.power;
         amp.gpio1Function = configuration.gpio1Function;
         amp.gpio2Function = configuration.gpio2Function;
-        amp.explicitGPIOConfiguration = binding.driverConfigurationKind && !strcmp(binding.driverConfigurationKind, kDeviceConfigurationKind);
+        amp.explicitGPIOConfiguration =
+            binding.driverConfigurationKind && !strcmp(binding.driverConfigurationKind, kDeviceConfigurationKind);
     }
     amp.deviceId = context.board.amplifiers[context.bindingIndex].siliconId;
-    amp.firmwareSubsystemId = context.board.useBoardFirmwareIdentity ?
-        (uint32_t(context.actualBoard.subsystemVendor) << 16 | context.actualBoard.subsystemDevice) : 0;
+    amp.firmwareSubsystemId = context.board.useBoardFirmwareIdentity
+                                  ? (uint32_t(context.actualBoard.subsystemVendor) << 16 | context.actualBoard.subsystemDevice)
+                                  : 0;
     amp.firmwareSpeakerId = binding.speakerId;
     amp.present = true;
     amp.diagnostic = mHost.diagnostics();

@@ -10,14 +10,15 @@ namespace cirrus::devices::amplifiers::cs35l41 {
 using ResourceAvailable = bool (*)(uint16_t, uint16_t, uint32_t);
 class PlatformConfiguration final : public platform::DiscoveredBoard {
 public:
-    static constexpr size_t kCapacity = 2; // Current resource schema has L0/R0.
+    // Current resource schema has L0/R0.
+    static constexpr size_t kCapacity = 2;
     platform::AmplifierBinding bindings[kCapacity]{};
     DeviceConfiguration devices[kCapacity]{};
     char controllerPaths[kCapacity][256]{};
     char hid[32]{};
 };
-inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::BoardDiscoveryContext& context,
-                                                              ResourceAvailable available, const char*& reason) {
+inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::BoardDiscoveryContext& context, ResourceAvailable available,
+                                                               const char*& reason) {
     reason = "CS35L41_PROPERTIES_INCOMPLETE";
     if (!context.identity.acpiHid || !context.identity.subsystemVendor || !context.identity.subsystemDevice ||
         strlen(context.identity.acpiHid) >= sizeof(PlatformConfiguration::hid) || !context.endpoints || !context.count ||
@@ -46,7 +47,12 @@ inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::B
     }
     memcpy(result->hid, context.identity.acpiHid, strlen(context.identity.acpiHid) + 1);
     result->configuration = {{context.identity.subsystemVendor, context.identity.subsystemDevice, result->hid},
-                             result->bindings, context.count, true, true, true, true};
+                             result->bindings,
+                             context.count,
+                             true,
+                             true,
+                             true,
+                             true};
     bool consumed[capacity]{};
     bool usedChannel[2]{};
     for (size_t i = 0; i < context.count; ++i) {
@@ -56,8 +62,8 @@ inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::B
         while (index < context.count && indices[index] != selection)
             ++index;
         if (!endpoint.valid() || (endpoint.transport == core::BusTransportType::SPI && endpoint.spiClockHz > 4000000) ||
-            strlen(endpoint.controllerPath) >= sizeof(result->controllerPaths[i]) || index == context.count ||
-            consumed[index] || channels[index] > 1 || usedChannel[channels[index]] || gpio1[index] > UINT8_MAX || gpio2[index] > UINT8_MAX) {
+            strlen(endpoint.controllerPath) >= sizeof(result->controllerPaths[i]) || index == context.count || consumed[index] ||
+            channels[index] > 1 || usedChannel[channels[index]] || gpio1[index] > UINT8_MAX || gpio2[index] > UINT8_MAX) {
             reason = "CS35L41_ENDPOINT_PROPERTIES_MISMATCH";
             delete result;
             return nullptr;

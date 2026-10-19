@@ -1,10 +1,6 @@
-//
-// Tuning.hpp
 // Bounded parser for embedded Linux CS35L41 companion tuning parameters.
 // The driver consumes these parameters; they are not DSP upload blocks.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include <stddef.h>

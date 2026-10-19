@@ -87,7 +87,8 @@ public:
         mWindow.write8(0x48, uint8_t(txLength - 1));
         mWindow.write8(0x4b, uint8_t(rxLength));
         uint64_t start = mWindow.nowUs();
-        uint32_t pollsRemaining = 100001; // Two seconds at the 20-us polling interval, independent of the clock.
+        // Two seconds at the 20-us polling interval, independent of the clock.
+        uint32_t pollsRemaining = 100001;
         if (mRevision == AMDSPIRevision::V1)
             mWindow.write32(0, mWindow.read32(0) | (1U << 16));
         else

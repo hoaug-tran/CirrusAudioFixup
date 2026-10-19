@@ -25,8 +25,7 @@ public:
     bool bound() const { return mCount != 0; }
     size_t count() const { return mCount; }
     core::RegisterIO* registers(size_t i) const { return i < mCount ? mRegisters[i] : nullptr; }
-    IOReturn readDiagnostic(size_t index, uint32_t clockHz, const core::RegisterMapConfig& format,
-                            uint32_t reg, uint32_t& value) {
+    IOReturn readDiagnostic(size_t index, uint32_t clockHz, const core::RegisterMapConfig& format, uint32_t reg, uint32_t& value) {
         value = 0;
         if (index >= mCount || !clockHz || clockHz > endpoint(index).spiClockHz || !core::RegisterMap::isValidConfig(format))
             return kIOReturnBadArgument;
@@ -121,7 +120,8 @@ private:
             }
             mSlots[i] = slot;
             if (slot == mControllers) {
-                mTargets[slot] = target; // Adopt resolver retain, including failure path.
+                // Adopt resolver retain, including failure path.
+                mTargets[slot] = target;
                 ++mControllers;
                 auto* pci = findPCI(target, owner, factory == createNativeSPIController);
                 NativeSPIControllerFailure failure{};

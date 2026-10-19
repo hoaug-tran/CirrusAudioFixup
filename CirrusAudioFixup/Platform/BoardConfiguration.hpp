@@ -9,8 +9,10 @@ inline bool parseACPISubsystemId(const char* text, uint32_t& output) {
     uint32_t value = 0;
     for (unsigned i = 0; i < 8; ++i) {
         const char c = text[i];
-        unsigned digit = c >= '0' && c <= '9' ? unsigned(c - '0') : c >= 'A' && c <= 'F' ? unsigned(c - 'A' + 10) :
-                         c >= 'a' && c <= 'f' ? unsigned(c - 'a' + 10) : 16;
+        unsigned digit = c >= '0' && c <= '9'   ? unsigned(c - '0')
+                         : c >= 'A' && c <= 'F' ? unsigned(c - 'A' + 10)
+                         : c >= 'a' && c <= 'f' ? unsigned(c - 'a' + 10)
+                                                : 16;
         if (digit > 15)
             return false;
         value = (value << 4) | digit;

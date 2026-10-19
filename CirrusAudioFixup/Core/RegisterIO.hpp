@@ -1,11 +1,7 @@
-//
-// RegisterIO.hpp
 // Register access contract shared by device code and host tests.
 // Addresses and scalar values are in host byte order. The transport handles
 // wire encoding; bulk buffers contain bytes in the device's transfer order.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Diagnostics/TraceTypes.hpp"

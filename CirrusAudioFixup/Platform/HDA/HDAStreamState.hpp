@@ -1,11 +1,7 @@
-//
-// HDAStreamState.hpp
 // State observed by the service's HDA stream scanner.
 // RUN, tag and format checks describe controller activity. They do not prove
 // that PCM reaches the speaker pin or that the speakers produce sound.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include <stdint.h>
@@ -24,5 +20,5 @@ struct HDAStreamState {
 };
 
 // Hardware access is owned by CirrusAudioFixup's serialized lifecycle.
-// End of the HDA observation state.
+
 }

@@ -1,11 +1,7 @@
-//
-// DiagnosticTracer.hpp
 // Bounded register-transfer flight recorder for I2C and SPI.
 // The lock protects trace indices and counters, not hardware sequencing.
 // Record completed transfers here; never hold this lock across bus transfers or sleeps.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Diagnostics/DiagnosticTypes.hpp"

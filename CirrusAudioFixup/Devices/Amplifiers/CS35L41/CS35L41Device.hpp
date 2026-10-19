@@ -1,11 +1,7 @@
-//
-// CS35L41Device.hpp
 // CS35L41 identification, reset and register configuration.
 // The independent CS35L41Driver owns firmware, playback and shutdown.
 // Platform authorization remains with the borrowed host contract.
 // See LICENSE for distribution terms.
-//
-
 #pragma once
 
 #include "Core/AmplifierDevice.hpp"

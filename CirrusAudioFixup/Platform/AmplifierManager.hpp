@@ -87,7 +87,8 @@ private:
         core::AmplifierLifecycle* members[kCapacity]{};
         for (size_t i = 0; i < count; ++i) {
             auto& slot = mSlots[i];
-            ++mCount; // Own partial slot state from this point onward.
+            // Own partial slot state from this point onward.
+            ++mCount;
             slot.context = new AmplifierDriverContext(contextAt(i));
             if (!slot.context) {
                 releaseUninitialized();

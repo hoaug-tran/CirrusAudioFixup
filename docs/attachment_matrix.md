@@ -10,8 +10,8 @@ controller on that CPU family.
 | --- | --- | --- |
 | Intel / I2C | Provider-backed `I2CController`, module RegisterMap, AMP runtime | Custom addressed VoodooI2C ABI or a verified selected factory; native DesignWare is not implied |
 | AMD / I2C | Same provider/controller and AMP contracts | Custom addressed ABI or verified selected factory; native MP2 is not implied |
-| Intel / SPI | ACPI resources, PCI controller owner, module framing, AMP runtime | Verified Intel LPSS IDs/resources and board data; `-cirrusspi` remains required |
-| AMD / SPI | ACPI resources, AMD owner/D0 gate, module framing, AMP runtime | Verified AMD controller HID/IP/resources and board data; `-cirrusspi` remains required |
+| Intel / SPI | ACPI resources, PCI controller owner, module framing, AMP runtime | Verified Intel LPSS IDs/resources and board data; selected automatically from `_CRS` |
+| AMD / SPI | ACPI resources, AMD owner/D0 gate, module framing, AMP runtime | Verified AMD controller HID/IP/resources and board data; selected automatically from `_CRS` |
 
 The host matrix exercises all four rows with registered synthetic AMP hooks and
 real production discovery/binding/runtime code. Complete CS35L41 production

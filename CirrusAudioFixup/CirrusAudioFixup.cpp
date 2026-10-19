@@ -577,7 +577,7 @@ void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
     setProperty("Cirrus_Platform_Discovery", reason);
 }
 
-// ACPI SPI matching is deliberately opt-in until physical controller tests.
+// Select transport from the provider's ACPI serial-bus resources.
 bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     auto* acpi = cirrus::support::acpiDeviceCast(provider);
 #if defined(KERNEL)
@@ -672,13 +672,6 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         return false;
     }
     setProperty("Cirrus_Bus", "SPI");
-    if (!bootArgEnabled("-cirrusspi")) {
-        setProperty("Cirrus_SPI_Status", "REQUIRES_SPI_OPTION");
-        mAttachment.communication = "DISABLED_BY_POLICY";
-        recordAttachmentFailure("POLICY", "SPI_OPTION_REQUIRED", kIOReturnNotPermitted);
-        CIRRUS_ERR("SPI attachment blocked: -cirrusspi is required");
-        return false;
-    }
     const cirrus::platform::AmplifierDriverRegistration* selected = nullptr;
     if (mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->amplifiers &&
         mPlatformProfile->boardConfiguration->count) {
@@ -747,6 +740,7 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
 
 size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
     mAmplifierCount = 0;
+    size_t identitySamples = 0;
     mProbingAmplifiers = true;
     setProperty("Cirrus_SPI_Resource_Count", uint64_t(uint32_t(mNativeSPI.count())), 32);
     for (size_t i = 0; i < mNativeSPI.count() && i < kMaxAmplifiers; ++i) {
@@ -814,6 +808,33 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
             recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound, uint32_t(i));
             CIRRUS_ERR("SPI silicon unsupported/mismatched: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization", i,
                        endpoint.controllerPath, endpoint.spiChipSelect, id);
+            if (bootArgEnabled("-cirrusdbg")) {
+                const uint32_t divisors[]{1, 4, 16};
+                unsigned sample = 0, errors = 0;
+                for (auto divisor : divisors) {
+                    const uint32_t hz = endpoint.spiClockHz / divisor;
+                    for (unsigned repeat = 0; hz && repeat < 3 && identitySamples < 32 && errors < 3; ++repeat) {
+                        ++identitySamples;
+                        uint32_t observed = 0;
+                        const auto result = mNativeSPI.readDiagnostic(i, hz, *definition->format(cirrus::core::BusTransportType::SPI),
+                                                                     identityRegister, observed);
+                        char detail[128]{};
+                        snprintf(detail, sizeof(detail), "hz=%u reg=0x%08x value=0x%08x ret=0x%08x", hz, identityRegister, observed,
+                                 uint32_t(result));
+                        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Sample_%u", i, sample++);
+                        setProperty(key, detail);
+                        if (result != kIOReturnSuccess)
+                            ++errors;
+                        if (result == kIOReturnSuccess && (observed & identityMask) ==
+                            (configuredBinding ? configuredBinding->siliconId : definition->siliconId)) {
+                            snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Diagnostic_Match_Hz", i);
+                            setProperty(key, uint64_t(hz), 32);
+                        }
+                    }
+                }
+                snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Samples_Status", i);
+                setProperty(key, errors >= 3 ? "STOPPED_AFTER_ERRORS" : sample == 9 ? "COMPLETE" : "PARTIAL_LIMIT");
+            }
             continue;
         }
         auto& amp = mAmplifiers[mAmplifierCount++];

@@ -23,6 +23,9 @@ public:
     const char* bindFailureReason() const { return mController.bindFailureReason(); }
     uint32_t initialCapabilities() const { return mController.initialCapabilities(); }
     uint32_t initialStatus() const { return mController.initialStatus(); }
+    uint32_t initialClock() const { return mController.initialClock(); }
+    uint32_t preparedClock() const { return mController.preparedClock(); }
+    uint32_t initialClockGate() const { return mController.initialClockGate(); }
     SPIController& controller() override { return mController; }
     void suspend() override { mController.suspend(); }
     IOReturn resume(NativeSPIControllerFailure& failure) override {
@@ -51,6 +54,9 @@ inline NativeSPIControllerOwner* createNativeSPIController(IOACPIPlatformDevice*
         if (driver) {
             owner->setProperty("Cirrus_Intel_SPI_Initial_Capabilities", uint64_t(driver->initialCapabilities()), 32);
             owner->setProperty("Cirrus_Intel_SPI_Initial_Status", uint64_t(driver->initialStatus()), 32);
+            owner->setProperty("Cirrus_Intel_SPI_Initial_Clock", uint64_t(driver->initialClock()), 32);
+            owner->setProperty("Cirrus_Intel_SPI_Prepared_Clock", uint64_t(driver->preparedClock()), 32);
+            owner->setProperty("Cirrus_Intel_SPI_Initial_Clock_Gate", uint64_t(driver->initialClockGate()), 32);
         }
     }
 #else

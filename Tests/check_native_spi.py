@@ -92,6 +92,9 @@ public:
  const char* bindFailureReason() const {{return active?"NONE":"INTEL_CONTROLLER_ID_UNSUPPORTED";}}
  uint32_t initialCapabilities() const {{return 0;}}
  uint32_t initialStatus() const {{return 0;}}
+ uint32_t initialClock() const {{return 0;}}
+ uint32_t preparedClock() const {{return 0;}}
+ uint32_t initialClockGate() const {{return 0;}}
  size_t maxTransferBytes() const override {{return 262;}}
  IOReturn exchange(const SPIEndpoint&,const uint8_t*,uint8_t*,size_t) override {{return kIOReturnUnsupported;}}
  IOReturn command(const SPIEndpoint& ep,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n) override {{if(!active)return kIOReturnNotReady;if(!n){{++writeTransfers;writes.emplace_back(tx,tx+tn);}}for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[ep.chipSelect]>>(24-8*i)):0;return 0;}}
@@ -372,8 +375,8 @@ int main(){
  legacyDefinition.spiFormat.readable=legacyDefinition.spiFormat.writable=[](uint32_t){return true;};
  assert(gated.mDriverRegistry.add(legacyDefinition));
  assert(gated.setupCommunication(&i2c)&&gated.strings["Cirrus_Bus"]=="I2C");
- assert(!gated.setupCommunication(&amp)&&!gated.mNativeSPI.bound());
- gated.flags["-cirrusspi"]=true;assert(gated.setupCommunication(&amp)&&!gated.mPlatformAuthorized);gated.teardownCommunication();
+ assert(gated.setupCommunication(&amp)&&gated.mNativeSPI.bound()&&!gated.mPlatformAuthorized);
+ gated.teardownCommunication();
  gated.flags["-cirrusro"]=true;assert(gated.setupCommunication(&amp)&&!gated.mPlatformAuthorized);
  assert(gated.strings["Cirrus_SPI_Status"]=="BOUND_READ_ONLY");
  assert(!gated.mNativeSPI.registers(0)->write(0,1));gated.teardownCommunication();assert(!liveControllers);
@@ -399,7 +402,7 @@ int main(){
  // Platform-selected native owner factory shares targets, owns PM and does not
  // fall back to built-in controllers after rejection. No host silicon branch.
  auto customProfile=*gated.mPlatformProfile;customProfile.spiControllerFactory=createCustomSPI;
- CirrusAudioFixup customSPI;customSPI.mPlatformProfile=&customProfile;customSPI.flags["-cirrusspi"]=true;
+ CirrusAudioFixup customSPI;customSPI.mPlatformProfile=&customProfile;
  assert(customSPI.mDriverRegistry.add(legacyDefinition));resources(amp,{{"SPI0",0},{"SPI0",1},{"SPI1",2}});
  const auto originalIntelResumes=resumes;
  assert(customSPI.setupCommunication(&amp) && nativeCreates==2 && !liveControllers);
@@ -486,6 +489,11 @@ int main(){
   FixtureNativeSPI::gpioLevels.clear();
   FixtureNativeSPI::simulateHeldReset=true;fixtureSleptMs=0;
   uint32_t resetIdentity=0;assert(resetHost.registers(0)->read(0,&resetIdentity)&&resetIdentity==0);
+  const auto originalRate=resetHost.endpoint(0).spiClockHz;
+  assert(resetHost.readDiagnostic(0,originalRate/4,format,0,resetIdentity)==0&&resetIdentity==0);
+  assert(resetHost.endpoint(0).spiClockHz==originalRate);
+  assert(resetHost.readDiagnostic(0,originalRate+1,format,0,resetIdentity)==kIOReturnBadArgument);
+  assert(resetHost.readDiagnostic(99,1,format,0,resetIdentity)==kIOReturnBadArgument);
   assert(resetHost.prepareHardware(&amp)==kIOReturnNotPermitted);
   assert(resetHost.configureAuthorized(resetRegistry,board,board.identity,"TESTAMP",writable)==0);
   assert(resetHost.prepareHardware(&amp)==(writable?0:kIOReturnNotPermitted));
@@ -512,7 +520,7 @@ int main(){
  cirrus::platform::PlatformProfile extensionProfile{"fixture-registry-only","TESTAMP",cirrus::core::AmplifierModel::Unknown,
      nullptr,0,nullptr,true,&extensionBoard,firmware,2};
  CirrusAudioFixup extension;extension.mProvider=&amp;extension.mPlatformProfile=&extensionProfile;extension.mPlatformSubsystemId=0x12345678;
- assert(extension.mDriverRegistry.add(d1)&&extension.mDriverRegistry.add(d2));extension.flags["-cirrusspi"]=true;
+ assert(extension.mDriverRegistry.add(d1)&&extension.mDriverRegistry.add(d2));
  before=writeTransfers;
  assert(extension.setupCommunication(&amp)&&extension.detectNativeSPIAmplifiers()==2&&writeTransfers==before);
  assert(extension.mAmplifiers[0].deviceId==0x2222&&extension.mAmplifiers[1].deviceId==0x1111);
@@ -544,7 +552,7 @@ int main(){
  cirrus::platform::PlatformProfile shipProfile{"fixture-spi","CSC3551",cirrus::core::AmplifierModel::CS35L41,nullptr,0,nullptr,true,&shipBoard,shipFirmware,2};
  AmplifierDriverRegistration shipDefinition{"fixture-service","CSC3551",0x35a40,2,{},f1,createSPI,destroySPI};
  CirrusAudioFixup shipping;shipping.mProvider=&amp;shipping.mPlatformProfile=&shipProfile;shipping.mPlatformSubsystemId=0x12345678;
- assert(shipping.mDriverRegistry.add(shipDefinition));shipping.flags["-cirrusspi"]=true;
+ assert(shipping.mDriverRegistry.add(shipDefinition));
  before=writeTransfers;
  assert(shipping.setupCommunication(&amp)&&shipping.mPlatformAuthorized&&shipping.detectNativeSPIAmplifiers()==2);
  assert(shipping.mAmplifiers[0].channel==cirrus::core::AudioChannel::Right&&shipping.mAmplifiers[1].channel==cirrus::core::AudioChannel::Left);
@@ -552,7 +560,7 @@ int main(){
  assert(shipping.mAmplifierManager.bringUp()==0&&shipping.mAmplifierManager.startPlayback()==0);
  shipping.teardownCommunication();assert(!shipping.mAmplifierManager.bound()&&!liveControllers&&driversCreated==driversDestroyed);
  CirrusAudioFixup verifiedReadOnly;verifiedReadOnly.mProvider=&amp;verifiedReadOnly.mPlatformProfile=&shipProfile;verifiedReadOnly.mPlatformSubsystemId=0x12345678;
- assert(verifiedReadOnly.mDriverRegistry.add(shipDefinition));verifiedReadOnly.flags["-cirrusspi"]=verifiedReadOnly.flags["-cirrusro"]=true;
+ assert(verifiedReadOnly.mDriverRegistry.add(shipDefinition));verifiedReadOnly.flags["-cirrusro"]=true;
  assert(verifiedReadOnly.setupCommunication(&amp)&&!verifiedReadOnly.mPlatformAuthorized);
  before=writeTransfers;
  assert(!verifiedReadOnly.mNativeSPI.registers(0)->write(4,1)&&!verifiedReadOnly.bindAmplifierDrivers()&&writeTransfers==before);
@@ -619,19 +627,19 @@ int main(){
   AmplifierBinding oneSPIBinding{{cirrus::core::BusTransportType::SPI,"\\_SB.SPI0",0,false,0,1000000,0},0x35a40,0,1,"tune-a","CSC3551"};
   BoardConfiguration oneSPIBoard{{0x1234,0x5678,"CSC3551"},&oneSPIBinding,1,true,true,true};
   cirrus::platform::PlatformProfile oneSPIProfile{"matrix-spi","CSC3551",cirrus::core::AmplifierModel::CS35L41,nullptr,0,nullptr,true,&oneSPIBoard,shipFirmware,1};
-  CirrusAudioFixup readySPI;readySPI.mPlatformProfile=&oneSPIProfile;readySPI.mPlatformSubsystemId=0x12345678;readySPI.flags["-cirrusspi"]=true;readySPI.setProperty("Cirrus_CPU_Vendor",cpu);
+  CirrusAudioFixup readySPI;readySPI.mPlatformProfile=&oneSPIProfile;readySPI.mPlatformSubsystemId=0x12345678;readySPI.setProperty("Cirrus_CPU_Vendor",cpu);
   assert(readySPI.mDriverRegistry.add(shipDefinition));assert(readySPI.setupCommunication(&amp) && readySPI.detectNativeSPIAmplifiers()==1);
   assert(readySPI.bindAmplifierDrivers() && readySPI.mAmplifierManager.bringUp()==0 && readySPI.mAmplifierManager.startPlayback()==0);
   assert(!strcmp(readySPI.mAttachment.communication,"READY") && readySPI.mAttachment.failureCount==0);
   readySPI.teardownCommunication();assert(!liveControllers);
-  CirrusAudioFixup unsupportedAMP;unsupportedAMP.mPlatformProfile=&oneSPIProfile;unsupportedAMP.flags["-cirrusspi"]=true;
+  CirrusAudioFixup unsupportedAMP;unsupportedAMP.mPlatformProfile=&oneSPIProfile;
   auto writesBefore=writeTransfers;assert(unsupportedAMP.setupCommunication(&amp));
   assert(unsupportedAMP.mNativeSPI.count()==1 && !unsupportedAMP.mNativeSPI.registers(0));
   assert(!strcmp(unsupportedAMP.mAttachment.communication,"READY") && !strcmp(unsupportedAMP.mAttachment.amplifier,"UNSUPPORTED"));
   assert(!strcmp(unsupportedAMP.mAttachment.first.stage,"AMPLIFIER") && writeTransfers==writesBefore && !unsupportedAMP.bindAmplifierDrivers());
   assert(unsupportedAMP.mNativeSPI.configureAuthorized(readySPI.mDriverRegistry,oneSPIBoard,oneSPIBoard.identity,"CSC3551")==kIOReturnUnsupported);
   unsupportedAMP.teardownCommunication();assert(!liveControllers);
-  CirrusAudioFixup unsupportedCommunication;unsupportedCommunication.mPlatformProfile=&oneSPIProfile;unsupportedCommunication.flags["-cirrusspi"]=true;
+  CirrusAudioFixup unsupportedCommunication;unsupportedCommunication.mPlatformProfile=&oneSPIProfile;
   assert(unsupportedCommunication.mDriverRegistry.add(shipDefinition));if(isIntel)pci.supported=false;else a.amd=false;
   assert(!unsupportedCommunication.setupCommunication(&amp));
   assert(!strcmp(unsupportedCommunication.mAttachment.amplifier,"REGISTERED_NOT_PROBED"));

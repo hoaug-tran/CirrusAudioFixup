@@ -36,15 +36,17 @@ struct Window : RegisterWindow {
     std::vector<std::pair<uint32_t,uint32_t>> writes;
     unsigned busyTail=0,assertions=0,deassertions=0,failAfter=0;
     bool selected=false,stuck=false,forceBusy=false,overrun=false,missing=false,staleForever=false,frozenClock=false;
-    bool guardPower=false,blockReset=false,blockClock=false;
+    bool guardPower=false,blockReset=false,blockClock=false,requireClockUpdate=false,clockApplied=false;
+    bool selfClearUpdate=false,corruptClockUpdate=false;
     Window() {
         regs[E::kCapabilities/4]=0x20|(3<<9);
         regs[E::kChipSelect/4]=3;
-        regs[E::kClock/4]=1|(1<<1)|(1<<16);
+        regs[E::kClock/4]=0x80000000U|1|(1<<1)|(1<<16);
         regs[E::kClockGate/4]=0x80;
         regs[E::kReset/4]=7;
     }
     uint32_t read32(uint32_t o) override {
+        if(requireClockUpdate&&o<0x200)assert(clockApplied);
         if(guardPower&&o<0x200)assert((regs[E::kReset/4]&3)==3&&(regs[E::kClock/4]&1));
         ++time;
         if(o==E::kStatus) {
@@ -79,6 +81,11 @@ struct Window : RegisterWindow {
         }
         if(o==E::kControl0 && !(v&E::kEnabled)) fifo.clear();
         regs[o/4]=v;
+        if(o==E::kClock&&(v&0x80000000U)){
+            clockApplied=true;
+            if(selfClearUpdate)regs[o/4]&=0x7fffffffU;
+            if(corruptClockUpdate)regs[o/4]^=2U;
+        }
         if(o==E::kData) {
             assert(selected && (regs[E::kControl0/4]&E::kEnabled));
             bytes.push_back(uint8_t(v));
@@ -110,6 +117,20 @@ void inactive(const Window& w) {
     assert(w.regs[E::kClockGate/4]==0x80);
 }
 int main() {
+    { Window captured;captured.requireClockUpdate=true;
+      captured.regs[E::kClock/4]=0x7fff0a3d;
+      E engine(captured);assert(engine.initialize()==0&&captured.clockApplied);
+      assert((captured.regs[E::kClock/4]&0x7ffffffeU)==0x7fff0a3c);
+      engine.suspend();captured.clockApplied=false;captured.regs[E::kClock/4]&=0x7fffffffU;
+      assert(engine.resume()==0&&captured.clockApplied);engine.shutdown();
+      assert(captured.regs[E::kClock/4]==0x7fff0a3d); }
+    { Window pulse;pulse.requireClockUpdate=true;pulse.selfClearUpdate=true;
+      pulse.regs[E::kClock/4]=0x7fff0a3d;E engine(pulse);
+      assert(engine.initialize()==0&&engine.preparedClock()==0x7fff0a3d);engine.shutdown(); }
+    { Window corrupt;corrupt.requireClockUpdate=true;corrupt.corruptClockUpdate=true;
+      corrupt.regs[E::kClock/4]=0x7fff0a3d;E engine(corrupt);
+      assert(engine.initialize()==kIOReturnNotReady&&!engine.online());
+      assert(corrupt.regs[E::kClock/4]==0x7fff0a3d); }
     {
         Window cold;cold.guardPower=true;cold.regs[E::kReset/4]=4;cold.regs[E::kClock/4]=0;
         E engine(cold);assert(engine.initialize()==0);

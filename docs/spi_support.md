@@ -10,10 +10,11 @@ behavior; 7AAA is one entry, not a special gate. This is not support for every
 SPI controller ever used on Intel/AMD systems.
 
 The I2C personality uses VoodooI2C through driver-formatted register maps.
-The opt-in ACPI SPI personality resolves `_CRS` sources and binds native
-controllers. Both buses use the shipping registered amplifier runtime for
-bring-up, firmware, group playback and PM. Unknown boards remain read-only;
-writable operation requires exact verified board and firmware bindings.
+ACPI serial-bus resources select SPI or I2C automatically; SPI resources resolve
+controller sources and bind native controllers. Both buses use the shipping
+registered amplifier runtime for bring-up, firmware, group playback and PM.
+Unknown boards remain read-only; writable operation requires exact verified
+board and firmware bindings.
 Driver-owned ACPI discovery resolves endpoints, channels and internal boost independently of OEM and controller path, with exact resource matching. The 103C89C6 dump is the present integration evidence, not a universal HP profile. Native macOS load and physical SPI playback are untested. See [HP evidence and target gates](hp_spi_bringup.md). No writable ASUS profile is supplied.
 A CPU vendor does not identify a controller or supply board tuning.
 
@@ -26,7 +27,7 @@ A CPU vendor does not identify a controller or supply board tuning.
 | Intel LPT/BYT/BSW legacy, AMD PCI HID2 | Not implemented | Different private offsets or LPC resource mapping; need distinct profiles/drivers |
 | Intel INTC1056/INTC1085 GPIO CS | Implemented for existing GPIO outputs | Evaluated ACPI mapping, exclusive provider, hardware ownership/TX lock and readback guards; target untested |
 | Other controllers / GPIO families | Not implemented | Need documented register driver and ownership/power behavior |
-| ACPI SPI IOService discovery | Implemented, opt-in | `-cirrusspi`; use `-cirrusro` for forced read-only discovery; hardware untested |
+| ACPI SPI IOService discovery | Implemented, automatic | Selected from `_CRS`; `-cirrusro` remains an optional forced read-only diagnostic mode; hardware validation ongoing |
 | SPI amplifier lifecycle/playback | Connected to shipping driver runtime | Experimental HP 103C89C6 configuration included; native macOS and physical validation pending; no ASUS profile |
 
 ## Research and base selection
@@ -211,7 +212,7 @@ output. No HP load/playback result has been obtained yet.
 
 ## Native SPI runtime capture
 
-Add `-cirrusspi -cirrusro -cirrusdbg` to test the ACPI `CSC3551` personality.
+Add `-cirrusdbg` to inspect automatic ACPI SPI attachment for the `CSC3551` personality. Add `-cirrusro` only when intentionally suppressing reset and amplifier writes.
 `NativeSPIHost` reads `_CRS`, resolves absolute/relative/parent AML paths against
 IOACPIPlane, associates Intel PCI devices by their `acpi-device`, and binds the
 existing Intel/AMD native owners. It supports up to 16 resource endpoints and

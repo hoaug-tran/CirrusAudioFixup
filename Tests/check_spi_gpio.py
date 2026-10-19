@@ -58,6 +58,8 @@ int main(){
  // Configuration is locked as in the capture, but TX remains writable.
  assert(line.setActive(true)==0&&w.r[off/4]==0x84000200);
  assert(line.setActive(false)==0&&w.r[off/4]==0x84000201);
+ assert(line.evidence().logical1Written==0x84000200&&line.evidence().logical1Readback==0x84000200);
+ assert(line.evidence().logical0Written==0x84000201&&line.evidence().logical0Readback==0x84000201);
  for(auto o:w.writes)assert(o==unsigned(off));
  auto n=w.writes.size();w.r[0x114/4]=1U<<19;
  assert(line.setActive(true)==kIOReturnNotPermitted&&w.writes.size()==n);

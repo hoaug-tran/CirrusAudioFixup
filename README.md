@@ -80,7 +80,7 @@ The implemented driver is CS35L41. The current personality matches a `VoodooI2CD
 | --- | --- |
 | Lenovo Legion 7 16ACHg6, SSID `17AA:3847` | Reference stereo profile, AMD `AMDI0030` reset quirk, embedded firmware and left/right tuning |
 | Lenovo Legion 5 Pro 16ACH6H, SSID `17AA:382B` | Explicit translation to the `17AA:3847` resource; validate speaker and boost equivalence on the actual machine |
-| `CLSA0101` / unknown `CSC3551` | Automatic initialization disabled; `CSC3551` has opt-in ACPI SPI discovery |
+| `CLSA0101` / unknown `CSC3551` | Automatic initialization disabled; `CSC3551` transport is selected from ACPI serial-bus resources |
 | HP `CSC3551`, ACPI `_SUB=103C89C6` | Experimental SPI profile: native/GPIO CS, internal boost, matched R/L firmware; [target validation required](docs/hp_spi_bringup.md) |
 | Other Intel or AMD boards | Porting required: provider, reset wiring, audio route, boost circuit and tuning must be verified |
 | CS35L45 / CS35L51 / CS35L56 / other amplifier models | No implemented driver; unknown models are rejected before initialization |
@@ -249,10 +249,9 @@ Flags with a value of `0` are treated as disabled. Debug builds enable routine l
 | `-cirrusoff` | Reject attachment before hardware initialization |
 | `-cirrusirq` | Experimental reference-board GPIO84 protection IRQ, with polling backup; disabled by default until target delivery and sleep/wake validation |
 | `-cirrusdbg` | Enable routine `IOLog` messages in Release; already enabled by default in Debug |
-| `-cirrusro` | Skip GPIO reset, initialization and register writes; collect a one-shot register snapshot. Reads still send an I2C register-address prefix |
+| `-cirrusro` | Force read-only probing: skip GPIO reset, initialization and register writes; normal boot selects SPI or I2C automatically from ACPI `_CRS` |
 | `-cirrusnodsp` | Skip firmware and coefficient upload; use the explicit DAC bypass path without DSP acoustic protection |
 | `-cirrusphase=<name>` | Stop after a selected initialization stage; playback stays disabled |
-| `-cirrusspi` | Opt-in native ACPI SPI ownership; unknown boards remain read-only. Writes require a verified profile and registered driver; `-cirrusro` forces read-only operation |
 | `-cirruslegacyprobe` | Permit read-only fixed-address discovery outside automatic profile policy; never invent endpoints or authorize initialization |
 | `-cirrusprobe` | Record the flag in `CirrusBootArgParsed`; currently does not enable a separate transaction-log mode |
 | `-cirrusdelay=<ms>` | Set the read-only snapshot delay, default 100 ms. Does not replace the normal 15 ms startup wait |

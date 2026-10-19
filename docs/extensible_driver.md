@@ -174,7 +174,7 @@ reset and does not erase recorded failure evidence.
 
 ## Failure reporting and fallbacks
 
-The owner logs unsupported silicon, unmatched endpoints, missing SPI opt-in and
+The owner logs unsupported silicon, unmatched endpoints, rejected serial-bus resources and
 blocked board/topology initialization. SPI bind errors retain a reason, native
 IOReturn, resource/controller index, copied ACPI source and parser/power detail
 through rollback and shutdown. Intel controller rejection includes the actual

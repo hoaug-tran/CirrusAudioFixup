@@ -44,6 +44,7 @@ public:
     struct Evidence {
         const char* reason{"UNBOUND"};
         uint32_t revision{0}, padbar{0}, ownership{0}, lockTx{0}, config{0}, offset{0}, written{0}, readback{0};
+        uint32_t logical0Written{0}, logical0Readback{0}, logical1Written{0}, logical1Readback{0};
     };
     const Evidence& evidence() const { return mEvidence; }
     IOReturn bind(IntelGPIOWindow& window, size_t bytes, const IntelGPIOPad& pad, bool activeLow) {
@@ -108,6 +109,13 @@ public:
         mEvidence.written = after;
         mWindow->write32(mOffset, after);
         mEvidence.readback = mWindow->read32(mOffset);
+        if (active) {
+            mEvidence.logical1Written = after;
+            mEvidence.logical1Readback = mEvidence.readback;
+        } else {
+            mEvidence.logical0Written = after;
+            mEvidence.logical0Readback = mEvidence.readback;
+        }
         if ((mEvidence.readback & ~2U) != (after & ~2U)) {
             mEvidence.reason = "PAD_WRITE_READBACK_FAILED";
             return kIOReturnIOError;

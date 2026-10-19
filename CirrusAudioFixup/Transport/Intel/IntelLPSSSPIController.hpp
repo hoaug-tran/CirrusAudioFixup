@@ -47,6 +47,9 @@ public:
     const char* bindFailureReason() const { return mBindFailureReason; }
     uint32_t initialCapabilities() const { return mEngine.initialCapabilities(); }
     uint32_t initialStatus() const { return mEngine.initialStatus(); }
+    uint32_t initialClock() const { return mEngine.initialClock(); }
+    uint32_t preparedClock() const { return mEngine.preparedClock(); }
+    uint32_t initialClockGate() const { return mEngine.initialClockGate(); }
     void shutdown();
     void suspend();
     IOReturn resume();

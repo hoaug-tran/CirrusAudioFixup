@@ -337,6 +337,12 @@ IOReturn IntelLPSSSPIController::bind(IOPCIDevice* pci, IOService* owner) {
     mWindow.initializing = true;
     traceStage(owner, "MMIO_INITIALIZE_BEGIN");
     IOReturn result = mEngine.initialize(mProfile);
+#if defined(KERNEL)
+    owner->setProperty("Cirrus_SPI_Clock_Initial", uint64_t(mEngine.initialClock()), 32);
+    owner->setProperty("Cirrus_SPI_Clock_Prepared", uint64_t(mEngine.preparedClock()), 32);
+    owner->setProperty("Cirrus_SPI_Clock_Gate_Initial", uint64_t(mEngine.initialClockGate()), 32);
+    owner->setProperty("Cirrus_SPI_Clock_Rate_Source", "PROGRAMMED_DIVIDER_NOT_MEASURED");
+#endif
     mWindow.initializing = false;
     mWindow.publish();
     traceStage(owner, "MMIO_INITIALIZE_END", result);

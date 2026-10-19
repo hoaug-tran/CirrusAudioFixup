@@ -40,6 +40,8 @@ public:
     static constexpr uint32_t kOverrun = 1U << 7;
     static constexpr uint32_t kTimeoutStatus = 1U << 19;
     static constexpr uint32_t kBitError = 1U << 23;
+    static constexpr uint32_t kClockEnable = 1U;
+    static constexpr uint32_t kClockUpdate = 1U << 31;
 
     // Caller must hold exclusive ownership of the controller and serialize
     // initialize/exchange/suspend/resume/shutdown, including power transitions.
@@ -47,10 +49,14 @@ public:
 
     uint32_t initialCapabilities() const { return mInitialCapabilities; }
     uint32_t initialStatus() const { return mInitialStatus; }
+    uint32_t initialClock() const { return mSavedClock; }
+    uint32_t preparedClock() const { return mPreparedClock; }
+    uint32_t initialClockGate() const { return mSavedGate; }
     IOReturn initialize(LPSSSPIProfile profile = {LPSSSPIFamily::CannonLake, kRootClockHz, true, true, 0x300}) {
         if (mInitialized)
             return kIOReturnBusy;
         mInitialCapabilities = mInitialStatus = 0;
+        mPreparedClock = 0;
         mProfile = profile;
         if (!mProfile.rootClockHz)
             return kIOReturnBadArgument;
@@ -302,10 +308,14 @@ private:
             if ((mWindow.read32(kReset) & 3U) != 3U)
                 return kIOReturnNotReady;
         }
-        if (!(clock & 1U)) {
+        if ((clock & (kClockEnable | kClockUpdate)) != (kClockEnable | kClockUpdate)) {
             mClockChanged = true;
-            mWindow.write32(kClock, clock | 1U);
+            mWindow.write32(kClock, clock | kClockEnable | kClockUpdate);
         }
+        mPreparedClock = mWindow.read32(kClock);
+        if (mPreparedClock == 0xffffffffU || !(mPreparedClock & kClockEnable) ||
+            (mPreparedClock & 0x7ffffffeU) != (clock & 0x7ffffffeU))
+            return kIOReturnNotReady;
         return hardwareReady() ? kIOReturnSuccess : kIOReturnNotReady;
     }
     void restorePrerequisites() {
@@ -378,6 +388,7 @@ private:
     uint32_t mSelectCount{0}, mActualClockHz{0};
     uint32_t mSavedControl0{0}, mSavedControl1{0}, mSavedSelect{0};
     uint32_t mSavedClock{0}, mSavedGate{0}, mSavedReset{0};
+    uint32_t mPreparedClock{0};
     uint32_t mSavedTimeout{0}, mSavedProtocol{0};
 };
 

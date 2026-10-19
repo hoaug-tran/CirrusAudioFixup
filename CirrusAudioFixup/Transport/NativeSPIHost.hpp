@@ -25,6 +25,21 @@ public:
     bool bound() const { return mCount != 0; }
     size_t count() const { return mCount; }
     core::RegisterIO* registers(size_t i) const { return i < mCount ? mRegisters[i] : nullptr; }
+    IOReturn readDiagnostic(size_t index, uint32_t clockHz, const core::RegisterMapConfig& format,
+                            uint32_t reg, uint32_t& value) {
+        value = 0;
+        if (index >= mCount || !clockHz || clockHz > endpoint(index).spiClockHz || !core::RegisterMap::isValidConfig(format))
+            return kIOReturnBadArgument;
+        auto* controller = mBus[mSlots[index]];
+        if (!controller)
+            return kIOReturnNotReady;
+        auto target = mResources.endpoints[index].endpoint;
+        target.clockHz = clockHz;
+        SPIRegisterBus bus(controller, target);
+        core::RegisterMap map(bus, format, false);
+        (void)map.read(reg, &value);
+        return map.lastReturn();
+    }
     const ACPISPIResource* resource(size_t i) const { return i < mCount ? &mResources.endpoints[i] : nullptr; }
     core::BusEndpoint endpoint(size_t i) const {
         if (i >= mCount)

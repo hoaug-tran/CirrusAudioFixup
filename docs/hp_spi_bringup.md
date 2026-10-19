@@ -51,8 +51,8 @@ The Windows investigation ran the host suite in WSL Ubuntu with GCC and its ASan
 
 Build the exact modified tree on macOS with `bash Tools/build_macos.sh`; retain Debug/Release bundles, matching dSYMs and metadata. Build/load evidence must identify the current configuration-discovery revision; earlier CI bundles do not validate this refactor. Earlier bundle UUIDs in project history do not identify this tree.
 
-1. First target boot: `-cirrusspi -cirrusro -cirrusdbg`. Keep the fallback EFI. Require controller association/bind, CS map count 2, CS0 native, CS1 GPIO pin from evaluated ACPI, and both 35a40/B2 identity reads. `-cirrusro` disables AMP register writes; SPI controller and CS GPIO transactions still change hardware state to perform reads.
-2. Only after the read-only gate succeeds, use the same build with `-cirrusspi -cirrusdbg -cirrusphase=platform`. Confirm `acpi-device-properties`, ACPI SSID, two correct channels, muted output and boost coefficient readback. The phase halt must not start playback.
+1. Boot target with `-cirrusdbg` only. Automatic `_CRS` selection must report SPI, controller association/bind, CS map count 2, CS0 native, CS1 GPIO pin from evaluated ACPI, completed reset sequence, and both 35A40/B2 identity reads. Keep fallback EFI available.
+2. If full initialization reaches `platform`, confirm ACPI SSID, two correct channels, muted output, boost coefficient readback and no playback publication before platform validation completes. Use `-cirrusphase=platform` only when intentionally stopping at that boundary.
 3. Remove the phase halt for firmware/DSP, then playback at low volume. Record physical Right/Left separately, headphones, idle transitions and cold boot. Capture the actual loaded kext identity and HDA/ASP route/clocks.
 4. Test sleep/wake with both GPIO/SPI providers accessible before transfers. GPIO mux, locks or power state changes are checked again; a failure keeps playback stopped.
 

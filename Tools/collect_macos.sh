@@ -111,7 +111,6 @@ capture() {
     wait "$command_pid"
     local result=$?
     kill "$watchdog_pid" 2>/dev/null
-    wait "$watchdog_pid" 2>/dev/null
     if [ "$result" -ne 0 ]; then capture_failed=1; fi
     printf '%-30s exit=%s\n' "$name" "$result" >>"$output/status.txt"
     if [ "$(wc -c <"$output/$name.txt")" -eq "$header_size" ]; then

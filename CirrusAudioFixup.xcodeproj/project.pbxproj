@@ -601,9 +601,23 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			path = "verify_kext_vtables.py";
 			sourceTree = "<group>";
 		};
+		C34DA2739E751FF478D0C496 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = "Collect-AudioAMP-Windows.ps1";
+			sourceTree = "<group>";
+		};
+		D280781DBF4E1C36DE072A97 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.sh;
+			path = "collect_audio_amp_linux.sh";
+			sourceTree = "<group>";
+		};
 		624913F8493D4E5ADB66ADDF = {
 			isa = PBXGroup;
 			children = (
+				C34DA2739E751FF478D0C496,
+				D280781DBF4E1C36DE072A97,
 				14C4A873D059DA3A76D05BB7,
 				78A8D22358D07C4CA784F52D,
 				93E13AE8D1AFEC6837762B9E,
@@ -744,34 +758,10 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			path = "Tests";
 			sourceTree = "<group>";
 		};
-		03066E837CD938DCAAFAF1BC = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "acoustic_parity_audit.md";
-			sourceTree = "<group>";
-		};
-		EBB01F7512319255851FCAD4 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "audit_status.md";
-			sourceTree = "<group>";
-		};
 		7E95FC859B9BBB7519B435B0 = {
 			isa = PBXFileReference;
 			lastKnownFileType = net.daringfireball.markdown;
 			path = "diagnostics.md";
-			sourceTree = "<group>";
-		};
-		0833B5C393E27B16A11A12B0 = {
-			isa = PBXFileReference;
-			lastKnownFileType = archive.zip;
-			path = "Kexts.zip";
-			sourceTree = "<group>";
-		};
-		16DDC108289302EF66E88EDB = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "linux_parity_audit.md";
 			sourceTree = "<group>";
 		};
 		EFCD37A28E7EA84AFC51AE25 = {
@@ -786,23 +776,96 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			path = "safe_bringup_protocol.md";
 			sourceTree = "<group>";
 		};
-		D48596870FCA9B9A166BC60A = {
+		5CB1581DB5440A0A39F83218 = {
 			isa = PBXFileReference;
 			lastKnownFileType = net.daringfireball.markdown;
-			path = "windows_driver_audit.md";
+			path = "attachment_matrix.md";
+			sourceTree = "<group>";
+		};
+		E7E868CF7FE0075CB3731BC4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "audio_collectors.md";
+			sourceTree = "<group>";
+		};
+		1E93082D8AE1B5A1CAEC66D1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "boot_arguments.md";
+			sourceTree = "<group>";
+		};
+		EF9343649F8CDA170F32C57D = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "codec_route.md";
+			sourceTree = "<group>";
+		};
+		A3911E30F137116B8E1D03F3 = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "extensible_driver.md";
+			sourceTree = "<group>";
+		};
+		79B68CF5E88BD0F0479541FB = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "hp_linux_collection.md";
+			sourceTree = "<group>";
+		};
+		6594F68B194CC8A2D487E376 = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "hp_spi_bringup.md";
+			sourceTree = "<group>";
+		};
+		2598858E6A91632662EE6730 = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "hp_windows_collection.md";
+			sourceTree = "<group>";
+		};
+		31068C16A4CF1F4B5E4F8467 = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "i2c_provider.md";
+			sourceTree = "<group>";
+		};
+		98A1792295B554F7FA2E6911 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.json;
+			path = "linux_reference_sources.json";
+			sourceTree = "<group>";
+		};
+		F4E01A27D6F3D6AB21D083AE = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "register_reference.md";
+			sourceTree = "<group>";
+		};
+		D71D8799E255800C728E63AF = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = "spi_support.md";
 			sourceTree = "<group>";
 		};
 		35EEBFFB211A68ED7E89BB0F = {
 			isa = PBXGroup;
 			children = (
-				03066E837CD938DCAAFAF1BC,
-				EBB01F7512319255851FCAD4,
+				D71D8799E255800C728E63AF,
+				F4E01A27D6F3D6AB21D083AE,
+				98A1792295B554F7FA2E6911,
+				31068C16A4CF1F4B5E4F8467,
+				2598858E6A91632662EE6730,
+				6594F68B194CC8A2D487E376,
+				79B68CF5E88BD0F0479541FB,
+				A3911E30F137116B8E1D03F3,
+				EF9343649F8CDA170F32C57D,
+				1E93082D8AE1B5A1CAEC66D1,
+				E7E868CF7FE0075CB3731BC4,
+				5CB1581DB5440A0A39F83218,
 				7E95FC859B9BBB7519B435B0,
-				0833B5C393E27B16A11A12B0,
-				16DDC108289302EF66E88EDB,
 				EFCD37A28E7EA84AFC51AE25,
 				513109EC12444281783D0994,
-				D48596870FCA9B9A166BC60A,
 			);
 			path = "docs";
 			sourceTree = "<group>";

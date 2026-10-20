@@ -10,7 +10,8 @@ struct ACPIGPIOResource {
     uint8_t sourceIndex{0};
     char source[128]{};
 };
-inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t resourceIndex, uint32_t pinIndex, ACPIGPIOResource& output) {
+inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t resourceIndex, uint32_t pinIndex, ACPIGPIOResource& output,
+                                  bool outputOnly = true) {
     if (!data || !length)
         return false;
     auto le16 = [](const uint8_t* p) -> uint16_t { return uint16_t(p[0]) | uint16_t(p[1]) << 8; };
@@ -42,8 +43,9 @@ inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t r
         if (!large && ((*d >> 3) == 6 || (*d >> 3) == 7))
             return false;
         if (*d == 0x8c && index++ == resourceIndex) {
-            // Only exclusive GpioIo output connections are writable here.
-            if (size < 23 || d[3] != 1 || d[4] != 1 || le16(d + 5) != 1 || le16(d + 7) != 2 || d[16] != 0)
+            // Input and output roles are explicit; no direction/mux changes.
+            if (size < 23 || d[3] != 1 || d[4] != 1 || le16(d + 5) != 1 ||
+                le16(d + 7) != (outputOnly ? 2 : 1) || d[16] != 0)
                 return false;
             const size_t pins = le16(d + 14), source = le16(d + 17);
             const size_t vendor = le16(d + 19), vendorSize = le16(d + 21);

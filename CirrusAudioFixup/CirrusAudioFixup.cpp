@@ -540,7 +540,7 @@ void CirrusAudioFixup::resolvePlatformProfile() {
 void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
                                                      const cirrus::platform::AmplifierDriverRegistration& definition) {
     cirrus::transport::ACPIDeviceProperties properties;
-    const IOReturn propertyReturn = properties.load(acpi);
+    const IOReturn propertyReturn = properties.load(acpi, this);
     setProperty("Cirrus_Platform_Properties_Return", uint64_t(uint32_t(propertyReturn)), 32);
     setProperty("Cirrus_Platform_Properties_Reason", properties.reason());
     setProperty("Cirrus_Platform_Properties_Source", properties.source());
@@ -555,11 +555,19 @@ void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
         cirrus::core::BusEndpoint endpoints[kMaxAmplifiers]{};
         for (size_t i = 0; i < mNativeSPI.count(); ++i)
             endpoints[i] = mNativeSPI.endpoint(i);
+        struct GPIOReader final : cirrus::platform::BoardDiscoveryContext::GPIOReader {
+            cirrus::transport::NativeSPIHost& host;
+            IOACPIPlatformDevice* device;
+            GPIOReader(cirrus::transport::NativeSPIHost& h, IOACPIPlatformDevice* d) : host(h), device(d) {}
+            bool read(const char* property, size_t index, uint32_t& value) override {
+                return host.readGPIO(device, property, index, value) == kIOReturnSuccess;
+            }
+        } gpio(mNativeSPI, acpi);
         const cirrus::platform::BoardDiscoveryContext context{
             {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid},
             endpoints,
             mNativeSPI.count(),
-            source};
+            source, &gpio};
         mDiscoveredBoard = definition.discoverBoard(context, reason);
         if (mDiscoveredBoard && mDiscoveredBoard->configuration.permits(context.identity)) {
             mDiscoveredProfile = *mPlatformProfile;
@@ -625,6 +633,14 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                   ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
                                                                              resourceData->getLength(), parsed, &hasI2C)
                                   : cirrus::transport::ACPISPIResult::Malformed;
+    if ((hasI2C || resourceKind == cirrus::transport::ACPISPIResult::Success) &&
+        !mDriverRegistry.prepareBoardMetadata(
+            {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid}, acpi, this,
+            hasI2C ? cirrus::core::BusTransportType::I2C : cirrus::core::BusTransportType::SPI)) {
+        OSSafeReleaseNULL(resources);
+        recordAttachmentFailure("PLATFORM", "BOARD_METADATA_REJECTED", kIOReturnUnsupported);
+        return false;
+    }
 #if defined(KERNEL)
     if (gCirrusDebug) {
         setProperty("Cirrus_ACPI_CRS_Return", uint64_t(uint32_t(resourceReturn)), 32);
@@ -879,6 +895,7 @@ void CirrusAudioFixup::teardownCommunication() {
     for (auto& amp : mAmplifiers)
         amp.registerIO = nullptr;
     mNativeSPI.shutdown();
+    removeProperty("Cirrus_Board_Metadata");
     if (mPlatformProfile == &mDiscoveredProfile)
         mPlatformProfile = &cirrus::platform::defaultPlatformProfile();
     delete mDiscoveredBoard;

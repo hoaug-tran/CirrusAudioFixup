@@ -43,6 +43,22 @@ int main(){
   assert(selects.select(1)->setActive(false)==0);gpio.values["_PSC"]=number(3);assert(selects.validate()==kIOReturnNotReady);
   gpio.values["_PSC"]=number(0);assert(selects.validate()==0);}
  assert(!gpio.opened&&gpio.opens==1&&gpio.closes==1&&gpio.refs==1&&mem->refs==1&&dsd->refs==1&&amp.refs==1);
+ // Issue #5: an unmodified, supported GPIO HID needs no synthetic _DSD.
+ // Apple may report Error for an absent object; this optional GPIO metadata
+ // must not change the mandatory CS wiring contract on the SPI controller.
+ for(auto error:{kIOReturnError,kIOReturnNotFound}){
+  gpio.dsdValidation=error;
+  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
+  assert(owner.strings["Cirrus_SPI_GPIO_Identity_Source"]=="ACPI_HID");
+ }
+ gpio.dsdValidation=0;
+ // A supported HID never hides malformed metadata or an unreadable package.
+ gpio.values["_DSD"]=make<OSData>(std::vector<uint8_t>{1,2});
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
+ gpio.values.erase("_DSD");gpio.dsdEvaluation=kIOReturnIOError;
+ gpio.values["_DSD"]=properties(array({number(0)}));
+ {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnIOError);}
+ gpio.values.erase("_DSD");gpio.dsdEvaluation=0;
  // Observe the shared reset reference through the existing exclusive CS map.
  // Both logical levels must be visible without ever changing the reset pad.
  auto resetCrs=crs;resetCrs.resize(resetCrs.size()-2);
@@ -98,6 +114,50 @@ int main(){
   assert(owner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==1&&owner.numbers["Cirrus_SPI_Reset_0_LogicalLevel"]==0);
   assert(mem->r[resetPad/4]==0x84000201);}
  amp.dsdNullResult=false;amp.values.erase("CSDP");
+ // Replay issue #5's INTC1085 topology: CS1 GPIO 468 in community 4,
+ // shared reset GPIO 320 in community 3. Each map has independent storage.
+ // Merely observing/preparing reset may map the owned provider, never pulse it.
+ {
+  auto* csMap=make<IOMemoryMap>();auto* resetMap=make<IOMemoryMap>();
+  for(auto* m:{csMap,resetMap}){m->r[0]=0x960000;m->r[3]=0x700;}
+  const auto csOffset=0x700+20*16;const auto resetOffset=0x700;
+  csMap->r[csOffset/4]=0x84000201;resetMap->r[resetOffset/4]=0x44000200;
+  csMap->r[0x114/4]=1U<<14; // unrelated locked pad must not block GPIO 468
+  auto asusCS=crs;asusCS.resize(asusCS.size()-2);asusCS[23]=0xd4;asusCS[24]=1;
+  auto asusReset=asusCS;asusReset[23]=0x40;asusReset[24]=1;
+  asusCS.insert(asusCS.end(),asusReset.begin(),asusReset.end());asusCS.insert(asusCS.end(),{0x79,0});
+  amp.values["_CRS"]=make<OSData>(asusCS);
+  resetTuples->v[3]=number(0);
+  gpio.values["_HID"]=make<OSString>("INTC1085");gpio.maps={{4,csMap},{3,resetMap}};
+  const auto opens=gpio.opens;
+  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
+   assert(owner.strings["Cirrus_SPI_Reset_0_Status"]=="OBSERVED_WITHOUT_WRITES");
+   assert(owner.numbers["Cirrus_SPI_Reset_0_Memory_Index"]==3);
+   assert(owner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==0);
+   assert(resetMap->r[resetOffset/4]==0x44000200&&gpio.opens==opens+1);
+   assert(selects.prepareGPIOGroup(&amp,"reset-gpios")==0);
+   assert(owner.numbers["Cirrus_SPI_GPIO_Group_Unique_Pins"]==1);
+   assert(resetMap->r[resetOffset/4]==0x44000200);
+   assert(selects.writeGPIOGroup(false)==0&&selects.writeGPIOGroup(true)==0);
+   assert(resetMap->r[resetOffset/4]==0x44000201&&csMap->r[csOffset/4]==0x84000201);
+  }
+  assert(!gpio.opened&&csMap->refs==1&&resetMap->refs==1&&gpio.refs==1);
+  // Failure to map a second community preserves the root failure and CS lease.
+  gpio.maps.erase(3);
+  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
+   assert(owner.strings["Cirrus_SPI_Reset_0_Status"]=="COMMUNITY_MAP_FAILED");
+   assert(selects.prepareGPIOGroup(&amp,"reset-gpios")==kIOReturnNoResources);
+   assert(selects.writeGPIOGroup(false)==kIOReturnNotReady);
+  }
+  gpio.maps={{4,csMap},{3,resetMap}};resetMap->r[0x114/4]=1;
+  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
+   assert(owner.strings["Cirrus_SPI_Reset_0_Status"]=="PAD_TX_LOCKED");
+   assert(selects.prepareGPIOGroup(&amp,"reset-gpios")==kIOReturnNotPermitted);
+   assert(selects.writeGPIOGroup(false)==kIOReturnNotReady&&resetMap->r[resetOffset/4]==0x44000201);
+  }
+  assert(!gpio.opened&&csMap->refs==1&&resetMap->refs==1&&gpio.refs==1);
+  gpio.maps.clear();gpio.values["_HID"]=make<OSString>("INTC1056");
+ }
  amp.values.erase("_DSD");amp.values["_CRS"]=make<OSData>(crs);
  // Validation failures must not be reclassified as an absent/native-only DSD.
  spi.dsdValidation=kIOReturnUnsupported;const auto opensBefore=gpio.opens;

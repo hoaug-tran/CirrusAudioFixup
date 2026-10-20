@@ -25,6 +25,15 @@ public:
     bool bound() const { return mCount != 0; }
     size_t count() const { return mCount; }
     core::RegisterIO* registers(size_t i) const { return i < mCount ? mRegisters[i] : nullptr; }
+    IOReturn readGPIO(IOACPIPlatformDevice* source, const char* property, size_t index, uint32_t& value) {
+        value = 0;
+        for (size_t i = 0; i < mControllers; ++i) {
+            const auto result = mOwners[i]->readGPIO(source, property, index, value);
+            if (result != kIOReturnUnsupported)
+                return result;
+        }
+        return kIOReturnUnsupported;
+    }
     IOReturn readDiagnostic(size_t index, uint32_t clockHz, const core::RegisterMapConfig& format, uint32_t reg, uint32_t& value) {
         value = 0;
         if (index >= mCount || !clockHz || clockHz > endpoint(index).spiClockHz || !core::RegisterMap::isValidConfig(format))

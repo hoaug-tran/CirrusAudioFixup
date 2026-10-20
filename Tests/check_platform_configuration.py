@@ -12,6 +12,11 @@ for symbol, size, digest in (
     ("cs35l41_dsp1_spk_prot_103c89c6_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
     ("cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin", 4000, "7b6a432787c14a9ba1ec419672c9ff87d0101669ecda37dc14c8e902ed363c42"),
     ("cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin", 4000, "2f7e769606a77ef433e5c1ca35bb4e5679b2d01326aefd9fdc11cdfcb151d81d"),
+    ("cs35l41_dsp1_spk_prot_10431c9f_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
+    ("cs35l41_dsp1_spk_prot_10431c9f_spkid0_l0_bin", 4660, "e7bc9975b5165ab9772ec1e1477b383fb5857198feb35d6d41d0497ce860ae6a"),
+    ("cs35l41_dsp1_spk_prot_10431c9f_spkid0_r0_bin", 4656, "1ef25251ff164dfd74ddb41e5f9214e81c464592d60432687de7c21a08abf834"),
+    ("cs35l41_dsp1_spk_prot_10431c9f_spkid1_l0_bin", 4648, "f71b292f33ef49e20308eb3d59523988f55c7acf50902bed97f4b07519d9a5cc"),
+    ("cs35l41_dsp1_spk_prot_10431c9f_spkid1_r0_bin", 4660, "8c235171e36bd27a0bd31a4d8f30887cbe682e485eeb95b0678bf5381111828e"),
 ):
     found = re.findall(r"const uint8_t " + symbol + r"\[\] = \{(.*?)\};", header, re.S)
     assert len(found) == 1, symbol
@@ -29,7 +34,10 @@ with tempfile.TemporaryDirectory(prefix="cirrus-hp-profile-") as directory:
 #include <algorithm>
 #include "Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp"
 #include "Platform/PlatformProfile.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/Firmware.hpp"
+#include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 struct Properties:cirrus::platform::PlatformProperties {
+ bool contains(const char* name)const override{return values.count(name)!=0;}
  std::map<std::string,std::vector<uint32_t>> values{
  {"cirrus,dev-index",{0,1}}, {"cirrus,speaker-position",{1,0}},
  {"cirrus,boost-type",{0,0}}, {"cirrus,gpio1-func",{0,0}}, {"cirrus,gpio2-func",{2,2}},
@@ -51,6 +59,16 @@ platform::DiscoveredBoard* resolve(Properties& p,platform::BoardIdentity identit
  return resolvePlatformConfiguration({identity,endpoints,2,p},assets,reason);
 }
 void profileChecks(){
+ for(uint32_t speaker:{0U,1U}){
+  const auto* resource=selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,0x1043,0x1c9f,speaker);
+  assert(resource&&!resource->genericSpeaker&&resource->spkid==speaker);
+  size_t left=0,right=0;
+  assert(selectChannelCoefficients(*resource,false,left)&&selectChannelCoefficients(*resource,true,right));
+  assert(left>0&&right>0&&resource->bin!=resource->binRight);
+ }
+ for(uint32_t unknown:{2U,UINT32_MAX})
+  assert(!selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,0x1043,0x1c9f,unknown));
+ assert(!selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,0x1043,0x14d3,1));
  assert(platform::defaultPlatformProfile().amplifierModel==core::AmplifierModel::Unknown);
  assert(!platform::defaultPlatformProfile().endpoints&&!platform::defaultPlatformProfile().endpointCount);
  uint32_t identity=7;
@@ -158,6 +176,7 @@ int main(){
 '''
     (tmp/'IOKit').mkdir()
     (tmp/'IOKit/IORegistryEntry.h').write_text('#pragma once\n')
+    (tmp/'IOKit/IOLib.h').write_text('#pragma once\n')
     (tmp/'test.cpp').write_text('#include <string>\n'+fixture+mocks+actual+checks)
     exe = tmp / "test"
     subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror",

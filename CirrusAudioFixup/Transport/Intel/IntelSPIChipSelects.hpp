@@ -5,6 +5,7 @@
 #include "Transport/ACPIDeviceProperties.hpp"
 #include "Transport/ACPIGPIOResources.hpp"
 #include "Transport/Intel/IntelGPIOOutput.hpp"
+#include "Transport/Intel/IntelGPIOInput.hpp"
 
 namespace cirrus::transport::intel {
 class IntelSPIChipSelects {
@@ -22,7 +23,7 @@ public:
         mTrace = trace;
         ACPIDeviceProperties properties;
         report("CS_DSD_BEGIN");
-        auto result = properties.load(controller);
+        auto result = properties.load(controller, owner);
         diagnostics::ACPIObjectEvidence::publish(owner, "Cirrus_SPI_DSD", properties.object());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Source", properties.source());
@@ -182,9 +183,65 @@ public:
         const auto result = validatePower();
         return result == kIOReturnSuccess ? validateOutputs() : result;
     }
+    // Startup/discovery-only input read through the already owned provider.
+    // It cannot acquire output permissions or change pad configuration.
+    IOReturn readGPIO(IOACPIPlatformDevice* source, const char* property, size_t index, uint32_t& value) {
+        value = 0;
+        auto result = validatePower();
+        if (result != kIOReturnSuccess || !source || !property || index >= kCapacity)
+            return result != kIOReturnSuccess ? result : kIOReturnBadArgument;
+        ACPIDeviceProperties properties;
+        result = properties.load(source, mOwner);
+        if (result != kIOReturnSuccess)
+            return result;
+        auto* tuples = OSDynamicCast(OSArray, properties.get(property));
+        if (!tuples || tuples->getCount() % 4 || tuples->getCount() > kCapacity * 4 || index >= tuples->getCount() / 4)
+            return kIOReturnUnsupported;
+        const unsigned i = unsigned(index * 4);
+        auto* resource = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
+        auto* pin = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
+        auto* low = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
+        if (!resource || !pin || !low || resource->unsigned64BitValue() > 0xffff || pin->unsigned64BitValue() > 0xffff ||
+            low->unsigned64BitValue() > 1)
+            return kIOReturnUnsupported;
+        auto* device = resolveACPIReference(source, tuples->getObject(i));
+        OSObject* crs = nullptr;
+        const auto crsResult = device ? device->evaluateObject("_CRS", &crs) : kIOReturnNotFound;
+        auto* bytes = OSDynamicCast(OSData, crs);
+        ACPIGPIOResource gpio{};
+        const bool decoded = crsResult == kIOReturnSuccess && bytes &&
+            parseACPIGPIOResource(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(),
+                                  resource->unsigned32BitValue(), pin->unsigned32BitValue(), gpio, false);
+        auto* provider = decoded ? resolveACPIDevice(device, gpio.source) : nullptr;
+        OSSafeReleaseNULL(crs);
+        OSSafeReleaseNULL(device);
+        if (!provider)
+            return kIOReturnUnsupported;
+        Line* mapped = nullptr;
+        IntelGPIOPad pad{};
+        result = ownedCommunity(provider, gpio.pin, mapped, pad);
+        IntelGPIOInputEvidence evidence;
+        evidence.reason = "COMMUNITY_UNAVAILABLE";
+        if (result == kIOReturnSuccess)
+            result = readIntelGPIOInput(*mapped, mapped->map->getLength(), pad, low->unsigned32BitValue() != 0, value, evidence);
+        provider->release();
+        if (mOwner) {
+            mOwner->setProperty("Cirrus_GPIO_Input_Property", property);
+            mOwner->setProperty("Cirrus_GPIO_Input_Index", uint64_t(index), 32);
+            mOwner->setProperty("Cirrus_GPIO_Input_Pin", uint64_t(gpio.pin), 32);
+            mOwner->setProperty("Cirrus_GPIO_Input_Reason", evidence.reason);
+            mOwner->setProperty("Cirrus_GPIO_Input_Config", uint64_t(evidence.config), 32);
+            mOwner->setProperty("Cirrus_GPIO_Input_Ownership", uint64_t(evidence.ownership), 32);
+            mOwner->setProperty("Cirrus_GPIO_Input_Memory_Index", uint64_t(pad.memoryIndex), 32);
+            mOwner->setProperty("Cirrus_GPIO_Input_Return", uint64_t(uint32_t(result)), 32);
+            if (result == kIOReturnSuccess)
+                mOwner->setProperty("Cirrus_GPIO_Input_Value", uint64_t(value), 32);
+        }
+        return result;
+    }
     // Prepare every firmware reference before changing any level. Shared pins
-    // are acquired once; a GPIO group cannot borrow a chip-select pad or a
-    // community not already exclusively owned by this controller owner.
+    // are acquired once; a GPIO group cannot borrow a chip-select pad. Other
+    // communities may be mapped only through an already owned GPIO provider.
     IOReturn prepareGPIOGroup(IOACPIPlatformDevice* source, const char* property) {
         clearGPIOGroup();
         if (!source || !property || !mOwner)
@@ -197,7 +254,7 @@ public:
         if (result != kIOReturnSuccess)
             return result;
         ACPIDeviceProperties properties;
-        result = properties.load(source);
+        result = properties.load(source, mOwner);
         if (result != kIOReturnSuccess)
             return result;
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
@@ -223,20 +280,19 @@ public:
             OSSafeReleaseNULL(device);
             if (!provider)
                 return reject(kIOReturnUnsupported);
-            Line* mapped = nullptr;
-            IntelGPIOPad pad{};
             bool collision = false;
             for (size_t j = 0; j < mCount; ++j) {
                 auto& line = mLines[j];
                 if (line.provider != provider || !line.gpio)
                     continue;
                 collision |= line.pin == gpio.pin;
-                if (lookupIntelGPIOPad(line.identity, gpio.pin, pad) && pad.memoryIndex == line.memoryIndex)
-                    mapped = &line;
             }
+            Line* mapped = nullptr;
+            IntelGPIOPad pad{};
+            result = collision ? kIOReturnNotPermitted : ownedCommunity(provider, gpio.pin, mapped, pad);
             provider->release();
-            if (collision || !mapped)
-                return reject(collision ? kIOReturnNotPermitted : kIOReturnUnsupported);
+            if (result != kIOReturnSuccess)
+                return reject(result);
             bool duplicate = false;
             for (size_t j = 0; j < mGPIOCount; ++j)
                 if (mGPIO[j].line->provider == mapped->provider && mGPIO[j].pin == gpio.pin) {
@@ -297,6 +353,13 @@ public:
     }
     void shutdown() {
         clearGPIOGroup();
+        // Release additional community maps before closing their provider.
+        for (size_t i = mCommunityCount; i > 0; --i) {
+            auto& line = mCommunities[i - 1];
+            OSSafeReleaseNULL(line.map);
+            OSSafeReleaseNULL(line.provider);
+        }
+        mCommunityCount = 0;
         for (size_t i = mCount; i > 0; --i) {
             auto& line = mLines[i - 1];
             line.output.unbind();
@@ -318,12 +381,12 @@ private:
             mGPIO[i].output.unbind();
         mGPIOCount = 0;
     }
-    // Observe only firmware-described reset pads in an already owned/mapped
-    // GPIO community. No new provider opens, mappings, output changes or reset
-    // pulses are permitted by this diagnostic, including in read-only mode.
+    // Observe firmware-described reset pads through the existing exclusive
+    // GPIO provider lease. Additional community maps perform no output writes
+    // or provider opens, including in read-only mode.
     void observeReset(IOACPIPlatformDevice* source) {
         ACPIDeviceProperties properties;
-        const auto result = properties.load(source);
+        const auto result = properties.load(source, mOwner);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Return", uint64_t(uint32_t(result)), 32);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Reason", properties.reason());
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Source", properties.source());
@@ -366,14 +429,14 @@ private:
             if (provider) {
                 publish("Pin", gpio.pin);
                 publish("ActiveLow", low->unsigned32BitValue());
-                for (size_t j = 0; j < mCount; ++j) {
-                    auto& line = mLines[j];
-                    IntelGPIOPad pad{};
-                    if (line.provider != provider || !line.gpio || !lookupIntelGPIOPad(line.identity, gpio.pin, pad) ||
-                        pad.memoryIndex != line.memoryIndex)
-                        continue;
+                Line* line = nullptr;
+                IntelGPIOPad pad{};
+                const auto mapping = ownedCommunity(provider, gpio.pin, line, pad);
+                publish("Map_Return", uint32_t(mapping));
+                if (mapping == kIOReturnSuccess) {
+                    publish("Memory_Index", pad.memoryIndex);
                     IntelGPIOOutput observer;
-                    const auto observed = observer.bind(line, line.map->getLength(), pad, low->unsigned32BitValue() != 0);
+                    const auto observed = observer.bind(*line, line->map->getLength(), pad, low->unsigned32BitValue() != 0);
                     const auto& evidence = observer.evidence();
                     publish("Return", uint32_t(observed));
                     publish("Config", evidence.config);
@@ -386,8 +449,8 @@ private:
                         publish("LogicalLevel", (evidence.config & 1U) ^ low->unsigned32BitValue());
                         state = "OBSERVED_WITHOUT_WRITES";
                     }
-                    break;
-                }
+                } else if (mapping == kIOReturnNoResources)
+                    state = "COMMUNITY_MAP_FAILED";
                 provider->release();
             }
             snprintf(key, sizeof(key), "Cirrus_SPI_Reset_%u_Status", i / 4);
@@ -421,6 +484,52 @@ private:
             OSSynchronizeIO();
         }
     };
+    // Reuse the physical identity and exclusive lease established by CS bind.
+    // Never derive a register layout from the amplifier or a board name.
+    IOReturn ownedCommunity(IOACPIPlatformDevice* provider, uint16_t pin, Line*& output, IntelGPIOPad& pad) {
+        output = nullptr;
+        const Line* lease = nullptr;
+        for (size_t i = 0; i < mCount; ++i) {
+            auto& line = mLines[i];
+            if (line.provider != provider || !line.gpio || !lookupIntelGPIOPad(line.identity, pin, pad))
+                continue;
+            lease = &line;
+            if (line.memoryIndex == pad.memoryIndex) {
+                output = &line;
+                return kIOReturnSuccess;
+            }
+        }
+        if (!lease)
+            return kIOReturnUnsupported;
+        for (size_t i = 0; i < mCommunityCount; ++i) {
+            auto& line = mCommunities[i];
+            if (line.provider == provider && line.memoryIndex == pad.memoryIndex) {
+                output = &line;
+                return kIOReturnSuccess;
+            }
+        }
+        if (mCommunityCount == kCapacity)
+            return kIOReturnNoResources;
+        // Firmware power checks occur outside the SPI transaction lock.
+        uint32_t power = 0;
+        if ((provider->getDeviceStatus() & 3) != 3 ||
+            (provider->validateObject("_PSC") == kIOReturnSuccess &&
+             (provider->evaluateInteger("_PSC", &power) != kIOReturnSuccess || power)))
+            return kIOReturnNotReady;
+        auto* map = provider->mapDeviceMemoryWithIndex(pad.memoryIndex);
+        if (!map || !map->getVirtualAddress()) {
+            OSSafeReleaseNULL(map);
+            return kIOReturnNoResources;
+        }
+        auto& line = mCommunities[mCommunityCount++];
+        line.provider = provider;
+        provider->retain();
+        line.map = map;
+        line.memoryIndex = pad.memoryIndex;
+        snprintf(line.identity, sizeof(line.identity), "%s", lease->identity);
+        output = &line;
+        return kIOReturnSuccess;
+    }
     IOReturn bindLine(Line& line, IOACPIPlatformDevice* provider, uint16_t pin) {
         OSObject* object = nullptr;
         auto result = provider->evaluateObject("_HID", &object);
@@ -429,7 +538,7 @@ private:
         mOwner->setProperty("Cirrus_SPI_GPIO_HID", hid ? hid->getCStringNoCopy() : "UNAVAILABLE");
         mOwner->setProperty("Cirrus_SPI_GPIO_HID_Return", uint64_t(uint32_t(result)), 32);
         ACPIDeviceProperties native;
-        const auto nativeResult = native.load(provider);
+        const auto nativeResult = native.load(provider, mOwner);
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Return", uint64_t(uint32_t(nativeResult)), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Reason", native.reason());
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Source", native.source());
@@ -438,7 +547,15 @@ private:
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Adapter_Return", uint64_t(uint32_t(native.adapterReturn())), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Native_Object_Type", native.nativeObjectType());
         diagnostics::ACPIObjectEvidence::publish(mOwner, "Cirrus_SPI_GPIO_DSD", native.object());
-        if (nativeResult != kIOReturnSuccess) {
+        // GPIO metadata is optional when firmware exposes an unmodified,
+        // supported physical HID. Unlike SPI cs-gpios, a GPIO controller does
+        // not need a property package to describe its register layout. Preserve
+        // errors for malformed objects/adapters and for compatibility HIDs.
+        IntelGPIOPad nativePad{};
+        const bool nativeIdentity = result == kIOReturnSuccess && hid &&
+                                    lookupIntelGPIOPad(hid->getCStringNoCopy(), pin, nativePad);
+        const bool absentMetadata = native.missingNativeMetadata();
+        if (nativeResult != kIOReturnSuccess && !(nativeIdentity && absentMetadata)) {
             OSSafeReleaseNULL(object);
             return nativeResult;
         }
@@ -446,6 +563,7 @@ private:
         // Explicit firmware metadata may preserve physical identity when the
         // compatibility HID was changed for another client. Never alias HIDs.
         const char* identity = physical ? physical->getCStringNoCopy() : hid ? hid->getCStringNoCopy() : nullptr;
+        mOwner->setProperty("Cirrus_SPI_GPIO_Identity_Source", physical ? "FIRMWARE_METADATA" : "ACPI_HID");
         mOwner->setProperty("Cirrus_SPI_GPIO_Physical_HID", identity ? identity : "UNAVAILABLE");
         const bool supported = result == kIOReturnSuccess && hid && lookupIntelGPIOPad(identity, pin, pad);
         if (supported) {
@@ -496,6 +614,8 @@ private:
         return result;
     }
     Line mLines[kCapacity];
+    Line mCommunities[kCapacity];
+    size_t mCommunityCount{0};
     struct GPIOOutput {
         IntelGPIOOutput output;
         Line* line{nullptr};

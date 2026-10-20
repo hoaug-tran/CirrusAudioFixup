@@ -21,8 +21,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-platform-discovery-") as directo
 #include "Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp"
 using namespace cirrus;
 bool gCirrusDebug=true;
-bool resourceAvailable=true;unsigned callbacks=0;
-bool resources(uint16_t,uint16_t,uint32_t){return resourceAvailable;}
+bool resourceAvailable=true;unsigned callbacks=0;uint32_t requiredSpeaker=UINT32_MAX,secondSpeaker=UINT32_MAX;
+bool resources(uint16_t,uint16_t,uint32_t speaker){return resourceAvailable&&(speaker==requiredSpeaker||speaker==secondSpeaker);}
 platform::DiscoveredBoard* discover(const platform::BoardDiscoveryContext& context,const char*& reason){
  ++callbacks;return devices::amplifiers::cs35l41::resolvePlatformConfiguration(context,resources,reason);
 }
@@ -30,7 +30,9 @@ struct Native {
  core::BusEndpoint endpoints[2]{{core::BusTransportType::SPI,"\\_SB.NEW.SPI8",0,false,0,4000000,0},
                                {core::BusTransportType::SPI,"\\_SB.NEW.SPI8",0,false,1,4000000,0}};
  size_t count()const{return 2;}core::BusEndpoint endpoint(size_t i)const{return endpoints[i];}
+ IOReturn readGPIO(IOACPIPlatformDevice*,const char*,size_t,uint32_t&){return kIOReturnUnsupported;}
 };
+namespace cirrus::transport {using NativeSPIHost=::Native;}
 class CirrusAudioFixup : public IOService {
 public:
  static constexpr size_t kMaxAmplifiers=16;
@@ -79,6 +81,31 @@ int main(){
   assert(service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Source"]=="CSDP");
   assert(service.strings["Cirrus_Platform_DSD_Status"]=="COMPLETE");}
  amp.dsdNullResult=false;amp.values.erase("CSDP");entries->v.pop_back();
+ // Speaker-specific board data must survive discovery, with the same asset
+ // gate as generic coefficients. Never assume one speaker for every SSID.
+ auto* speaker=pair("cirrus,speaker-id",{1,1});entries->v.push_back(speaker);requiredSpeaker=1;
+ {CirrusAudioFixup service;service.mPlatformSubsystemId=0x10431c9f;service.discoverPlatformConfiguration(&amp,registration);
+  assert(service.mPlatformAuthorized&&service.mDiscoveredBoard);
+  assert(service.mDiscoveredBoard->configuration.amplifiers[0].speakerId==1);
+  assert(service.mDiscoveredBoard->configuration.amplifiers[1].speakerId==1);}
+ auto* speakerValues=OSDynamicCast(OSArray,speaker->getObject(1));
+ speakerValues->v[1]=make<OSString>("1");
+ {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
+  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_SPEAKER_PROPERTIES_INVALID");}
+ speakerValues->v[1]=make<OSNumber>(2);
+ secondSpeaker=2;
+ {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
+  assert(service.mPlatformAuthorized&&service.mDiscoveredBoard);
+  assert(service.mDiscoveredBoard->configuration.amplifiers[0].speakerId==1);
+  assert(service.mDiscoveredBoard->configuration.amplifiers[1].speakerId==2);}
+ secondSpeaker=UINT32_MAX;
+ {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
+  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_SPEAKER_TUNING_UNAVAILABLE");}
+ entries->v.pop_back();requiredSpeaker=UINT32_MAX;
+ auto* first=entries->v[0];entries->v.erase(entries->v.begin());
+ {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
+  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_PROPERTIES_INCOMPLETE:cirrus,dev-index");}
+ entries->v.insert(entries->v.begin(),first);
  {CirrusAudioFixup service;resourceAvailable=false;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&!service.mDiscoveredBoard);
   assert(service.strings["Cirrus_Platform_Discovery"]=="CS35L41_GENERIC_TUNING_UNAVAILABLE");resourceAvailable=true;}

@@ -19,6 +19,7 @@ public:
     virtual SPIController& controller() = 0;
     virtual IOReturn prepareGPIOGroup(IOACPIPlatformDevice*, const char*) { return kIOReturnUnsupported; }
     virtual IOReturn writeGPIOGroup(bool) { return kIOReturnUnsupported; }
+    virtual IOReturn readGPIO(IOACPIPlatformDevice*, const char*, size_t, uint32_t&) { return kIOReturnUnsupported; }
     virtual void suspend() = 0;
     virtual IOReturn resume(NativeSPIControllerFailure&) = 0;
 };

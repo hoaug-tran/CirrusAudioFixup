@@ -19,6 +19,9 @@ public:
         return mController.prepareGPIOGroup(source, property);
     }
     IOReturn writeGPIOGroup(bool level) override { return mController.writeGPIOGroup(level); }
+    IOReturn readGPIO(IOACPIPlatformDevice* source, const char* property, size_t index, uint32_t& value) override {
+        return mController.readGPIO(source, property, index, value);
+    }
 #endif
     const char* bindFailureReason() const { return mController.bindFailureReason(); }
     uint32_t initialCapabilities() const { return mController.initialCapabilities(); }

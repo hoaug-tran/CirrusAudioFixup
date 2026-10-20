@@ -26,6 +26,9 @@ public:
         return mChipSelects.prepareGPIOGroup(source, property);
     }
     IOReturn writeGPIOGroup(bool level);
+    IOReturn readGPIO(IOACPIPlatformDevice* source, const char* property, size_t index, uint32_t& value) {
+        return mChipSelects.readGPIO(source, property, index, value);
+    }
     IOReturn configureChipSelects(IOACPIPlatformDevice* controller, IOService* owner) {
         traceStage(owner, "CHIP_SELECT_BIND_BEGIN");
         const auto result = mChipSelects.bind(controller, owner, traceStage, gCirrusDebug);

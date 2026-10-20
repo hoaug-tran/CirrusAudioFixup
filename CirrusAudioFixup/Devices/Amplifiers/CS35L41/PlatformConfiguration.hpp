@@ -28,17 +28,57 @@ inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::B
     uint32_t indices[capacity]{}, channels[capacity]{}, boost[capacity]{}, gpio1[capacity]{}, gpio2[capacity]{};
     uint32_t inductor[capacity]{}, peak[capacity]{}, capacitor[capacity]{};
     const auto& properties = context.properties;
-    if (!properties.array("cirrus,dev-index", indices, context.count) ||
-        !properties.array("cirrus,speaker-position", channels, context.count) ||
-        !properties.array("cirrus,boost-type", boost, context.count) || !properties.array("cirrus,gpio1-func", gpio1, context.count) ||
-        !properties.array("cirrus,gpio2-func", gpio2, context.count) ||
-        !properties.array("cirrus,boost-ind-nanohenry", inductor, context.count) ||
-        !properties.array("cirrus,boost-peak-milliamp", peak, context.count) ||
-        !properties.array("cirrus,boost-cap-microfarad", capacitor, context.count))
+    struct RequiredArray {
+        const char* name;
+        uint32_t* values;
+        const char* failure;
+    };
+    const RequiredArray required[] = {
+        {"cirrus,dev-index", indices, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,dev-index"},
+        {"cirrus,speaker-position", channels, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,speaker-position"},
+        {"cirrus,boost-type", boost, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,boost-type"},
+        {"cirrus,gpio1-func", gpio1, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,gpio1-func"},
+        {"cirrus,gpio2-func", gpio2, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,gpio2-func"},
+        {"cirrus,boost-ind-nanohenry", inductor, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,boost-ind-nanohenry"},
+        {"cirrus,boost-peak-milliamp", peak, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,boost-peak-milliamp"},
+        {"cirrus,boost-cap-microfarad", capacitor, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,boost-cap-microfarad"},
+    };
+    for (const auto& field : required)
+        if (!properties.array(field.name, field.values, context.count)) {
+            reason = field.failure;
+            return nullptr;
+        }
+    uint32_t speakers[capacity]{};
+    const bool hasSpeaker = properties.contains("cirrus,speaker-id");
+    const bool hasSpeakerGPIO = properties.contains("speaker-id-gpios");
+    if (hasSpeaker && !properties.array("cirrus,speaker-id", speakers, context.count)) {
+        reason = "CS35L41_SPEAKER_PROPERTIES_INVALID";
         return nullptr;
-    if (!available(context.identity.subsystemVendor, context.identity.subsystemDevice, UINT32_MAX)) {
-        reason = "CS35L41_GENERIC_TUNING_UNAVAILABLE";
-        return nullptr;
+    }
+    for (size_t i = 0; i < context.count; ++i) {
+        if (hasSpeakerGPIO) {
+            // Shared or per-endpoint input references are supplied by firmware
+            // or verified module data; the actual level comes from the host.
+            uint32_t observed = 0;
+            if (!context.gpio || !context.gpio->read("speaker-id-gpios", i, observed)) {
+                reason = "CS35L41_SPEAKER_ID_UNREADABLE";
+                return nullptr;
+            }
+            if (hasSpeaker && speakers[i] != observed) {
+                reason = "CS35L41_SPEAKER_ID_MISMATCH";
+                return nullptr;
+            }
+            speakers[i] = observed;
+        } else if (!hasSpeaker)
+            speakers[i] = UINT32_MAX;
+        if ((hasSpeaker || hasSpeakerGPIO) && speakers[i] > UINT8_MAX) {
+            reason = "CS35L41_SPEAKER_PROPERTIES_INVALID";
+            return nullptr;
+        }
+        if (!available(context.identity.subsystemVendor, context.identity.subsystemDevice, speakers[i])) {
+            reason = hasSpeaker || hasSpeakerGPIO ? "CS35L41_SPEAKER_TUNING_UNAVAILABLE" : "CS35L41_GENERIC_TUNING_UNAVAILABLE";
+            return nullptr;
+        }
     }
     auto* result = new PlatformConfiguration;
     if (!result) {
@@ -101,7 +141,7 @@ inline platform::DiscoveredBoard* resolvePlatformConfiguration(const platform::B
         result->bindings[i] = {resolved,
                                registers::kValDeviceId,
                                channels[index],
-                               UINT32_MAX,
+                               speakers[index],
                                "speaker-protection",
                                result->hid,
                                uint8_t(gpio2[index] == 2 ? 2 : 0),

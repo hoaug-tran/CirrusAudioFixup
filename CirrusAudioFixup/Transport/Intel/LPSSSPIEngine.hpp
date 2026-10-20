@@ -43,6 +43,44 @@ public:
     static constexpr uint32_t kClockEnable = 1U;
     static constexpr uint32_t kClockUpdate = 1U << 31;
 
+    // Serialized by the controller's transaction lock. No diagnostic SSDR
+    // reads: RX bytes are copied only when the transfer consumes them.
+    struct TransactionEvidence {
+        bool valid{false}, externalCS{false}, configured{false};
+        uint64_t sequence{0};
+        uint32_t chipSelect{0}, requestedHz{0}, actualHz{0}, mode{0};
+        size_t length{0}, sent{0}, received{0};
+        uint8_t tx[32]{}, rx[32]{};
+        uint32_t clock{0}, reset{0}, gate{0}, status{0};
+        uint32_t control0{0}, control1{0}, timeout{0}, protocol{0};
+        uint32_t csInactive{0}, csActive{0}, csFinal{0};
+        const char* phase{"PREFLIGHT"};
+        IOReturn result{kIOReturnNotReady};
+        IOReturn primaryResult{kIOReturnNotReady};
+        IOReturn cleanupResult{kIOReturnSuccess};
+        bool cleanupAttempted{false};
+        // NotReady means that cleanup step was not attempted.
+        IOReturn cleanupController{kIOReturnNotReady};
+        IOReturn cleanupNativeCS{kIOReturnNotReady};
+        IOReturn cleanupExternalCS{kIOReturnNotReady};
+        IOReturn cleanupDrain{kIOReturnNotReady};
+    };
+    const TransactionEvidence& lastTransaction() const { return mTransaction; }
+    const TransactionEvidence& firstFailure() const { return mFirstFailure; }
+    // Native LPSS has at most four outputs. Larger logical GPIO indices still
+    // have last/first-failure evidence without an unbounded per-device table.
+    const TransactionEvidence* firstTransaction(uint32_t cs) const {
+        return cs < 4 && mFirstTransactions[cs].valid ? &mFirstTransactions[cs] : nullptr;
+    }
+    // Preserve only exact DEVID/REVID read frames, without issuing extra bus
+    // traffic. Identity validation remains the amplifier driver's responsibility.
+    const TransactionEvidence* firstIdentityTransaction(uint32_t cs, uint32_t address) const {
+        if (cs >= 4 || (address != 0 && address != 4))
+            return nullptr;
+        const auto& evidence = mIdentityTransactions[cs][address / 4];
+        return evidence.valid ? &evidence : nullptr;
+    }
+
     // Caller must hold exclusive ownership of the controller and serialize
     // initialize/exchange/suspend/resume/shutdown, including power transitions.
     explicit LPSSSPIEngine(RegisterWindow& window) : mWindow(window) {}
@@ -170,6 +208,41 @@ public:
     }
 
     IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length, SPIChipSelect* external = nullptr) {
+        mTransaction = {};
+        mTransaction.valid = true;
+        mTransaction.sequence = ++mSequence;
+        mTransaction.chipSelect = endpoint.chipSelect;
+        mTransaction.requestedHz = endpoint.clockHz;
+        mTransaction.mode = endpoint.mode;
+        mTransaction.length = length;
+        mTransaction.externalCS = external != nullptr;
+        // Capture before RX can alias TX, including rejected frames.
+        if (tx && length <= kMaxFrameBytes)
+            for (size_t i = 0; i < length && i < sizeof(mTransaction.tx); ++i)
+                mTransaction.tx[i] = tx[i];
+        const auto result = exchangeImpl(endpoint, tx, rx, length, external);
+        mTransaction.result = result;
+        if (!mTransaction.cleanupAttempted)
+            mTransaction.primaryResult = result;
+        if (endpoint.chipSelect < 4 && !mFirstTransactions[endpoint.chipSelect].valid)
+            mFirstTransactions[endpoint.chipSelect] = mTransaction;
+        bool identity = tx && length == 10 && mTransaction.tx[0] == 0x80 &&
+                        (mTransaction.tx[3] == 0 || mTransaction.tx[3] == 4);
+        for (size_t i = 1; identity && i < 10; ++i)
+            if (i != 3 && mTransaction.tx[i] != 0)
+                identity = false;
+        if (identity && endpoint.chipSelect < 4) {
+            auto& first = mIdentityTransactions[endpoint.chipSelect][mTransaction.tx[3] / 4];
+            if (!first.valid)
+                first = mTransaction;
+        }
+        if (result != kIOReturnSuccess && !mFirstFailure.valid)
+            mFirstFailure = mTransaction;
+        return result;
+    }
+
+private:
+    IOReturn exchangeImpl(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length, SPIChipSelect* external) {
         if (!online())
             return kIOReturnNotReady;
         if (!tx || !length || length > kMaxFrameBytes || !endpoint.clockHz || endpoint.mode > 3 ||
@@ -182,6 +255,7 @@ public:
             return kIOReturnNotReady;
         }
         uint32_t status = mWindow.read32(kStatus);
+        mTransaction.status = status;
         if (status == 0xffffffffU) {
             markOffline();
             return kIOReturnNoDevice;
@@ -192,6 +266,8 @@ public:
         // Account for the firmware-programmed fractional LPSS clock rather
         // than assuming root clock equals the actual SSP input clock.
         uint32_t clock = mWindow.read32(kClock);
+        mTransaction.clock = clock;
+        mTransaction.reset = mWindow.read32(kReset);
         uint32_t numerator = (clock >> 1) & 0x7fff;
         uint32_t denominator = (clock >> 16) & 0x7fff;
         if (!numerator && !denominator)
@@ -205,6 +281,7 @@ public:
             return kIOReturnUnsupported;
         uint64_t actualDenominator = uint64_t(denominator) * divisor;
         mActualClockHz = static_cast<uint32_t>(clockNumerator / actualDenominator);
+        mTransaction.actualHz = mActualClockHz;
         uint64_t bitCount = uint64_t(length) * 8;
         uint64_t wireUs = (bitCount * actualDenominator * 1000000ULL + clockNumerator - 1) / clockNumerator;
         // Bound CPU occupancy and reject a frame that cannot fit the budget.
@@ -220,16 +297,19 @@ public:
 
         mTouched = true;
         uint32_t gate = mWindow.read32(kClockGate);
+        mTransaction.gate = gate;
+        mTransaction.phase = "CONFIGURE";
         if (mProfile.forceClockGate)
             mWindow.write32(kClockGate, (gate & ~3U) | 3U);
         mWindow.write32(kControl0, mWindow.read32(kControl0) & ~kEnabled);
         uint32_t inactive = (mWindow.read32(kChipSelect) & ~mProfile.selectMask) | (external ? 0 : endpoint.chipSelect << 8) | 3U;
         mWindow.write32(kChipSelect, inactive);
+        mTransaction.csInactive = mWindow.read32(kChipSelect);
         // CS selection is latched; wait at least two input clock cycles before
         // assertion, allowing a slow fractional input clock as well.
         uint64_t selectDelay = (2000000ULL * denominator + clockNumerator - 1) / clockNumerator;
         mWindow.delayUs(static_cast<uint32_t>(selectDelay ? selectDelay : 1));
-        const auto drained = drainRx();
+        const auto drained = drainRx(true);
         if (drained != kIOReturnSuccess)
             return finish(drained, inactive, gate, nullptr, drained == kIOReturnNoDevice);
         mWindow.write32(kStatus, kOverrun | kTimeoutStatus | kBitError);
@@ -240,12 +320,29 @@ public:
         mWindow.write32(0x28, 0);
         mWindow.write32(0x2c, 0);
         mWindow.write32(kControl0, cr0 | kEnabled);
+        mTransaction.control0 = mWindow.read32(kControl0);
+        mTransaction.control1 = mWindow.read32(kControl1);
+        mTransaction.timeout = mWindow.read32(0x28);
+        mTransaction.protocol = mWindow.read32(0x2c);
+        mTransaction.configured = true;
+        // A completed MMIO write is not proof the requested frame was accepted.
+        // Refuse to clock bytes with a different word size, mode or divider.
+        if (mTransaction.control0 != (cr0 | kEnabled) || mTransaction.control1 != cr1 ||
+            mTransaction.timeout != 0 || mTransaction.protocol != 0 ||
+            (mTransaction.csInactive & (mProfile.selectMask | 3U)) != (inactive & (mProfile.selectMask | 3U)))
+            return finish(kIOReturnIOError, inactive, gate);
+        mTransaction.phase = "ASSERT_CS";
         if (external) {
             const auto result = external->setActive(true);
             if (result != kIOReturnSuccess)
                 return finish(result, inactive, gate, external);
         } else
             mWindow.write32(kChipSelect, inactive & ~2U);
+        mTransaction.csActive = mWindow.read32(kChipSelect);
+        if ((mTransaction.csActive & (mProfile.selectMask | 3U)) !=
+            ((external ? inactive : inactive & ~2U) & (mProfile.selectMask | 3U)))
+            return finish(kIOReturnIOError, inactive, gate, external);
+        mTransaction.phase = "TRANSFER";
 
         size_t sent = 0, received = 0;
         while (received < length) {
@@ -253,6 +350,7 @@ public:
                 return finish(kIOReturnTimeout, inactive, gate, external);
             size_t previousSent = sent, previousReceived = received;
             status = mWindow.read32(kStatus);
+            mTransaction.status = status;
             if (status == 0xffffffffU)
                 return finish(kIOReturnNoDevice, inactive, gate, external, true);
             if (status & (kOverrun | kBitError))
@@ -263,12 +361,17 @@ public:
                 if (received == sent)
                     return finish(kIOReturnIOError, inactive, gate, external);
                 uint8_t value = static_cast<uint8_t>(mWindow.read32(kData));
+                if (received < sizeof(mTransaction.rx))
+                    mTransaction.rx[received] = value;
                 if (rx)
                     rx[received] = value;
                 ++received;
+                mTransaction.received = received;
             }
-            if (sent < length && sent - received < 8 && (status & kTxReady))
+            if (sent < length && sent - received < 8 && (status & kTxReady)) {
                 mWindow.write32(kData, tx[sent++]);
+                mTransaction.sent = sent;
+            }
             if (mWindow.nowUs() - started >= budgetUs)
                 return finish(kIOReturnTimeout, inactive, gate, external);
             // Short polling waits preserve CS. No sleeping allocator or
@@ -276,10 +379,12 @@ public:
             if (sent == previousSent && received == previousReceived)
                 mWindow.delayUs(1);
         }
+        mTransaction.phase = "WAIT_IDLE";
         do {
             if (!pollsRemaining--)
                 return finish(kIOReturnTimeout, inactive, gate, external);
             status = mWindow.read32(kStatus);
+            mTransaction.status = status;
             if (status == 0xffffffffU)
                 return finish(kIOReturnNoDevice, inactive, gate, external, true);
             if (status & (kOverrun | kBitError))
@@ -327,9 +432,11 @@ private:
         }
         mClockChanged = mResetChanged = false;
     }
-    IOReturn drainRx() {
+    IOReturn drainRx(bool captureStatus = false) {
         for (unsigned i = 0; i < 256; ++i) {
             uint32_t status = mWindow.read32(kStatus);
+            if (captureStatus)
+                mTransaction.status = status;
             if (status == 0xffffffffU)
                 return kIOReturnNoDevice;
             if (!(status & kRxReady))
@@ -340,33 +447,57 @@ private:
     }
 
     IOReturn finish(IOReturn result, uint32_t inactive, uint32_t gate, SPIChipSelect* external = nullptr, bool controllerGone = false) {
+        mTransaction.primaryResult = result;
+        mTransaction.cleanupAttempted = true;
+        const auto recordCleanup = [&](IOReturn step) {
+            if (step != kIOReturnSuccess && mTransaction.cleanupResult == kIOReturnSuccess)
+                mTransaction.cleanupResult = step;
+        };
+        const auto releaseExternal = [&]() {
+            if (external) {
+                mTransaction.cleanupExternalCS = external->setActive(false);
+                recordCleanup(mTransaction.cleanupExternalCS);
+                if (mTransaction.cleanupExternalCS != kIOReturnSuccess)
+                    mOnline = false;
+            }
+        };
         uint32_t control = controllerGone ? 0xffffffffU : mWindow.read32(kControl0);
+        mTransaction.cleanupController = control == 0xffffffffU ? kIOReturnNoDevice : kIOReturnSuccess;
+        recordCleanup(mTransaction.cleanupController);
         if (controllerGone || control == 0xffffffffU) {
             mOnline = false;
-            if (external)
-                (void)external->setActive(false);
-            return kIOReturnNoDevice;
+            releaseExternal();
+            return result == kIOReturnSuccess ? mTransaction.cleanupResult : result;
         }
         // Stop clocks on error before releasing CS. On success BSY was already
         // clear. Force the clock gate on while changing CS, a CNL LPSS quirk.
         mWindow.write32(kControl0, control & ~kEnabled);
         mWindow.write32(kChipSelect, inactive);
-        (void)mWindow.read32(kChipSelect);
-        if (external) {
-            const auto released = external->setActive(false);
-            if (released != kIOReturnSuccess) {
-                mOnline = false;
-                if (result == kIOReturnSuccess)
-                    result = released;
-            }
-        }
-        if (drainRx() == kIOReturnNoDevice) {
+        mTransaction.csFinal = mWindow.read32(kChipSelect);
+        const uint32_t csMask = mProfile.selectMask | 3U;
+        mTransaction.cleanupNativeCS = mTransaction.csFinal == 0xffffffffU ? kIOReturnNoDevice :
+            ((mTransaction.csFinal & csMask) == (inactive & csMask) ? kIOReturnSuccess : kIOReturnIOError);
+        recordCleanup(mTransaction.cleanupNativeCS);
+        if (mTransaction.cleanupNativeCS != kIOReturnSuccess)
             mOnline = false;
-            return result == kIOReturnSuccess ? kIOReturnNoDevice : result;
+        releaseExternal();
+        if (mTransaction.cleanupNativeCS == kIOReturnNoDevice) {
+            // Stop MMIO after the function disappears; still release a separately
+            // owned external CS and retain its independent outcome above.
+            return result == kIOReturnSuccess ? mTransaction.cleanupResult : result;
+        }
+        const auto drained = drainRx();
+        mTransaction.cleanupDrain = drained;
+        recordCleanup(drained);
+        if (drained == kIOReturnNoDevice) {
+            mOnline = false;
+            return result == kIOReturnSuccess ? mTransaction.cleanupResult : result;
         }
         mWindow.write32(kStatus, kOverrun | kTimeoutStatus | kBitError);
         mWindow.write32(kClockGate, gate);
-        return result;
+        // A bounded but unsuccessful drain is not a successful transaction.
+        // Preserve an earlier transfer error instead of hiding it with cleanup.
+        return result == kIOReturnSuccess ? mTransaction.cleanupResult : result;
     }
 
     void quiesce() {
@@ -390,6 +521,9 @@ private:
     uint32_t mSavedClock{0}, mSavedGate{0}, mSavedReset{0};
     uint32_t mPreparedClock{0};
     uint32_t mSavedTimeout{0}, mSavedProtocol{0};
+    uint64_t mSequence{0};
+    TransactionEvidence mTransaction{}, mFirstFailure{}, mFirstTransactions[4]{};
+    TransactionEvidence mIdentityTransactions[4][2]{};
 };
 
 }

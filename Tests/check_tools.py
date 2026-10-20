@@ -7,6 +7,7 @@ import tempfile
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+subprocess.run([sys.executable, str(ROOT / 'Tests/check_tools_provenance.py')], check=True)
 tool = ROOT / "Tools/import_firmware.py"
 with tempfile.TemporaryDirectory(prefix="cirrus-tools-") as directory:
     tmp = Path(directory)

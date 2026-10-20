@@ -319,7 +319,7 @@ void CS35L41Driver::initializeFirmware(AmplifierState& amp, const char* phaseArg
 // length. Missing calibration is reported, never fabricated.
 // Remove old channel properties before a retry so they cannot look current.
 bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* image) {
-    const char* fields[] = {"Status", "R0", "Ambient", "Valid", "Checksum"};
+    const char* fields[] = {"Status", "R0", "Ambient", "Valid", "Checksum", "Selection"};
     for (const char* field : fields) {
         char property[80];
         snprintf(property, sizeof(property), "Cirrus_Calibration_%s_%s", field, amp.name);
@@ -404,6 +404,8 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
                 if (count <= (len - sizeof(cs35l41_amp_efi_data)) / sizeof(cs35l41_amp_cal_data)) {
                     invalidData = false;
                     const cs35l41_amp_cal_data* selected = nullptr;
+                    uint32_t selectedIndex = UINT32_MAX;
+                    const char* selectionReason = "NO_MATCHING_EFI_RECORD";
                     auto targetOf = [](const cs35l41_amp_cal_data& entry) -> uint64_t {
                         return ((uint64_t)OSSwapLittleToHostInt32(entry.calTarget[1]) << 32) | OSSwapLittleToHostInt32(entry.calTarget[0]);
                     };
@@ -428,6 +430,8 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
                                 const auto& entry = efiData->data[i];
                                 if ((entry.calTime[0] || entry.calTime[1]) && targetOf(entry) == siliconUid) {
                                     selected = &entry;
+                                    selectedIndex = i;
+                                    selectionReason = "EXACT_SILICON_UID";
                                     break;
                                 }
                             }
@@ -439,8 +443,21 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
                     // fallback only when the entry or silicon UID is zero.
                     if (!uidReadFailed && !selected && ampIdx < count) {
                         const auto& entry = efiData->data[ampIdx];
-                        if ((entry.calTime[0] || entry.calTime[1]) && (!targetOf(entry) || !siliconUid))
+                        if ((entry.calTime[0] || entry.calTime[1]) && (!targetOf(entry) || !siliconUid)) {
                             selected = &entry;
+                            selectedIndex = ampIdx;
+                            selectionReason = "INDEX_FALLBACK_ZERO_UID_OR_TARGET";
+                        }
+                    }
+                    char selection[256]{}, selectionKey[80]{};
+                    snprintf(selection, sizeof(selection), "reason=%s records=%u index=%u uid=0x%016llx target=0x%016llx uid_read_required=%u",
+                             uidReadFailed ? "UID_READ_FAILED" : selectionReason, count, selectedIndex,
+                             static_cast<unsigned long long>(siliconUid),
+                             static_cast<unsigned long long>(selected ? targetOf(*selected) : 0), unsigned(hasTarget));
+                    snprintf(selectionKey, sizeof(selectionKey), "Cirrus_Calibration_Selection_%s", amp.name);
+                    if (auto* value = OSString::withCString(selection)) {
+                        setProperty(selectionKey, value);
+                        value->release();
                     }
                     if (selected) {
                         ambientVal = selected->calAmbient;
@@ -2072,8 +2089,6 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
 
     snprintf(propFW, sizeof(propFW), "Cirrus_FW_Size_%s", amp.name);
     setProperty(propFW, (uint64_t)foundRes->wmfwSize, 32);
-    snprintf(propFW, sizeof(propFW), "Cirrus_BIN_Size_%s", amp.name);
-    setProperty(propFW, (uint64_t)foundRes->binSize, 32);
 
     bool isRight = amp.channel == cirrus::core::AudioChannel::Right;
     size_t chanBinSize = 0;
@@ -2083,6 +2098,10 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
         setProperty(propStatus, "INVALID_CHANNEL_TUNING");
         return;
     }
+    snprintf(propFW, sizeof(propFW), "Cirrus_BIN_Size_%s", amp.name);
+    setProperty(propFW, (uint64_t)chanBinSize, 32);
+    snprintf(propFW, sizeof(propFW), "Cirrus_BIN_Channel_%s", amp.name);
+    setProperty(propFW, isRight ? "RIGHT" : "LEFT");
 
     const uint8_t* tuningData = isRight ? foundRes->tuningRight : foundRes->tuningLeft;
     const size_t tuningSize = isRight ? foundRes->tuningRightSize : foundRes->tuningLeftSize;
@@ -2422,6 +2441,12 @@ bool CS35L41Driver::bringUpDSP(AmplifierState& amp) {
         setProperty(propName, (uint64_t)pmVioSts, 32);
         snprintf(propName, sizeof(propName), "Cirrus_DSP_SCRATCH1_%s", amp.name);
         setProperty(propName, (uint64_t)scratch[0], 32);
+        const uint32_t addresses[]{xmVioAddr, ymVioAddr, pmVioAddr, scratch[1], scratch[2], scratch[3]};
+        const char* fields[]{"MPU_XM_ADDR", "MPU_YM_ADDR", "MPU_PM_ADDR", "SCRATCH2", "SCRATCH3", "SCRATCH4"};
+        for (unsigned i = 0; i < sizeof(addresses) / sizeof(addresses[0]); ++i) {
+            snprintf(propName, sizeof(propName), "Cirrus_DSP_%s_%s", fields[i], amp.name);
+            setProperty(propName, uint64_t(addresses[i]), 32);
+        }
     }
 
     if (!hbReadable || haloState != HALO_STATE_CODE_RUN)

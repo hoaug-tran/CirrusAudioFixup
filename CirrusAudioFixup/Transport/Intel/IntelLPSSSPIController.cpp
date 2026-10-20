@@ -6,6 +6,7 @@
 #include <mach/mach_time.h>
 #if defined(KERNEL)
 #include "Support/Logging.hpp"
+#include "Support/SPIPowerClient.hpp"
 #endif
 
 namespace cirrus::transport::intel {
@@ -131,11 +132,94 @@ bool IntelLPSSSPIController::pciIsD0() const {
     return !offset || (offset <= 0xf8 && (mPCI->configRead16(static_cast<uint8_t>(offset + 4)) & 3U) == 0);
 }
 
+void IntelLPSSSPIController::publishPowerSnapshot(const char* phase, unsigned attempt, IOReturn result, uint64_t startedNs) {
+#if defined(KERNEL)
+    if (!gCirrusDebug || !mOwner || !mPCI)
+        return;
+    uint64_t nowNs = 0;
+    absolutetime_to_nanoseconds(mach_absolute_time(), &nowNs);
+    char key[112]{};
+    const auto number = [&](const char* field, uint64_t value) {
+        snprintf(key, sizeof(key), "Cirrus_SPI_Power_%s_%s", phase, field);
+        mOwner->setProperty(key, value, 64);
+    };
+    const auto string = [&](const char* field, const char* value) {
+        snprintf(key, sizeof(key), "Cirrus_SPI_Power_%s_%s", phase, field);
+        mOwner->setProperty(key, value);
+    };
+    number("Attempt", attempt);
+    number("Elapsed_US", nowNs >= startedNs ? (nowNs - startedNs) / 1000 : 0);
+    number("Return", uint32_t(result));
+    number("PCI_Identity", (uint32_t(mPCI->configRead16(0)) << 16) | mPCI->configRead16(2));
+    number("PCI_Command", mPCI->configRead16(kIOPCIConfigCommand));
+    number("BAR0", mPCI->configRead32(kIOPCIConfigBaseAddress0));
+    number("BAR1", mPCI->configRead32(kIOPCIConfigBaseAddress0 + 4));
+    uint8_t pmOffset = 0;
+    (void)mPCI->findPCICapability(kIOPCIPowerManagementCapability, &pmOffset);
+    number("PM_Offset", pmOffset);
+    if (pmOffset && pmOffset <= 0xf8)
+        number("PMCSR", mPCI->configRead16(uint8_t(pmOffset + 4)));
+    number("Parent_Capability", mPCI->currentCapability());
+    number("Client_Capability", mPowerClient ? mPowerClient->currentCapability() : 0);
+    number("Parent_Power_State", mPCI->getPowerState());
+    number("Client_Power_State", mPowerClient ? mPowerClient->getPowerState() : 0);
+    // The PM tree connection, not the IOService attachment, establishes the
+    // domain grant. Snapshot both sides before teardown removes the client.
+    auto* connection = mPowerClient ? mPowerClient->getParentEntry(gIOPowerPlane) : nullptr;
+    auto* powerParent = connection ? connection->getParentEntry(gIOPowerPlane) : nullptr;
+    number("Client_In_Power_Plane", connection != nullptr);
+    number("Power_Parent_Is_PCI", powerParent == mPCI);
+    if (powerParent)
+        string("Power_Parent_Name", powerParent->getName());
+    char path[256]{};
+    int length = sizeof(path);
+    if (mPCI->getPath(path, &length, gIOServicePlane))
+        string("PCI_Path", path);
+    if (auto* state = mPCI->getProperty("IOPowerManagement")) {
+        snprintf(key, sizeof(key), "Cirrus_SPI_Power_%s_Parent_State", phase);
+        mOwner->setProperty(key, state);
+    }
+    if (mPowerClient)
+        if (auto* state = mPowerClient->getProperty("IOPowerManagement")) {
+            snprintf(key, sizeof(key), "Cirrus_SPI_Power_%s_Client_State", phase);
+            mOwner->setProperty(key, state);
+        }
+    if (mPowerClient) {
+        const auto callbacks = static_cast<CirrusSPIPowerClient*>(mPowerClient)->snapshot();
+        number("Callback_Parent_ID", callbacks.parentId);
+        number("Callback_Cancelled", callbacks.cancelled);
+        string("PM_Gate_Context", "UNAVAILABLE_PUBLIC_LP64_API");
+        const char* names[]{"Initialized", "Registered", "Joined", "Vote", "SetState", "Completed"};
+        for (unsigned i = 0; i < 6; ++i) {
+            const auto& e = i < 4 ? callbacks.milestones[i] : i == 4 ? callbacks.setState : callbacks.completed;
+            char field[64]{}, value[256]{};
+            snprintf(field, sizeof(field), "Callback_%s", names[i]);
+            snprintf(value, sizeof(value), "count=%u uptime_us=%llu thread=%llu ordinal=%llu device=%llu ret=0x%08x",
+                     e.count, static_cast<unsigned long long>(e.uptimeUs), static_cast<unsigned long long>(e.threadId),
+                     static_cast<unsigned long long>(e.ordinal), static_cast<unsigned long long>(e.deviceId), uint32_t(e.result));
+            string(field, value);
+        }
+    }
+#else
+    (void)phase;
+    (void)attempt;
+    (void)result;
+    (void)startedNs;
+#endif
+}
+
 IOReturn IntelLPSSSPIController::acquirePower() {
+    uint64_t startedNs = 0;
+    absolutetime_to_nanoseconds(mach_absolute_time(), &startedNs);
+    publishPowerSnapshot("Before", 0, kIOReturnSuccess, startedNs);
     traceStage(mOwner, "POWER_REQUEST_BEGIN");
     if (!mPowerClient) {
         traceStage(mOwner, "POWER_CLIENT_ALLOC_BEGIN");
+#if defined(KERNEL)
+        mPowerClient = new CirrusSPIPowerClient;
+#else
         mPowerClient = new IOService;
+#endif
         traceStage(mOwner, "POWER_CLIENT_ALLOC_END", mPowerClient ? kIOReturnSuccess : kIOReturnNoMemory);
         if (!mPowerClient)
             return kIOReturnNoMemory;
@@ -154,6 +238,10 @@ IOReturn IntelLPSSSPIController::acquirePower() {
         }
         traceStage(mOwner, "POWER_CLIENT_INIT_BEGIN");
         mPowerClient->PMinit();
+#if defined(KERNEL)
+        static_cast<CirrusSPIPowerClient*>(mPowerClient)->identifyParent(mPCI);
+        static_cast<CirrusSPIPowerClient*>(mPowerClient)->recordMilestone(CirrusSPIPowerClient::Milestone::Initialized);
+#endif
         traceStage(mOwner, "POWER_CLIENT_INIT_END");
         mPowerStates[0].version = 1;
         mPowerStates[1].version = 1;
@@ -161,30 +249,55 @@ IOReturn IntelLPSSSPIController::acquirePower() {
         mPowerStates[1].inputPowerRequirement = kIOPMPowerOn;
         traceStage(mOwner, "POWER_CLIENT_REGISTER_BEGIN");
         auto result = mPowerClient->registerPowerDriver(mPowerClient, mPowerStates, 2);
+#if defined(KERNEL)
+        static_cast<CirrusSPIPowerClient*>(mPowerClient)->recordMilestone(CirrusSPIPowerClient::Milestone::Registered, result);
+#endif
         traceStage(mOwner, "POWER_CLIENT_REGISTER_END", result);
         if (result != kIOReturnSuccess)
             return result;
         traceStage(mOwner, "POWER_CLIENT_JOIN_BEGIN");
         mPCI->joinPMtree(mPowerClient);
+#if defined(KERNEL)
+        static_cast<CirrusSPIPowerClient*>(mPowerClient)->recordMilestone(CirrusSPIPowerClient::Milestone::Joined);
+#endif
         traceStage(mOwner, "POWER_CLIENT_JOIN_END");
     }
     const auto result = mPowerClient->changePowerStateTo(1);
+#if defined(KERNEL)
+    static_cast<CirrusSPIPowerClient*>(mPowerClient)->recordMilestone(CirrusSPIPowerClient::Milestone::Vote, result, 1);
+#endif
     traceStage(mOwner, "POWER_REQUEST_END", result);
+    publishPowerSnapshot("Requested", 0, result, startedNs);
     if (result != kIOReturnSuccess)
         return result;
     // The request is asynchronous. Poll configuration space only, with a
     // completed-iteration bound independent of the monotonic clock. Never
     // evaluate firmware or wait on PM while holding the SPI transaction lock.
     for (unsigned attempt = 0; attempt < 50; ++attempt) {
-        const bool domainReady = (mPowerClient->currentCapability() & kIOPMDeviceUsable) != 0;
+        const auto capability = mPowerClient->currentCapability();
+        const bool domainReady = (capability & kIOPMDeviceUsable) != 0;
+#if defined(KERNEL)
+        // Retain the last wait sample even when acquisition fails and the
+        // temporary PM client is destroyed. Success-only evidence hid whether
+        // a domain grant or a physical PCI transition timed out on issue #5.
+        if (gCirrusDebug && mOwner && (attempt == 0 || attempt == 49 || domainReady)) {
+            mOwner->setProperty("Cirrus_SPI_Power_Wait_Attempts", uint64_t(attempt + 1), 32);
+            mOwner->setProperty("Cirrus_SPI_Power_Client_Capability", uint64_t(capability), 32);
+            mOwner->setProperty("Cirrus_SPI_Power_Parent_Capability", uint64_t(mPCI->currentCapability()), 32);
+            uint8_t pmOffset = 0;
+            (void)mPCI->findPCICapability(kIOPCIPowerManagementCapability, &pmOffset);
+            if (pmOffset && pmOffset <= 0xf8)
+                mOwner->setProperty("Cirrus_SPI_Power_Wait_PMCSR", uint64_t(mPCI->configRead16(uint8_t(pmOffset + 4))), 32);
+            mOwner->setProperty("Cirrus_SPI_Power_Wait_Reason", domainReady ? "WAITING_PCI_D0" : "WAITING_DOMAIN_GRANT");
+        }
+#endif
         if (domainReady && pciIsD0()) {
 #if defined(KERNEL)
-            if (gCirrusDebug) {
-                mOwner->setProperty("Cirrus_SPI_Power_Wait_Attempts", uint64_t(attempt + 1), 32);
-                mOwner->setProperty("Cirrus_SPI_Power_Client_Capability", uint64_t(mPowerClient->currentCapability()), 32);
-            }
+            if (gCirrusDebug && mOwner)
+                mOwner->setProperty("Cirrus_SPI_Power_Wait_Reason", "READY");
 #endif
             traceStage(mOwner, "POWER_D0_READY");
+            publishPowerSnapshot("Ready", attempt + 1, kIOReturnSuccess, startedNs);
             return kIOReturnSuccess;
         }
         // Firmware can leave PMCSR in D3hot while IOPCIFamily already reports
@@ -203,6 +316,7 @@ IOReturn IntelLPSSSPIController::acquirePower() {
                     // advertises No_Soft_Reset. Do not reuse cached BAR resources
                     // on such hardware without a PCI-family restore contract.
                     if ((before & 3U) == 3U && !(before & 8U)) {
+                        publishPowerSnapshot("Rejected", attempt + 1, kIOReturnNotReady, startedNs);
                         traceStage(mOwner, "PCI_D0_CONFIG_RESTORE_REQUIRED", kIOReturnNotReady);
                         return kIOReturnNotReady;
                     }
@@ -211,6 +325,7 @@ IOReturn IntelLPSSSPIController::acquirePower() {
                         mOwner->setProperty("Cirrus_Intel_SPI_PMCSR_Before_D0", uint64_t(before), 32);
 #endif
                     traceStage(mOwner, "PCI_D0_TRANSITION_BEGIN");
+                    publishPowerSnapshot("Transition_Before", attempt + 1, kIOReturnSuccess, startedNs);
                     mPCI->configWrite16(pmcsrOffset, before & uint16_t(~0x8003U));
                     // D3hot -> D0 requires recovery before BAR/MMIO access.
                     IOSleep(10);
@@ -219,6 +334,7 @@ IOReturn IntelLPSSSPIController::acquirePower() {
                         mOwner->setProperty("Cirrus_Intel_SPI_PMCSR_After_D0", uint64_t(mPCI->configRead16(pmcsrOffset)), 32);
 #endif
                     traceStage(mOwner, "PCI_D0_TRANSITION_END", pciIsD0() ? kIOReturnSuccess : kIOReturnNotReady);
+                    publishPowerSnapshot("Transition_After", attempt + 1, pciIsD0() ? kIOReturnSuccess : kIOReturnNotReady, startedNs);
                     // One hardware request per acquisition, not 50 writes to
                     // a device that refuses the transition.
                     if (!pciIsD0())
@@ -228,7 +344,28 @@ IOReturn IntelLPSSSPIController::acquirePower() {
         }
         IOSleep(10);
     }
-    traceStage(mOwner, "POWER_D0_TIMEOUT", kIOReturnTimeout);
+    const bool grantMissing = (mPowerClient->currentCapability() & kIOPMDeviceUsable) == 0;
+#if defined(KERNEL)
+    if (gCirrusDebug && mOwner) {
+        const auto callbacks = static_cast<CirrusSPIPowerClient*>(mPowerClient)->snapshot();
+        const char* blocker = "PCI_DSTATE_NOT_D0";
+        if (mPCI->configRead16(0) != 0x8086 || mPCI->configRead16(2) != mDeviceId)
+            blocker = "PCI_IDENTITY_UNAVAILABLE_OR_CHANGED";
+        else if (grantMissing) {
+            if (!mPowerClient->getParentEntry(gIOPowerPlane))
+                blocker = "PM_CLIENT_NOT_JOINED_BEFORE_DEADLINE";
+            else if (!callbacks.setState.count)
+                blocker = "PM_CLIENT_CALLBACK_NOT_DELIVERED";
+            else if (!callbacks.completed.count)
+                blocker = "PM_CLIENT_TRANSITION_NOT_COMPLETED";
+            else
+                blocker = "PM_CLIENT_STATE_NOT_USABLE";
+        }
+        mOwner->setProperty("Cirrus_SPI_Power_Blocker", blocker);
+    }
+#endif
+    traceStage(mOwner, grantMissing ? "POWER_DOMAIN_GRANT_TIMEOUT" : "POWER_PCI_D0_TIMEOUT", kIOReturnTimeout);
+    publishPowerSnapshot("Timeout", 50, kIOReturnTimeout, startedNs);
     return kIOReturnTimeout;
 }
 
@@ -236,7 +373,11 @@ void IntelLPSSSPIController::releasePower() {
     if (!mPowerClient)
         return;
     traceStage(mOwner, "POWER_RELEASE_BEGIN");
+#if defined(KERNEL)
+    static_cast<CirrusSPIPowerClient*>(mPowerClient)->cancelAndStop(true);
+#else
     mPowerClient->PMstop();
+#endif
     mPowerClient->detach(mPCI);
     mPowerClient->release();
     mPowerClient = nullptr;
@@ -374,6 +515,42 @@ IOReturn IntelLPSSSPIController::writeGPIOGroup(bool level) {
 }
 #endif
 
+void IntelLPSSSPIController::publishTransactionEvidence(const char* prefix, const LPSSSPIEngine::TransactionEvidence& e) {
+#if defined(KERNEL)
+    if (!gCirrusDebug || !mOwner || !e.valid)
+        return;
+    char key[128]{}, value[512]{};
+    const auto publish = [&](const char* field, const char* data) {
+        snprintf(key, sizeof(key), "%s_%s", prefix, field);
+        mOwner->setProperty(key, data);
+    };
+    publish("Phase", e.phase);
+    snprintf(value, sizeof(value), "seq=%llu cs=%u external=%u mode=%u requested_hz=%u calculated_hz=%u bytes=%llu sent=%llu received=%llu configured=%u ret=0x%08x cleanup=0x%08x",
+             static_cast<unsigned long long>(e.sequence), e.chipSelect, unsigned(e.externalCS), e.mode, e.requestedHz, e.actualHz,
+             static_cast<unsigned long long>(e.length), static_cast<unsigned long long>(e.sent), static_cast<unsigned long long>(e.received),
+             unsigned(e.configured), uint32_t(e.result), uint32_t(e.cleanupResult));
+    publish("Transfer", value);
+    snprintf(value, sizeof(value), "attempted=%u primary=0x%08x controller=0x%08x native_cs=0x%08x external_cs=0x%08x drain=0x%08x cleanup=0x%08x",
+             unsigned(e.cleanupAttempted), uint32_t(e.primaryResult), uint32_t(e.cleanupController), uint32_t(e.cleanupNativeCS),
+             uint32_t(e.cleanupExternalCS), uint32_t(e.cleanupDrain), uint32_t(e.cleanupResult));
+    publish("Cleanup", value);
+    snprintf(value, sizeof(value), "clock=0x%08x reset=0x%08x gate=0x%08x status=0x%08x cr0=0x%08x cr1=0x%08x timeout=0x%08x protocol=0x%08x cs_inactive=0x%08x cs_active=0x%08x cs_final=0x%08x",
+             e.clock, e.reset, e.gate, e.status, e.control0, e.control1, e.timeout, e.protocol, e.csInactive, e.csActive, e.csFinal);
+    publish("Registers", value);
+    char bytes[65]{};
+    for (size_t i = 0; i < e.length && i < sizeof(e.tx); ++i)
+        snprintf(bytes + i * 2, 3, "%02x", e.tx[i]);
+    publish("TX", bytes);
+    bytes[0] = 0;
+    for (size_t i = 0; i < e.received && i < sizeof(e.rx); ++i)
+        snprintf(bytes + i * 2, 3, "%02x", e.rx[i]);
+    publish("RX", bytes);
+#else
+    (void)prefix;
+    (void)e;
+#endif
+}
+
 IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
     if (!mLock)
         return kIOReturnNotReady;
@@ -409,16 +586,62 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
                    static_cast<unsigned long long>(mOwner ? mOwner->getRegistryEntryID() : 0));
 #endif
     IOReturn result = kIOReturnNotReady;
+#if defined(KERNEL)
+    LPSSSPIEngine::TransactionEvidence transaction{}, firstFailure{}, firstCS{};
+    bool engineAttempted = false;
+#endif
     if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {
 #if defined(KERNEL)
         result = mChipSelects.validateOutputs();
-        if (result == kIOReturnSuccess)
+        if (result == kIOReturnSuccess) {
+            engineAttempted = true;
             result = mEngine.exchange(endpoint, tx, rx, length, mChipSelects.select(endpoint.chipSelect));
+        }
 #else
         result = mEngine.exchange(endpoint, tx, rx, length);
 #endif
     }
+#if defined(KERNEL)
+    // Copy while serialized; publish properties only after dropping the SPI
+    // lock. No extra FIFO reads or bus transactions are made for diagnostics.
+    if (gCirrusDebug && engineAttempted) {
+        transaction = mEngine.lastTransaction();
+        firstFailure = mEngine.firstFailure();
+        if (const auto* first = mEngine.firstTransaction(endpoint.chipSelect))
+            firstCS = *first;
+    }
+#endif
     IOLockUnlock(mLock);
+#if defined(KERNEL)
+    if (gCirrusDebug && mOwner) {
+        if (trace || result != kIOReturnSuccess) {
+            mOwner->setProperty("Cirrus_SPI_Transaction_Invoked", engineAttempted ? kOSBooleanTrue : kOSBooleanFalse);
+            if (!engineAttempted) {
+                const char* fields[]{"Phase", "Transfer", "Cleanup", "Registers", "TX", "RX"};
+                for (const char* field : fields) {
+                    char key[112]{};
+                    snprintf(key, sizeof(key), "Cirrus_SPI_Transaction_Last_%s", field);
+                    mOwner->removeProperty(key);
+                }
+            }
+            publishTransactionEvidence("Cirrus_SPI_Transaction_Last", transaction);
+            publishTransactionEvidence("Cirrus_SPI_Transaction_FirstFailure", firstFailure);
+            char prefix[96]{};
+            snprintf(prefix, sizeof(prefix), "Cirrus_SPI_CS_%u_FirstFrame", endpoint.chipSelect);
+            publishTransactionEvidence(prefix, firstCS);
+        }
+        // Keep one exact identity frame per endpoint/rate, even if a successful
+        // all-zero response is not a transport error. Repeats cannot erase it.
+        if (transaction.valid && tx && length == 10 && tx[0] == 0x80 && !tx[1] && !tx[2] &&
+            (tx[3] == 0 || tx[3] == 4) && !tx[4] && !tx[5]) {
+            char prefix[96]{}, key[112]{};
+            snprintf(prefix, sizeof(prefix), "Cirrus_SPI_CS_%u_Hz_%u_ID_%u", endpoint.chipSelect, endpoint.clockHz, unsigned(tx[3]));
+            snprintf(key, sizeof(key), "%s_Phase", prefix);
+            if (!mOwner->getProperty(key))
+                publishTransactionEvidence(prefix, transaction);
+        }
+    }
+#endif
     if (trace || result != kIOReturnSuccess) {
         mWindow.publish();
 #if defined(KERNEL)

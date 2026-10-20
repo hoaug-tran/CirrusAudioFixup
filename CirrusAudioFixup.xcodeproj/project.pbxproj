@@ -5,6 +5,14 @@
 	};
 	objectVersion = 56;
 	objects = {
+        A5C200000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "SPIPowerClient.hpp"; sourceTree = "<group>";};
+        A5C200000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "SPIPowerClient.cpp"; sourceTree = "<group>";};
+        A5C200000000000000000003 = {isa = PBXBuildFile; fileRef = A5C200000000000000000002;};
+        A5C200000000000000000004 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "build_provenance.py"; sourceTree = "<group>";};
+        A5C200000000000000000005 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "compare_macos_evidence.py"; sourceTree = "<group>";};
+        A5C200000000000000000006 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_boot_evidence.py"; sourceTree = "<group>";};
+        A5C200000000000000000007 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_power_client.py"; sourceTree = "<group>";};
+        A5C200000000000000000008 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_tools_provenance.py"; sourceTree = "<group>";};
         A5C100000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIBoardMetadata.hpp"; sourceTree = "<group>";};
         A5C100000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "BoardMetadata.hpp"; sourceTree = "<group>";};
         A5C100000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "IntelGPIOInput.hpp"; sourceTree = "<group>";};
@@ -412,6 +420,8 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			isa = PBXGroup;
 			children = (
                 A5C100000000000000000004,
+                A5C200000000000000000001,
+                A5C200000000000000000002,
                 5563407EB45C332E7AEB7810,
 				AC9100000000000000000001,
 				3E01BEE9F84F8DCFE4727EA6,
@@ -626,6 +636,8 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 		624913F8493D4E5ADB66ADDF = {
 			isa = PBXGroup;
 			children = (
+                A5C200000000000000000004,
+                A5C200000000000000000005,
 				C34DA2739E751FF478D0C496,
 				D280781DBF4E1C36DE072A97,
 				14C4A873D059DA3A76D05BB7,
@@ -738,6 +750,9 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			isa = PBXGroup;
 			children = (
                 A5C100000000000000000007,
+                A5C200000000000000000006,
+                A5C200000000000000000007,
+                A5C200000000000000000008,
                 1BF3A8D39570B9D4030EDF80,
                 6A12FEBC78457916CD62CEDB,
                 B2584EBEAE4CA972F9FBCB04,
@@ -1048,6 +1063,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			buildActionMask = 2147483647;
 			files = (
                 ABCD61000000000000000002,
+                A5C200000000000000000003,
                 8A9A66A1329F44D390D8B6B8,
 				CAFE00000011 ,
 				CAFE00000012 ,

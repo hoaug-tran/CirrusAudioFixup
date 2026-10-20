@@ -90,6 +90,8 @@ private:
 
     bool pciIsD0() const;
     IOReturn acquirePower();
+    void publishPowerSnapshot(const char* phase, unsigned attempt, IOReturn result, uint64_t startedNs);
+    void publishTransactionEvidence(const char* prefix, const LPSSSPIEngine::TransactionEvidence& evidence);
     void releasePower();
     static void traceStage(IOService* owner, const char* stage, IOReturn result = kIOReturnSuccess);
     uint16_t mDeviceId{0};

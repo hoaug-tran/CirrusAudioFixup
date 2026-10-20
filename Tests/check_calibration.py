@@ -148,10 +148,14 @@ int main() {
     reordered.memory[0x17044]=0x99AABBCC; reordered.memory[0x17040]=0xDDEEFF00;
     check(reordered.applyCalibration(amp,&image) && reordered.memory[4]==5933,
           "silicon UID takes precedence over channel index");
+    check(reordered.properties["Cirrus_Calibration_Selection_L"].find("reason=EXACT_SILICON_UID records=2 index=1")!=std::string::npos,
+          "selection evidence retains UID priority and selected record index");
     CirrusAudioFixup mismatched;
     mismatched.memory[0x17044]=0x12345678; mismatched.memory[0x17040]=1;
     check(mismatched.applyCalibration(amp,&image) && mismatched.writes==0,
           "unmatched nonzero target is never applied to another speaker");
+    check(mismatched.properties["Cirrus_Calibration_Selection_L"].find("NO_MATCHING_EFI_RECORD")!=std::string::npos,
+          "missing calibration is distinguished from a mismatched target");
     CirrusAudioFixup zeroUid;
     check(zeroUid.applyCalibration(amp,&image) && zeroUid.memory[4]==5846,
           "zero silicon UID permits Linux index fallback");
@@ -265,6 +269,7 @@ int main() {
         }
         if(mode<8) check(d.properties["Cirrus_Calibration_Status_L"]==expectedStatuses[mode],"repeat status describes current attempt");
         else check(!d.properties.count("Cirrus_Calibration_Status_L"),"null image cannot retain successful status");
+        if(mode==8) check(!d.properties.count("Cirrus_Calibration_Selection_L"),"null image clears old UID selection evidence");
         d.skip=false; d.failWrite=d.failRead=d.corruptRead=0;
         args.clear(); IORegistryEntry::data=&data; WMFWParser::missing=false;
         check(d.applyCalibration(amp,&image) && d.numbers.size()==8,"successful retry republishes current evidence");

@@ -38,10 +38,12 @@ constexpr unsigned kIOPMPowerOn=2,kIOPMDeviceUsable=0x8000;
 struct IOPMPowerState {unsigned version=0,capabilityFlags=0,outputPowerCharacter=0,inputPowerRequirement=0;};
 inline unsigned pmClients=0,pmStops=0;
 inline bool rejectPM=false,denyDomain=false,rejectVote=false;
+inline unsigned domainDelayMs=0;
 class IOService {
 public:
     IOService* powerProvider=nullptr;
     unsigned capability=0;
+    uint64_t grantAt=0;bool grantPending=false;
     void (*powerRequest)(IOService*,unsigned)=nullptr;
     bool init(){return true;}
     bool attach(IOService* p){powerProvider=p;++pmClients;return true;}
@@ -51,8 +53,8 @@ public:
     void PMstop(){assert(!lockStorage.held);++pmStops;}
     IOReturn registerPowerDriver(IOService*,IOPMPowerState*,unsigned){return rejectPM?kIOReturnNotReady:0;}
     void joinPMtree(IOService* c){assert(c->powerProvider==this);}
-    unsigned currentCapability(){return capability;}
-    IOReturn changePowerStateTo(unsigned s){assert(!lockStorage.held);if(rejectVote)return kIOReturnIOError;capability=s&&!denyDomain?kIOPMDeviceUsable:0;if(powerProvider&&powerProvider->powerRequest)powerProvider->powerRequest(powerProvider,s);return 0;}
+    unsigned currentCapability(){if(grantPending&&fakeNs>=grantAt){capability=kIOPMDeviceUsable;grantPending=false;}return capability;}
+    IOReturn changePowerStateTo(unsigned s){assert(!lockStorage.held);if(rejectVote)return kIOReturnIOError;capability=s&&!denyDomain&&!domainDelayMs?kIOPMDeviceUsable:0;grantPending=s&&!denyDomain&&domainDelayMs;grantAt=fakeNs+uint64_t(domainDelayMs)*1000000;if(powerProvider&&powerProvider->powerRequest)powerProvider->powerRequest(powerProvider,s);return 0;}
 };
 struct IOMemoryMap {
     uint32_t regs[0x300/4]{};unsigned releases=0;bool shortMap=false;
@@ -163,6 +165,17 @@ int main(){
      bus.suspend();cold.state=0xb;assert(bus.resume()==0&&cold.state==8);
      bus.shutdown();}
     assert(cold.refs==1&&!cold.opened&&!cold.memory);
+    // Queued PM success does not imply an immediate domain grant. A delayed
+    // grant can release D3hot, but a grant beyond the bound must not write PCI.
+    for(unsigned delay:{100U,600U}){
+        domainDelayMs=delay;IOPCIDevice delayed;delayed.state=0xb;delayed.wakeAllowed=true;
+        IntelLPSSSPIController bus;auto result=bus.bind(&delayed,&owner);
+        assert(result==(delay<500?kIOReturnSuccess:kIOReturnTimeout));
+        assert(delayed.writes==(delay<500?1U:0U));
+        if(delay>=500)assert(delayed.map.releases==0&&!delayed.memory);
+        bus.shutdown();assert(delayed.refs==1&&!delayed.opened);
+    }
+    domainDelayMs=0;
     IOPCIDevice resetRequired;resetRequired.state=3;resetRequired.wakeAllowed=true;
     {IntelLPSSSPIController bus;assert(bus.bind(&resetRequired,&owner)==kIOReturnNotReady);}
     assert(resetRequired.writes==0&&resetRequired.map.releases==0);

@@ -41,6 +41,7 @@ assert compiled == {ROOT / 'CirrusAudioFixup/CirrusAudioFixup.cpp',
                     ROOT / 'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41Driver.cpp',
                     ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEventSource.cpp',
                     ROOT / 'CirrusAudioFixup/Transport/Intel/IntelLPSSSPIController.cpp',
+                    ROOT / 'CirrusAudioFixup/Support/SPIPowerClient.cpp',
                     ROOT / 'CirrusAudioFixup/Transport/AMD/AMDSPIController.cpp'}
 gates = [objects[i] for i in target['buildPhases']
          if objects[i]['isa'] == 'PBXShellScriptBuildPhase']

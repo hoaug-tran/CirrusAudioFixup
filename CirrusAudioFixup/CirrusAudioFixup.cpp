@@ -61,6 +61,29 @@ OSDefineMetaClassAndStructors(CirrusAudioFixup, IOService)
         }
         event->release();
     }
+    void publishBootCheckpoint(IOService* service, const char* stage, IOReturn result = kIOReturnSuccess) {
+        if (!gCirrusDebug || !service)
+            return;
+        auto* previous = OSDynamicCast(OSNumber, service->getProperty("Cirrus_Boot_Checkpoint_Count"));
+        const uint32_t count = previous ? previous->unsigned32BitValue() : 0;
+        uint64_t ns = 0;
+        absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
+        service->setProperty("Cirrus_Boot_Checkpoint_Last", stage);
+        service->setProperty("Cirrus_Boot_Checkpoint_Return", uint64_t(uint32_t(result)), 32);
+        if (count < 96) {
+            char key[80]{}, value[160]{};
+            snprintf(key, sizeof(key), "Cirrus_Boot_Checkpoint_%03u", count);
+            snprintf(value, sizeof(value), "uptime_us=%llu stage=%s ret=0x%08x", static_cast<unsigned long long>(ns / 1000), stage,
+                     uint32_t(result));
+            service->setProperty(key, value);
+            service->setProperty("Cirrus_Boot_Checkpoint_Count", uint64_t(count + 1), 32);
+        } else
+            service->setProperty("Cirrus_Boot_Checkpoint_Status", "PARTIAL_LIMIT");
+        if (result != kIOReturnSuccess && !service->getProperty("Cirrus_Boot_First_Error")) {
+            service->setProperty("Cirrus_Boot_First_Error", stage);
+            service->setProperty("Cirrus_Boot_First_Return", uint64_t(uint32_t(result)), 32);
+        }
+    }
     void retainFailedServiceEvidence(IOService * service) {
         if (!gCirrusDebug)
             return;
@@ -923,6 +946,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
 
     setProperty("Author", "Tran Kinh Hoang (hoaugtr)");
     setProperty("Cirrus_Build_Configuration", cirrus::support::kBuildConfiguration);
+    setProperty("Cirrus_Diagnostic_Schema", cirrus::support::kDiagnosticSchema);
     setProperty("Cirrus_Debug_Enabled", gCirrusDebug ? kOSBooleanTrue : kOSBooleanFalse);
     setProperty("Cirrus_Audio_Event_Mode", "HDA_TIMER_FALLBACK");
     IOLog("CirrusAudioFixup: %s build; verbose logging %s\n", cirrus::support::kBuildConfiguration, gCirrusDebug ? "enabled" : "disabled");
@@ -930,6 +954,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
     CIRRUS_LOG("Author: Tran Kinh Hoang (hoaugtr)");
     CIRRUS_LOG("start");
 #if defined(KERNEL)
+    publishBootCheckpoint(this, "START_ENTERED");
     publishMatchingEvent("START_ENTERED", provider, kIOReturnSuccess);
 #endif
 
@@ -969,8 +994,14 @@ bool CirrusAudioFixup::start(IOService* provider) {
     }
 
     CIRRUS_LOG("BOOT_FLOW COMMUNICATION_BEGIN");
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "COMMUNICATION_BEGIN");
+#endif
     const bool communicationReady = setupCommunication(provider);
     CIRRUS_LOG("BOOT_FLOW COMMUNICATION_END ready=%u", unsigned(communicationReady));
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "COMMUNICATION_END", communicationReady ? kIOReturnSuccess : kIOReturnError);
+#endif
     if (!communicationReady) {
 #if defined(KERNEL)
         retainFailedServiceEvidence(this);
@@ -992,8 +1023,14 @@ bool CirrusAudioFixup::start(IOService* provider) {
         publishAttachmentStatus();
     } else {
         CIRRUS_LOG("BOOT_FLOW RESET_POLICY_BEGIN");
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "RESET_POLICY_BEGIN");
+#endif
         bool hardwareResetVerified = performPlatformHardwareReset();
         CIRRUS_LOG("BOOT_FLOW RESET_POLICY_END policy_ok=%u", unsigned(hardwareResetVerified));
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "RESET_POLICY_END", hardwareResetVerified ? kIOReturnSuccess : kIOReturnNotReady);
+#endif
         if (!hardwareResetVerified) {
             if (mNativeSPI.bound()) {
 #if defined(KERNEL)
@@ -1009,19 +1046,30 @@ bool CirrusAudioFixup::start(IOService* provider) {
 
         IOSleep(15);
         CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_BEGIN");
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "AMP_DISCOVERY_BEGIN");
+#endif
         if (mNativeSPI.bound())
             detectNativeSPIAmplifiers();
         else
             detectAmplifiers();
         CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_END count=%lu", mAmplifierCount);
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "AMP_DISCOVERY_END", mAmplifierCount == expectedAmplifierCount() ? kIOReturnSuccess : kIOReturnNotFound);
+#endif
     }
 
     CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_BEGIN");
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "EVENT_SETUP_BEGIN");
+#endif
     if (!setupProbeTimer()) {
         CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=0");
         CIRRUS_ERR("probe timer setup failed");
 #if defined(KERNEL)
         publishMatchingEvent("START_PROBE_TIMER_FAILED", provider, kIOReturnNoMemory);
+        publishBootCheckpoint(this, "EVENT_SETUP_FAILED", kIOReturnNoMemory);
+        retainFailedServiceEvidence(this);
 #endif
         teardownCommunication();
         mProvider = nullptr;
@@ -1029,6 +1077,9 @@ bool CirrusAudioFixup::start(IOService* provider) {
         return false;
     }
     CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=1");
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "EVENT_SETUP_END");
+#endif
 
     if (bootArgEnabled("-cirrusro")) {
         CIRRUS_LOG("CirrusAudioFixup starting in READ-ONLY PROBE mode");
@@ -1046,8 +1097,16 @@ bool CirrusAudioFixup::start(IOService* provider) {
     }
 
     CIRRUS_LOG("BOOT_FLOW PM_SETUP_BEGIN");
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "PM_SETUP_BEGIN");
+#endif
     const bool powerManagementReady = setupPowerManagement(provider);
     CIRRUS_LOG("BOOT_FLOW PM_SETUP_END ready=%u", unsigned(powerManagementReady));
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "PM_SETUP_END", powerManagementReady ? kIOReturnSuccess : kIOReturnNotReady);
+    if (!powerManagementReady)
+        retainFailedServiceEvidence(this);
+#endif
     if (!powerManagementReady) {
         stop(provider);
         return false;
@@ -1055,6 +1114,9 @@ bool CirrusAudioFixup::start(IOService* provider) {
     setupAmplifierInterrupt();
     registerService();
     CIRRUS_LOG("BOOT_FLOW START_END");
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "START_END");
+#endif
     return true;
 }
 
@@ -1068,6 +1130,9 @@ void CirrusAudioFixup::bringUpAmplifiers() {
     if (bootArgEnabled("-cirrusro"))
         return;
     if (!mPlatformAuthorized || !mPlatformProfile || mAmplifierCount != expectedAmplifierCount()) {
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "BRINGUP_POLICY_BLOCKED", kIOReturnNotPermitted);
+#endif
         setProperty("Cirrus_Runtime_Block_Reason", !mPlatformAuthorized ? "BOARD_NOT_AUTHORIZED" : "INCOMPLETE_TOPOLOGY");
         CIRRUS_ERR("initialization blocked: authorized=%u detected=%lu expected=%lu; no amplifier initialization",
                    unsigned(mPlatformAuthorized), mAmplifierCount, expectedAmplifierCount());
@@ -1086,12 +1151,24 @@ void CirrusAudioFixup::bringUpAmplifiers() {
         return;
     }
     if (!bindAmplifierDrivers()) {
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "DRIVER_BIND_FAILED", kIOReturnNotReady);
+#endif
         publishDriverVerdict();
         return;
     }
     if (mAmplifierManager.stage() == cirrus::core::AmplifierStage::Detached) {
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "AMPLIFIER_LIFECYCLE_BEGIN");
+#endif
         IOReturn result = mAmplifierManager.bringUp();
         setProperty("Cirrus_Runtime_BringUp_Return", uint64_t(uint32_t(result)), 32);
+#if defined(KERNEL)
+        const auto stage = mAmplifierManager.stage();
+        const bool pending = stage == cirrus::core::AmplifierStage::Waiting || stage == cirrus::core::AmplifierStage::DebugHalted;
+        publishBootCheckpoint(this, pending ? "AMPLIFIER_LIFECYCLE_DEFERRED" : "AMPLIFIER_LIFECYCLE_END",
+                              pending ? kIOReturnSuccess : result);
+#endif
         if (result != kIOReturnSuccess)
             CIRRUS_LOG("amplifier bring-up paused/failed: stage=%u ret=0x%08X", unsigned(mAmplifierManager.stage()), result);
     }
@@ -2108,7 +2185,12 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         mAudioState = mAudioEvents->snapshot();
     const uint32_t routeGeneration = mAudioState.generation;
     const bool eventRoute = mAudioState.routeKnown;
-    const bool routePermitsPlayback = !eventRoute || (mAudioState.speakers && (!mAudioState.engineKnown || mAudioState.engineRunning));
+    // A DMA stream may belong to headphones/HDMI. An unknown output is not
+    // permission to unmute board speakers, even when its format is compatible.
+    const bool routePermitsPlayback = eventRoute && mAudioState.speakers && (!mAudioState.engineKnown || mAudioState.engineRunning);
+    setProperty("Cirrus_Playback_Route_Policy", !eventRoute ? "UNKNOWN_OUTPUT_ROUTE"
+                : !mAudioState.speakers ? "NON_SPEAKER_OUTPUT"
+                : !routePermitsPlayback ? "OUTPUT_ENGINE_STOPPED" : "SPEAKER_OUTPUT_SELECTED");
     bool hasAudio = mHdaState.observed && hdaStreamActive && routePermitsPlayback;
     if (!mAmplifierManager.bound() || (mAmplifierManager.stage() != cirrus::core::AmplifierStage::Ready &&
                                        mAmplifierManager.stage() != cirrus::core::AmplifierStage::Playing))

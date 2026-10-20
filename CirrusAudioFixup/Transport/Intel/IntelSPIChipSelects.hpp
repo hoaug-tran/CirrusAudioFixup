@@ -323,13 +323,14 @@ public:
     void publishGPIOGroupEvidence() const {
         if (!mOwner)
             return;
+        mOwner->setProperty("Cirrus_SPI_GPIO_Group_Observation", "PAD_TX_LATCH_READBACK_NOT_EXTERNAL_WAVEFORM");
         for (size_t i = 0; i < mGPIOCount; ++i) {
             const auto& e = mGPIO[i].output.evidence();
             char key[80]{};
             const char* fields[]{"Pin", "Offset", "Config", "Written", "Readback", "Logical0_Written", "Logical0_Readback",
-                                 "Logical1_Written", "Logical1_Readback"};
+                                 "Logical1_Written", "Logical1_Readback", "Revision", "Padbar", "Ownership", "LockTx"};
             const uint32_t values[]{mGPIO[i].pin, e.offset, e.config, e.written, e.readback, e.logical0Written, e.logical0Readback,
-                                    e.logical1Written, e.logical1Readback};
+                                    e.logical1Written, e.logical1Readback, e.revision, e.padbar, e.ownership, e.lockTx};
             for (unsigned j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
                 snprintf(key, sizeof(key), "Cirrus_SPI_GPIO_Group_%u_%s", unsigned(i), fields[j]);
                 mOwner->setProperty(key, uint64_t(values[j]), 32);
@@ -387,6 +388,7 @@ private:
     // GPIO provider lease. Additional community maps perform no output writes
     // or provider opens, including in read-only mode.
     void observeReset(IOACPIPlatformDevice* source) {
+        mOwner->setProperty("Cirrus_SPI_Reset_Observation", "PAD_TX_LATCH_READBACK_NOT_EXTERNAL_WAVEFORM");
         ACPIDeviceProperties properties;
         const auto result = properties.load(source, mOwner);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Return", uint64_t(uint32_t(result)), 32);

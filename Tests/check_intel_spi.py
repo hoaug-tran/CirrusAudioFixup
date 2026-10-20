@@ -35,10 +35,14 @@ struct Window : RegisterWindow {
     std::map<uint32_t,uint32_t> codec;
     std::vector<std::vector<uint8_t>> transactions;
     std::vector<std::pair<uint32_t,uint32_t>> writes;
-    unsigned busyTail=0,assertions=0,deassertions=0,failAfter=0;
+    unsigned busyTail=0,assertions=0,deassertions=0,failAfter=0,dataReads=0;
+    uint32_t rejectOffset=0xffffffffU;
     bool selected=false,stuck=false,forceBusy=false,overrun=false,missing=false,staleForever=false,frozenClock=false;
     bool guardPower=false,blockReset=false,blockClock=false,requireClockUpdate=false,clockApplied=false;
     bool selfClearUpdate=false,corruptClockUpdate=false;
+    bool cleanupStale=false;
+    bool rejectRelease=false,controlGoneAtFinish=false,errorAfterTwo=false,externalFrame=false;
+    size_t writesAtGone=0;
     Window() {
         regs[E::kCapabilities/4]=0x20|(3<<9);
         regs[E::kChipSelect/4]=3;
@@ -50,14 +54,19 @@ struct Window : RegisterWindow {
         if(requireClockUpdate&&o<0x200)assert(clockApplied);
         if(guardPower&&o<0x200)assert((regs[E::kReset/4]&3)==3&&(regs[E::kClock/4]&1));
         ++time;
+        if(o==E::kControl0&&controlGoneAtFinish&&!bytes.empty()){
+            writesAtGone=writes.size();return 0xffffffffU;
+        }
         if(o==E::kStatus) {
             if(missing || (failAfter && bytes.size()>=failAfter)) return 0xffffffff;
             if(overrun) return E::kOverrun;
+            if(errorAfterTwo&&bytes.size()>=2)return E::kOverrun;
             if(forceBusy || (busyTail && busyTail--)) return E::kBusy;
-            return E::kTxReady|((!fifo.empty()||staleForever)?E::kRxReady:0);
+            return E::kTxReady|((!fifo.empty()||staleForever||(cleanupStale&&!selected&&!bytes.empty()))?E::kRxReady:0);
         }
         if(o==E::kData) {
-            if(staleForever) return 0;
+            ++dataReads;
+            if(staleForever||(cleanupStale&&!selected&&!bytes.empty())) return 0;
             assert(!fifo.empty()); auto b=fifo.front();fifo.pop_front();return b;
         }
         return regs[o/4];
@@ -65,6 +74,8 @@ struct Window : RegisterWindow {
     void write32(uint32_t o,uint32_t v) override {
         if(guardPower&&o<0x200)assert((regs[E::kReset/4]&3)==3&&(regs[E::kClock/4]&1));
         ++time;writes.emplace_back(o,v);
+        if(o==rejectOffset)return;
+        if(o==E::kChipSelect&&rejectRelease&&selected&&(v&3)==3)return;
         if((blockReset&&o==E::kReset)||(blockClock&&o==E::kClock))return;
         if(o==E::kStatus) return;
         if(o==E::kChipSelect) {
@@ -88,7 +99,7 @@ struct Window : RegisterWindow {
             if(corruptClockUpdate)regs[o/4]^=2U;
         }
         if(o==E::kData) {
-            assert(selected && (regs[E::kControl0/4]&E::kEnabled));
+            assert((selected||externalFrame) && (regs[E::kControl0/4]&E::kEnabled));
             bytes.push_back(uint8_t(v));
             if(!stuck) {
                 // Return recognizable data after the six-byte CS35L41 header.
@@ -117,7 +128,88 @@ void inactive(const Window& w) {
     assert(!w.selected && !(w.regs[E::kControl0/4]&E::kEnabled));
     assert(w.regs[E::kClockGate/4]==0x80);
 }
-int main() {
+struct External : SPIChipSelect {
+    Window& w;bool failRelease;unsigned releases=0;
+    External(Window& window,bool fail):w(window),failRelease(fail){}
+    IOReturn setActive(bool active) override {
+        w.externalFrame=active;
+        if(active)w.bytes.clear();
+        if(!active){++releases;return failRelease?kIOReturnNotPermitted:kIOReturnSuccess;}
+        return kIOReturnSuccess;
+    }
+};
+void cleanupRegression(unsigned kind) {
+    Controller c;uint8_t tx[10]={0x80},rx[10]{};
+    if(kind==0) {
+        c.w.rejectRelease=true;
+        assert(c.engine.exchange({0,1000000,0},tx,rx,10)==kIOReturnIOError);
+        assert(c.engine.firstFailure().cleanupResult==kIOReturnIOError&&!c.engine.online());
+        assert(c.engine.firstFailure().primaryResult==0);
+        assert(c.engine.firstFailure().cleanupNativeCS==kIOReturnIOError);
+    } else if(kind==1) {
+        External cs(c.w,true);
+        assert(c.engine.exchange({1,1000000,0},tx,rx,10,&cs)==kIOReturnNotPermitted);
+        assert(c.engine.firstFailure().cleanupResult==kIOReturnNotPermitted&&cs.releases==1);
+        assert(c.engine.firstFailure().cleanupExternalCS==kIOReturnNotPermitted);
+        assert(c.engine.firstFailure().cleanupDrain==0);
+    } else if(kind==2) {
+        c.w.controlGoneAtFinish=true;c.w.errorAfterTwo=true;
+        assert(c.engine.exchange({0,1000000,0},tx,rx,10)==kIOReturnIOError);
+        assert(c.engine.firstFailure().cleanupResult==kIOReturnNoDevice&&!c.engine.online());
+        assert(c.engine.firstFailure().primaryResult==kIOReturnIOError);
+        assert(c.engine.firstFailure().cleanupController==kIOReturnNoDevice);
+        assert(c.engine.firstFailure().cleanupDrain==kIOReturnNotReady);
+        assert(c.w.writes.size()==c.w.writesAtGone);
+    } else {
+        c.w.failAfter=2;External cs(c.w,true);
+        assert(c.engine.exchange({1,1000000,0},tx,rx,10,&cs)==kIOReturnNoDevice);
+        assert(c.engine.firstFailure().cleanupResult!=kIOReturnSuccess&&cs.releases==1);
+        assert(c.engine.firstFailure().primaryResult==kIOReturnNoDevice);
+        assert(c.engine.firstFailure().cleanupController==kIOReturnNoDevice);
+        assert(c.engine.firstFailure().cleanupExternalCS==kIOReturnNotPermitted);
+    }
+}
+int main(int argc,char** argv) {
+    if(argc==2){cleanupRegression(unsigned(argv[1][0]-'0'));return 0;}
+    // Exact identity probes, not arbitrary register scans. Evidence must retain
+    // the full ten-byte frame and consume each FIFO byte exactly once.
+    for (uint32_t address : {0U,4U}) {
+        Controller probe;
+        probe.w.codec[address]=address?0xb2:0x35a40;
+        uint8_t frame[10]={0x80,0,0,uint8_t(address)},reply[10]{};
+        assert(probe.engine.exchange({0,4000000,0},frame,reply,10)==0);
+        const auto& e=probe.engine.lastTransaction();
+        assert(e.valid&&e.configured&&e.length==10&&e.sent==10&&e.received==10);
+        assert(e.tx[0]==0x80&&e.tx[3]==address&&e.rx[9]==(address?0xb2:0x40));
+        assert(e.control0==(24U<<8|7U|E::kEnabled)&&e.control1==0&&e.protocol==0&&e.timeout==0);
+        assert((e.csInactive&3)==3&&(e.csActive&3)==1&&(e.csFinal&3)==3);
+        assert(probe.w.dataReads==10&&!probe.engine.firstFailure().valid);
+        assert(probe.engine.firstIdentityTransaction(0,address)->sequence==1);
+        assert(!probe.engine.firstIdentityTransaction(0,8));
+        assert(!probe.engine.firstIdentityTransaction(4,address));
+        auto first=*probe.engine.firstTransaction(0);
+        probe.w.stuck=true;
+        assert(probe.engine.exchange({0,4000000,0},frame,reply,10)==kIOReturnTimeout);
+        auto failure=probe.engine.firstFailure();
+        assert(failure.sequence==2&&failure.sent==8&&failure.received==0&&failure.configured);
+        probe.w.stuck=false;
+        assert(probe.engine.exchange({0,4000000,0},frame,nullptr,10)==0);
+        assert(probe.engine.firstFailure().sequence==failure.sequence);
+        assert(probe.engine.firstTransaction(0)->sequence==first.sequence);
+        assert(probe.engine.lastTransaction().received==10&&probe.engine.lastTransaction().rx[9]==(address?0xb2:0x40));
+        assert(probe.engine.firstIdentityTransaction(0,address)->sequence==1);
+        assert(!probe.engine.firstTransaction(4));
+    }
+    // Rejected programming must fail before a single data byte is clocked.
+    for(uint32_t offset:{E::kControl0,E::kControl1,0x28U,0x2cU,E::kChipSelect}) {
+        Controller fault;
+        fault.w.regs[offset/4]=0x55555555;
+        fault.w.rejectOffset=offset;
+        uint8_t frame[10]={0x80},reply[10]{};
+        assert(fault.engine.exchange({0,4000000,0},frame,reply,10)==kIOReturnIOError);
+        assert(fault.w.dataReads==0&&fault.w.bytes.empty());
+        assert(fault.engine.firstFailure().configured&&fault.engine.firstFailure().sent==0);
+    }
     { Window captured;captured.requireClockUpdate=true;
       captured.regs[E::kClock/4]=0x7fff0a3d;
       E engine(captured);assert(engine.initialize()==0&&captured.clockApplied);
@@ -240,6 +332,44 @@ int main() {
     assert(gone.engine.exchange(ep,tx,rx,32)==kIOReturnNoDevice&&gone.w.writes.empty());
     Controller unplug;unplug.w.failAfter=2;
     assert(unplug.engine.exchange(ep,tx,rx,32)==kIOReturnNoDevice&&!unplug.engine.online());
+    assert(unplug.engine.firstFailure().sent==2&&unplug.engine.firstFailure().received==1);
+    assert(unplug.engine.firstFailure().status==0xffffffffU);
+    assert(unplug.w.dataReads==1); // No diagnostic read consumed the second byte.
+    Controller truncated;
+    assert(truncated.engine.exchange(ep,tx,rx,32)==0);
+    const auto& retained=truncated.engine.lastTransaction();
+    assert(retained.sent==32&&retained.received==32&&truncated.w.dataReads==32);
+    // A near-match must not be mistaken for a bounded identity read.
+    uint8_t other[10]={0x80,0,0,0,0,1};
+    assert(truncated.engine.exchange({0,1000000,0},other,rx,10)==0);
+    assert(!truncated.engine.firstIdentityTransaction(0,0));
+    Controller cleanup;cleanup.w.cleanupStale=true;
+    assert(cleanup.engine.exchange(ep,tx,rx,32)==kIOReturnIOError);
+    assert(cleanup.engine.firstFailure().sent==32&&cleanup.engine.firstFailure().received==32);
+    assert(cleanup.engine.firstFailure().cleanupResult==kIOReturnIOError);
+    assert(cleanup.w.dataReads==32+256); // Bounded cleanup, not diagnostic reads.
+    inactive(cleanup.w);
+    Controller primary;primary.w.cleanupStale=true;primary.w.stuck=true;
+    assert(primary.engine.exchange(ep,tx,rx,32)==kIOReturnTimeout);
+    assert(primary.engine.firstFailure().result==kIOReturnTimeout);
+    assert(primary.engine.firstFailure().cleanupResult==kIOReturnIOError);
+    // Capture prefixes remain bounded even when the transfer is much larger.
+    Controller large;std::vector<uint8_t> largeTX(4096,0x5a);
+    assert(large.engine.exchange(ep,largeTX.data(),nullptr,largeTX.size())==0);
+    assert(large.engine.lastTransaction().sent==4096&&large.engine.lastTransaction().received==4096);
+    assert(large.w.dataReads==4096&&large.engine.lastTransaction().tx[31]==0x5a);
+    Controller logical;External external(logical.w,false);uint8_t identityFrame[10]={0x80};
+    assert(logical.engine.exchange({0,1000000,0},identityFrame,rx,10)==0);
+    const auto identitySequence=logical.engine.firstIdentityTransaction(0,0)->sequence;
+    for(unsigned i=0;i<256;++i){
+        uint32_t cs=i==255?0xffffffffU:4+i*104729U;
+        assert(logical.engine.exchange({cs,1000000,0},identityFrame,rx,10,&external)==0);
+        assert(logical.engine.lastTransaction().chipSelect==cs);
+        assert(!logical.engine.firstTransaction(cs)&&!logical.engine.firstIdentityTransaction(cs,0));
+    }
+    assert(external.releases==256);
+    assert(logical.engine.firstIdentityTransaction(0,0)->sequence==identitySequence);
+    assert(!logical.engine.firstIdentityTransaction(0,4));
 }
 ''')
     for flags in sanitizer_flags():
@@ -247,5 +377,11 @@ int main() {
         subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
                         '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
                         str(tmp/'test.cpp'),'-o',str(exe)],check=True)
+        failures=[]
+        for case in range(4):
+            result=subprocess.run([str(exe),str(case)],timeout=10)
+            if result.returncode:
+                failures.append(case)
+        assert not failures, f'cleanup regressions failed: {failures}'
         subprocess.run([str(exe)],check=True,timeout=10)
 print('PASS Intel LPSS PIO + CS35L41: native CS, full-duplex FIFO, modes, clock, firmware chunks, errors, timeout and suspend; hardware untested')

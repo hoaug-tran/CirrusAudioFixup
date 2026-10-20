@@ -330,6 +330,7 @@ public:
     std::vector<uint32_t> reads;
     std::map<std::string,uint64_t> numericProperties;
     CirrusAudioFixup() {
+        mAudioState = {true, true, true, true, 1};
         mHdaConverterPrepared=true; mHdaTopologyLogged=true;
         mHdaControllerObserved=true; mHdaStreamActive=true;
         mHdaLastStreamTag=1;
@@ -476,6 +477,10 @@ public:
 
 checks = r'''
 int main() {
+    // A running DMA stream alone cannot identify the selected output route.
+    { CirrusAudioFixup unknownRoute;unknownRoute.mAudioState={};
+      unknownRoute.runBackgroundMonitor();assert(unknownRoute.unmute==0);
+      assert(unknownRoute.properties["Cirrus_Playback_Route_Policy"]=="UNKNOWN_OUTPUT_ROUTE"); }
     {
         using namespace cirrus::devices::amplifiers::cs35l41;
         CirrusAudioFixup stereo;

@@ -11,7 +11,7 @@ fi
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-for command in xcodebuild python3 plutil lipo dwarfdump shasum; do
+for command in git xcodebuild python3 plutil lipo dwarfdump shasum; do
     command -v "$command" >/dev/null || { echo "error: missing $command" >&2; exit 1; }
 done
 for dependency in MacKernelSDK/Headers/IOKit/IOService.h Lilu/Lilu/Headers/kern_patcher.hpp; do
@@ -22,12 +22,18 @@ done
 python3 Tests/run.py
 python3 Tools/release_metadata.py
 
+provenance_snapshot="$(mktemp "${TMPDIR:-/tmp}/cirrus-build-source.XXXXXX")"
+trap 'rm -f "$provenance_snapshot"' EXIT
+python3 Tools/build_provenance.py snapshot --root "$root" --snapshot "$provenance_snapshot"
+
 for mode in Debug Release; do
+    bundle="$root/build/Local-$mode/CirrusAudioFixup.kext"
+    # A failed rebuild must not leave an earlier source claim on a new binary.
+    rm -f "$bundle/Contents/Resources/CirrusBuildManifest.plist"
     xcodebuild -project CirrusAudioFixup.xcodeproj -target CirrusAudioFixup \
         -configuration "$mode" -sdk macosx \
         CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO \
         CONFIGURATION_BUILD_DIR="$root/build/Local-$mode" build
-    bundle="$root/build/Local-$mode/CirrusAudioFixup.kext"
     binary="$bundle/Contents/MacOS/CirrusAudioFixup"
     symbols="$bundle.dSYM/Contents/Resources/DWARF/CirrusAudioFixup"
     plutil -lint "$bundle/Contents/Info.plist"
@@ -41,6 +47,10 @@ for mode in Debug Release; do
         echo "error: binary/symbol UUID mismatch for $mode" >&2; exit 1;
     }
     shasum -a 256 "$binary"
+    python3 Tools/build_provenance.py finalize --root "$root" --snapshot "$provenance_snapshot" \
+        --bundle "$bundle" --configuration "$mode" \
+        --binary-uuid "$binary_uuid" --symbols-uuid "$symbols_uuid"
+    plutil -lint "$bundle/Contents/Info.plist" "$bundle/Contents/Resources/CirrusBuildManifest.plist"
     echo "PASS $mode bundle: $bundle"
 done
 echo "Build verification passed. Hardware playback and load compatibility are not yet verified."

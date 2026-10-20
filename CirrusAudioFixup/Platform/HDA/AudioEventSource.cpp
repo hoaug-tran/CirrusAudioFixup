@@ -121,6 +121,7 @@ public:
         if (cirrus::support::kDefaultVerboseLogging || checkKernelArgument("-cirrusdbg")) {
             setProperty("Cirrus_Bootstrap_Status", "STARTED");
             setProperty("Cirrus_Build_Configuration", cirrus::support::kBuildConfiguration);
+            setProperty("Cirrus_Diagnostic_Schema", cirrus::support::kDiagnosticSchema);
             // Keep matching/catalogue enumeration out of IOResources start.
             // A separate timer checks matching state after start returns.
             auditLoop = IOWorkLoop::workLoop();

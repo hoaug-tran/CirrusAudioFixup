@@ -379,10 +379,15 @@ IOService* CirrusAudioFixup::probe(IOService* provider, SInt32* score) {
 // This quirk writes a board-specific MMIO register. Resolve the profile first;
 // finding an AMD controller alone is not permission to use its reset pin.
 bool CirrusAudioFixup::performPlatformHardwareReset() {
-    if (bootArgEnabled("-cirrusro") || bootArgStrEquals("-cirrusphase", "probe"))
+    if (bootArgEnabled("-cirrusro") || bootArgStrEquals("-cirrusphase", "probe")) {
+        setProperty("Cirrus_Reset_Policy", bootArgEnabled("-cirrusro") ? "SKIPPED_READ_ONLY" : "SKIPPED_PROBE_PHASE");
         return true;
-    if (!mPlatformAuthorized)
+    }
+    if (!mPlatformAuthorized) {
+        setProperty("Cirrus_Reset_Policy", "BLOCKED_NOT_AUTHORIZED");
         return false;
+    }
+    setProperty("Cirrus_Reset_Policy", "AUTHORIZED");
     if (mNativeSPI.bound()) {
         setProperty("Cirrus_SPI_Reset_Sequence", "BEGIN");
         const auto result = mNativeSPI.prepareHardware(cirrus::support::acpiDeviceCast(mProvider));
@@ -732,6 +737,10 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                              !bootArgEnabled("-cirrusro"));
         writable = ret == kIOReturnSuccess && !bootArgEnabled("-cirrusro");
     }
+    // Board acceptance and permission to write are different facts. Read-only
+    // policy must not make a resolved board look unsupported in the dump.
+    setProperty("Cirrus_Board_Authorized", ret == kIOReturnSuccess && mPlatformAuthorized && mPlatformProfile->boardConfiguration
+                                               ? kOSBooleanTrue : kOSBooleanFalse);
     mPlatformAuthorized = writable;
     setProperty("Cirrus_Platform_Authorized", writable ? kOSBooleanTrue : kOSBooleanFalse);
     setProperty("Cirrus_SPI_Bind_Return", uint64_t(uint32_t(ret)), 32);
@@ -984,7 +993,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
     } else {
         CIRRUS_LOG("BOOT_FLOW RESET_POLICY_BEGIN");
         bool hardwareResetVerified = performPlatformHardwareReset();
-        CIRRUS_LOG("BOOT_FLOW RESET_POLICY_END verified=%u", unsigned(hardwareResetVerified));
+        CIRRUS_LOG("BOOT_FLOW RESET_POLICY_END policy_ok=%u", unsigned(hardwareResetVerified));
         if (!hardwareResetVerified) {
             if (mNativeSPI.bound()) {
 #if defined(KERNEL)
@@ -1105,7 +1114,7 @@ void CirrusAudioFixup::bringUpAmplifiers() {
 
 // A phase stop belongs to the whole service, not just one amplifier.
 // The monitor stays disabled after either channel reaches the requested stage;
-// initialization still visits the other channel so its failures are visible.
+// The group stops at the first halted member; later members stay untouched.
 bool CirrusAudioFixup::stopAfterDebugStage(const char* stage) {
     if (!bootArgStrEquals("-cirrusphase", stage))
         return false;

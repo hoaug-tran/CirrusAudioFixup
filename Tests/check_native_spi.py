@@ -633,6 +633,14 @@ int main(){
   assert(readySPI.bindAmplifierDrivers() && readySPI.mAmplifierManager.bringUp()==0 && readySPI.mAmplifierManager.startPlayback()==0);
   assert(!strcmp(readySPI.mAttachment.communication,"READY") && readySPI.mAttachment.failureCount==0);
   readySPI.teardownCommunication();assert(!liveControllers);
+  // A verified board remains recognized when read-only policy denies writes.
+  CirrusAudioFixup readOnlySPI;readOnlySPI.mPlatformProfile=&oneSPIProfile;
+  readOnlySPI.mPlatformSubsystemId=0x12345678;readOnlySPI.flags["-cirrusro"]=true;
+  assert(readOnlySPI.mDriverRegistry.add(shipDefinition)&&readOnlySPI.setupCommunication(&amp));
+  assert(readOnlySPI.numbers["Cirrus_Board_Authorized"]==1);
+  assert(readOnlySPI.numbers["Cirrus_Platform_Authorized"]==0&&!readOnlySPI.mPlatformAuthorized);
+  assert(!readOnlySPI.mNativeSPI.registers(0)->write(0,1));
+  readOnlySPI.teardownCommunication();assert(!liveControllers);
   CirrusAudioFixup unsupportedAMP;unsupportedAMP.mPlatformProfile=&oneSPIProfile;
   auto writesBefore=writeTransfers;assert(unsupportedAMP.setupCommunication(&amp));
   assert(unsupportedAMP.mNativeSPI.count()==1 && !unsupportedAMP.mNativeSPI.registers(0));

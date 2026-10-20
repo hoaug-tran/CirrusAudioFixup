@@ -326,9 +326,11 @@ public:
         for (size_t i = 0; i < mGPIOCount; ++i) {
             const auto& e = mGPIO[i].output.evidence();
             char key[80]{};
-            const char* fields[]{"Pin", "Offset", "Config", "Written", "Readback"};
-            const uint32_t values[]{mGPIO[i].pin, e.offset, e.config, e.written, e.readback};
-            for (unsigned j = 0; j < 5; ++j) {
+            const char* fields[]{"Pin", "Offset", "Config", "Written", "Readback", "Logical0_Written", "Logical0_Readback",
+                                 "Logical1_Written", "Logical1_Readback"};
+            const uint32_t values[]{mGPIO[i].pin, e.offset, e.config, e.written, e.readback, e.logical0Written, e.logical0Readback,
+                                    e.logical1Written, e.logical1Readback};
+            for (unsigned j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
                 snprintf(key, sizeof(key), "Cirrus_SPI_GPIO_Group_%u_%s", unsigned(i), fields[j]);
                 mOwner->setProperty(key, uint64_t(values[j]), 32);
             }

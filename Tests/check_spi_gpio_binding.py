@@ -77,6 +77,9 @@ int main(){
   assert(owner.numbers["Cirrus_SPI_GPIO_Group_Unique_Pins"]==1&&mem->r[resetPad/4]==0x44000200);
   assert(selects.writeGPIOGroup(false)==0&&mem->r[resetPad/4]==0x44000200);
   assert(selects.writeGPIOGroup(true)==0&&mem->r[resetPad/4]==0x44000201);
+  selects.publishGPIOGroupEvidence();
+  assert(owner.numbers["Cirrus_SPI_GPIO_Group_0_Logical0_Readback"]==0x44000200);
+  assert(owner.numbers["Cirrus_SPI_GPIO_Group_0_Logical1_Readback"]==0x44000201);
   assert(mem->r[pad/4]==0x84000201);
   selects.shutdown();assert(selects.writeGPIOGroup(false)==kIOReturnNotReady);}
  // Reject reset/CS aliases before writing; a locked shared reset must not be

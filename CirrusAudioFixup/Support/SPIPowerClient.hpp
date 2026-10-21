@@ -4,10 +4,7 @@
 #include <IOKit/IOService.h>
 #include <IOKit/IOLib.h>
 
-// An observable PM vote holder, not an asynchronous transport scheduler.
-// Owner serializes setup/milestones/cancellation and keeps its allocation
-// reference until cancelAndStop(), detach(), and release() have completed.
-// Callbacks retain no owner, dispatch no work, and touch no PCI/MMIO/AML.
+// Records PM callbacks. The owner stops PM before detaching and releasing.
 class CirrusSPIPowerClient : public IOService {
     OSDeclareDefaultStructors(CirrusSPIPowerClient)
 
@@ -24,36 +21,31 @@ public:
         IOReturn result {kIOReturnSuccess};
     };
     struct Snapshot {
-        uint64_t parentId {0}; // Cached during owner setup, not queried in callbacks.
+        // Cached before registration to avoid registry access in callbacks.
+        uint64_t parentId {0};
         uint64_t cancelledUs {0};
         Event milestones[static_cast<unsigned>(Milestone::Count)] {};
         Event setState {};
         Event completed {};
         bool cancelled {false};
-        bool pmGateContextAvailable {false}; // getPMworkloop unavailable on LP64.
     };
 
     bool init(OSDictionary* properties = nullptr) override;
     void free() override;
 
-    // Call after attach, before PMinit/register/join/vote. No parent retain:
-    // only its registry ID is copied. No owner pointer is stored anywhere.
+    // Cache the parent ID before registering PM.
     void identifyParent(IOService* parent);
-    // Record RETURN from each owner-issued operation. Successful register/join/
-    // vote milestones mean submission/return, never completed power delivery.
+    // Submission results are separate from callback completion.
     void recordMilestone(Milestone phase, IOReturn result = kIOReturnSuccess,
                          unsigned long ordinal = 0);
     Snapshot snapshot();
-    // Owner-only; call outside callback/owner locks, before owner destruction.
-    // pmInitialized must reflect whether the owner actually called PMinit().
-    // PMstop drains PM callbacks; owner still owns detach/release afterwards.
+    // Call without owner locks held; PMstop waits for outstanding callbacks.
     void cancelAndStop(bool pmInitialized);
 
     IOReturn setPowerState(unsigned long ordinal, IOService* device) override;
 
 protected:
-    // Documented completion hook; argument is the PREVIOUS state ordinal.
-    // No powerStateDidChangeTo override or interested-driver registration.
+    // The argument is the previous power-state ordinal.
     void powerChangeDone(unsigned long previousState) override;
 
 private:

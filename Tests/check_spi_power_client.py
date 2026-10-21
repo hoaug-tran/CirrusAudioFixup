@@ -110,9 +110,10 @@ int main(){
  using M=CirrusSPIPowerClient::Milestone;
  for(auto m:{M::Initialized,M::Registered,M::Joined,M::Vote})
   client->recordMilestone(m,0,m==M::Vote?1:0);
- client->recordMilestone(M::Count,-1); // bounded invalid phase
+ // bounded invalid phase
+ client->recordMilestone(M::Count,-1);
  auto before=client->snapshot();assert(before.parentId==123);
- assert(!before.cancelled&&!before.pmGateContextAvailable);
+ assert(!before.cancelled);
  assert(before.setState.count==0&&before.completed.count==0);
  for(auto& e:before.milestones)assert(e.count==1&&e.uptimeUs&&e.threadId);
  const auto ownerThread=before.milestones[0].threadId;
@@ -133,12 +134,14 @@ int main(){
  client->cancelAndStop(true);assert(client->stopped&&!client->worker.joinable());
  auto cancelled=client->snapshot();assert(cancelled.cancelledUs);
  client->recordMilestone(M::Vote,-1,0);client->identifyParent(nullptr);
- client->setPowerState(0,client); // defensive suppression after cancellation
+ // defensive suppression after cancellation
+ client->setPowerState(0,client);
  auto after=client->snapshot();
  assert(after.parentId==123&&after.setState.count==observed.setState.count);
  assert(after.milestones[3].count==1&&after.milestones[3].ordinal==1);
  client->cancelAndStop(true);assert(stops==1);
- assert(client->refs==1&&parent->refs==2); // no callback/owner retain cycle
+ // no callback/owner retain cycle
+ assert(client->refs==1&&parent->refs==2);
  client->drainCheck={};ownerAlive=false;
  client->detach(parent);client->release();assert(parent->refs==1&&live==1);
  parent->release();assert(live==0&&locks==0);

@@ -8,9 +8,53 @@
 namespace cirrus::transport::intel {
 class IntelSPIControllerOwner final : public NativeSPIControllerOwner {
     IntelLPSSSPIController mController;
+    // NativeSPIHost retains the target until this owner is destroyed.
+    IOACPIPlatformDevice* mTarget{nullptr};
+    IOService* mOwner{nullptr};
+    bool mChipSelectsReady{false};
+    uint32_t mPCIIdentity{0};
 
 public:
-    IOReturn bind(IOPCIDevice* pci, IOService* owner) { return mController.bind(pci, owner); }
+    IOReturn bind(IOPCIDevice* pci, IOService* owner) {
+        mPCIIdentity = pci ? (uint32_t(pci->configRead16(0)) << 16) | pci->configRead16(2) : 0;
+        return mController.bind(pci, owner);
+    }
+#if defined(KERNEL)
+    void publishEvidence(const char* reason) {
+        if (mOwner && gCirrusDebug) {
+            mOwner->setProperty("Cirrus_Intel_SPI_Bind_Reason", mController.powerPending() ? "WAITING_POWER" : reason);
+            mOwner->setProperty("Cirrus_Intel_SPI_PCI_Identity", uint64_t(mPCIIdentity), 32);
+            if (!mController.powerPending()) {
+                mOwner->setProperty("Cirrus_Intel_SPI_Initial_Capabilities", uint64_t(mController.initialCapabilities()), 32);
+                mOwner->setProperty("Cirrus_Intel_SPI_Initial_Status", uint64_t(mController.initialStatus()), 32);
+                mOwner->setProperty("Cirrus_Intel_SPI_Initial_Clock", uint64_t(mController.initialClock()), 32);
+                mOwner->setProperty("Cirrus_Intel_SPI_Prepared_Clock", uint64_t(mController.preparedClock()), 32);
+                mOwner->setProperty("Cirrus_Intel_SPI_Initial_Clock_Gate", uint64_t(mController.initialClockGate()), 32);
+            }
+        }
+    }
+#endif
+    void setContext(IOACPIPlatformDevice* target, IOService* owner) {
+        mTarget = target;
+        mOwner = owner;
+    }
+    bool powerPending() const override { return mController.powerPending(); }
+    IOReturn continueBind(NativeSPIControllerFailure& failure) override {
+        auto result = mController.continueBind();
+        failure.result = result;
+        failure.reason = mController.bindFailureReason();
+#if defined(KERNEL)
+        if (result == kIOReturnSuccess && !mChipSelectsReady) {
+            result = configureChipSelects(mTarget, mOwner);
+            mChipSelectsReady = result == kIOReturnSuccess;
+            failure.result = result;
+            if (result != kIOReturnSuccess)
+                failure.reason = "INTEL_SPI_CHIP_SELECT_CONFIGURATION_FAILED";
+            publishEvidence(failure.reason);
+        }
+#endif
+        return result;
+    }
 #if defined(KERNEL)
     IOReturn configureChipSelects(IOACPIPlatformDevice* target, IOService* owner) {
         return mController.configureChipSelects(target, owner);
@@ -41,31 +85,20 @@ inline NativeSPIControllerOwner* createNativeSPIController(IOACPIPlatformDevice*
                                                            NativeSPIControllerFailure& failure) {
     failure.detail = pci ? (uint32_t(pci->configRead16(0)) << 16) | pci->configRead16(2) : 0;
     auto* driver = new IntelSPIControllerOwner;
+    if (driver)
+        driver->setContext(target, owner);
     auto result = driver ? driver->bind(pci, owner) : kIOReturnNoMemory;
     failure.result = result;
     failure.reason = driver ? driver->bindFailureReason() : "INTEL_CONTROLLER_ALLOCATION_FAILED";
 #if defined(KERNEL)
-    if (result == kIOReturnSuccess) {
-        result = driver->configureChipSelects(target, owner);
-        failure.result = result;
-        if (result != kIOReturnSuccess)
-            failure.reason = "INTEL_SPI_CHIP_SELECT_CONFIGURATION_FAILED";
-    }
-    if (owner && gCirrusDebug) {
-        owner->setProperty("Cirrus_Intel_SPI_Bind_Reason", failure.reason);
-        owner->setProperty("Cirrus_Intel_SPI_PCI_Identity", uint64_t(failure.detail), 32);
-        if (driver) {
-            owner->setProperty("Cirrus_Intel_SPI_Initial_Capabilities", uint64_t(driver->initialCapabilities()), 32);
-            owner->setProperty("Cirrus_Intel_SPI_Initial_Status", uint64_t(driver->initialStatus()), 32);
-            owner->setProperty("Cirrus_Intel_SPI_Initial_Clock", uint64_t(driver->initialClock()), 32);
-            owner->setProperty("Cirrus_Intel_SPI_Prepared_Clock", uint64_t(driver->preparedClock()), 32);
-            owner->setProperty("Cirrus_Intel_SPI_Initial_Clock_Gate", uint64_t(driver->initialClockGate()), 32);
-        }
-    }
+    if (result == kIOReturnSuccess)
+        result = driver->continueBind(failure);
+    if (driver)
+        driver->publishEvidence(failure.reason);
 #else
     (void)target;
 #endif
-    if (result != kIOReturnSuccess) {
+    if (result != kIOReturnSuccess && !(driver && driver->powerPending())) {
         delete driver;
         return nullptr;
     }

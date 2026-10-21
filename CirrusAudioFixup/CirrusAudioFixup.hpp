@@ -137,6 +137,10 @@ private:
     IOService* mProvider{nullptr};
     cirrus::transport::NativeSPIHost mNativeSPI;
     bool setupCommunication(IOService* provider);
+    bool finishStartup();
+    void continueStartup();
+    bool mStartupPending{false};
+    bool mStartupFailed{false};
     void discoverPlatformConfiguration(IOACPIPlatformDevice* provider, const cirrus::platform::AmplifierDriverRegistration& definition);
     bool retryPlatformIdentity();
     bool mPlatformIdentityPending{false};
@@ -157,6 +161,13 @@ private:
     }
     bool resumeCommunication() {
         IOReturn ret = mNativeSPI.resume();
+        mResumePending = ret != kIOReturnSuccess && mNativeSPI.powerPending();
+        if (mResumePending) {
+            setProperty("Cirrus_SPI_Status", "WAKE_WAITING_POWER");
+            mAttachment.communication = "WAITING_POWER";
+            publishAttachmentStatus();
+            return false;
+        }
         if (mNativeSPI.bound()) {
             setProperty("Cirrus_SPI_Wake_Return", uint64_t(uint32_t(ret)), 32);
             setProperty("Cirrus_SPI_Status",
@@ -183,6 +194,7 @@ private:
     bool mPMInitialized{false};
     IOPMPowerState mPowerStates[2]{};
     bool mPowerAvailable{true};
+    bool mResumePending{false};
     bool mStopping{false};
     bool mNeedsReinitialization{false};
     bool mDebugPhaseHalted{false};

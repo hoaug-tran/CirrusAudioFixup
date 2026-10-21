@@ -66,11 +66,12 @@ void IOSleep(unsigned){}
 struct Timer{unsigned arms=0;void setTimeoutMS(unsigned){++arms;}};
 class CirrusAudioFixup{
 public:
+ bool mStartupPending=false;
  bool mPlatformIdentityPending=true,mPlatformAuthorized=false;uint64_t mPlatformIdentityDeadlineMs=30000;
  uint32_t mPlatformSubsystemId=0,nextIdentity=0;void* mProvider=nullptr;
  Timer timer;Timer* mProbeTimer=&timer;
  struct Attachment{const char* amplifier="WAITING";}mAttachment;
- struct Native{bool active=false;bool bound(){return active;}}mNativeSPI;
+ struct Native{bool active=false;bool bound(){return active;}bool powerPending(){return false;}}mNativeSPI;
  bool setupOK=true,wrongSilicon=false;unsigned resets=0,detected=0,initialized=0,teardowns=0,irq=0,failures=0,verdicts=0;
  std::string order,reason;std::map<std::string,std::string> properties;
  void resolvePlatformProfile(){mPlatformSubsystemId=nextIdentity;mPlatformAuthorized=nextIdentity==0x17aa382b;}

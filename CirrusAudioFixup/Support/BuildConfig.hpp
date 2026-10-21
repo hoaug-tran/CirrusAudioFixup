@@ -8,7 +8,7 @@ namespace cirrus::support {
 
 // Increment when the retained boot evidence contract changes. This identifies
 // diagnostic capabilities in a loaded service independently of bundle version.
-inline constexpr const char* kDiagnosticSchema = "spi-boot-2";
+inline constexpr const char* kDiagnosticSchema = "spi-boot-3";
 
 #if defined(DEBUG) && DEBUG
 inline constexpr bool kDefaultVerboseLogging = true;

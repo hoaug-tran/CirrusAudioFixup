@@ -238,7 +238,8 @@ int main(int argc,char** argv) {
         Window cold;cold.guardPower=true;cold.blockReset=!clockFailure;cold.blockClock=clockFailure;
         cold.regs[E::kReset/4]=4;cold.regs[E::kClock/4]=0;
         E engine(cold);assert(engine.initialize()==kIOReturnNotReady&&!engine.online());
-        for(auto entry:cold.writes)assert(entry.first>=0x200); // No SSP access when reset/clock readback failed.
+        // No SSP access when reset/clock readback failed.
+        for(auto entry:cold.writes)assert(entry.first>=0x200);
         assert(cold.regs[E::kReset/4]==4&&cold.regs[E::kClock/4]==0);
     }
     for (uint16_t id : {uint16_t(0x9d29),uint16_t(0x1ac2),uint16_t(0xa32a),uint16_t(0x51aa),uint16_t(0x7aaa)}) {
@@ -334,7 +335,8 @@ int main(int argc,char** argv) {
     assert(unplug.engine.exchange(ep,tx,rx,32)==kIOReturnNoDevice&&!unplug.engine.online());
     assert(unplug.engine.firstFailure().sent==2&&unplug.engine.firstFailure().received==1);
     assert(unplug.engine.firstFailure().status==0xffffffffU);
-    assert(unplug.w.dataReads==1); // No diagnostic read consumed the second byte.
+    // No diagnostic read consumed the second byte.
+    assert(unplug.w.dataReads==1);
     Controller truncated;
     assert(truncated.engine.exchange(ep,tx,rx,32)==0);
     const auto& retained=truncated.engine.lastTransaction();
@@ -347,7 +349,8 @@ int main(int argc,char** argv) {
     assert(cleanup.engine.exchange(ep,tx,rx,32)==kIOReturnIOError);
     assert(cleanup.engine.firstFailure().sent==32&&cleanup.engine.firstFailure().received==32);
     assert(cleanup.engine.firstFailure().cleanupResult==kIOReturnIOError);
-    assert(cleanup.w.dataReads==32+256); // Bounded cleanup, not diagnostic reads.
+    // Bounded cleanup, not diagnostic reads.
+    assert(cleanup.w.dataReads==32+256);
     inactive(cleanup.w);
     Controller primary;primary.w.cleanupStale=true;primary.w.stuck=true;
     assert(primary.engine.exchange(ep,tx,rx,32)==kIOReturnTimeout);

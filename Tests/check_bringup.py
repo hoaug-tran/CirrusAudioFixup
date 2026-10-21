@@ -64,7 +64,7 @@ public:
     Timer* mProbeTimer=nullptr;
     Timer* mAmpInterrupt=nullptr;
     bool configureAmplifierInterrupt() { return true; }
-    bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
+    bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false,mResumePending=false,mStartupPending=false;
     bool mDebugPhaseHalted=false;
     void clearHdaCache() {}
     std::string phase;

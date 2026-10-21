@@ -31,6 +31,17 @@ Non-byte-aligned packed protocols, bank/page selection, register windows and add
 
 ## Adding a future driver
 
+`prepareBoardMetadata` adds verified missing board properties under the discovered
+ACPI paths. Native properties take precedence; malformed packages are rejected.
+`BoardDiscoveryContext::GPIOReader` reads speaker identity without changing the
+GPIO configuration. CS35L41 discovery currently supports its two-channel L0/R0
+schema.
+
+A native controller can retain ownership while power is pending. The service
+calls `continueBind()` on its workloop until the controller is ready or fails.
+Register ports and reset operations remain unavailable while `powerPending()` is
+true. A failed controller cancels the other pending owners.
+
 1. Establish ACPI identity, actual silicon/revision reads, I2C/SPI format and register access rules from authoritative source/datasheet plus machine evidence. Unknown identifiers remain unsupported.
 2. Provide a controller driver only when its layout, capabilities, ownership, CS/repeated-START behavior and power resources are known. Existing Intel LPSS and AMD command controllers have separate implementations. Generic interfaces do not implement unknown controllers.
 3. Implement `AmplifierLifecycleHooks` against `RegisterIO` and board/platform resource providers. Keep reset, boost, clock, DSP packing, mailbox, calibration, ASP routing, faults and shutdown specific to silicon/board. A no-DSP driver explicitly treats firmware loading as a no-op.

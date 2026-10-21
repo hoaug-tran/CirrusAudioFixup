@@ -17,6 +17,8 @@ public:
     NativeSPIControllerOwner& operator=(const NativeSPIControllerOwner&) = delete;
     virtual ~NativeSPIControllerOwner() = default;
     virtual SPIController& controller() = 0;
+    virtual bool powerPending() const { return false; }
+    virtual IOReturn continueBind(NativeSPIControllerFailure&) { return kIOReturnSuccess; }
     virtual IOReturn prepareGPIOGroup(IOACPIPlatformDevice*, const char*) { return kIOReturnUnsupported; }
     virtual IOReturn writeGPIOGroup(bool) { return kIOReturnUnsupported; }
     virtual IOReturn readGPIO(IOACPIPlatformDevice*, const char*, size_t, uint32_t&) { return kIOReturnUnsupported; }

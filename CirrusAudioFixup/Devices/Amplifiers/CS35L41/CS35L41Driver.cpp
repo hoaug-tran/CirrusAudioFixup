@@ -810,7 +810,8 @@ void CS35L41Driver::monitorCS35L41(AmplifierState& amp, const cirrus::core::Play
         stopRuntimePlayback(amp);
         return;
     }
-    if (amp.playbackTransition.pending() &&
+    // Reprepare when the active stream changes, even without an IOAudio event.
+    if (((amp.playbackActive && !amp.playbackFaulted) || amp.playbackTransition.pending()) &&
         (!hasAudio || amp.playbackTransition.generation != routeGeneration || amp.playbackTransition.streamTag != mHdaState.lastStreamTag ||
          amp.playbackTransition.streamFormat != mHdaState.lastFormat)) {
         stopRuntimePlayback(amp);

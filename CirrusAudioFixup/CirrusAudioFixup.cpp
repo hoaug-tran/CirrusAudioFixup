@@ -729,7 +729,7 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         mAttachment.amplifier = "UNSUPPORTED";
         const auto factory =
             mPlatformProfile->spiControllerFactory ? mPlatformProfile->spiControllerFactory : cirrus::transport::createNativeSPIController;
-        const IOReturn ret = mNativeSPI.bindControllers(acpi, this, factory);
+        const IOReturn ret = mNativeSPI.bound() ? mNativeSPI.continueBind() : mNativeSPI.bindControllers(acpi, this, factory);
         mAttachment.communication = ret == kIOReturnSuccess ? "READY" : "FAILED";
         if (ret != kIOReturnSuccess) {
             const auto& failure = mNativeSPI.failure();
@@ -745,10 +745,16 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     mAttachment.amplifier = "REGISTERED_NOT_PROBED";
     const auto format = *selected->format(cirrus::core::BusTransportType::SPI);
     CIRRUS_LOG("BOOT_FLOW SPI_BIND_BEGIN");
-    IOReturn ret = mNativeSPI.bind(acpi, this, format,
+    IOReturn ret = mNativeSPI.bound() ? mNativeSPI.continueBind() : mNativeSPI.bind(acpi, this, format,
                                    mPlatformProfile->spiControllerFactory ? mPlatformProfile->spiControllerFactory
                                                                           : cirrus::transport::createNativeSPIController);
     CIRRUS_LOG("BOOT_FLOW SPI_BIND_END ret=0x%08X", uint32_t(ret));
+    if (mNativeSPI.powerPending()) {
+        setProperty("Cirrus_SPI_Status", "WAITING_POWER");
+        mAttachment.communication = "WAITING_POWER";
+        publishAttachmentStatus();
+        return true;
+    }
     const IOReturn controllerReturn = ret;
     bool writable = false;
     if (ret == kIOReturnSuccess && selected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard)
@@ -936,8 +942,7 @@ void CirrusAudioFixup::teardownCommunication() {
 }
 
 // Validate diagnostic options before any reset or amplifier write.
-// Provider discovery happens before service publication; later playback and
-// power transitions run on the service workloop.
+// The workloop completes pending controller power after start returns.
 bool CirrusAudioFixup::start(IOService* provider) {
     if (bootArgEnabled("-cirrusoff")) {
         return false;
@@ -993,6 +998,15 @@ bool CirrusAudioFixup::start(IOService* provider) {
         }
     }
 
+    if (!setupProbeTimer()) {
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "EVENT_SETUP_FAILED", kIOReturnNoMemory);
+        retainFailedServiceEvidence(this);
+#endif
+        mProvider = nullptr;
+        super::stop(provider);
+        return false;
+    }
     CIRRUS_LOG("BOOT_FLOW COMMUNICATION_BEGIN");
 #if defined(KERNEL)
     publishBootCheckpoint(this, "COMMUNICATION_BEGIN");
@@ -1007,11 +1021,51 @@ bool CirrusAudioFixup::start(IOService* provider) {
         retainFailedServiceEvidence(this);
         publishMatchingEvent("START_COMMUNICATION_FAILED", provider, kIOReturnError);
 #endif
-        teardownCommunication();
-        mProvider = nullptr;
-        super::stop(provider);
+        stop(provider);
         return false;
     }
+    if (mNativeSPI.powerPending()) {
+        mStartupPending = true;
+        setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_POWER");
+#if defined(KERNEL)
+        publishBootCheckpoint(this, "START_WAITING_CONTROLLER_POWER");
+#endif
+        registerService();
+        mProbeTimer->setTimeoutMS(10);
+        return true;
+    }
+    if (!finishStartup()) {
+        stop(provider);
+        return false;
+    }
+    return true;
+}
+
+// Keep controller ownership while its power request is pending.
+void CirrusAudioFixup::continueStartup() {
+    const auto result = mNativeSPI.continueBind();
+    if (mNativeSPI.powerPending()) {
+        mProbeTimer->setTimeoutMS(10);
+        return;
+    }
+    mStartupPending = false;
+    if (result == kIOReturnSuccess && setupCommunication(mProvider) && finishStartup())
+        return;
+    mStartupFailed = true;
+    setProperty("Cirrus_Driver_Verdict", "STARTUP_FAILED");
+    if (result != kIOReturnSuccess) {
+        const auto& failure = mNativeSPI.failure();
+        recordAttachmentFailure("COMMUNICATION", failure.reason, result, uint32_t(failure.index), "CONTROLLER_SLOT");
+    }
+#if defined(KERNEL)
+    publishBootCheckpoint(this, "DEFERRED_START_FAILED", result == kIOReturnSuccess ? kIOReturnError : result);
+    retainFailedServiceEvidence(this);
+#endif
+    teardownCommunication();
+}
+
+bool CirrusAudioFixup::finishStartup() {
+    auto* provider = mProvider;
     mPlatformIdentityPending = !mPlatformSubsystemId && mPlatformProfile->allowAutomaticInitialization && !bootArgEnabled("-cirrusro");
     if (mPlatformIdentityPending) {
         mPlatformIdentityDeadlineMs = playbackTimeMilliseconds() + 30000;
@@ -1037,8 +1091,6 @@ bool CirrusAudioFixup::start(IOService* provider) {
                 retainFailedServiceEvidence(this);
 #endif
                 teardownCommunication();
-                mProvider = nullptr;
-                super::stop(provider);
                 return false;
             }
             CIRRUS_LOG("Platform hardware reset not asserted or verified; continuing with ACPI and I2C soft reset");
@@ -1059,28 +1111,6 @@ bool CirrusAudioFixup::start(IOService* provider) {
 #endif
     }
 
-    CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_BEGIN");
-#if defined(KERNEL)
-    publishBootCheckpoint(this, "EVENT_SETUP_BEGIN");
-#endif
-    if (!setupProbeTimer()) {
-        CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=0");
-        CIRRUS_ERR("probe timer setup failed");
-#if defined(KERNEL)
-        publishMatchingEvent("START_PROBE_TIMER_FAILED", provider, kIOReturnNoMemory);
-        publishBootCheckpoint(this, "EVENT_SETUP_FAILED", kIOReturnNoMemory);
-        retainFailedServiceEvidence(this);
-#endif
-        teardownCommunication();
-        mProvider = nullptr;
-        super::stop(provider);
-        return false;
-    }
-    CIRRUS_LOG("BOOT_FLOW EVENT_SETUP_END ready=1");
-#if defined(KERNEL)
-    publishBootCheckpoint(this, "EVENT_SETUP_END");
-#endif
-
     if (bootArgEnabled("-cirrusro")) {
         CIRRUS_LOG("CirrusAudioFixup starting in READ-ONLY PROBE mode");
         uint32_t delayMs = 100;
@@ -1100,7 +1130,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
 #if defined(KERNEL)
     publishBootCheckpoint(this, "PM_SETUP_BEGIN");
 #endif
-    const bool powerManagementReady = setupPowerManagement(provider);
+    const bool powerManagementReady = mPMInitialized || setupPowerManagement(provider);
     CIRRUS_LOG("BOOT_FLOW PM_SETUP_END ready=%u", unsigned(powerManagementReady));
 #if defined(KERNEL)
     publishBootCheckpoint(this, "PM_SETUP_END", powerManagementReady ? kIOReturnSuccess : kIOReturnNotReady);
@@ -1108,7 +1138,6 @@ bool CirrusAudioFixup::start(IOService* provider) {
         retainFailedServiceEvidence(this);
 #endif
     if (!powerManagementReady) {
-        stop(provider);
         return false;
     }
     setupAmplifierInterrupt();
@@ -1225,10 +1254,17 @@ IOReturn CirrusAudioFixup::lifecycleAction(OSObject* owner, void* operation, voi
         return kIOReturnBadArgument;
     const uintptr_t action = reinterpret_cast<uintptr_t>(operation);
     if (action == 2) {
+        const bool pending = self->mResumePending;
+        self->mStartupPending = false;
         self->handlePowerChange(false);
+        self->mResumePending = false;
         self->mStopping = true;
+        if (pending)
+            self->acknowledgeSetPowerState();
     } else if (!self->mStopping) {
         self->handlePowerChange(action != 0);
+        if (self->mResumePending)
+            return kIOReturnNotReady;
     }
     return kIOReturnSuccess;
 }
@@ -1239,6 +1275,10 @@ IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device)
     CIRRUS_LOG("BOOT_FLOW PM_CHANGE_BEGIN state=%lu", state);
     if (mCommandGate) {
         IOReturn result = mCommandGate->runAction(lifecycleAction, reinterpret_cast<void*>(state));
+        if (result == kIOReturnNotReady) {
+            // IOKit expects an acknowledgement timeout in microseconds.
+            return 35000000;
+        }
         if (result != kIOReturnSuccess)
             CIRRUS_ERR("PM gate failed: 0x%08X", result);
     }
@@ -1250,7 +1290,7 @@ IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device)
 // Wake repeats the amplifier initialization flow, including its software reset;
 // it does not repeat the board GPIO reset performed during start().
 void CirrusAudioFixup::handlePowerChange(bool powered) {
-    if (mStopping || powered == mPowerAvailable)
+    if (mStopping || (powered == mPowerAvailable && !(mResumePending && !powered)))
         return;
     if (!powered) {
         if (mAmpInterrupt)
@@ -1269,6 +1309,7 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
                 releaseAmplifierDrivers();
         }
         suspendCommunication();
+        mResumePending = false;
         mPowerAvailable = false;
         clearHdaCache();
         mHdaState.streamActive = mHdaState.observed = mHdaState.converterPrepared = false;
@@ -1277,8 +1318,17 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
         mHdaState.lastFormat = 0;
         setProperty("Cirrus_PM_Powered", uint64_t(uint32_t(0)), 32);
     } else {
+        if (mStartupPending) {
+            mPowerAvailable = true;
+            if (mProbeTimer)
+                mProbeTimer->setTimeoutMS(10);
+            return;
+        }
         if (!resumeCommunication()) {
-            setProperty("Cirrus_SPI_Status", "WAKE_CONTROLLER_NOT_READY");
+            if (mResumePending && mProbeTimer)
+                mProbeTimer->setTimeoutMS(10);
+            else
+                setProperty("Cirrus_SPI_Status", "WAKE_CONTROLLER_NOT_READY");
             return;
         }
         mPowerAvailable = true;
@@ -1308,14 +1358,15 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
 // Cancel and remove event sources before releasing their owners; a timer
 // callback must never outlive the provider pointer it uses.
 void CirrusAudioFixup::stop(IOService* provider) {
-    teardownAmplifierInterrupt();
-    teardownAudioEvents();
     if (mCommandGate) {
         mCommandGate->runAction(lifecycleAction, reinterpret_cast<void*>(uintptr_t(2)));
     } else {
         handlePowerChange(false);
         mStopping = true;
     }
+    // Stop callbacks under the gate before releasing their event sources.
+    teardownAmplifierInterrupt();
+    teardownAudioEvents();
     if (mPMInitialized) {
         PMstop();
         mPMInitialized = false;
@@ -1579,12 +1630,8 @@ void CirrusAudioFixup::teardownAmplifierInterrupt() {
 }
 
 bool CirrusAudioFixup::setupProbeTimer() {
-    mWorkLoop = getWorkLoop();
-    if (!mWorkLoop) {
-        mWorkLoop = IOWorkLoop::workLoop();
-    } else {
-        mWorkLoop->retain();
-    }
+    // A separate loop lets provider matching and PM progress during startup.
+    mWorkLoop = IOWorkLoop::workLoop();
 
     if (!mWorkLoop) {
         CIRRUS_ERR("EVENT_SETUP_FAILED operation=workLoop reason=NO_MEMORY");
@@ -1629,7 +1676,23 @@ void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* send
     (void)sender;
     CirrusAudioFixup* self = OSDynamicCast(CirrusAudioFixup, owner);
     if (self) {
-        if (self->mStopping || !self->mPowerAvailable)
+        if (self->mStopping || self->mStartupFailed)
+            return;
+        if (!self->mPowerAvailable && !self->mResumePending)
+            return;
+        if (self->mStartupPending) {
+            self->continueStartup();
+            return;
+        }
+        if (self->mResumePending) {
+            self->handlePowerChange(true);
+            if (self->mResumePending)
+                self->mProbeTimer->setTimeoutMS(10);
+            else
+                self->acknowledgeSetPowerState();
+            return;
+        }
+        if (!self->mPowerAvailable)
             return;
         self->setProperty("CirrusTimerFired", kOSBooleanTrue);
         if (self->bootArgEnabled("-cirrusro")) {
@@ -1886,6 +1949,7 @@ void CirrusAudioFixup::clearHdaCache() {
 // removal or invalid topology; unavailable hardware must disable playback.
 // Multiple running output streams are ambiguous, so none is selected.
 bool CirrusAudioFixup::synchronizeHdaStream() {
+    const auto previous = mHdaState;
     const bool wasPrepared = mHdaState.converterPrepared;
     auto publishStatus = [&](const char* text) {
         if (mHdaStatus && strcmp(mHdaStatus, text) == 0)
@@ -2020,8 +2084,23 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
     }
     bool converterPrepared = outputRunning && activeStream != 0 && supportedHdaFormat(activeFormat);
     bool streamActive = converterPrepared;
+    const bool streamChanged = previous.lastDescriptor != activeDescriptor || previous.lastStreamTag != activeStream ||
+                               previous.lastFormat != activeFormat || previous.observed != mHdaState.observed;
+    if (streamChanged) {
+        char text[192]{};
+        snprintf(text, sizeof(text), "descriptor=%u tag=%u format=0x%04X rate_hz=%u bits=%u channels=%u compatible=%u",
+                 activeDescriptor, activeStream, activeFormat,
+                 outputRunning ? cirrus::platform::hda::HDAStreamWatcher::decodeSampleRate(activeFormat) : 0,
+                 outputRunning ? cirrus::platform::hda::HDAStreamWatcher::decodeBitsPerSample(activeFormat) : 0,
+                 outputRunning ? unsigned((activeFormat & 15) + 1) : 0, unsigned(converterPrepared));
+        if (auto* summary = OSString::withCString(text)) {
+            setProperty("Cirrus_HDA_Last_Stream", summary);
+            summary->release();
+        }
+    }
 
-    if (outputRunning && activeStream != 0 && !supportedHdaFormat(activeFormat)) {
+    // Record format rejection once per stream change.
+    if (streamChanged && outputRunning && activeStream != 0 && !supportedHdaFormat(activeFormat)) {
         for (size_t i = 0; i < mAmplifierCount; ++i) {
             setDiagnosticStage(mAmplifiers[i], STAGE_HDA_DETECT);
             recordDiagnosticFailure(mAmplifiers[i], DIAG_HDA_STREAM_FORMAT, activeDescriptor, 1, activeFormat, kIOReturnSuccess, false);
@@ -2132,6 +2211,13 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
         publishDriverVerdict();
         return true;
     }
+    if (mNativeSPI.powerPending()) {
+        mStartupPending = true;
+        setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_POWER");
+        if (mProbeTimer)
+            mProbeTimer->setTimeoutMS(10);
+        return true;
+    }
     if (!mPlatformAuthorized) {
         publishDriverVerdict();
         return true;
@@ -2187,9 +2273,10 @@ void CirrusAudioFixup::runBackgroundMonitor() {
     const bool eventRoute = mAudioState.routeKnown;
     // A DMA stream may belong to headphones/HDMI. An unknown output is not
     // permission to unmute board speakers, even when its format is compatible.
-    const bool routePermitsPlayback = eventRoute && mAudioState.speakers && (!mAudioState.engineKnown || mAudioState.engineRunning);
+    const bool routePermitsPlayback = eventRoute && mAudioState.speakers && mAudioState.engineKnown && mAudioState.engineRunning;
     setProperty("Cirrus_Playback_Route_Policy", !eventRoute ? "UNKNOWN_OUTPUT_ROUTE"
                 : !mAudioState.speakers ? "NON_SPEAKER_OUTPUT"
+                : !mAudioState.engineKnown ? "UNKNOWN_OUTPUT_ENGINE"
                 : !routePermitsPlayback ? "OUTPUT_ENGINE_STOPPED" : "SPEAKER_OUTPUT_SELECTED");
     bool hasAudio = mHdaState.observed && hdaStreamActive && routePermitsPlayback;
     if (!mAmplifierManager.bound() || (mAmplifierManager.stage() != cirrus::core::AmplifierStage::Ready &&
@@ -2260,6 +2347,9 @@ void CirrusAudioFixup::runBackgroundMonitor() {
                 mProbeTimer->setTimeoutMS(5);
             } else if (mAmplifierManager.stage() == cirrus::core::AmplifierStage::Playing && routePermitsPlayback)
                 mProbeTimer->setTimeoutMS(100);
+            else if (routePermitsPlayback)
+                // Format changes can occur without an IOAudio state event.
+                mProbeTimer->setTimeoutMS(250);
             return;
         }
         mProbeTimer->setTimeoutMS(mHdaState.streamActive ? 100 : 50);

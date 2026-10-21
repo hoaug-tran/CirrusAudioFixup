@@ -90,6 +90,8 @@ public:
  {cls}(){{++liveControllers;}}~{cls}(){{--liveControllers;}}
  static bool supportsProvider({typ}* p){{return p && {valid};}}
  IOReturn bind({typ}* p,IOService*){{active={valid};return active?0:kIOReturnUnsupported;}}
+ bool powerPending() const {{return false;}}
+ IOReturn continueBind() {{return active?0:kIOReturnNotReady;}}
  const char* bindFailureReason() const {{return active?"NONE":"INTEL_CONTROLLER_ID_UNSUPPORTED";}}
  uint32_t initialCapabilities() const {{return 0;}}
  uint32_t initialStatus() const {{return 0;}}
@@ -207,6 +209,7 @@ public:
  size_t expectedAmplifierCount()const{return mPlatformProfile->boardConfiguration?mPlatformProfile->boardConfiguration->count:mPlatformProfile->endpointCount;}
  size_t detectConfiguredI2CAmplifiers();
  ~CirrusAudioFixup(){teardownCommunication();}
+ bool mResumePending=false;
  bool setupCommunication(IOService*);
  bool preflightI2CIdentity(const cirrus::platform::AmplifierDriverRegistration*);
  size_t detectNativeSPIAmplifiers();void teardownCommunication();
@@ -262,21 +265,23 @@ cirrus::core::AmplifierLifecycleHooks* createSPI(const cirrus::platform::Amplifi
 void destroySPI(cirrus::core::AmplifierLifecycleHooks* h){delete h;}
 // Independent communication owner: no Intel/AMD base class or register knowledge.
 unsigned nativeCreates=0,nativeDestroys=0,nativeSuspends=0,nativeResumes=0;
-bool rejectNative=false,failNativeResume=false;
+bool rejectNative=false,failNativeResume=false,delayNativePower=false;
 class FixtureNativeSPI final : public cirrus::transport::NativeSPIControllerOwner,public cirrus::transport::SPIController {
- bool active=true;
+ bool active=true,pending=false;
 public:
  static inline std::vector<bool> gpioLevels;
  static inline int gpioPrepareResult=0,gpioWriteResult=0;
- static inline bool simulateHeldReset=false;
+ static inline bool simulateHeldReset=false,failContinuation=false;
  IOReturn prepareGPIOGroup(IOACPIPlatformDevice*,const char* property)override{
   assert(!strcmp(property,"reset-gpios"));return gpioPrepareResult;
  }
  IOReturn writeGPIOGroup(bool level)override{gpioLevels.push_back(level);if(!gpioWriteResult)simulateHeldReset=!level;return gpioWriteResult;}
- FixtureNativeSPI(){++nativeCreates;}~FixtureNativeSPI(){++nativeDestroys;}
+ FixtureNativeSPI(){++nativeCreates;pending=delayNativePower;active=!pending;}~FixtureNativeSPI(){++nativeDestroys;}
  cirrus::transport::SPIController& controller()override{return *this;}
- void suspend()override{active=false;++nativeSuspends;}
- IOReturn resume(cirrus::transport::NativeSPIControllerFailure& failure)override{++nativeResumes;active=!failNativeResume;failure={"CUSTOM_OWNER_RESUME_FAILED",active?0:kIOReturnNotReady,0};return failure.result;}
+ bool powerPending()const override{return pending;}
+ IOReturn continueBind(cirrus::transport::NativeSPIControllerFailure& f)override{if(failContinuation){pending=false;f={"DEFERRED_BIND_FAILED",kIOReturnTimeout,0};return kIOReturnTimeout;}if(delayNativePower)return kIOReturnNotReady;pending=false;active=true;return 0;}
+ void suspend()override{active=false;pending=false;++nativeSuspends;}
+ IOReturn resume(cirrus::transport::NativeSPIControllerFailure& failure)override{++nativeResumes;pending=delayNativePower;active=!failNativeResume&&!pending;failure={"CUSTOM_OWNER_RESUME_FAILED",active?0:kIOReturnNotReady,0};return failure.result;}
  size_t maxTransferBytes()const override{return 262;}
  IOReturn exchange(const cirrus::transport::SPIEndpoint&,const uint8_t*,uint8_t*,size_t)override{return kIOReturnUnsupported;}
  IOReturn command(const cirrus::transport::SPIEndpoint& endpoint,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n)override{
@@ -697,6 +702,30 @@ int main(){
  amp.path=originalACPIPath;
  auto mixedBus=descriptor("SPI0",0);mixedBus.insert(mixedBus.end(),i2cCRS.begin(),i2cCRS.end());amp.crs.bytes=mixedBus;
  CirrusAudioFixup mixedResources;assert(!mixedResources.setupCommunication(&amp) && !strcmp(mixedResources.mAttachment.first.reason,"MIXED_I2C_SPI_RESOURCES") && !liveControllers);
+
+ // Pending is neither a factory failure nor a new controller allocation.
+ resources(amp,{{"SPI0",0},{"SPI1",1}});
+ delayNativePower=true;
+ NativeSPIHost deferred;
+ auto creates=nativeCreates,destroys=nativeDestroys;
+ assert(deferred.bind(&amp,&owner,format,createCustomSPI)==0);
+ assert(deferred.bound()&&deferred.powerPending()&&nativeCreates==creates+2);
+ assert(!deferred.registers(0)&&deferred.prepareHardware(&amp)==kIOReturnNotReady);
+ for(unsigned i=0;i<80;++i)assert(deferred.continueBind()==kIOReturnNotReady);
+ assert(nativeCreates==creates+2&&nativeDestroys==destroys);
+ delayNativePower=false;assert(deferred.continueBind()==0&&!deferred.powerPending());
+ deferred.suspend();delayNativePower=true;
+ auto stops=nativeSuspends;
+ assert(deferred.resume()==kIOReturnNotReady&&deferred.powerPending());
+ assert(nativeSuspends==stops);
+ delayNativePower=false;assert(deferred.resume()==0&&!deferred.powerPending());
+ deferred.shutdown();assert(nativeDestroys==destroys+2);
+ // A terminal first-controller failure must cancel another pending peer.
+ delayNativePower=true;assert(deferred.bind(&amp,&owner,format,createCustomSPI)==0);
+ FixtureNativeSPI::failContinuation=true;
+ assert(deferred.continueBind()==kIOReturnTimeout&&!deferred.powerPending()&&!deferred.bound());
+ assert(!strcmp(deferred.failure().reason,"DEFERRED_BIND_FAILED"));
+ FixtureNativeSPI::failContinuation=false;delayNativePower=false;
  puts("PASS Intel/AMD x I2C/SPI attachment/runtime matrix, unsupported controller/AMP separation, ACPI bus classification and no unsupported AMP writes");
  assert(pciMatchingDictionary.refs==1);
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;

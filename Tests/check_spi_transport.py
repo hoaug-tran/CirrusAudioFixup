@@ -71,9 +71,11 @@ int main() {
     assert(c.frames.size()==2 && c.frames[0].size()==18 && c.frames[1][3]==0x0c);
     assert(data[0]==0x11 && data[12]==0x11 && data[19]==0x44);
     before=c.calls;
-    assert(!io.write(0x03804fec,0)); // Linux CS35L41_LASTREG + 4
+    // Linux CS35L41_LASTREG + 4
+    assert(!io.write(0x03804fec,0));
     assert(!io.bulkWrite(0x03804fe8,data.data(),8));
-    assert(c.calls==before); // Reject the entire range before any transfer.
+    // Reject the entire range before any transfer.
+    assert(c.calls==before);
     assert(!io.bulkWrite(0x7ffffffc,data.data(),8));
     assert(!io.bulkRead(1,data.data(),4));
     assert(!io.bulkRead(0,data.data(),3));

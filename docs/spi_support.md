@@ -15,7 +15,7 @@ controller sources and bind native controllers. Both buses use the shipping
 registered amplifier runtime for bring-up, firmware, group playback and PM.
 Unknown boards remain read-only; writable operation requires exact verified
 board and firmware bindings.
-Driver-owned ACPI discovery resolves endpoints, channels and internal boost independently of OEM and controller path, with exact resource matching. The 103C89C6 dump is the present integration evidence, not a universal HP profile. The listed HP configuration has working playback; other controller/board combinations need their own tests. See [HP evidence and target gates](hp_spi_bringup.md). No writable ASUS profile is supplied.
+Driver-owned ACPI discovery resolves endpoints, channels and internal boost independently of OEM and controller path, with exact resource matching. The 103C89C6 dump is integration evidence, not a universal HP profile. The listed HP configuration has working playback; other controller/board combinations need their own tests. See [HP evidence and target gates](hp_spi_bringup.md). ASUS G614JI (`1043:1C9F`) has confirmed macOS playback with AppleALC layout 21 at 48 kHz using automatic board metadata and speaker-specific firmware. Cold boot and reboot work according to the reporter; sleep/wake and other layouts remain unverified.
 A CPU vendor does not identify a controller or supply board tuning.
 
 | Driver | Source support | Limits / remaining work |
@@ -28,7 +28,7 @@ A CPU vendor does not identify a controller or supply board tuning.
 | Intel INTC1056/INTC1085 GPIO CS | Implemented for existing GPIO outputs | Evaluated ACPI mapping, exclusive provider, hardware ownership/TX lock and readback guards; INTC1056 used by the supported HP board |
 | Other controllers / GPIO families | Not implemented | Need documented register driver and ownership/power behavior |
 | ACPI SPI IOService discovery | Implemented, automatic | Selected from `_CRS`; use `-cirrusro -cirrusdbg` for first-boot inspection; hardware validation ongoing |
-| SPI amplifier lifecycle/playback | Connected to shipping driver runtime | HP 103C89C6 configuration included; no ASUS profile |
+| SPI amplifier lifecycle/playback | Connected to shipping driver runtime | HP 103C89C6 configuration included; ASUS 10431C9F playback confirmed at layout 21 / 48 kHz; 44.1 kHz is not supported |
 
 ## Controller selection
 

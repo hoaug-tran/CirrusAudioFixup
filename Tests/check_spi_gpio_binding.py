@@ -125,7 +125,8 @@ int main(){
   for(auto* m:{csMap,resetMap}){m->r[0]=0x960000;m->r[3]=0x700;}
   const auto csOffset=0x700+20*16;const auto resetOffset=0x700;
   csMap->r[csOffset/4]=0x84000201;resetMap->r[resetOffset/4]=0x44000200;
-  csMap->r[0x114/4]=1U<<14; // unrelated locked pad must not block GPIO 468
+  // unrelated locked pad must not block GPIO 468
+  csMap->r[0x114/4]=1U<<14;
   auto asusCS=crs;asusCS.resize(asusCS.size()-2);asusCS[23]=0xd4;asusCS[24]=1;
   auto asusReset=asusCS;asusReset[23]=0x40;asusReset[24]=1;
   asusCS.insert(asusCS.end(),asusReset.begin(),asusReset.end());asusCS.insert(asusCS.end(),{0x79,0});

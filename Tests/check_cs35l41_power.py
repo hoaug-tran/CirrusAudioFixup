@@ -20,7 +20,8 @@ struct Port:cirrus::core::RegisterIO {
  bool step(){return ++calls!=failAt;}
  bool read(uint32_t reg,uint32_t* out)override{if(!step())return false;*out=r[reg];return true;}
  bool write(uint32_t reg,uint32_t value)override{
-  if(reg==0x13020)assert(value==1||value==2||value==7); // Linux CSPL commands used by this lifecycle
+  // Linux CSPL commands used by this lifecycle
+  if(reg==0x13020)assert(value==1||value==2||value==7);
   if(!step())return false;
   writes.push_back(reg);
   if(reg==0x10010)r[reg]&=~value;else r[reg]=value;
@@ -37,7 +38,8 @@ int main(){
  {Port io;io.r[0x2018]=0x3021;CS35L41Device device("helper",0x40);
   assert(device.stopPlayback(io));
   assert(!(io.r[0x2018]&1)&&io.r[0x6000]==0xA678&&io.r[0x6c04]==0);
-  assert(!device.powerDown(io)); // Monitor/boost still active: never claim shutdown.
+  // Monitor/boost still active: never claim shutdown.
+  assert(!device.powerDown(io));
   io.r[0x2018]=0;io.r[0x2014]=0;assert(device.powerDown(io));
   io.r[0]=UINT32_MAX;assert(!device.isAlive(io));
   io.r[0]=registers::kValDeviceId;assert(device.isAlive(io));
@@ -58,7 +60,8 @@ int main(){
  assert(powerConfiguration(&internal,sizeof(internal),kPowerConfigurationKind)==&internal);
  assert(powerConfiguration(nullptr,0,nullptr)==&kLegacyPowerConfiguration);
  Port legacyConfiguration;assert(kLegacyPowerConfiguration.configure(legacyConfiguration));
- assert(legacyConfiguration.calls==0); // Old bindings gain no boost programming I/O.
+ // Old bindings gain no boost programming I/O.
+ assert(legacyConfiguration.calls==0);
  // Run legacy default, explicit external and internal lifecycles interleaved:
  // no global power selection may leak between independent amplifier instances.
  for(bool dsp:{false,true}){
@@ -87,10 +90,10 @@ int main(){
    assert(hp.r[0x4C54]==0x29U&&legacy.r[0x4C54]==0x29U&&explicitLegacy.r[0x4C54]==0x29U);
    assert(hp.r[0x4C58]==0x3AU&&legacy.r[0x4C58]==0x3AU&&explicitLegacy.r[0x4C58]==0x3AU);
    assert(hp.r[0x4C5C]==0x3BU&&legacy.r[0x4C5C]==0x3BU&&explicitLegacy.r[0x4C5C]==0x3BU);
-   auto wrongInternal=hp;auto wrongExternal=legacy;auto ci=c;auto ai=a;
+   auto wrongInternal=hp;auto wrongExternal=legacy;auto internalTransition=c;auto externalTransition=a;
    wrongInternal.r[0x4C54]=0x21;wrongExternal.r[0x4C54]=0x21;
-   assert(!Playback::commit(wrongInternal,ci,17<<5,true,internal));
-   assert(!Playback::commit(wrongExternal,ai,17<<5,true));
+   assert(!Playback::commit(wrongInternal,internalTransition,17<<5,true,internal));
+   assert(!Playback::commit(wrongExternal,externalTransition,17<<5,true));
    assert(wrongInternal.r[0x6000]==0xA678&&wrongExternal.r[0x6000]==0xA678);
   }
   assert(legacy.r[0x2018]==(dsp?0x3001U:1U)&&hp.r[0x2018]==(dsp?0x3021U:0x21U));

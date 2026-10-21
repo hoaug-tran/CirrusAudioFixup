@@ -124,7 +124,7 @@ int main(){
         pci.rejectMemory=false;assert(bus.resume()==0);
         bus.shutdown();assert(pci.refs==1&&!pci.opened&&!pci.memory&&pci.map.releases==1);
         bus.shutdown();assert(pci.closes==1);
-        assert(bus.bind(&pci,&owner)==0); // owner can bind again after teardown
+        assert(bus.bind(&pci,&owner)==0);
     }
     assert(pci.refs==1&&!pci.opened&&pci.closes==2&&allocs==frees);
     for(unsigned mode=0;mode<7;++mode){
@@ -165,16 +165,28 @@ int main(){
      bus.suspend();cold.state=0xb;assert(bus.resume()==0&&cold.state==8);
      bus.shutdown();}
     assert(cold.refs==1&&!cold.opened&&!cold.memory);
-    // Queued PM success does not imply an immediate domain grant. A delayed
-    // grant can release D3hot, but a grant beyond the bound must not write PCI.
-    for(unsigned delay:{100U,600U}){
+    // Delayed grants keep ownership without accessing the BAR.
+    for(unsigned delay:{100U,600U,5000U,31000U}){
         domainDelayMs=delay;IOPCIDevice delayed;delayed.state=0xb;delayed.wakeAllowed=true;
-        IntelLPSSSPIController bus;auto result=bus.bind(&delayed,&owner);
-        assert(result==(delay<500?kIOReturnSuccess:kIOReturnTimeout));
-        assert(delayed.writes==(delay<500?1U:0U));
-        if(delay>=500)assert(delayed.map.releases==0&&!delayed.memory);
+        IntelLPSSSPIController bus;auto before=fakeNs;auto result=bus.bind(&delayed,&owner);
+        assert(result==kIOReturnNotReady&&bus.powerPending());
+        assert(fakeNs-before<10000000&&delayed.writes==0&&!delayed.memory&&delayed.opened);
+        auto clients=pmClients;
+        for(unsigned tick=0;bus.powerPending()&&tick<3100;++tick){
+            IOSleep(10);result=bus.continueBind();
+        }
+        assert(result==(delay<30000?kIOReturnSuccess:kIOReturnTimeout));
+        assert(pmClients==clients);
+        assert(delayed.writes==(delay<30000?1U:0U));
+        if(delay>=30000)assert(delayed.map.releases==0&&!delayed.memory);
         bus.shutdown();assert(delayed.refs==1&&!delayed.opened);
     }
+    domainDelayMs=5000;
+    { IOPCIDevice gone;gone.state=0xb;IntelLPSSSPIController bus;
+      assert(bus.bind(&gone,&owner)==kIOReturnNotReady&&bus.powerPending());
+      gone.vendor=0xffff;auto before=fakeNs;
+      assert(bus.continueBind()==kIOReturnNoDevice&&!bus.powerPending());
+      assert(fakeNs-before<10000000&&!gone.writes&&!gone.memory&&!gone.opened&&gone.refs==1); }
     domainDelayMs=0;
     IOPCIDevice resetRequired;resetRequired.state=3;resetRequired.wakeAllowed=true;
     {IntelLPSSSPIController bus;assert(bus.bind(&resetRequired,&owner)==kIOReturnNotReady);}
@@ -183,9 +195,10 @@ int main(){
         IOPCIDevice denied;denied.state=3;denied.wakeAllowed=true;
         rejectPM=failure==0;denyDomain=failure==1;rejectVote=failure==2;
         auto start=fakeNs;
-        {IntelLPSSSPIController bus;assert(bus.bind(&denied,&owner)!=0);}
+        {IntelLPSSSPIController bus;assert(bus.bind(&denied,&owner)!=0);
+         if(failure==1){assert(bus.powerPending());fakeNs+=30000000000ULL;assert(bus.continueBind()==kIOReturnTimeout);}}
         assert(denied.writes==0&&denied.map.releases==0&&!denied.memory&&!denied.opened&&denied.refs==1);
-        if(failure==1)assert(fakeNs-start<=510000000);
+        if(failure==1)assert(fakeNs-start<=30010000000ULL);
         rejectPM=denyDomain=rejectVote=false;
     }
     assert(pmClients==pmStops);

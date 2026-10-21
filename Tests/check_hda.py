@@ -76,7 +76,7 @@ public:
     uint32_t& mHdaMissCount = mHdaState.missCount;
 
     bool mPowerAvailable=true,mStopping=false,missing=false;
-    unsigned lookups=0;
+    unsigned lookups=0,diagFailures=0;
     size_t mAmplifierCount{2};
     int mAmplifiers[2]{};
     IOPCIDevice pci;
@@ -97,7 +97,7 @@ public:
     IOService* getAudioController() { ++lookups; return missing?nullptr:&pci; }
     void setProperty(const char* p,OSString* v) { properties[p]=v->value; }
     void setDiagnosticStage(int&,int) {}
-    template<class... T> void recordDiagnosticFailure(int&,T...) {}
+    template<class... T> void recordDiagnosticFailure(int&,T...) {++diagFailures;}
     bool synchronizeHdaStream();
     static bool supportedHdaFormat(uint16_t);
 };
@@ -143,10 +143,15 @@ int main() {
     CirrusAudioFixup unsupported;
     unsupported.stream(0,1,true,0x4031);
     check(!unsupported.synchronizeHdaStream(),"44.1 kHz blocked by fixed 48 kHz ASP");
+    for(unsigned tick=0;tick<100;++tick)check(!unsupported.synchronizeHdaStream(),"unsupported format remains blocked");
+    check(unsupported.diagFailures==2,"unchanged unsupported format diagnosed once per amplifier");
+    check(unsupported.properties["Cirrus_HDA_Last_Stream"].find("rate_hz=44100")!=std::string::npos,"dump explains rejected HDA rate");
     CirrusAudioFixup ambiguous;
+    check(ambiguous.synchronizeHdaStream(),"initial unique stream before ambiguity");
     ambiguous.write16(0,0x2000); ambiguous.stream(1,2);
     check(!ambiguous.synchronizeHdaStream(),"multiple running outputs cannot identify speaker descriptor");
     check(ambiguous.properties["Cirrus_HDA_Status"]=="AMBIGUOUS_OUTPUT_STREAMS","ambiguous route has explicit status");
+    check(!ambiguous.mHdaStreamActive&&!ambiguous.mHdaConverterPrepared&&!ambiguous.mHdaLastStreamTag,"ambiguity invalidates previous active stream state");
     CirrusAudioFixup unassigned;
     unassigned.write16(0,0x2000); unassigned.stream(1,0);
     check(unassigned.synchronizeHdaStream() && unassigned.mHdaLastDescriptor==0 &&

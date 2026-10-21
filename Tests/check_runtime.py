@@ -280,7 +280,7 @@ public:
     CS35L41Amp mAmplifiers[2]{};
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
-    bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false;
+    bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false,mResumePending=false,mStartupPending=false;
     bool mDebugPhaseHalted=false;
     void clearHdaCache() {}
     struct DummyPci { void release() {} };
@@ -477,6 +477,37 @@ public:
 
 checks = r'''
 int main() {
+
+    // Stream changes require cleanup before preparing the replacement.
+    for(unsigned changed=0;changed<2;++changed) {
+        CirrusAudioFixup d;d.runBackgroundMonitor();assert(d.mAmplifiers[0].playbackActive);
+        auto unmutes=d.unmute;
+        if(changed==0)++d.mHdaLastStreamTag;else d.mHdaLastFormat=0x31;
+        d.runBackgroundMonitor();
+        assert(!d.mAmplifiers[0].playbackActive && !d.mAmplifiers[0].playbackFaulted && d.unmute==unmutes);
+        d.runBackgroundMonitor();
+        assert(d.mAmplifiers[0].playbackActive && d.unmute==unmutes+1);
+    }
+    // Recheck format changes after fast preparation retries expire.
+    { CirrusAudioFixup d;Timer timer;d.mProbeTimer=&timer;
+      d.mHdaStreamActive=false;d.mHdaLastFormat=0x4031;d.mAudioPrepareRetries=0;
+      d.runBackgroundMonitor();assert(timer.scheduled && timer.lastDelay==250 && d.unmute==0);
+      d.mHdaStreamActive=true;d.mHdaLastFormat=0x31;d.runBackgroundMonitor();
+      assert(d.mAmplifiers[0].playbackActive && !d.mAmplifiers[0].playbackFaulted); }
+
+    { CirrusAudioFixup d;d.runBackgroundMonitor();
+      for(unsigned i=0;i<100;++i) {
+        d.mAudioState.engineRunning=false;++d.mAudioState.generation;d.runBackgroundMonitor();
+        assert(!d.mAmplifiers[0].playbackActive&&!d.mAmplifiers[0].playbackFaulted);
+        assert(d.mAmplifierManager.stage()==cirrus::core::AmplifierStage::Ready);
+        d.mAudioState.engineRunning=true;++d.mAudioState.generation;d.runBackgroundMonitor();
+        assert(d.mAmplifiers[0].playbackActive&&!d.mAmplifiers[0].playbackFaulted);
+      }
+      assert(d.mAmplifierManager.stage()==cirrus::core::AmplifierStage::Playing); }
+
+    { CirrusAudioFixup d;d.mAudioState={true,true,false,false,1};
+      d.runBackgroundMonitor();assert(d.unmute==0 && !d.mAmplifiers[0].playbackActive);
+      assert(d.properties["Cirrus_Playback_Route_Policy"]=="UNKNOWN_OUTPUT_ENGINE"); }
     // A running DMA stream alone cannot identify the selected output route.
     { CirrusAudioFixup unknownRoute;unknownRoute.mAudioState={};
       unknownRoute.runBackgroundMonitor();assert(unknownRoute.unmute==0);
@@ -1119,7 +1150,7 @@ int main() {
     for(int tick = 0; tick < 39; ++tick) eventDriver.runBackgroundMonitor();
     timerCalls = eventTimer.scheduled;
     eventDriver.runBackgroundMonitor();
-    checkNew(eventTimer.scheduled == timerCalls, "unready transition stops scheduling at its deadline");
+    checkNew(eventTimer.scheduled == timerCalls+1 && eventTimer.lastDelay==250 && eventDriver.writes.size()==eventIdleWrites, "fast retries end in slow HDA-only watch without amplifier writes");
     eventDriver.pll = true;
     eventDriver.mHdaStreamActive = true;
     eventDriver.mAudioState.generation = 4;
@@ -1132,6 +1163,11 @@ int main() {
     checkNew(!eventDriver.mAmplifiers[0].playbackActive && !eventDriver.mAmplifiers[0].shutdownTransition.pending() &&
              eventTimer.scheduled - timerCalls <= 5,
              "engine stop quiesces without persistent timer");
+    timerCalls = eventTimer.scheduled;
+    const auto stoppedEngineOps = eventDriver.ops;
+    for(int tick = 0; tick < 250; ++tick) eventDriver.runBackgroundMonitor();
+    checkNew(eventDriver.ops == stoppedEngineOps && eventTimer.scheduled == timerCalls,
+             "stopped speaker engine requires no amplifier I/O or timer rearming");
     recoveryPowerFault.runBackgroundMonitor();
     recoveryPowerFault.pll = false;
     recoveryPowerFault.runBackgroundMonitor();

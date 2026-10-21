@@ -24,9 +24,32 @@ public:
     ~NativeSPIHost() { shutdown(); }
     bool bound() const { return mCount != 0; }
     size_t count() const { return mCount; }
-    core::RegisterIO* registers(size_t i) const { return i < mCount ? mRegisters[i] : nullptr; }
+    bool powerPending() const {
+        for (size_t i = 0; i < mControllers; ++i)
+            if (mOwners[i] && mOwners[i]->powerPending())
+                return true;
+        return false;
+    }
+    IOReturn continueBind() {
+        for (size_t i = 0; i < mControllers; ++i) {
+            NativeSPIControllerFailure failure{};
+            const auto result = mOwners[i]->continueBind(failure);
+            if (result != kIOReturnSuccess) {
+                if (mOwners[i]->powerPending())
+                    return result;
+                fail(failure.reason, result, i, controllerSource(i), failure.detail);
+                // Cancel pending peers when any controller fails.
+                shutdown();
+                return result;
+            }
+        }
+        return kIOReturnSuccess;
+    }
+    core::RegisterIO* registers(size_t i) const { return !powerPending() && i < mCount ? mRegisters[i] : nullptr; }
     IOReturn readGPIO(IOACPIPlatformDevice* source, const char* property, size_t index, uint32_t& value) {
         value = 0;
+        if (powerPending())
+            return kIOReturnNotReady;
         for (size_t i = 0; i < mControllers; ++i) {
             const auto result = mOwners[i]->readGPIO(source, property, index, value);
             if (result != kIOReturnUnsupported)
@@ -36,6 +59,8 @@ public:
     }
     IOReturn readDiagnostic(size_t index, uint32_t clockHz, const core::RegisterMapConfig& format, uint32_t reg, uint32_t& value) {
         value = 0;
+        if (powerPending())
+            return kIOReturnNotReady;
         if (index >= mCount || !clockHz || clockHz > endpoint(index).spiClockHz || !core::RegisterMap::isValidConfig(format))
             return kIOReturnBadArgument;
         auto* controller = mBus[mSlots[index]];
@@ -173,6 +198,8 @@ public:
     // discovery maps only after every endpoint has a verified board/driver.
     IOReturn configureAuthorized(const platform::AmplifierDriverRegistry& registry, const platform::BoardConfiguration& board,
                                  const platform::BoardIdentity& actual, const char* deviceHid, bool allowWrites = true) {
+        if (powerPending())
+            return kIOReturnNotReady;
         if (!bound() || mAuthorized || !deviceHid || !board.permits(actual) || board.count != mCount)
             return fail("BOARD_AUTHORIZATION_REJECTED", kIOReturnNotPermitted);
         mFailure = {};
@@ -228,6 +255,8 @@ public:
         return kIOReturnSuccess;
     }
     IOReturn prepareHardware(IOACPIPlatformDevice* source) {
+        if (powerPending())
+            return kIOReturnNotReady;
         if (!mAuthorized || !mWritable)
             return fail("GPIO_RESET_NOT_AUTHORIZED", kIOReturnNotPermitted);
         if (!mResetSequence)
@@ -261,21 +290,27 @@ public:
         return kIOReturnSuccess;
     }
     void suspend() {
+        mResumeSlot = 0;
         for (size_t i = 0; i < mControllers; ++i)
             if (mOwners[i])
                 mOwners[i]->suspend();
     }
     IOReturn resume() {
         mFailure = {};
-        for (size_t i = 0; i < mControllers; ++i) {
+        for (size_t i = mResumeSlot; i < mControllers; ++i) {
             NativeSPIControllerFailure failure{};
             const auto result = mOwners[i]->resume(failure);
             if (result != kIOReturnSuccess) {
+                if (mOwners[i]->powerPending()) {
+                    mResumeSlot = i;
+                    return result;
+                }
                 fail(failure.reason, result, i, controllerSource(i), failure.detail);
                 suspend();
                 return result;
             }
         }
+        mResumeSlot = 0;
         return kIOReturnSuccess;
     }
     void shutdown() {
@@ -292,6 +327,7 @@ public:
             OSSafeReleaseNULL(mTargets[i]);
         }
         mCount = mControllers = 0;
+        mResumeSlot = 0;
         mResources = {};
         mAuthorized = false;
         mWritable = false;
@@ -308,6 +344,7 @@ public:
     NativeSPIHost() = default;
 
 private:
+    size_t mResumeSlot{0};
     static IOACPIPlatformDevice* resolve(IOACPIPlatformDevice* device, const char* source) {
         auto* plane = IORegistryEntry::getPlane("IOACPIPlane");
         if (!plane)

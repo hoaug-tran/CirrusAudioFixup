@@ -21,6 +21,9 @@ public:
     // Borrow owner, retain/open PCI and map BAR0. Caller must have verified
     // ownership/wiring. PCI D0 is requested and verified before BAR access.
     IOReturn bind(IOPCIDevice* pci, IOService* owner);
+    // Keep ownership while pending; the service workloop calls continueBind().
+    IOReturn continueBind();
+    bool powerPending() const { return mPowerPending; }
 #if defined(KERNEL)
     IOReturn prepareGPIOGroup(IOACPIPlatformDevice* source, const char* property) {
         return mChipSelects.prepareGPIOGroup(source, property);
@@ -106,6 +109,9 @@ private:
     IOPCIDevice* mPCI{nullptr};
     IOService* mOwner{nullptr};
     IOService* mPowerClient{nullptr};
+    uint64_t mPowerStartedNs{0};
+    unsigned mPowerSamples{0};
+    bool mPowerPending{false};
     IOPMPowerState mPowerStates[2]{};
     IOMemoryMap* mMap{nullptr};
     IOLock* mLock{nullptr};

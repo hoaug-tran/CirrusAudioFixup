@@ -54,7 +54,6 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 - [Collect Windows or Linux data](#collect-windows-or-linux-data)
 - [Adding hardware support](#adding-hardware-support)
 - [Build from source](#build-from-source)
-- [Documentation](#documentation)
 - [Sources and acknowledgments](#sources-and-acknowledgments)
 - [License](#license)
 
@@ -88,6 +87,7 @@ Additional families need their own driver, board configuration and firmware.
 
 | Configuration | Status |
 | --- | --- |
+| ASUS G614JV with verified `1043:1C9F` and matching CS35L41 wiring/tuning | Uses the same board profile as G614JI; macOS playback on G614JV has not yet been confirmed |
 | Other `CSC3551` boards | ACPI discovery available for supported properties; matching embedded firmware and board validation required |
 | `CLSA0101` or an unknown legacy Lenovo identity | Automatic initialization disabled |
 | Intel LPSS SPI | Supported SPT, BXT, CNL and TGL PCI profiles; controller identity selects the register family and root clock |

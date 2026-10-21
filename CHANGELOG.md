@@ -32,7 +32,7 @@
 
 ### Limits
 
-- Hardware output remains limited to 48 kHz stereo. G614JI sleep/wake and layout 22 are not confirmed. G614JV can use the same profile when its subsystem ID, wiring and tuning match; macOS playback on that model is not yet confirmed.
+- Hardware output remains limited to 48 kHz stereo. G614JI sleep/wake and layout 22 are not confirmed.
 - Other amplifier families and unsupported board/power configurations remain disabled.
 
 ## [1.1.0] - 2026-10-19

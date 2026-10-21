@@ -79,9 +79,6 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B` | I2C | Working |
 | HP ZBook Fury 16 G9 | `103C:89C6` | SPI | Working |
 | ASUS ROG Strix G16 G614JI | `1043:1C9F` | SPI | Working with layout 21 at 48 kHz |
-| ASUS ROG Strix G16 G614JV | `1043:1C9F` required | SPI | Supported with matching board configuration and speaker tuning |
-
-G614JV uses the same profile when its subsystem ID and amplifier configuration match. Playback has been confirmed on G614JI.
 
 <details>
 <summary><strong>Other boards and controller support</strong></summary>
@@ -143,7 +140,7 @@ Compare sound at matched output levels using the same track.
 
 ## Identify I2C or SPI
 
-The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 and ASUS G614JI/G614JV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
+The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 and ASUS G614JI use **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 

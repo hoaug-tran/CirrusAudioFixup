@@ -2,40 +2,27 @@
 
 ## [1.1.1] - 2026-10-21
 
-Release changes: [#9](https://github.com/hoaug-tran/CirrusAudioFixup/pull/9).
+[Pull request #9](https://github.com/hoaug-tran/CirrusAudioFixup/pull/9)
 
 ### Added
 
-- ASUS `1043:1C9F` board configuration and CS35L41 firmware, with separate left/right tuning for speaker IDs 0 and 1. G614JI playback is confirmed with speaker ID 1, AppleALC layout 21 and a 48 kHz hardware stream.
-- Shared board metadata and GPIO lookup interfaces. Amplifier modules can supply verified missing properties while preserving native ACPI data, without requiring a custom SSDT.
-- Speaker ID discovery from shared or per-amplifier GPIO resources, with explicit checks for conflicting identities and missing tuning.
-- Retained boot checkpoints, reset observations and Intel SPI transaction details, including initial identity responses, register readback, transferred bytes and separate transfer/cleanup failures. Publish calibration-record selection and the selected channel coefficient size.
-- Build manifests containing source, dependency and binary identity; the macOS collector captures these alongside loaded-bundle information. Add an offline ZIP comparison tool for captures from different boots.
+- Added CS35L41 support for ASUS subsystem `1043:1C9F`, including firmware and left/right speaker tuning.
+- Added automatic board configuration using ACPI resources and built-in metadata, without requiring a custom SSDT.
+- Added GPIO-based speaker ID detection and validation.
+- Improved diagnostic logs for amplifier initialization, firmware loading and SPI errors.
 
 ### Fixed
 
-- Keep Intel SPI power requests pending until the power domain responds; complete startup on the workloop instead of blocking and cancelling a late grant. Preserve controller ownership and stop if PCI identity disappears.
-- Handle Intel PCI functions left in D3hot when the power domain already reports ready, verify the physical power transition and retain controller state when preparation fails.
-- Verify Intel SPI configuration and chip-select readback before clocking data. Record FIFO progress, check cleanup and preserve the original transfer failure.
-- Resolve shared reset and mixed native/GPIO chip selects through ACPI resources and verified board metadata. Keep read-only startup free of reset release and amplifier writes.
-- Cancel stale playback before changing HDA format or stream tag. Keep amplifiers muted while the hardware stream is unsupported, and check again for a compatible stream.
-- Require a known running speaker engine before unmute, stop playback before teardown and acknowledge deferred wake completion.
-- Fix Clang errors from unused host-test declarations.
-- Reject duplicate changelog versions and empty release notes. Keep module and bundle versions aligned, and require the Windows collector checks as well as the kext build before publishing.
+- Fixed Intel SPI power management, including PCI D3hot handling and delayed power requests.
+- Improved SPI controller initialization, chip-select handling and transfer error detection.
+- Fixed playback handling when the HDA stream changes or uses an unsupported format.
+- Improved amplifier startup, mute, shutdown and wake handling.
 
 ### Changed
 
-- Split service attachment, runtime, power and diagnostics into separate files. Split CS35L41 hardware, firmware, playback and diagnostics, and group ACPI, board, I2C and SPI code by responsibility.
-- Define embedded firmware data in one translation unit; update resource selection, the importer, Xcode references, build scripts and tests for the new layout.
-- Remove the bootstrap catalogue scanner and timer while keeping early Lilu hook registration.
-- Rename the full Windows package collector to `Collect-AudioDriverPackages.ps1`/`.cmd`. Remove the old HP-specific Linux collector; use `collect_audio_amp_linux.sh` instead.
-- Remove obsolete design notes and hardware reports, simplify README and diagnostic instructions, and correct the published 1.1.0 release date and PR references.
-- Extend host regressions for board metadata, Intel SPI transfers and power, deferred startup, playback transitions, build identity and release validation.
-
-### Limits
-
-- Hardware output remains limited to 48 kHz stereo. G614JI sleep/wake and layout 22 are not confirmed.
-- Other amplifier families and unsupported board/power configurations remain disabled.
+- Reorganized the driver into separate service, platform, transport and amplifier modules.
+- Moved embedded firmware data into a single compilation unit.
+- Updated build tools, diagnostics and regression tests.
 
 ## [1.1.0] - 2026-10-19
 

@@ -8,10 +8,10 @@ body:
       value: |
         A model name alone is not enough to add hardware support. Include data from the actual machine.
         Check [supported hardware](https://github.com/hoaug-tran/CirrusAudioFixup#supported-hardware) first. For a failure on an already supported configuration, use **Bug report**.
-        Linux: `sudo bash Tools/collect_audio_amp_linux.sh`
-        Windows PowerShell as Administrator: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collect-AudioAMP-Windows.ps1`
-        macOS, if bootable: `sudo bash Tools/collect_macos.sh`
-        See [collector instructions](https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/audio_collectors.md). Do not force a different board identity or copy another speaker's tuning to test compatibility.
+        Linux: `sudo bash Tools/Collectors/collect_audio_amp_linux.sh`
+        Windows PowerShell as Administrator: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collectors\Collect-AudioAMP-Windows.ps1`
+        macOS, if bootable: `sudo bash Tools/Collectors/collect_macos.sh`
+        See [collector instructions](https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/guides/audio_collectors.md). Do not force a different board identity or copy another speaker's tuning to test compatibility.
   - type: checkboxes
     id: checks
     attributes:

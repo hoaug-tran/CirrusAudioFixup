@@ -2,10 +2,10 @@
 // Host/register/board/asset views outlive this driver through shutdown.
 #pragma once
 #include "Devices/Amplifiers/CS35L41/PowerConfiguration.hpp"
-#include "Devices/Amplifiers/CS35L41/DeviceState.hpp"
+#include "Devices/Amplifiers/CS35L41/InstanceState.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp"
-#include "Platform/AmplifierDriverRegistry.hpp"
-#include "Platform/AmplifierHost.hpp"
+#include "Runtime/AmplifierDriverRegistry.hpp"
+#include "Runtime/AmplifierHost.hpp"
 #include "Platform/HDA/HDAStreamState.hpp"
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
@@ -44,14 +44,14 @@ public:
 
 private:
     friend class DriverRegisterIO;
-    using AmplifierState = DeviceState;
+    using AmplifierState = InstanceState;
     struct RegisterSequence {
         uint32_t reg, mask, value, delayUs;
         bool updateBits;
     };
     const platform::AmplifierDriverContext& mContext;
     platform::AmplifierHost& mHost;
-    DeviceState mAmplifier{};
+    InstanceState mAmplifier{};
     platform::hda::HDAStreamState mHdaState{};
     struct RouteGuard {
         platform::AmplifierHost& host;

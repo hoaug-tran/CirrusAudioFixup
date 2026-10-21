@@ -3,7 +3,7 @@
 #pragma once
 #include "Core/RegisterMap.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
-#include "Transport/SPIRegisterBus.hpp"
+#include "Transport/SPI/SPIRegisterBus.hpp"
 namespace cirrus::devices::amplifiers::cs35l41 {
 class CS35L41SPIRegisterIO final : public core::RegisterIO {
 public:

@@ -166,7 +166,7 @@ for bus in i2c spi; do
 done
 ```
 
-The first field identifies the bus of each bound Cirrus device. If nothing appears, the Linux driver may not be bound. Use `sudo bash Tools/collect_audio_amp_linux.sh` to collect the device and ACPI information; do not guess which bus to configure. The driver selects the bus automatically once it has valid resources.
+The first field identifies the bus of each bound Cirrus device. If nothing appears, the Linux driver may not be bound. Use `sudo bash Tools/Collectors/collect_audio_amp_linux.sh` to collect the device and ACPI information; do not guess which bus to configure. The driver selects the bus automatically once it has valid resources.
 
 ## Requirements
 
@@ -219,7 +219,7 @@ Keep existing ACPI and controller configuration required by the machine. No fixe
 
 AppleHDA and AppleALC must provide the output path feeding the amplifiers. Working headphones or a visible audio device do not prove the internal speaker route is correct.
 
-Use the **[codec dump and AppleALC route guide](docs/codec_route.md)** to:
+Use the **[codec dump and AppleALC route guide](docs/hardware/codec_route.md)** to:
 
 - Save the HDA codec dump from Linux on the same machine.
 - Match its converter, selector/mixer and output pin nodes against the active files in [AppleALC Resources](https://github.com/acidanthera/AppleALC/tree/master/Resources).
@@ -239,7 +239,7 @@ No speaker output from this kext is expected yet. Run:
 
 ```bash
 ioreg -lw0 -p IOService -r -c CirrusAudioFixup
-sudo bash Tools/collect_macos.sh
+sudo bash Tools/Collectors/collect_macos.sh
 ```
 
 Open `cirrus-fixup-ioreg.txt` in the report folder on your Desktop. For the supported two-amplifier configurations, check:
@@ -338,7 +338,7 @@ Current board discovery supports one or two CS35L41 endpoints with distinct left
 
 For a diagnostic capture, start with `-cirrusdbg`. Use `-cirrusdbg -cirrusro` when the board has not been validated. Remove diagnostic arguments after testing.
 
-Stage stops, register-dump options, speaker identity and measured-calibration overrides are documented in the **[complete boot argument reference](docs/boot_arguments.md)**. They are not a recommended preset for normal use.
+Stage stops, register-dump options, speaker identity and measured-calibration overrides are documented in the **[complete boot argument reference](docs/diagnostics/boot_arguments.md)**. They are not a recommended preset for normal use.
 
 ## Status and diagnostics
 
@@ -366,19 +366,19 @@ Query the `CirrusAudioFixup` service in **IOService**. A matching ACPI node alon
 
 Use the channel suffixes actually published by the service; the Lenovo reference uses `left` and `right`.
 
-See the [verdict reference](docs/diagnostics.md#driver-and-playback-verdicts) for initialization and playback states. `READY_DSP` confirms DSP initialization; listen to both channels to check actual output.
+See the [verdict reference](docs/diagnostics/diagnostics.md#driver-and-playback-verdicts) for initialization and playback states. `READY_DSP` confirms DSP initialization; listen to both channels to check actual output.
 
 ### Capture a report
 
 Use a Debug build, or add `-cirrusdbg` to a Release build and reboot. From the repository folder, run:
 
 ```bash
-sudo bash Tools/collect_macos.sh
+sudo bash Tools/Collectors/collect_macos.sh
 ```
 
 The collector saves a directory and ZIP on your Desktop. It reads IORegistry, loaded kexts, unified logs and the available kernel buffers. Check `status.txt` for missing or failed captures.
 
-`log stream` and `log show` only return messages available through unified logging. They can be empty even when the kext is loaded; they do not guarantee complete boot logs. See [manual log capture and fallbacks](docs/diagnostics.md#retained-logs-and-live-messages).
+`log stream` and `log show` only return messages available through unified logging. They can be empty even when the kext is loaded; they do not guarantee complete boot logs. See [manual log capture and fallbacks](docs/diagnostics/diagnostics.md#retained-logs-and-live-messages).
 
 ## Troubleshooting
 
@@ -395,7 +395,7 @@ The collector saves a directory and ZIP on your Desktop. It reads IORegistry, lo
 | DSP bypass changes loudness or tone | Verify matching program and speaker tuning; bypass is not a sound-quality mode |
 | Microphone clips | Check codec input gain and routing in AppleALC; amplifier gain does not control the microphone |
 
-For a named failure, use the [failure-code reference](docs/diagnostics.md#failure-codes) and keep the first native I/O error.
+For a named failure, use the [failure-code reference](docs/diagnostics/diagnostics.md#failure-codes) and keep the first native I/O error.
 
 ## Collect Windows or Linux data
 
@@ -403,28 +403,28 @@ Use these tools when checking a new machine, comparing OEM settings or reporting
 
 | System | Tool | Default output |
 | --- | --- | --- |
-| Windows | [Collect-AudioAMP-Windows.ps1](Tools/Collect-AudioAMP-Windows.ps1) | New folder and ZIP in Documents |
-| Linux | [collect_audio_amp_linux.sh](Tools/collect_audio_amp_linux.sh) | New folder and `.tar.gz` in the invoking user's home directory |
+| Windows | [Collect-AudioAMP-Windows.ps1](Tools/Collectors/Collect-AudioAMP-Windows.ps1) | New folder and ZIP in Documents |
+| Linux | [collect_audio_amp_linux.sh](Tools/Collectors/collect_audio_amp_linux.sh) | New folder and `.tar.gz` in the invoking user's home directory |
 
 **Windows:** open Windows PowerShell as Administrator in the repository folder:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collect-AudioAMP-Windows.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collectors\Collect-AudioAMP-Windows.ps1
 ```
 
 **Linux:** run from the repository folder:
 
 ```bash
-sudo bash Tools/collect_audio_amp_linux.sh
+sudo bash Tools/Collectors/collect_audio_amp_linux.sh
 ```
 
 Windows collects audio/AMP devices, installed INF files, selected registry settings, recent events and the named Cirrus EFI calibration variable when available. Linux collects audio devices, codec dumps, bus/controller information, ACPI tables, available amplifier regmap snapshots and audio logs. Neither guarantees a complete DSP-memory dump or every OEM setting.
 
-Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when matching driver/firmware files are needed. Both default to a 24 MiB collection budget and record missing or skipped data in `status.json`. See [collector options](docs/audio_collectors.md) for output paths, limits and optional tracing.
+Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when matching driver/firmware files are needed. Both default to a 24 MiB collection budget and record missing or skipped data in `status.json`. See [collector options](docs/guides/audio_collectors.md) for output paths, limits and optional tracing.
 
 ## Adding hardware support
 
-For a new board or amplifier family, start with the [driver framework and porting guide](docs/extensible_driver.md#adding-hardware-support). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
+For a new board or amplifier family, start with the [driver framework and porting guide](docs/architecture/extensible_driver.md#adding-hardware-support). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
 
 ## Build from source
 
@@ -442,7 +442,7 @@ git -C MacKernelSDK checkout 7af1933c27aefcbdf4809ee44478829aad30f9c1
 git clone https://github.com/acidanthera/Lilu.git Lilu
 git -C Lilu checkout e4748cc081bf060302c7d3c44a643ce1d11b7e1d
 
-bash Tools/build_macos.sh
+bash Tools/Build/build_macos.sh
 ```
 
 Check out the intended CirrusAudioFixup branch or tag before building. The script runs host regressions, builds Debug and Release, verifies bundle metadata, x86_64 architecture, kernel class metadata and matching dSYM UUIDs. It does not install or load the result.
@@ -468,16 +468,17 @@ Host tests establish tested source behavior. Load compatibility, physical stereo
 
 | Guide | Contents |
 | --- | --- |
-| [Boot argument reference](docs/boot_arguments.md) | All supported options, stage stops and measured overrides |
-| [Codec dump and speaker routing](docs/codec_route.md) | Linux codec dump and AppleALC resource comparison |
-| [Windows and Linux collectors](docs/audio_collectors.md) | Collection commands, output files and options |
-| [Diagnostics](docs/diagnostics.md) | Service inspection, collection and output/input transition checks |
-| [Board bring-up](docs/safe_bringup_protocol.md) | Read-only discovery, staged initialization and hardware checks |
-| [Driver framework](docs/extensible_driver.md) | Registration, endpoint ownership and module boundaries |
-| [Runtime transitions](docs/runtime_transition_design.md) | Grouped playback, deadlines and rollback |
-| [Register reference](docs/register_reference.md) | Linux constants, register addresses, tables and payload hashes |
-| [I2C provider](docs/i2c_provider.md) | Required provider interface and request layout |
-| [Native SPI](docs/spi_support.md) | Controller families, chip select, transfer limits and power handling |
+| [Boot argument reference](docs/diagnostics/boot_arguments.md) | All supported options, stage stops and measured overrides |
+| [Codec dump and speaker routing](docs/hardware/codec_route.md) | Linux codec dump and AppleALC resource comparison |
+| [Windows and Linux collectors](docs/guides/audio_collectors.md) | Collection commands, output files and options |
+| [Diagnostics](docs/diagnostics/diagnostics.md) | Service inspection, collection and output/input transition checks |
+| [Board bring-up](docs/diagnostics/safe_bringup_protocol.md) | Read-only discovery, staged initialization and hardware checks |
+| [Source layout](docs/architecture/source_layout.md) | Service, runtime, platform, transport and silicon module boundaries |
+| [Driver framework](docs/architecture/extensible_driver.md) | Registration, endpoint ownership and module boundaries |
+| [Runtime transitions](docs/architecture/runtime_transition_design.md) | Grouped playback, deadlines and rollback |
+| [Register reference](docs/hardware/register_reference.md) | Linux constants, register addresses, tables and payload hashes |
+| [I2C provider](docs/hardware/i2c_provider.md) | Required provider interface and request layout |
+| [Native SPI](docs/hardware/spi_support.md) | Controller families, chip select, transfer limits and power handling |
 | [Contributing](CONTRIBUTING.md) | Code conventions and validation requirements |
 | [Changelog](CHANGELOG.md) | Version changes |
 

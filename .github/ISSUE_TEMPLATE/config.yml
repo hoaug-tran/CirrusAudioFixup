@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/hoaug-tran/CirrusAudioFixup#readme
     about: Check first-boot values, bus detection and the AppleALC speaker route.
   - name: Collect a useful report
-    url: https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/diagnostics.md
+    url: https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/diagnostics/diagnostics.md
     about: macOS logs and IORegistry, with links to Windows and Linux collection.
   - name: Contribution requirements
     url: https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/CONTRIBUTING.md

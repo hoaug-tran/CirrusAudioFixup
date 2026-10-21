@@ -6,7 +6,7 @@
 #include "Devices/Amplifiers/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
 #if defined(KERNEL)
-#include "Devices/Amplifiers/CS35L41/BoardMetadata.hpp"
+#include "Devices/Amplifiers/CS35L41/Board/BoardMetadataFallback.hpp"
 #endif
 
 namespace cirrus::devices::amplifiers::cs35l41 {

@@ -27,11 +27,11 @@ Use the Hardware support form and include:
 - Exact machine, CPU and OS versions actually tested.
 - Codec/HDA subsystem identity and amplifier model/revision, if known.
 - I2C or SPI evidence, ACPI HID/_SUB, controller and endpoints. Do not assume every amplifier is a VoodooI2C device.
-- A Linux or Windows report from the new general collectors, plus macOS IORegistry if available. Include collection errors and partial output where necessary.
+- A Linux or Windows report from the collectors, plus macOS IORegistry if available. Include collection errors and partial output where necessary.
 - AppleALC speaker-route evidence from the codec dump and matching resources; mark an unverified route explicitly.
 - Matching firmware/tuning source and hashes, known speaker/channel/reset/boost data, and whether measured calibration is available. Missing values must stay unknown.
 
-Read [collector options](docs/audio_collectors.md) and [codec route checks](docs/codec_route.md). Do not force another board's SSID, substitute channel tuning or disable DSP protection merely to complete a report.
+Read [collector options](docs/guides/audio_collectors.md) and [codec route checks](docs/hardware/codec_route.md). Do not force another board's SSID, substitute channel tuning or disable DSP protection merely to complete a report.
 
 ---
 
@@ -45,7 +45,7 @@ Read [collector options](docs/audio_collectors.md) and [codec route checks](docs
   - No RTTI (`-fno-rtti`).
   - No STL containers in kernel code (`std::vector`, `std::map`, etc. are forbidden in kernel space; use IOKit collections or fixed-size structures).
   - Use `#pragma once` for all internal header files.
-  - No raw `new` / `delete` outside of IOKit memory allocation helpers (`IOLockAlloc`, `IOMalloc`, `IOFree`).
+  - Use IOKit allocation and ownership rules: pair `IOMalloc` with `IOFree`, and release reference-counted objects with `release()`.
 
 ### Style and naming
 
@@ -71,17 +71,19 @@ Use PascalCase `.hpp` / `.cpp` filenames describing the main type or narrowly
 scoped responsibility. Keep acronym spelling consistent: `I2C`, `SPI`, `ACPI`,
 `HDA`, `WMFW`, `CS35L41`. Public record fields and local variables use
 lowerCamelCase; private class state uses `mPascalCase`. Name functions for their
-operation: `bringUpAmplifiers`, `findAmplifierById`, `initializeCS35L41Device`.
+operation: `bringUpAmplifiers`, `synchronizeHdaStream`, `stopPlayback`.
 Avoid vague implementation labels such as `Real`, `FixupAdapter`, or an empty
 controller source. Related helper types may share one header; one file per tiny
 struct is not required.
 
 | Directory | Responsibility | Examples |
 | --- | --- | --- |
-| `Core/` | Bus-independent register and amplifier contracts | `RegisterIO`, `RegisterMap`, `BusEndpoint`, `AmplifierLifecycle`, `AmplifierDescriptors` |
+| `Core/` | Bus-independent register and amplifier contracts | `RegisterIO`, `RegisterMap`, `BusEndpoint`, `AmplifierLifecycle` |
 | `Transport/` | Bus/provider transactions and controller ownership | `I2CController`, `I2CRegisterBus`, `VoodooI2CProvider`, `NativeSPIHost` |
-| `Transport/Intel/`, `Transport/AMD/` | Documented controller families | `IntelLPSSSPIController`, `AMDSPIController` |
-| `Platform/` | Board identity, resources, driver selection and owned runtime | `BoardConfiguration`, `AmplifierDriverRegistry`, `AmplifierManager` |
+| `Transport/SPI/Intel/`, `Transport/SPI/AMD/` | Documented controller families | `IntelLPSSSPIController`, `AMDSPIController` |
+| `Platform/` | ACPI resources, board identity and HDA integration | `BoardConfiguration`, `BoardDiscovery`, `AudioEventSource` |
+| `Runtime/` | Registered driver selection and owned amplifier coordination | `AmplifierDriverRegistry`, `AmplifierManager` |
+| `Service/` | IOService lifecycle, attachment, power and runtime observation | `CirrusAudioFixup` |
 | `Devices/Amplifiers/<Model>/` | Silicon registers, framing, errata, lifecycle and resources | `CS35L41DriverFactory`, `CS35L41SPIRegisterIO` |
 | `Firmware/<Format>/` | Format-specific parser, mapping and upload | `WMFWParser`, `WMFWMemoryMapper`, `WMFWUploader` |
 | `Diagnostics/`, `Support/` | Transfer evidence and small kernel utilities | `DiagnosticTracer`, `Logging` |
@@ -95,7 +97,7 @@ shipping lifecycle ownership lives in `AmplifierManager` and driver hooks.
 
 ### Driver boundaries
 
-Keep silicon registers, firmware and lifecycle in the amplifier module. Keep controller ownership, framing and PM in transport modules. The service supplies discovery, verified board bindings and serialized runtime coordination. Read the [framework guide](docs/extensible_driver.md) before adding a module.
+Keep silicon registers, firmware and lifecycle in the amplifier module. Keep controller ownership, framing and PM in transport modules. The service supplies discovery, verified board bindings and serialized runtime coordination.
 
 Factories and destructors perform no hardware I/O. Shutdown completes before drivers and their borrowed register ports are released. Preserve the original failure when cleanup also fails.
 
@@ -151,11 +153,11 @@ must not be overwritten. CI packages include commit/configuration metadata and r
 checksums; successful host tests do not prove hardware playback or speaker safety.
 
 Before tagging, test cold boot, playback start/stop, headphone switching and sleep/wake
-on the supported machine. Collect IORegistry and unified logs with `Tools/collect_macos.sh`
+on the supported machine. Collect IORegistry and unified logs with `Tools/Collectors/collect_macos.sh`
 and inspect both amplifier verdicts and first/latest failures. Keep a known-good fallback
 EFI and begin hardware validation at low volume.
 
-Include first microphone activation after idle/wake in transition tests. Use the [diagnostic guide](docs/diagnostics.md) to record timestamps and pre/post state. Do not label a pop as a layout defect without isolating its source. Report acoustic differences separately from register readiness and compare loudness at matched levels.
+Include first microphone activation after idle/wake in transition tests. Use the [diagnostic guide](docs/diagnostics/diagnostics.md) to record timestamps and pre/post state. Do not label a pop as a layout defect without isolating its source. Report acoustic differences separately from register readiness and compare loudness at matched levels.
 
 ## License and attribution
 
@@ -168,8 +170,20 @@ Include first microphone activation after idle/wake in transition tests. Use the
 | --- | --- |
 | `CirrusAudioFixup/Core` | Shared register, endpoint and lifecycle contracts |
 | `CirrusAudioFixup/Devices/Amplifiers` | Per-family amplifier drivers and resources |
-| `CirrusAudioFixup/Platform` | Board discovery, driver registry and HDA integration |
-| `CirrusAudioFixup/Transport` | I2C, native SPI, ACPI and controller access |
+| `CirrusAudioFixup/Service` | IOService lifecycle, attachment, power and diagnostic publication |
+| `CirrusAudioFixup/Runtime` | Registered amplifier drivers and group coordination |
+| `CirrusAudioFixup/Platform` | ACPI resources, board discovery and HDA integration |
+| `CirrusAudioFixup/Transport` | I2C and SPI controller ownership and transactions |
 | `Tests` | Maintained host regressions and fixtures |
 | `Tools` | Build, collection, import and release tools |
 | `docs` | Hardware guides and technical references |
+
+Keep file names aligned with their main type or responsibility. Within an
+amplifier namespace, `RuntimeState` holds silicon, firmware and playback state;
+`InstanceState` adds endpoint and resource bindings. Board metadata fallbacks
+and property corrections belong under that amplifier's `Board/` directory.
+
+Python and shell helpers use snake_case; PowerShell entry points use Verb-Noun.
+The root `Tests/` and `Tools/` paths are retained. Add suites explicitly to
+`Tests/run.py`, and update Xcode source membership whenever a translation unit
+is added.

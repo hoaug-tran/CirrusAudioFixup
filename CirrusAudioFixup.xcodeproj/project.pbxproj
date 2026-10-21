@@ -5,993 +5,64 @@
 	};
 	objectVersion = 56;
 	objects = {
-67B8A9CD12704F0DA86390BA = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIObjectEvidence.hpp"; sourceTree = "<group>";};
-1BF3A8D39570B9D4030EDF80 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "acpi_kernel_fixture.py"; sourceTree = "<group>";};
-6A12FEBC78457916CD62CEDB = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_platform_discovery.py"; sourceTree = "<group>";};
-4A6AFA34854DBE7CD379F8B6 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PropertyQuirks.hpp"; sourceTree = "<group>";};
-A1570F28CEE6D997D09CAC15 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "FirmwareSelection.hpp"; sourceTree = "<group>";};
-A837D6A8E58194CDD0717147 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIPlatformProperties.hpp"; sourceTree = "<group>";};
-E47A4CB735CAE8D3F77E1F34 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PlatformConfiguration.hpp"; sourceTree = "<group>";};
-C4F40FB4905257886C78251E = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "DeviceConfiguration.hpp"; sourceTree = "<group>";};
-B2584EBEAE4CA972F9FBCB04 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_platform_configuration.py"; sourceTree = "<group>";};
-3D55DC2B7DD82C9247A72604 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_cs35l41_power.py"; sourceTree = "<group>";};
-0D60D9B10857C8580E0A61A3 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_gpio_binding.py"; sourceTree = "<group>";};
-6D3CC2C430CB04F9BE45D87C = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_gpio.py"; sourceTree = "<group>";};
-35CBC7DC46BA4BB4CB450D20 = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "check_spi_chip_select.py"; sourceTree = "<group>";};
-E6D5CA58311CC56FA72A29B5 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "PowerConfiguration.hpp"; sourceTree = "<group>";};
-614937864310FDEE840D627B = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "BoardDiscovery.hpp"; sourceTree = "<group>";};
-E8D60B38E48F46AB269FAEE7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "IntelSPIChipSelects.hpp"; sourceTree = "<group>";};
-1CB8291BF505D0D65865013C = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "IntelGPIOOutput.hpp"; sourceTree = "<group>";};
-9B1AA0FF3764E3D5DBFA46BE = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIGPIOResources.hpp"; sourceTree = "<group>";};
-BB7372D2E62BC2AA18F2E02A = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "ACPIDeviceProperties.hpp"; sourceTree = "<group>";};
-6A9F6AC950CEE5FC9E124C03 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AttachmentState.hpp";sourceTree = "<group>";};
-5563407EB45C332E7AEB7810 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CPUIdentity.hpp";sourceTree = "<group>";};
-467C05493D3366377B8B15BF = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AMD/AMDSPIControllerOwner.hpp";sourceTree = "<group>";};
-93CA90577209D745B0DFA6F1 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "IntelSPIControllerOwner.hpp";sourceTree = "<group>";};
-832F05729C9FF63F811668B8 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerFactory.hpp";sourceTree = "<group>";};
-5C656742B026D7B45E031029 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "NativeSPIControllerOwner.hpp";sourceTree = "<group>";};
-520E5B62235CBEFCA0A2F70F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "SPIControllerDrivers.hpp";sourceTree = "<group>";};
-1EC86071840BB16D5072B690 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "TraceTypes.hpp";sourceTree = "<group>";};
-AA98911D63E8F93259AEBE62 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "FailureNames.hpp";sourceTree = "<group>";};
-53E69E8522D6B7A0D86DBC2F = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "ResourceSchema.hpp";sourceTree = "<group>";};
-271EC16674AE80213B2E6986 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "DeviceState.hpp";sourceTree = "<group>";};
-4DC6A45D6438AA59D3DCAA71 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41Driver.hpp";sourceTree = "<group>";};
-ABCD61000000000000000001 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41Driver.cpp";sourceTree = "<group>";};
-ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD61000000000000000001;};
-        AECFDA71B41745F7BD246B9B = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.cpp;path = "CS35L41DriverFactory.cpp";sourceTree = "<group>";};
-        8A9A66A1329F44D390D8B6B8 = {isa = PBXBuildFile;fileRef = AECFDA71B41745F7BD246B9B;};
-        28FCF60355DB403CA8D56264 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "I2CRegisterBus.hpp";sourceTree = "<group>";};
-		5471378CA53C475A884BD29A = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "CS35L41DriverFactory.hpp";sourceTree = "<group>";};
-		884B6D453F48442FA6D0B874 = {isa = PBXFileReference;lastKnownFileType = sourcecode.cpp.h;path = "AmplifierDrivers.hpp";sourceTree = "<group>";};
-		B71011000000000000000001 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "SPIAmplifierManager.hpp";
-			sourceTree = "<group>";
+		A5C100000000000000000002 = {
+			isa = PBXBuildFile;
+			fileRef = A5C100000000000000000001;
 		};
-		A6ACBB061A579B59A193BA93 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AmplifierManager.hpp";
-			sourceTree = "<group>";
-		};
-		CA98C65691C0F2C60B20D60F = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_native_spi.py";
-			sourceTree = "<group>";
-		};
-		1FB54EE34BAE0041B4906A8F = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "NativeSPIHost.hpp";
-			sourceTree = "<group>";
-		};
-		906368FCA2EB8FE548BD7705 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "ACPIPath.hpp";
-			sourceTree = "<group>";
-		};
-		D71011000000000000000001 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_firmware_identity.py";
-			sourceTree = "<group>";
-		};
-		4F3CF04B7A8D1D42693303F8 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_vtable_policy.py";
-			sourceTree = "<group>";
-		};
-		DB63CD957C9FBFABF0C6701E = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_xcode_project.py";
-			sourceTree = "<group>";
-		};
-		213AEE71073006568DE1EEA0 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AmplifierDevice.hpp";
-			sourceTree = "<group>";
-		};
-		BDC5ADD1611D328F362B7D02 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AmplifierDescriptors.hpp";
-			sourceTree = "<group>";
-		};
-		432953BD9A6B9F4B940AEEE1 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "RegisterIO.hpp";
-			sourceTree = "<group>";
-		};
-		1E89978DD38922A7CFE8E4F6 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AudioTypes.hpp";
-			sourceTree = "<group>";
-		};
-		27521F5A59ABD126183B279A = {
-			isa = PBXGroup;
-			children = (
-                E7B135887CFD04840682F4F3,
-                7A7ADE64047F21EF79F434FA,
-                963BF563D9B6A0EF2350CE7D,
-                6485F2F92AD6BE6DD317F1F6,
-                3C1B9C1975046A6CC0EF9A72,
-				213AEE71073006568DE1EEA0,
-				BDC5ADD1611D328F362B7D02,
-				432953BD9A6B9F4B940AEEE1,
-				1E89978DD38922A7CFE8E4F6,
+		A5C100000000000000000003 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A5C100000000000000000002,
 			);
-			path = "Core";
-			sourceTree = "<group>";
-		};
-		EAA44267639C6B62DBD497AD = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "Errata.hpp";
-			sourceTree = "<group>";
-		};
-		980DB57ED7434DBC3429FD16 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "OTPMap.hpp";
-			sourceTree = "<group>";
-		};
-		6D21BF6889C943914C1FE564 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "Registers.hpp";
-			sourceTree = "<group>";
-		};
-		90842EAEFC1528FA929AB2B2 = {
-			isa = PBXGroup;
-			children = (
-                4A6AFA34854DBE7CD379F8B6,
-				EAA44267639C6B62DBD497AD,
-				980DB57ED7434DBC3429FD16,
-				6D21BF6889C943914C1FE564,
-			);
-			path = "Hardware";
-			sourceTree = "<group>";
-		};
-		9725FD599984B55A6E6D7EDF = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "Firmware.hpp";
-			sourceTree = "<group>";
-		};
-		A03263A4BA55A2FF07FC04D6 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "Tuning.hpp";
-			sourceTree = "<group>";
-		};
-		DBD8EDACAC2E17BAD75D5AC6 = {
-			isa = PBXGroup;
-			children = (
-                A1570F28CEE6D997D09CAC15,
-                53E69E8522D6B7A0D86DBC2F,
-				9725FD599984B55A6E6D7EDF,
-				A03263A4BA55A2FF07FC04D6,
-			);
-			path = "Resources";
-			sourceTree = "<group>";
-		};
-		51BA20FB9CD5C512B4FAB8A2 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "CS35L41Device.hpp";
-			sourceTree = "<group>";
-		};
-		4F64AC1335631EEC183C8179 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "Playback.hpp";
-			sourceTree = "<group>";
-		};
-		EE9A377635384868BC5B5821 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "SiliconState.hpp";
-			sourceTree = "<group>";
-		};
-		B1CA410D7F1B4C648A2DD7F6 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "DSPControl.hpp";
-			sourceTree = "<group>";
-		};
-		6BC1167998E24F78B83A3E27 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AmplifierHost.hpp";
-			sourceTree = "<group>";
-		};
-		DF8B927CD2204E1381A49C5E = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "CS35L41DriverRegistration.hpp";
-			sourceTree = "<group>";
-		};
-		5F18E3977620B1AFB2AEDD59 = {
-			isa = PBXGroup;
-			children = (
-                E6D5CA58311CC56FA72A29B5,
-                E47A4CB735CAE8D3F77E1F34,
-                C4F40FB4905257886C78251E,
-                271EC16674AE80213B2E6986,
-                4DC6A45D6438AA59D3DCAA71,
-                ABCD61000000000000000001,
-                AECFDA71B41745F7BD246B9B,
-                CAFE51000000000000000002,
-                5471378CA53C475A884BD29A,
-				90842EAEFC1528FA929AB2B2,
-				DBD8EDACAC2E17BAD75D5AC6,
-				51BA20FB9CD5C512B4FAB8A2,
-				4F64AC1335631EEC183C8179,
-				EE9A377635384868BC5B5821,
-				DF8B927CD2204E1381A49C5E,
-				B1CA410D7F1B4C648A2DD7F6,
-			);
-			path = "CS35L41";
-			sourceTree = "<group>";
-		};
-        ABCD62000000000000000001 = {
-            isa = PBXGroup;
-            children = (5F18E3977620B1AFB2AEDD59,);
-            path = "Amplifiers";
-            sourceTree = "<group>";
-        };
-		B7025D93A1607FD444228958 = {
-			isa = PBXGroup;
-			children = (
-                884B6D453F48442FA6D0B874,
-				ABCD62000000000000000001,
-			);
-			path = "Devices";
-			sourceTree = "<group>";
-		};
-		F020B0C511BE7C8145385429 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "DiagnosticTracer.hpp";
-			sourceTree = "<group>";
-		};
-		E0605EA1EB37F708C4FAA377 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "DiagnosticTypes.hpp";
-			sourceTree = "<group>";
-		};
-		710A73C9D4A075C03072C322 = {
-			isa = PBXGroup;
-			children = (
-                6A9F6AC950CEE5FC9E124C03,
-                67B8A9CD12704F0DA86390BA,
-                1EC86071840BB16D5072B690,
-                AA98911D63E8F93259AEBE62,
-				F020B0C511BE7C8145385429,
-				E0605EA1EB37F708C4FAA377,
-			);
-			path = "Diagnostics";
-			sourceTree = "<group>";
-		};
-		3EE5A64B016195D0B95976FE = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "WMFWUploader.hpp";
-			sourceTree = "<group>";
-		};
-		E0E51BBBD43F09274B6FFE7E = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "WMFWUploadPlan.hpp";
-			sourceTree = "<group>";
-		};
-		C2DDAB80313D23D86D767E21 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "WMFWFormat.hpp";
-			sourceTree = "<group>";
-		};
-		D6F113F20C1C03EDE354CF6F = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "WMFWParser.hpp";
-			sourceTree = "<group>";
-		};
-		2C556974E9227C88EE2E8627 = {
-			isa = PBXGroup;
-			children = (
-				3EE5A64B016195D0B95976FE,
-				E0E51BBBD43F09274B6FFE7E,
-				C2DDAB80313D23D86D767E21,
-				D6F113F20C1C03EDE354CF6F,
-			);
-			path = "WMFW";
-			sourceTree = "<group>";
-		};
-		4B398F610293B924D539D0EB = {
-			isa = PBXGroup;
-			children = (
-                6D40FF03FC7BE8EE2E66E123,
-				2C556974E9227C88EE2E8627,
-			);
-			path = "Firmware";
-			sourceTree = "<group>";
-		};
-		79C731287875A3F568EE7384 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AudioEventSource.hpp";
-			sourceTree = "<group>";
-		};
-		DC4498D631C3CF6EF1CBABAB = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "HDAStreamState.hpp";
-			sourceTree = "<group>";
-		};
-		B8ADFE1DB47399E479E14F55 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "HDAStreamWatcher.hpp";
-			sourceTree = "<group>";
-		};
-		28B22464D8DE199BCB70E2E4 = {
-			isa = PBXGroup;
-			children = (
-				CAFE00000004,
-				79C731287875A3F568EE7384,
-				DC4498D631C3CF6EF1CBABAB,
-				B8ADFE1DB47399E479E14F55,
-			);
-			path = "HDA";
-			sourceTree = "<group>";
-		};
-		D1DEE96129AE7010800B6326 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "PlatformProfile.hpp";
-			sourceTree = "<group>";
-		};
-		75BA5000D0C47D62AB5DD68C = {
-			isa = PBXGroup;
-			children = (
-                614937864310FDEE840D627B,
-				6BC1167998E24F78B83A3E27,
-                B71011000000000000000001,
-                A6ACBB061A579B59A193BA93,
-                0AE7D65E29CF3F41FCDAB433,
-                1E4FC108153F3B68092EDD67,
-				28B22464D8DE199BCB70E2E4,
-				D1DEE96129AE7010800B6326,
-			);
-			path = "Platform";
-			sourceTree = "<group>";
-		};
-		3E01BEE9F84F8DCFE4727EA6 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "BitUtils.hpp";
-			sourceTree = "<group>";
-		};
-		6B4DE6E3262E10D79F03D1BE = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "BuildConfig.hpp";
-			sourceTree = "<group>";
-		};
-		F9963AE58EE1C4D8FCF9F098 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "Logging.hpp";
-			sourceTree = "<group>";
-		};
-		AC9100000000000000000001 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "KernelDeviceCast.hpp";
-			sourceTree = "<group>";
-		};
-		83460938A80237492B5B34EB = {
-			isa = PBXGroup;
-			children = (
-                5563407EB45C332E7AEB7810,
-				AC9100000000000000000001,
-				3E01BEE9F84F8DCFE4727EA6,
-				6B4DE6E3262E10D79F03D1BE,
-				F9963AE58EE1C4D8FCF9F098,
-			);
-			path = "Support";
-			sourceTree = "<group>";
-		};
-		79E10805A559FC3E5503866B = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "VoodooI2CProvider.hpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000001 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "SPIController.hpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000002 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "CS35L41SPIRegisterIO.hpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000008 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "ACPISPIResources.hpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000009 = {
- isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "Intel/LPSSSPIProfiles.hpp"; sourceTree = "<group>";
- };
-		CAFE5100000000000000000A = {
- isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDSPIEngine.hpp"; sourceTree = "<group>";
- };
-		CAFE5100000000000000000B = {
- isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AMD/AMDSPIController.hpp"; sourceTree = "<group>";
- };
-		CAFE5100000000000000000C = {
- isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "AMD/AMDSPIController.cpp"; sourceTree = "<group>";
- };
-		CAFE5100000000000000000D = { isa = PBXBuildFile; fileRef = CAFE5100000000000000000C; };
-		3C1B9C1975046A6CC0EF9A72 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "RegisterBus.hpp";
-			sourceTree = "<group>";
-		};
-		6485F2F92AD6BE6DD317F1F6 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "RegisterMap.hpp";
-			sourceTree = "<group>";
-		};
-		963BF563D9B6A0EF2350CE7D = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "BusEndpoint.hpp";
-			sourceTree = "<group>";
-		};
-		7A7ADE64047F21EF79F434FA = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "AmplifierLifecycle.hpp";
-			sourceTree = "<group>";
-		};
-		29F371FB87977DF261FF1260 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "SPIRegisterBus.hpp";
-			sourceTree = "<group>";
-		};
-		21C3366F896C719BA60E6170 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "I2CController.hpp";
-			sourceTree = "<group>";
-		};
-		8CF69CE796ABB36A1A3D630F = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "VoodooI2CController.hpp";
-			sourceTree = "<group>";
-		};
-		1E4FC108153F3B68092EDD67 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "BoardConfiguration.hpp";
-			sourceTree = "<group>";
-		};
-		6D40FF03FC7BE8EE2E66E123 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "FirmwareBundle.hpp";
-			sourceTree = "<group>";
-		};
-		0AE7D65E29CF3F41FCDAB433 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierDriverRegistry.hpp"; sourceTree = "<group>"; };
-		E7B135887CFD04840682F4F3 = { isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = "AmplifierGroup.hpp"; sourceTree = "<group>"; };
-		CAFE51000000000000000003 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "LPSSSPIEngine.hpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000004 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = "IntelLPSSSPIController.hpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000005 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.cpp;
-			path = "IntelLPSSSPIController.cpp";
-			sourceTree = "<group>";
-		};
-		CAFE51000000000000000006 = {
-            isa = PBXGroup;
-            children = (
-                E8D60B38E48F46AB269FAEE7,
-                1CB8291BF505D0D65865013C,
-                93CA90577209D745B0DFA6F1,CAFE51000000000000000003, CAFE51000000000000000004, CAFE51000000000000000005);
-            path = Intel;
-            sourceTree = "<group>";
-        };
-        CAFE51000000000000000007 = {
-            isa = PBXBuildFile;
-            fileRef = CAFE51000000000000000005;
-        };
-		D1C35C0E3D90A9BEF84D6F6D = {
-			isa = PBXGroup;
-			children = (
-                9B1AA0FF3764E3D5DBFA46BE,
-                BB7372D2E62BC2AA18F2E02A,
-                A837D6A8E58194CDD0717147,
-                467C05493D3366377B8B15BF,
-                832F05729C9FF63F811668B8,
-                5C656742B026D7B45E031029,
-                520E5B62235CBEFCA0A2F70F,
-                28FCF60355DB403CA8D56264,
-                1FB54EE34BAE0041B4906A8F,
-                906368FCA2EB8FE548BD7705,
-                8CF69CE796ABB36A1A3D630F,
-                21C3366F896C719BA60E6170,
-                29F371FB87977DF261FF1260,
-				79E10805A559FC3E5503866B,
-				CAFE51000000000000000001,
-				CAFE51000000000000000008,
-				CAFE51000000000000000009,
-				CAFE5100000000000000000A,
-				CAFE5100000000000000000B,
-				CAFE5100000000000000000C,
-
-				CAFE51000000000000000006,
-			);
-			path = "Transport";
-			sourceTree = "<group>";
-		};
-		14C4A873D059DA3A76D05BB7 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "audit_windows_payloads.py";
-			sourceTree = "<group>";
-		};
-		78A8D22358D07C4CA784F52D = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.sh;
-			path = "build_macos.sh";
-			sourceTree = "<group>";
-		};
-		93E13AE8D1AFEC6837762B9E = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.sh;
-			path = "collect_macos.sh";
-			sourceTree = "<group>";
-		};
-		A63B4A299F77C2F41BB61F01 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "import_firmware.py";
-			sourceTree = "<group>";
-		};
-		98DF8407D8560A13B3A31982 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "release_metadata.py";
-			sourceTree = "<group>";
-		};
-		5CEF43D92304BBBABCBA5AC2 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "verify_kext_vtables.py";
-			sourceTree = "<group>";
-		};
-		C34DA2739E751FF478D0C496 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = "Collect-AudioAMP-Windows.ps1";
-			sourceTree = "<group>";
-		};
-		D280781DBF4E1C36DE072A97 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.sh;
-			path = "collect_audio_amp_linux.sh";
-			sourceTree = "<group>";
-		};
-		624913F8493D4E5ADB66ADDF = {
-			isa = PBXGroup;
-			children = (
-				C34DA2739E751FF478D0C496,
-				D280781DBF4E1C36DE072A97,
-				14C4A873D059DA3A76D05BB7,
-				78A8D22358D07C4CA784F52D,
-				93E13AE8D1AFEC6837762B9E,
-				A63B4A299F77C2F41BB61F01,
-				98DF8407D8560A13B3A31982,
-				5CEF43D92304BBBABCBA5AC2,
-			);
-			path = "Tools";
-			sourceTree = "<group>";
-		};
-		DA2623CD1F28541C7B7EB77E = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_architecture.py";
-			sourceTree = "<group>";
-		};
-		F23737CE79C498D379A1C69C = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_audio_events.py";
-			sourceTree = "<group>";
-		};
-		30E3DFCA2E12167BA7C20612 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_bringup.py";
-			sourceTree = "<group>";
-		};
-		F3BFB8D7978AE17B2AB23727 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_build_policy.py";
-			sourceTree = "<group>";
-		};
-		D21881893352E65BBA2B08A6 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_calibration.py";
-			sourceTree = "<group>";
-		};
-		69E9C3A98CF3B10EEA103575 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_diagnostics.py";
-			sourceTree = "<group>";
-		};
-		5260209CF920E63534F12F09 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_hda.py";
-			sourceTree = "<group>";
-		};
-		93F241DDA404FD189D3ECB15 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_registers.py";
-			sourceTree = "<group>";
-		};
-		47499E258C311A285AF6494F = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_release.py";
-			sourceTree = "<group>";
-		};
-		F9FE21A068C8B91E112C7920 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_runtime.py";
-			sourceTree = "<group>";
-		};
-		8C3F10B1E6723A60B3E6339C = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_tools.py";
-			sourceTree = "<group>";
-		};
-		F98934459A7CA722BAA4E508 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_transport.py";
-			sourceTree = "<group>";
-		};
-		C3891C477AEA03A75A849956 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_tuning.py";
-			sourceTree = "<group>";
-		};
-		5C016D1698E5D5AB75C3C2F4 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "check_windows_payloads.py";
-			sourceTree = "<group>";
-		};
-		445491209DD7785F84B9F7DA = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.cpp;
-			path = "host_regression.cpp";
-			sourceTree = "<group>";
-		};
-		4F0BF2C225436F799EDE2801 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.python;
-			path = "reproduce_host.py";
-			sourceTree = "<group>";
-		};
-		CC9C8F7C5041835F9AAE8AA0 = {
-			isa = PBXGroup;
-			children = (
-                1BF3A8D39570B9D4030EDF80,
-                6A12FEBC78457916CD62CEDB,
-                B2584EBEAE4CA972F9FBCB04,
-                3D55DC2B7DD82C9247A72604,
-                0D60D9B10857C8580E0A61A3,
-                6D3CC2C430CB04F9BE45D87C,
-                35CBC7DC46BA4BB4CB450D20,
-                CA98C65691C0F2C60B20D60F,
-				4F3CF04B7A8D1D42693303F8,
-				DB63CD957C9FBFABF0C6701E,
-				DA2623CD1F28541C7B7EB77E,
-				F23737CE79C498D379A1C69C,
-				30E3DFCA2E12167BA7C20612,
-				F3BFB8D7978AE17B2AB23727,
-				D21881893352E65BBA2B08A6,
-				69E9C3A98CF3B10EEA103575,
-				5260209CF920E63534F12F09,
-				93F241DDA404FD189D3ECB15,
-				47499E258C311A285AF6494F,
-				D71011000000000000000001,
-				F9FE21A068C8B91E112C7920,
-				8C3F10B1E6723A60B3E6339C,
-				F98934459A7CA722BAA4E508,
-				C3891C477AEA03A75A849956,
-				5C016D1698E5D5AB75C3C2F4,
-				445491209DD7785F84B9F7DA,
-				4F0BF2C225436F799EDE2801,
-			);
-			path = "Tests";
-			sourceTree = "<group>";
-		};
-		7E95FC859B9BBB7519B435B0 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "diagnostics.md";
-			sourceTree = "<group>";
-		};
-		EFCD37A28E7EA84AFC51AE25 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "runtime_transition_design.md";
-			sourceTree = "<group>";
-		};
-		513109EC12444281783D0994 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "safe_bringup_protocol.md";
-			sourceTree = "<group>";
-		};
-		5CB1581DB5440A0A39F83218 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "attachment_matrix.md";
-			sourceTree = "<group>";
-		};
-		E7E868CF7FE0075CB3731BC4 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "audio_collectors.md";
-			sourceTree = "<group>";
-		};
-		1E93082D8AE1B5A1CAEC66D1 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "boot_arguments.md";
-			sourceTree = "<group>";
-		};
-		EF9343649F8CDA170F32C57D = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "codec_route.md";
-			sourceTree = "<group>";
-		};
-		A3911E30F137116B8E1D03F3 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "extensible_driver.md";
-			sourceTree = "<group>";
-		};
-		79B68CF5E88BD0F0479541FB = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "hp_linux_collection.md";
-			sourceTree = "<group>";
-		};
-		6594F68B194CC8A2D487E376 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "hp_spi_bringup.md";
-			sourceTree = "<group>";
-		};
-		2598858E6A91632662EE6730 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "hp_windows_collection.md";
-			sourceTree = "<group>";
-		};
-		31068C16A4CF1F4B5E4F8467 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "i2c_provider.md";
-			sourceTree = "<group>";
-		};
-		98A1792295B554F7FA2E6911 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.json;
-			path = "linux_reference_sources.json";
-			sourceTree = "<group>";
-		};
-		F4E01A27D6F3D6AB21D083AE = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "register_reference.md";
-			sourceTree = "<group>";
-		};
-		D71D8799E255800C728E63AF = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "spi_support.md";
-			sourceTree = "<group>";
-		};
-		35EEBFFB211A68ED7E89BB0F = {
-			isa = PBXGroup;
-			children = (
-				D71D8799E255800C728E63AF,
-				F4E01A27D6F3D6AB21D083AE,
-				98A1792295B554F7FA2E6911,
-				31068C16A4CF1F4B5E4F8467,
-				2598858E6A91632662EE6730,
-				6594F68B194CC8A2D487E376,
-				79B68CF5E88BD0F0479541FB,
-				A3911E30F137116B8E1D03F3,
-				EF9343649F8CDA170F32C57D,
-				1E93082D8AE1B5A1CAEC66D1,
-				E7E868CF7FE0075CB3731BC4,
-				5CB1581DB5440A0A39F83218,
-				7E95FC859B9BBB7519B435B0,
-				EFCD37A28E7EA84AFC51AE25,
-				513109EC12444281783D0994,
-			);
-			path = "docs";
-			sourceTree = "<group>";
-		};
-		BCF42C0219F427D6A2F567AD = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "README.md";
-			sourceTree = "<group>";
-		};
-		8D200E0F26A421EFB9ED2225 = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "CHANGELOG.md";
-			sourceTree = "<group>";
-		};
-		6B1871D5C175C54C9A40679B = {
-			isa = PBXFileReference;
-			lastKnownFileType = net.daringfireball.markdown;
-			path = "CONTRIBUTING.md";
-			sourceTree = "<group>";
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		9F857E73729F420519CF9799 = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
-			files = ();
-			inputPaths = ("$(SRCROOT)/Tools/verify_kext_vtables.py", "$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)");
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Tools/verify_kext_vtables.py",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
+			);
 			name = "Verify OpenCore vtables";
-			outputPaths = ();
+			outputPaths = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/usr/bin/python3 \"${SRCROOT}/Tools/verify_kext_vtables.py\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\"\n";
+			shellScript = "/usr/bin/python3 \"${SRCROOT}/Tools/Build/verify_kext_vtables.py\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\"\n";
 		};
-		CAFE00000012 = {
-			isa = PBXBuildFile;
-			fileRef = CAFE00000004;
-		};
-		CAFE00000004 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.cpp;
-			path = AudioEventSource.cpp;
-			sourceTree = "<group>";
-		};
-		CAFE00000011  = {
-			isa = PBXBuildFile;
-			fileRef = CAFE00000001 ;
-		};
-		CAFE00000001  = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.cpp;
-			path = CirrusAudioFixup.cpp;
-			sourceTree = "<group>";
-		};
-		CAFE00000002  = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = CirrusAudioFixup.hpp;
-			sourceTree = "<group>";
-		};
-		CAFE00000003  = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.plist.xml;
-			path = Info.plist;
-			sourceTree = "<group>";
-		};
-		CAFE00000005  = {
+		CAFE00000005 = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.cfbundle;
 			includeInIndex = 0;
 			path = CirrusAudioFixup.kext;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		CAFE00000031  = {
+		CAFE00000031 = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		CAFE00000020  = {
+		CAFE00000023 = {
 			isa = PBXGroup;
 			children = (
-				CAFE00000021 ,
-				CAFE00000023 ,
-				624913F8493D4E5ADB66ADDF,
-				CC9C8F7C5041835F9AAE8AA0,
-				35EEBFFB211A68ED7E89BB0F,
-				BCF42C0219F427D6A2F567AD,
-				8D200E0F26A421EFB9ED2225,
-				6B1871D5C175C54C9A40679B,
-			);
-			sourceTree = "<group>";
-		};
-		CAFE00000021  = {
-			isa = PBXGroup;
-			children = (
-				CAFE00000001,
-				CAFE00000002,
-				CAFE00000003,
-				27521F5A59ABD126183B279A,
-				B7025D93A1607FD444228958,
-				710A73C9D4A075C03072C322,
-				4B398F610293B924D539D0EB,
-				75BA5000D0C47D62AB5DD68C,
-				83460938A80237492B5B34EB,
-				D1C35C0E3D90A9BEF84D6F6D,
-			);
-			name = CirrusAudioFixup;
-			path = CirrusAudioFixup;
-			sourceTree = "<group>";
-		};
-		CAFE00000023  = {
-			isa = PBXGroup;
-			children = (
-				CAFE00000005 ,
+				CAFE00000005,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		CAFE00000040  = {
+		CAFE00000040 = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CAFE00000061;
 			buildPhases = (
-				CAFE00000030 ,
-				CAFE00000031 ,
+				CAFE00000030,
+				A5C100000000000000000003,
+				CAFE00000031,
 				9F857E73729F420519CF9799,
 			);
 			buildRules = (
@@ -1000,10 +71,10 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			);
 			name = CirrusAudioFixup;
 			productName = CirrusAudioFixup;
-			productReference = CAFE00000005 ;
+			productReference = CAFE00000005;
 			productType = "com.apple.product-type.kernel-extension";
 		};
-		CAFE00000050  = {
+		CAFE00000050 = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
@@ -1023,27 +94,37 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 				Base,
 			);
 			mainGroup = CAFE00000020;
-			productRefGroup = CAFE00000023 ;
+			productRefGroup = CAFE00000023;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				CAFE00000040 ,
+				CAFE00000040,
 			);
 		};
-		CAFE00000030  = {
+		CAFE00000030 = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-                ABCD61000000000000000002,
-                8A9A66A1329F44D390D8B6B8,
-				CAFE00000011 ,
-				CAFE00000012 ,
-				CAFE51000000000000000007,
-                CAFE5100000000000000000D,
+				CA6D495D96D3625F8D00875E,
+				D4C2F8C602AE7174255331BB,
+				A5CEE17407689C27010E43D7,
+				64C5E6819173CA3D19A84A87,
+				D4B46E471234691480FB3827,
+				7DD9048A6259CD34BDB9381C,
+				19D5E11CA6B413719373101F,
+				CA1D6CFCA70125C0A315FB49,
+				254AA04670683947C68B33B3,
+				3C45CEF63B33F6C70F3322CB,
+				923BB0EB27727C56BC33DCDA,
+				FB5966B6B7B6CF6FB7E7EACD,
+				6B694075A4BE49FA65B8CBBF,
+				4DDD1D5C37AB77E4C925F00B,
+				2B9CA1BE9923853191D20501,
+				8A4A2FB5EE7DF4CFE113B002,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		CAFE00000070  = {
+		CAFE00000070 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -1057,7 +138,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			};
 			name = Debug;
 		};
-		CAFE00000071  = {
+		CAFE00000071 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -1071,7 +152,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			};
 			name = Release;
 		};
-		CAFE00000072  = {
+		CAFE00000072 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
@@ -1097,7 +178,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1;
+				MODULE_VERSION = 1.1.1;
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -1119,7 +200,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			};
 			name = Debug;
 		};
-		CAFE00000073  = {
+		CAFE00000073 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
@@ -1145,7 +226,7 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1;
+				MODULE_VERSION = 1.1.1;
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",
@@ -1166,24 +247,1661 @@ ABCD61000000000000000002 = {isa = PBXBuildFile;fileRef = ABCD6100000000000000000
 			};
 			name = Release;
 		};
-		CAFE00000060  = {
+		CAFE00000060 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CAFE00000070 ,
-				CAFE00000071 ,
+				CAFE00000070,
+				CAFE00000071,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		CAFE00000061  = {
+		CAFE00000061 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				CAFE00000072 ,
-				CAFE00000073 ,
+				CAFE00000072,
+				CAFE00000073,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
+		};
+		8D200E0F26A421EFB9ED2225 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = CHANGELOG.md;
+			sourceTree = "<group>";
+		};
+		783F10C24098E98499E8607F = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = CONTRIBUTING.md;
+			sourceTree = "<group>";
+		};
+		213AEE71073006568DE1EEA0 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierDevice.hpp;
+			sourceTree = "<group>";
+		};
+		E7B135887CFD04840682F4F3 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierGroup.hpp;
+			sourceTree = "<group>";
+		};
+		7A7ADE64047F21EF79F434FA = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierLifecycle.hpp;
+			sourceTree = "<group>";
+		};
+		1E89978DD38922A7CFE8E4F6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AudioTypes.hpp;
+			sourceTree = "<group>";
+		};
+		963BF563D9B6A0EF2350CE7D = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BusEndpoint.hpp;
+			sourceTree = "<group>";
+		};
+		3C1B9C1975046A6CC0EF9A72 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = RegisterBus.hpp;
+			sourceTree = "<group>";
+		};
+		432953BD9A6B9F4B940AEEE1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = RegisterIO.hpp;
+			sourceTree = "<group>";
+		};
+		6485F2F92AD6BE6DD317F1F6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = RegisterMap.hpp;
+			sourceTree = "<group>";
+		};
+		106D091CB98422232B6AE440 = {
+			isa = PBXGroup;
+			children = (
+				213AEE71073006568DE1EEA0,
+				E7B135887CFD04840682F4F3,
+				7A7ADE64047F21EF79F434FA,
+				1E89978DD38922A7CFE8E4F6,
+				963BF563D9B6A0EF2350CE7D,
+				3C1B9C1975046A6CC0EF9A72,
+				432953BD9A6B9F4B940AEEE1,
+				6485F2F92AD6BE6DD317F1F6,
+			);
+			sourceTree = "<group>";
+			path = Core;
+		};
+		26A7269661FFEEBBD8D2BEC4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierDriverModules.hpp;
+			sourceTree = "<group>";
+		};
+		2AEE4CC8D4CE5926ACF3BC3F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BoardMetadataFallback.hpp;
+			sourceTree = "<group>";
+		};
+		68D902B001E3BD196D84BBF4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BoardPropertyCorrections.hpp;
+			sourceTree = "<group>";
+		};
+		57080D45B33F828D5736F88B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41BoardDiscovery.hpp;
+			sourceTree = "<group>";
+		};
+		65D959E5E3E9B5CAFC8B7078 = {
+			isa = PBXGroup;
+			children = (
+				2AEE4CC8D4CE5926ACF3BC3F,
+				68D902B001E3BD196D84BBF4,
+				57080D45B33F828D5736F88B,
+			);
+			sourceTree = "<group>";
+			path = Board;
+		};
+		51BA20FB9CD5C512B4FAB8A2 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41Device.hpp;
+			sourceTree = "<group>";
+		};
+		59311629F9191E4CD48EC04D = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L41Diagnostics.cpp;
+			sourceTree = "<group>";
+		};
+		ABCD61000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L41Driver.cpp;
+			sourceTree = "<group>";
+		};
+		4DC6A45D6438AA59D3DCAA71 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41Driver.hpp;
+			sourceTree = "<group>";
+		};
+		AECFDA71B41745F7BD246B9B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L41DriverFactory.cpp;
+			sourceTree = "<group>";
+		};
+		5471378CA53C475A884BD29A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41DriverFactory.hpp;
+			sourceTree = "<group>";
+		};
+		DF8B927CD2204E1381A49C5E = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41DriverRegistration.hpp;
+			sourceTree = "<group>";
+		};
+		BD5E978872F7F6A381444470 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L41Firmware.cpp;
+			sourceTree = "<group>";
+		};
+		3F43F06668C0DA492E48BC65 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L41Hardware.cpp;
+			sourceTree = "<group>";
+		};
+		049572D90F5E06ACF5D7EC9A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41Internal.hpp;
+			sourceTree = "<group>";
+		};
+		E5FC91FB765D94C8A5E72DC1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L41Playback.cpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000002 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L41SPIRegisterIO.hpp;
+			sourceTree = "<group>";
+		};
+		B1CA410D7F1B4C648A2DD7F6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = DSPControl.hpp;
+			sourceTree = "<group>";
+		};
+		C4F40FB4905257886C78251E = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = DeviceConfiguration.hpp;
+			sourceTree = "<group>";
+		};
+		EAA44267639C6B62DBD497AD = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Errata.hpp;
+			sourceTree = "<group>";
+		};
+		980DB57ED7434DBC3429FD16 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = OTPMap.hpp;
+			sourceTree = "<group>";
+		};
+		6D21BF6889C943914C1FE564 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Registers.hpp;
+			sourceTree = "<group>";
+		};
+		915985519639ED1FB7A7748C = {
+			isa = PBXGroup;
+			children = (
+				EAA44267639C6B62DBD497AD,
+				980DB57ED7434DBC3429FD16,
+				6D21BF6889C943914C1FE564,
+			);
+			sourceTree = "<group>";
+			path = Hardware;
+		};
+		399BB4F13B91D36C14CF6CE4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = InstanceState.hpp;
+			sourceTree = "<group>";
+		};
+		4F64AC1335631EEC183C8179 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Playback.hpp;
+			sourceTree = "<group>";
+		};
+		E6D5CA58311CC56FA72A29B5 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = PowerConfiguration.hpp;
+			sourceTree = "<group>";
+		};
+		F10DC54D10BB3F32FE911E21 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = FirmwareData.cpp;
+			sourceTree = "<group>";
+		};
+		828D89EA89B9CD8391BAC73F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareData.hpp;
+			sourceTree = "<group>";
+		};
+		A1570F28CEE6D997D09CAC15 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareSelection.hpp;
+			sourceTree = "<group>";
+		};
+		668DA30E06E7B7666A973316 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareData.inc;
+			sourceTree = "<group>";
+		};
+		74A66266E4B1C8EE42AF0978 = {
+			isa = PBXGroup;
+			children = (
+				668DA30E06E7B7666A973316,
+			);
+			sourceTree = "<group>";
+			path = Generated;
+		};
+		53E69E8522D6B7A0D86DBC2F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ResourceSchema.hpp;
+			sourceTree = "<group>";
+		};
+		A03263A4BA55A2FF07FC04D6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Tuning.hpp;
+			sourceTree = "<group>";
+		};
+		FAD6D96A555C137D81BDEB2C = {
+			isa = PBXGroup;
+			children = (
+				F10DC54D10BB3F32FE911E21,
+				828D89EA89B9CD8391BAC73F,
+				A1570F28CEE6D997D09CAC15,
+				74A66266E4B1C8EE42AF0978,
+				53E69E8522D6B7A0D86DBC2F,
+				A03263A4BA55A2FF07FC04D6,
+			);
+			sourceTree = "<group>";
+			path = Resources;
+		};
+		20EA95D8778A418C2EA17512 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = RuntimeState.hpp;
+			sourceTree = "<group>";
+		};
+		1F0624E71DB62691796BC906 = {
+			isa = PBXGroup;
+			children = (
+				65D959E5E3E9B5CAFC8B7078,
+				51BA20FB9CD5C512B4FAB8A2,
+				59311629F9191E4CD48EC04D,
+				ABCD61000000000000000001,
+				4DC6A45D6438AA59D3DCAA71,
+				AECFDA71B41745F7BD246B9B,
+				5471378CA53C475A884BD29A,
+				DF8B927CD2204E1381A49C5E,
+				BD5E978872F7F6A381444470,
+				3F43F06668C0DA492E48BC65,
+				049572D90F5E06ACF5D7EC9A,
+				E5FC91FB765D94C8A5E72DC1,
+				CAFE51000000000000000002,
+				B1CA410D7F1B4C648A2DD7F6,
+				C4F40FB4905257886C78251E,
+				915985519639ED1FB7A7748C,
+				399BB4F13B91D36C14CF6CE4,
+				4F64AC1335631EEC183C8179,
+				E6D5CA58311CC56FA72A29B5,
+				FAD6D96A555C137D81BDEB2C,
+				20EA95D8778A418C2EA17512,
+			);
+			sourceTree = "<group>";
+			path = CS35L41;
+		};
+		5EFAE80EBFFE5C518779AFE2 = {
+			isa = PBXGroup;
+			children = (
+				1F0624E71DB62691796BC906,
+			);
+			sourceTree = "<group>";
+			path = Amplifiers;
+		};
+		7B82C29E22E0B705C32E30EF = {
+			isa = PBXGroup;
+			children = (
+				26A7269661FFEEBBD8D2BEC4,
+				5EFAE80EBFFE5C518779AFE2,
+			);
+			sourceTree = "<group>";
+			path = Devices;
+		};
+		67B8A9CD12704F0DA86390BA = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIObjectEvidence.hpp;
+			sourceTree = "<group>";
+		};
+		6A9F6AC950CEE5FC9E124C03 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AttachmentState.hpp;
+			sourceTree = "<group>";
+		};
+		F020B0C511BE7C8145385429 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = DiagnosticTracer.hpp;
+			sourceTree = "<group>";
+		};
+		E0605EA1EB37F708C4FAA377 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = DiagnosticTypes.hpp;
+			sourceTree = "<group>";
+		};
+		AA98911D63E8F93259AEBE62 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FailureNames.hpp;
+			sourceTree = "<group>";
+		};
+		1EC86071840BB16D5072B690 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = TraceTypes.hpp;
+			sourceTree = "<group>";
+		};
+		FBD407D11684A8BDA1BAE2C2 = {
+			isa = PBXGroup;
+			children = (
+				67B8A9CD12704F0DA86390BA,
+				6A9F6AC950CEE5FC9E124C03,
+				F020B0C511BE7C8145385429,
+				E0605EA1EB37F708C4FAA377,
+				AA98911D63E8F93259AEBE62,
+				1EC86071840BB16D5072B690,
+			);
+			sourceTree = "<group>";
+			path = Diagnostics;
+		};
+		6D40FF03FC7BE8EE2E66E123 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareBundle.hpp;
+			sourceTree = "<group>";
+		};
+		C2DDAB80313D23D86D767E21 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = WMFWFormat.hpp;
+			sourceTree = "<group>";
+		};
+		D6F113F20C1C03EDE354CF6F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = WMFWParser.hpp;
+			sourceTree = "<group>";
+		};
+		E0E51BBBD43F09274B6FFE7E = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = WMFWUploadPlan.hpp;
+			sourceTree = "<group>";
+		};
+		3EE5A64B016195D0B95976FE = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = WMFWUploader.hpp;
+			sourceTree = "<group>";
+		};
+		60CD727161402076075D9B61 = {
+			isa = PBXGroup;
+			children = (
+				C2DDAB80313D23D86D767E21,
+				D6F113F20C1C03EDE354CF6F,
+				E0E51BBBD43F09274B6FFE7E,
+				3EE5A64B016195D0B95976FE,
+			);
+			sourceTree = "<group>";
+			path = WMFW;
+		};
+		ED302F0D07641DB0AB3FFF8D = {
+			isa = PBXGroup;
+			children = (
+				6D40FF03FC7BE8EE2E66E123,
+				60CD727161402076075D9B61,
+			);
+			sourceTree = "<group>";
+			path = Firmware;
+		};
+		CAFE00000003 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = Info.plist;
+			sourceTree = "<group>";
+		};
+		A5C100000000000000000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIBoardMetadata.hpp;
+			sourceTree = "<group>";
+		};
+		BB7372D2E62BC2AA18F2E02A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIDeviceProperties.hpp;
+			sourceTree = "<group>";
+		};
+		9B1AA0FF3764E3D5DBFA46BE = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIGPIOResources.hpp;
+			sourceTree = "<group>";
+		};
+		906368FCA2EB8FE548BD7705 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIPath.hpp;
+			sourceTree = "<group>";
+		};
+		A837D6A8E58194CDD0717147 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIPlatformProperties.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000008 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPISPIResources.hpp;
+			sourceTree = "<group>";
+		};
+		EEA1B1663A570631C0449F01 = {
+			isa = PBXGroup;
+			children = (
+				A5C100000000000000000004,
+				BB7372D2E62BC2AA18F2E02A,
+				9B1AA0FF3764E3D5DBFA46BE,
+				906368FCA2EB8FE548BD7705,
+				A837D6A8E58194CDD0717147,
+				CAFE51000000000000000008,
+			);
+			sourceTree = "<group>";
+			path = ACPI;
+		};
+		1E4FC108153F3B68092EDD67 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BoardConfiguration.hpp;
+			sourceTree = "<group>";
+		};
+		614937864310FDEE840D627B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BoardDiscovery.hpp;
+			sourceTree = "<group>";
+		};
+		D1DEE96129AE7010800B6326 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = PlatformProfile.hpp;
+			sourceTree = "<group>";
+		};
+		8CCCC6A730958B508D279C40 = {
+			isa = PBXGroup;
+			children = (
+				1E4FC108153F3B68092EDD67,
+				614937864310FDEE840D627B,
+				D1DEE96129AE7010800B6326,
+			);
+			sourceTree = "<group>";
+			path = Board;
+		};
+		CAFE00000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = AudioEventSource.cpp;
+			sourceTree = "<group>";
+		};
+		79C731287875A3F568EE7384 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AudioEventSource.hpp;
+			sourceTree = "<group>";
+		};
+		DC4498D631C3CF6EF1CBABAB = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = HDAStreamState.hpp;
+			sourceTree = "<group>";
+		};
+		B8ADFE1DB47399E479E14F55 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = HDAStreamWatcher.hpp;
+			sourceTree = "<group>";
+		};
+		47A756E65059FC36C2AE1EEF = {
+			isa = PBXGroup;
+			children = (
+				CAFE00000004,
+				79C731287875A3F568EE7384,
+				DC4498D631C3CF6EF1CBABAB,
+				B8ADFE1DB47399E479E14F55,
+			);
+			sourceTree = "<group>";
+			path = HDA;
+		};
+		1CA03FA150885C331D0B7F7B = {
+			isa = PBXGroup;
+			children = (
+				EEA1B1663A570631C0449F01,
+				8CCCC6A730958B508D279C40,
+				47A756E65059FC36C2AE1EEF,
+			);
+			sourceTree = "<group>";
+			path = Platform;
+		};
+		0AE7D65E29CF3F41FCDAB433 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierDriverRegistry.hpp;
+			sourceTree = "<group>";
+		};
+		6BC1167998E24F78B83A3E27 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierHost.hpp;
+			sourceTree = "<group>";
+		};
+		A6ACBB061A579B59A193BA93 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AmplifierManager.hpp;
+			sourceTree = "<group>";
+		};
+		B71011000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = SPIAmplifierManager.hpp;
+			sourceTree = "<group>";
+		};
+		2376F4AAD658E58D7A10C884 = {
+			isa = PBXGroup;
+			children = (
+				0AE7D65E29CF3F41FCDAB433,
+				6BC1167998E24F78B83A3E27,
+				A6ACBB061A579B59A193BA93,
+				B71011000000000000000001,
+			);
+			sourceTree = "<group>";
+			path = Runtime;
+		};
+		F351D08972AF0E9B8F016883 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CirrusAudioFixup.cpp;
+			sourceTree = "<group>";
+		};
+		94D7D9EFE6D8FD8882D97119 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CirrusAudioFixup.hpp;
+			sourceTree = "<group>";
+		};
+		EDAF52F7B903BABB769C94FC = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CirrusAudioFixupAttachment.cpp;
+			sourceTree = "<group>";
+		};
+		596EE160826F688D8E549941 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CirrusAudioFixupDiagnostics.cpp;
+			sourceTree = "<group>";
+		};
+		68C8CCAB5F63AD5AAA7B578E = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CirrusAudioFixupPower.cpp;
+			sourceTree = "<group>";
+		};
+		C2B88BECAFF70EC01A74B8FD = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CirrusAudioFixupRuntime.cpp;
+			sourceTree = "<group>";
+		};
+		355EA373EE4218CC745C4155 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CirrusAudioFixupSupport.hpp;
+			sourceTree = "<group>";
+		};
+		EF13D362978547F068ECE62B = {
+			isa = PBXGroup;
+			children = (
+				F351D08972AF0E9B8F016883,
+				94D7D9EFE6D8FD8882D97119,
+				EDAF52F7B903BABB769C94FC,
+				596EE160826F688D8E549941,
+				68C8CCAB5F63AD5AAA7B578E,
+				C2B88BECAFF70EC01A74B8FD,
+				355EA373EE4218CC745C4155,
+			);
+			sourceTree = "<group>";
+			path = Service;
+		};
+		3E01BEE9F84F8DCFE4727EA6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BitUtils.hpp;
+			sourceTree = "<group>";
+		};
+		6B4DE6E3262E10D79F03D1BE = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BuildConfig.hpp;
+			sourceTree = "<group>";
+		};
+		5563407EB45C332E7AEB7810 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CPUIdentity.hpp;
+			sourceTree = "<group>";
+		};
+		AC9100000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = KernelDeviceCast.hpp;
+			sourceTree = "<group>";
+		};
+		F9963AE58EE1C4D8FCF9F098 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Logging.hpp;
+			sourceTree = "<group>";
+		};
+		5E6BDF8ADE60AB9D57B7521B = {
+			isa = PBXGroup;
+			children = (
+				3E01BEE9F84F8DCFE4727EA6,
+				6B4DE6E3262E10D79F03D1BE,
+				5563407EB45C332E7AEB7810,
+				AC9100000000000000000001,
+				F9963AE58EE1C4D8FCF9F098,
+			);
+			sourceTree = "<group>";
+			path = Support;
+		};
+		21C3366F896C719BA60E6170 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = I2CController.hpp;
+			sourceTree = "<group>";
+		};
+		28FCF60355DB403CA8D56264 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = I2CRegisterBus.hpp;
+			sourceTree = "<group>";
+		};
+		8CF69CE796ABB36A1A3D630F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = VoodooI2CController.hpp;
+			sourceTree = "<group>";
+		};
+		79E10805A559FC3E5503866B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = VoodooI2CProvider.hpp;
+			sourceTree = "<group>";
+		};
+		E54CB9798B60C60B78E26495 = {
+			isa = PBXGroup;
+			children = (
+				21C3366F896C719BA60E6170,
+				28FCF60355DB403CA8D56264,
+				8CF69CE796ABB36A1A3D630F,
+				79E10805A559FC3E5503866B,
+			);
+			sourceTree = "<group>";
+			path = I2C;
+		};
+		CAFE5100000000000000000C = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = AMDSPIController.cpp;
+			sourceTree = "<group>";
+		};
+		CAFE5100000000000000000B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AMDSPIController.hpp;
+			sourceTree = "<group>";
+		};
+		467C05493D3366377B8B15BF = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AMDSPIControllerOwner.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE5100000000000000000A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = AMDSPIEngine.hpp;
+			sourceTree = "<group>";
+		};
+		D6D463692ED17CA94BA82352 = {
+			isa = PBXGroup;
+			children = (
+				CAFE5100000000000000000C,
+				CAFE5100000000000000000B,
+				467C05493D3366377B8B15BF,
+				CAFE5100000000000000000A,
+			);
+			sourceTree = "<group>";
+			path = AMD;
+		};
+		A5C100000000000000000006 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = IntelGPIOInput.hpp;
+			sourceTree = "<group>";
+		};
+		1CB8291BF505D0D65865013C = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = IntelGPIOOutput.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000005 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = IntelLPSSSPIController.cpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = IntelLPSSSPIController.hpp;
+			sourceTree = "<group>";
+		};
+		E8D60B38E48F46AB269FAEE7 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = IntelSPIChipSelects.hpp;
+			sourceTree = "<group>";
+		};
+		93CA90577209D745B0DFA6F1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = IntelSPIControllerOwner.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000003 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = LPSSSPIEngine.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000009 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = LPSSSPIProfiles.hpp;
+			sourceTree = "<group>";
+		};
+		5A95359F5BCCC6244FAE80DC = {
+			isa = PBXGroup;
+			children = (
+				A5C100000000000000000006,
+				1CB8291BF505D0D65865013C,
+				CAFE51000000000000000005,
+				CAFE51000000000000000004,
+				E8D60B38E48F46AB269FAEE7,
+				93CA90577209D745B0DFA6F1,
+				CAFE51000000000000000003,
+				CAFE51000000000000000009,
+			);
+			sourceTree = "<group>";
+			path = Intel;
+		};
+		832F05729C9FF63F811668B8 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = NativeSPIControllerFactory.hpp;
+			sourceTree = "<group>";
+		};
+		5C656742B026D7B45E031029 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = NativeSPIControllerOwner.hpp;
+			sourceTree = "<group>";
+		};
+		61B87D788EE5AE247B75A0D1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = NativeSPIControllerSelection.hpp;
+			sourceTree = "<group>";
+		};
+		1FB54EE34BAE0041B4906A8F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = NativeSPIHost.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE51000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = SPIController.hpp;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000002 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = SPIPowerClient.cpp;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = SPIPowerClient.hpp;
+			sourceTree = "<group>";
+		};
+		29F371FB87977DF261FF1260 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = SPIRegisterBus.hpp;
+			sourceTree = "<group>";
+		};
+		745FB34B9B32B03D05099FEC = {
+			isa = PBXGroup;
+			children = (
+				D6D463692ED17CA94BA82352,
+				5A95359F5BCCC6244FAE80DC,
+				832F05729C9FF63F811668B8,
+				5C656742B026D7B45E031029,
+				61B87D788EE5AE247B75A0D1,
+				1FB54EE34BAE0041B4906A8F,
+				CAFE51000000000000000001,
+				A5C200000000000000000002,
+				A5C200000000000000000001,
+				29F371FB87977DF261FF1260,
+			);
+			sourceTree = "<group>";
+			path = SPI;
+		};
+		99F114594E356F02C77C711D = {
+			isa = PBXGroup;
+			children = (
+				E54CB9798B60C60B78E26495,
+				745FB34B9B32B03D05099FEC,
+			);
+			sourceTree = "<group>";
+			path = Transport;
+		};
+		0AD0A071BDA6FC58580FF0FB = {
+			isa = PBXGroup;
+			children = (
+				106D091CB98422232B6AE440,
+				7B82C29E22E0B705C32E30EF,
+				FBD407D11684A8BDA1BAE2C2,
+				ED302F0D07641DB0AB3FFF8D,
+				CAFE00000003,
+				1CA03FA150885C331D0B7F7B,
+				2376F4AAD658E58D7A10C884,
+				EF13D362978547F068ECE62B,
+				5E6BDF8ADE60AB9D57B7521B,
+				99F114594E356F02C77C711D,
+			);
+			sourceTree = "<group>";
+			path = CirrusAudioFixup;
+		};
+		BCB338BF6A2FB49A0486CA60 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = LICENSE;
+			sourceTree = "<group>";
+		};
+		A5C100000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = LICENSE.cirrus;
+			sourceTree = "<group>";
+		};
+		BCF42C0219F427D6A2F567AD = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = README.md;
+			sourceTree = "<group>";
+		};
+		DA2623CD1F28541C7B7EB77E = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_architecture.py;
+			sourceTree = "<group>";
+		};
+		A48D075158356343E8B0890D = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_extensible_core.py;
+			sourceTree = "<group>";
+		};
+		9EAE4F7E63F3134005E5296C = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_source_layout.py;
+			sourceTree = "<group>";
+		};
+		6720DE240C7E1427AEE91F5C = {
+			isa = PBXGroup;
+			children = (
+				DA2623CD1F28541C7B7EB77E,
+				A48D075158356343E8B0890D,
+				9EAE4F7E63F3134005E5296C,
+			);
+			sourceTree = "<group>";
+			path = Architecture;
+		};
+		F3BFB8D7978AE17B2AB23727 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_build_policy.py;
+			sourceTree = "<group>";
+		};
+		47499E258C311A285AF6494F = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_release.py;
+			sourceTree = "<group>";
+		};
+		8C3F10B1E6723A60B3E6339C = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_tools.py;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000008 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_tools_provenance.py;
+			sourceTree = "<group>";
+		};
+		4F3CF04B7A8D1D42693303F8 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_vtable_policy.py;
+			sourceTree = "<group>";
+		};
+		9970E1B9601FF524652AC1AE = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = check_windows_collector.ps1;
+			sourceTree = "<group>";
+		};
+		5FDB5D8BF7C32D0952D6FB38 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_windows_collector.py;
+			sourceTree = "<group>";
+		};
+		5C016D1698E5D5AB75C3C2F4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_windows_payloads.py;
+			sourceTree = "<group>";
+		};
+		DB63CD957C9FBFABF0C6701E = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_xcode_project.py;
+			sourceTree = "<group>";
+		};
+		A89A7364977435C7F2787C83 = {
+			isa = PBXGroup;
+			children = (
+				F3BFB8D7978AE17B2AB23727,
+				47499E258C311A285AF6494F,
+				8C3F10B1E6723A60B3E6339C,
+				A5C200000000000000000008,
+				4F3CF04B7A8D1D42693303F8,
+				9970E1B9601FF524652AC1AE,
+				5FDB5D8BF7C32D0952D6FB38,
+				5C016D1698E5D5AB75C3C2F4,
+				DB63CD957C9FBFABF0C6701E,
+			);
+			sourceTree = "<group>";
+			path = Build;
+		};
+		D21881893352E65BBA2B08A6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_calibration.py;
+			sourceTree = "<group>";
+		};
+		E84CD52417310F27B9FD47F6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_cs35l41_driver.py;
+			sourceTree = "<group>";
+		};
+		3D55DC2B7DD82C9247A72604 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_cs35l41_power.py;
+			sourceTree = "<group>";
+		};
+		D71011000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_firmware_identity.py;
+			sourceTree = "<group>";
+		};
+		93F241DDA404FD189D3ECB15 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_registers.py;
+			sourceTree = "<group>";
+		};
+		C3891C477AEA03A75A849956 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_tuning.py;
+			sourceTree = "<group>";
+		};
+		4F0BF2C225436F799EDE2801 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = reproduce_host.py;
+			sourceTree = "<group>";
+		};
+		8F824F56B2DDFDDE20B263E0 = {
+			isa = PBXGroup;
+			children = (
+				D21881893352E65BBA2B08A6,
+				E84CD52417310F27B9FD47F6,
+				3D55DC2B7DD82C9247A72604,
+				D71011000000000000000001,
+				93F241DDA404FD189D3ECB15,
+				C3891C477AEA03A75A849956,
+				4F0BF2C225436F799EDE2801,
+			);
+			sourceTree = "<group>";
+			path = Drivers;
+		};
+		1BF3A8D39570B9D4030EDF80 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = acpi_kernel_fixture.py;
+			sourceTree = "<group>";
+		};
+		4582248F78A05271F88A7AC6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = driver_kernel_fixture.py;
+			sourceTree = "<group>";
+		};
+		A5004A04F923F641E69FFD0C = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = host_build.py;
+			sourceTree = "<group>";
+		};
+		445491209DD7785F84B9F7DA = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = host_regression.cpp;
+			sourceTree = "<group>";
+		};
+		84F7083789BFD215AE6F9749 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = production_source_fixture.py;
+			sourceTree = "<group>";
+		};
+		06F29D190C4F4DA94A340C16 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = service_runtime_fixture.py;
+			sourceTree = "<group>";
+		};
+		7A87B7F01047364195EBA87D = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = xcode_project.py;
+			sourceTree = "<group>";
+		};
+		7442E7C43C55B6F69AE2F782 = {
+			isa = PBXGroup;
+			children = (
+				1BF3A8D39570B9D4030EDF80,
+				4582248F78A05271F88A7AC6,
+				A5004A04F923F641E69FFD0C,
+				445491209DD7785F84B9F7DA,
+				84F7083789BFD215AE6F9749,
+				06F29D190C4F4DA94A340C16,
+				7A87B7F01047364195EBA87D,
+			);
+			sourceTree = "<group>";
+			path = Fixtures;
+		};
+		F591CFC96A34BE99AC448C58 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_attachment.py;
+			sourceTree = "<group>";
+		};
+		F23737CE79C498D379A1C69C = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_audio_events.py;
+			sourceTree = "<group>";
+		};
+		A5C100000000000000000007 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_board_metadata.py;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000006 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_boot_evidence.py;
+			sourceTree = "<group>";
+		};
+		30E3DFCA2E12167BA7C20612 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_bringup.py;
+			sourceTree = "<group>";
+		};
+		69E9C3A98CF3B10EEA103575 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_diagnostics.py;
+			sourceTree = "<group>";
+		};
+		5260209CF920E63534F12F09 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_hda.py;
+			sourceTree = "<group>";
+		};
+		B2584EBEAE4CA972F9FBCB04 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_platform_configuration.py;
+			sourceTree = "<group>";
+		};
+		6A12FEBC78457916CD62CEDB = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_platform_discovery.py;
+			sourceTree = "<group>";
+		};
+		F9FE21A068C8B91E112C7920 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_runtime.py;
+			sourceTree = "<group>";
+		};
+		3C0A73184474A4AFA05FC582 = {
+			isa = PBXGroup;
+			children = (
+				F591CFC96A34BE99AC448C58,
+				F23737CE79C498D379A1C69C,
+				A5C100000000000000000007,
+				A5C200000000000000000006,
+				30E3DFCA2E12167BA7C20612,
+				69E9C3A98CF3B10EEA103575,
+				5260209CF920E63534F12F09,
+				B2584EBEAE4CA972F9FBCB04,
+				6A12FEBC78457916CD62CEDB,
+				F9FE21A068C8B91E112C7920,
+			);
+			sourceTree = "<group>";
+			path = Platform;
+		};
+		057B6E404B7A23C732220131 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_acpi_cast.py;
+			sourceTree = "<group>";
+		};
+		0D1C3F8911D8E8697DF3CE07 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_acpi_spi.py;
+			sourceTree = "<group>";
+		};
+		8CD1C9BA5D5B56DAE8C198CE = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_amd_spi.py;
+			sourceTree = "<group>";
+		};
+		5004C0B84059977F1CE893DF = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_amd_spi_lifecycle.py;
+			sourceTree = "<group>";
+		};
+		29B10A19766CA697B1CD3EE0 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_intel_spi.py;
+			sourceTree = "<group>";
+		};
+		A73491CA8E19EFFBD83C1CB0 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_intel_spi_lifecycle.py;
+			sourceTree = "<group>";
+		};
+		CA98C65691C0F2C60B20D60F = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_native_spi.py;
+			sourceTree = "<group>";
+		};
+		281744BE7E6F0D2F39457838 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_pci_publication.py;
+			sourceTree = "<group>";
+		};
+		35CBC7DC46BA4BB4CB450D20 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_spi_chip_select.py;
+			sourceTree = "<group>";
+		};
+		6D3CC2C430CB04F9BE45D87C = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_spi_gpio.py;
+			sourceTree = "<group>";
+		};
+		0D60D9B10857C8580E0A61A3 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_spi_gpio_binding.py;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000007 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_spi_power_client.py;
+			sourceTree = "<group>";
+		};
+		C7B444B97747AA70C1DC81A5 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_spi_transport.py;
+			sourceTree = "<group>";
+		};
+		F98934459A7CA722BAA4E508 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_transport.py;
+			sourceTree = "<group>";
+		};
+		18B2F1794A1E8E5DBB05EC72 = {
+			isa = PBXGroup;
+			children = (
+				057B6E404B7A23C732220131,
+				0D1C3F8911D8E8697DF3CE07,
+				8CD1C9BA5D5B56DAE8C198CE,
+				5004C0B84059977F1CE893DF,
+				29B10A19766CA697B1CD3EE0,
+				A73491CA8E19EFFBD83C1CB0,
+				CA98C65691C0F2C60B20D60F,
+				281744BE7E6F0D2F39457838,
+				35CBC7DC46BA4BB4CB450D20,
+				6D3CC2C430CB04F9BE45D87C,
+				0D60D9B10857C8580E0A61A3,
+				A5C200000000000000000007,
+				C7B444B97747AA70C1DC81A5,
+				F98934459A7CA722BAA4E508,
+			);
+			sourceTree = "<group>";
+			path = Transport;
+		};
+		EA687A1D05D7ACEE261F0A44 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = run.py;
+			sourceTree = "<group>";
+		};
+		156052F04525D0F710673CF0 = {
+			isa = PBXGroup;
+			children = (
+				6720DE240C7E1427AEE91F5C,
+				A89A7364977435C7F2787C83,
+				8F824F56B2DDFDDE20B263E0,
+				7442E7C43C55B6F69AE2F782,
+				3C0A73184474A4AFA05FC582,
+				18B2F1794A1E8E5DBB05EC72,
+				EA687A1D05D7ACEE261F0A44,
+			);
+			sourceTree = "<group>";
+			path = Tests;
+		};
+		08E1F48CBE6D1C188AF3096B = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = audit_linux_reference.py;
+			sourceTree = "<group>";
+		};
+		14C4A873D059DA3A76D05BB7 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = audit_windows_payloads.py;
+			sourceTree = "<group>";
+		};
+		57EE7E5DC8A11D71BA7D547E = {
+			isa = PBXGroup;
+			children = (
+				08E1F48CBE6D1C188AF3096B,
+				14C4A873D059DA3A76D05BB7,
+			);
+			sourceTree = "<group>";
+			path = Audit;
+		};
+		78A8D22358D07C4CA784F52D = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.sh;
+			path = build_macos.sh;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = build_provenance.py;
+			sourceTree = "<group>";
+		};
+		98DF8407D8560A13B3A31982 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = release_metadata.py;
+			sourceTree = "<group>";
+		};
+		5CEF43D92304BBBABCBA5AC2 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = verify_kext_vtables.py;
+			sourceTree = "<group>";
+		};
+		34DDA37A8E8A466AE3313A0A = {
+			isa = PBXGroup;
+			children = (
+				78A8D22358D07C4CA784F52D,
+				A5C200000000000000000004,
+				98DF8407D8560A13B3A31982,
+				5CEF43D92304BBBABCBA5AC2,
+			);
+			sourceTree = "<group>";
+			path = Build;
+		};
+		C34DA2739E751FF478D0C496 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = "Collect-AudioAMP-Windows.ps1";
+			sourceTree = "<group>";
+		};
+		8195FCE22BEEDD08BA27E6D3 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = "Collect-AudioDriverPackages.cmd";
+			sourceTree = "<group>";
+		};
+		FB538E6A86645282FDEDC855 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = "Collect-AudioDriverPackages.ps1";
+			sourceTree = "<group>";
+		};
+		D280781DBF4E1C36DE072A97 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.sh;
+			path = collect_audio_amp_linux.sh;
+			sourceTree = "<group>";
+		};
+		93E13AE8D1AFEC6837762B9E = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.sh;
+			path = collect_macos.sh;
+			sourceTree = "<group>";
+		};
+		A5C200000000000000000005 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = compare_macos_evidence.py;
+			sourceTree = "<group>";
+		};
+		B81DB180B771176DA8AF277F = {
+			isa = PBXGroup;
+			children = (
+				C34DA2739E751FF478D0C496,
+				8195FCE22BEEDD08BA27E6D3,
+				FB538E6A86645282FDEDC855,
+				D280781DBF4E1C36DE072A97,
+				93E13AE8D1AFEC6837762B9E,
+				A5C200000000000000000005,
+			);
+			sourceTree = "<group>";
+			path = Collectors;
+		};
+		A63B4A299F77C2F41BB61F01 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = import_firmware.py;
+			sourceTree = "<group>";
+		};
+		45287280CA6F95DEA92C43AF = {
+			isa = PBXGroup;
+			children = (
+				A63B4A299F77C2F41BB61F01,
+			);
+			sourceTree = "<group>";
+			path = Firmware;
+		};
+		B023CA8F0F68491740229B47 = {
+			isa = PBXGroup;
+			children = (
+				57EE7E5DC8A11D71BA7D547E,
+				34DDA37A8E8A466AE3313A0A,
+				B81DB180B771176DA8AF277F,
+				45287280CA6F95DEA92C43AF,
+			);
+			sourceTree = "<group>";
+			path = Tools;
+		};
+		1E93082D8AE1B5A1CAEC66D1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = boot_arguments.md;
+			sourceTree = "<group>";
+		};
+		7E95FC859B9BBB7519B435B0 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = diagnostics.md;
+			sourceTree = "<group>";
+		};
+		B16EE2CE738A3EE50ABFC6B8 = {
+			isa = PBXGroup;
+			children = (
+				1E93082D8AE1B5A1CAEC66D1,
+				7E95FC859B9BBB7519B435B0,
+			);
+			sourceTree = "<group>";
+			path = diagnostics;
+		};
+		E7E868CF7FE0075CB3731BC4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = audio_collectors.md;
+			sourceTree = "<group>";
+		};
+		6CB916932CFFD07F603B3065 = {
+			isa = PBXGroup;
+			children = (
+				E7E868CF7FE0075CB3731BC4,
+			);
+			sourceTree = "<group>";
+			path = guides;
+		};
+		EF9343649F8CDA170F32C57D = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = codec_route.md;
+			sourceTree = "<group>";
+		};
+		31068C16A4CF1F4B5E4F8467 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text;
+			path = i2c_provider.md;
+			sourceTree = "<group>";
+		};
+		DF87E108886EADBE395434A0 = {
+			isa = PBXGroup;
+			children = (
+				EF9343649F8CDA170F32C57D,
+				31068C16A4CF1F4B5E4F8467,
+			);
+			sourceTree = "<group>";
+			path = hardware;
+		};
+		1B4FFFFBDA5103C7E9E4DCCA = {
+			isa = PBXGroup;
+			children = (
+				B16EE2CE738A3EE50ABFC6B8,
+				6CB916932CFFD07F603B3065,
+				DF87E108886EADBE395434A0,
+			);
+			sourceTree = "<group>";
+			path = docs;
+		};
+		CAFE00000020 = {
+			isa = PBXGroup;
+			children = (
+				8D200E0F26A421EFB9ED2225,
+				783F10C24098E98499E8607F,
+				0AD0A071BDA6FC58580FF0FB,
+				BCB338BF6A2FB49A0486CA60,
+				A5C100000000000000000001,
+				BCF42C0219F427D6A2F567AD,
+				156052F04525D0F710673CF0,
+				B023CA8F0F68491740229B47,
+				1B4FFFFBDA5103C7E9E4DCCA,
+				CAFE00000023,
+			);
+			sourceTree = "<group>";
+		};
+		CA6D495D96D3625F8D00875E = {
+			isa = PBXBuildFile;
+			fileRef = 59311629F9191E4CD48EC04D;
+		};
+		D4C2F8C602AE7174255331BB = {
+			isa = PBXBuildFile;
+			fileRef = ABCD61000000000000000001;
+		};
+		A5CEE17407689C27010E43D7 = {
+			isa = PBXBuildFile;
+			fileRef = AECFDA71B41745F7BD246B9B;
+		};
+		64C5E6819173CA3D19A84A87 = {
+			isa = PBXBuildFile;
+			fileRef = BD5E978872F7F6A381444470;
+		};
+		D4B46E471234691480FB3827 = {
+			isa = PBXBuildFile;
+			fileRef = 3F43F06668C0DA492E48BC65;
+		};
+		7DD9048A6259CD34BDB9381C = {
+			isa = PBXBuildFile;
+			fileRef = E5FC91FB765D94C8A5E72DC1;
+		};
+		19D5E11CA6B413719373101F = {
+			isa = PBXBuildFile;
+			fileRef = F10DC54D10BB3F32FE911E21;
+		};
+		CA1D6CFCA70125C0A315FB49 = {
+			isa = PBXBuildFile;
+			fileRef = CAFE00000004;
+		};
+		254AA04670683947C68B33B3 = {
+			isa = PBXBuildFile;
+			fileRef = F351D08972AF0E9B8F016883;
+		};
+		3C45CEF63B33F6C70F3322CB = {
+			isa = PBXBuildFile;
+			fileRef = EDAF52F7B903BABB769C94FC;
+		};
+		923BB0EB27727C56BC33DCDA = {
+			isa = PBXBuildFile;
+			fileRef = 596EE160826F688D8E549941;
+		};
+		FB5966B6B7B6CF6FB7E7EACD = {
+			isa = PBXBuildFile;
+			fileRef = 68C8CCAB5F63AD5AAA7B578E;
+		};
+		6B694075A4BE49FA65B8CBBF = {
+			isa = PBXBuildFile;
+			fileRef = C2B88BECAFF70EC01A74B8FD;
+		};
+		4DDD1D5C37AB77E4C925F00B = {
+			isa = PBXBuildFile;
+			fileRef = CAFE5100000000000000000C;
+		};
+		2B9CA1BE9923853191D20501 = {
+			isa = PBXBuildFile;
+			fileRef = CAFE51000000000000000005;
+		};
+		8A4A2FB5EE7DF4CFE113B002 = {
+			isa = PBXBuildFile;
+			fileRef = A5C200000000000000000002;
 		};
 	};
-	rootObject = CAFE00000050 ;
+	rootObject = CAFE00000050;
 }

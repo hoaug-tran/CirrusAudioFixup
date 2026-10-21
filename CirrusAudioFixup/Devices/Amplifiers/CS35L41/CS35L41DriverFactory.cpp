@@ -2,7 +2,7 @@
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
-#include "Devices/Amplifiers/CS35L41/PlatformConfiguration.hpp"
+#include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
 namespace cirrus::devices::amplifiers::cs35l41 {
 core::AmplifierLifecycleHooks* createDriver(const platform::AmplifierDriverContext& c) {
     if (!c.host || !c.host->supportsResources() || !c.board.amplifiers || c.bindingIndex >= c.board.count ||
@@ -34,6 +34,6 @@ bool validDebugPhase(const char* requested) {
     return false;
 }
 platform::DiscoveredBoard* discoverBoard(const platform::BoardDiscoveryContext& context, const char*& reason) {
-    return resolvePlatformConfiguration(context, protectionResourceAvailable, reason);
+    return resolveBoardConfiguration(context, protectionResourceAvailable, reason);
 }
 }

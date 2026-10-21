@@ -295,7 +295,7 @@ public:
 
     bool stopPlayback(core::RegisterIO& io) override {
         // Emergency mute only, not a substitute for topology-aware shutdown.
-        // AMP_EN is bit 0; setting bits 0/1 here used to enable the amplifier.
+        // Clear AMP_EN (bit 0) without changing the other power fields.
         bool ok = io.write(registers::kRegAmplifierGainControl, 0);
         ok = io.write(registers::kRegAmplifierDigitalVolumeControl, 0xA678) && ok;
         return io.updateBits(registers::kRegPowerControl2, 1, 0) && ok;

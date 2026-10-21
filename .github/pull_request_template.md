@@ -23,7 +23,7 @@ Give the tested commit/artifact, commands, host OS and actual results. Link CI o
 | Check | Result and evidence |
 | --- | --- |
 | Maintained host tests: `python3 Tests/run.py` | |
-| macOS Debug and Release bundles: `bash Tools/build_macos.sh` | |
+| macOS Debug and Release bundles: `bash Tools/Build/build_macos.sh` | |
 | Relevant collector, parser or documentation checks | |
 
 The macOS build script already runs the host suite. Do not repeat it just to fill this table. For documentation-only changes, check links and examples; a new hardware run is not required. For collector changes, state which OS/tool paths actually ran. A Windows host test or Mach-O object compile is not a native linked/loaded kext test.

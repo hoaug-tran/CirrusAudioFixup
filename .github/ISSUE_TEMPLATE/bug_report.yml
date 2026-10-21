@@ -8,7 +8,7 @@ body:
       value: |
         Report one problem per issue. For a new board or amplifier, use **Hardware support** instead.
         Read the [README](https://github.com/hoaug-tran/CirrusAudioFixup#readme). First-boot checks use `-cirrusro -cirrusdbg`; do not enable DSP bypass, force another board's SSID or raise gain just to complete this form.
-        On the affected macOS installation, run `sudo bash Tools/collect_macos.sh` from the repository folder and keep the Desktop ZIP with `status.txt`. Unified logs can be empty; the report's IORegistry and kernel-buffer captures also matter.
+        On the affected macOS installation, run `sudo bash Tools/Collectors/collect_macos.sh` from the repository folder and keep the Desktop ZIP with `status.txt`. Unified logs can be empty; the report's IORegistry and kernel-buffer captures also matter.
   - type: checkboxes
     id: checks
     attributes:

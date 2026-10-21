@@ -16,10 +16,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Test Windows PowerShell 5.1 collector helpers
         shell: powershell
-        run: ./Tests/check_windows_collector.ps1
+        run: ./Tests/Build/check_windows_collector.ps1
       - name: Test PowerShell 7 collector helpers
         shell: pwsh
-        run: ./Tests/check_windows_collector.ps1
+        run: ./Tests/Build/check_windows_collector.ps1
 
   build:
     name: Build and Test
@@ -52,6 +52,9 @@ jobs:
       - name: Run host regression test suite
         run: python3 Tests/run.py
 
+      - name: Record build source identity
+        run: python3 Tools/Build/build_provenance.py snapshot --root "$GITHUB_WORKSPACE" --snapshot "$RUNNER_TEMP/cirrus-source.json"
+
       - name: Build Release kext
         run: |
           xcodebuild \
@@ -80,12 +83,12 @@ jobs:
 
       - name: Verify build artifacts
         run: |
-          python3 Tools/release_metadata.py
+          python3 Tools/Build/release_metadata.py
           for MODE in Release Debug; do
             BUNDLE="${GITHUB_WORKSPACE}/build/${MODE}/CirrusAudioFixup.kext"
             plutil -lint "${BUNDLE}/Contents/Info.plist"
-            python3 Tools/release_metadata.py --bundle "$BUNDLE"
-            python3 Tools/verify_kext_vtables.py "$BUNDLE/Contents/MacOS/CirrusAudioFixup"
+            python3 Tools/Build/release_metadata.py --bundle "$BUNDLE"
+            python3 Tools/Build/verify_kext_vtables.py "$BUNDLE/Contents/MacOS/CirrusAudioFixup"
             lipo "${BUNDLE}/Contents/MacOS/CirrusAudioFixup" -verify_arch x86_64
             SYMBOLS="${BUNDLE}.dSYM/Contents/Resources/DWARF/CirrusAudioFixup"
             test -f "$SYMBOLS"
@@ -93,8 +96,10 @@ jobs:
             SYMBOL_UUID="$(dwarfdump --uuid "$SYMBOLS" | awk '{print $2}')"
             test -n "$BINARY_UUID"
             test "$BINARY_UUID" = "$SYMBOL_UUID"
-            /usr/libexec/PlistBuddy -c "Add :CirrusBuildCommit string ${GITHUB_SHA}" "${BUNDLE}/Contents/Info.plist"
-            /usr/libexec/PlistBuddy -c "Add :CirrusBuildConfiguration string ${MODE}" "${BUNDLE}/Contents/Info.plist"
+            python3 Tools/Build/build_provenance.py finalize --root "$GITHUB_WORKSPACE" \
+              --snapshot "$RUNNER_TEMP/cirrus-source.json" --bundle "$BUNDLE" \
+              --configuration "$MODE" --binary-uuid "$BINARY_UUID" --symbols-uuid "$SYMBOL_UUID"
+            plutil -lint "$BUNDLE/Contents/Resources/CirrusBuildManifest.plist"
           done
           echo "--- Release kext ---"
           file "${GITHUB_WORKSPACE}/build/Release/CirrusAudioFixup.kext/Contents/MacOS/CirrusAudioFixup"
@@ -139,7 +144,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: build
+    needs: [build, windows-collector]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     permissions:
@@ -175,7 +180,7 @@ jobs:
         id: changelog
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 Tools/release_metadata.py --tag "$RELEASE_TAG" --output-dir dist
+        run: python3 Tools/Build/release_metadata.py --tag "$RELEASE_TAG" --output-dir dist
 
       - name: Download matching debug symbols
         uses: actions/download-artifact@v4

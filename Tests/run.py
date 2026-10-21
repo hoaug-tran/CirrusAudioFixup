@@ -10,13 +10,13 @@ parser.add_argument("--audit", action="store_true", help="also test the optional
 args = parser.parse_args()
 # Explicit membership: a one-off experiment must never enter CI via a glob.
 suites = (
-    "reproduce_host", "check_registers", "check_transport", "check_diagnostics", "check_attachment",
-    "check_extensible_core", "check_cs35l41_driver", "check_cs35l41_power", "check_platform_configuration", "check_platform_discovery", "check_native_spi", "check_spi_chip_select", "check_spi_gpio", "check_spi_gpio_binding", "check_amd_spi", "check_amd_spi_lifecycle", "check_acpi_spi", "check_acpi_cast", "check_pci_publication", "check_spi_transport", "check_intel_spi", "check_intel_spi_lifecycle", "check_hda", "check_calibration", "check_tuning", "check_bringup",
-    "check_runtime", "check_audio_events", "check_firmware_identity",
-    "check_architecture", "check_release", "check_build_policy", "check_tools",
-    "check_vtable_policy", "check_xcode_project", "check_source_layout", "check_windows_collector",
+    "Drivers/reproduce_host", "Drivers/check_registers", "Transport/check_transport", "Platform/check_diagnostics", "Platform/check_boot_evidence", "Platform/check_attachment", "Platform/check_board_metadata",
+    "Architecture/check_extensible_core", "Drivers/check_cs35l41_driver", "Drivers/check_cs35l41_power", "Platform/check_platform_configuration", "Platform/check_platform_discovery", "Transport/check_native_spi", "Transport/check_spi_chip_select", "Transport/check_spi_gpio", "Transport/check_spi_gpio_binding", "Transport/check_amd_spi", "Transport/check_amd_spi_lifecycle", "Transport/check_acpi_spi", "Transport/check_acpi_cast", "Transport/check_pci_publication", "Transport/check_spi_transport", "Transport/check_intel_spi", "Transport/check_intel_spi_lifecycle", "Transport/check_spi_power_client", "Platform/check_hda", "Drivers/check_calibration", "Drivers/check_tuning", "Platform/check_bringup",
+    "Platform/check_runtime", "Platform/check_audio_events", "Drivers/check_firmware_identity",
+    "Architecture/check_architecture", "Build/check_release", "Build/check_build_policy", "Build/check_tools",
+    "Build/check_vtable_policy", "Build/check_xcode_project", "Architecture/check_source_layout", "Build/check_windows_collector",
 )
-for suite in suites + (("check_windows_payloads",) if args.audit else ()):
+for suite in suites + (("Build/check_windows_payloads",) if args.audit else ()):
     print(f"Running {suite}", flush=True)
     subprocess.run([sys.executable, str(ROOT / "Tests" / f"{suite}.py")], cwd=ROOT, check=True)
 print("PASS maintained host regressions (hardware behavior requires on-device validation)")

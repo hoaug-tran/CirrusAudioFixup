@@ -1,6 +1,6 @@
 // Common register-level device operations.
-// This interface does not yet own the complete driver lifecycle. CS35L41 DSP
-// upload, mailbox sequencing and playback verification remain in the service.
+// Silicon drivers provide these operations. AmplifierLifecycleHooks owns
+// firmware, playback verification and the complete initialization sequence.
 // See LICENSE for distribution terms.
 #pragma once
 

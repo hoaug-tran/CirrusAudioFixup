@@ -31,7 +31,7 @@ I2C and SPI - Intel and AMD - x86_64
 
 CirrusAudioFixup enables internal speakers driven by Cirrus Logic smart amplifiers on macOS. It handles amplifier initialization, DSP firmware, speaker tuning, playback and sleep/wake over I2C or native SPI.
 
-**CS35L41 is currently supported over I2C and SPI.** The driver framework allows support for additional Cirrus amplifier families; the [support table](#amplifier-families) lists their current status.
+**CS35L41 is currently supported over I2C and SPI.** See [amplifier families](#amplifier-families) for other models.
 
 AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the amplifiers on that route. Firmware and tuning are embedded in the kext, with no separate firmware installation or userspace service.
 
@@ -71,23 +71,23 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | CS35L56 | Not yet supported | Requires a dedicated amplifier driver |
 | Other Cirrus amplifiers | Not yet supported | Additional families can use the shared framework |
 
-Additional families need their own driver, board configuration and firmware.
+### Supported laptops
 
-### Working laptop configurations
-
-| Laptop | Board identity | Bus | Status |
+| Laptop | Subsystem ID | Bus | Support |
 | --- | --- | --- | --- |
-| **Lenovo Legion 7 16ACHg6 (2021)** | `17AA:3847` | I2C | **Working** |
-| **Lenovo Legion 5 Pro 16ACH6H (2021)** | `17AA:382B` | I2C | **Working** |
-| **HP ZBook Fury 16 G9** | `103C:89C6` | SPI | **Working** |
-| **[ASUS ROG Strix G16 G614JI](https://github.com/hoaug-tran/CirrusAudioFixup/issues/5)** | `1043:1C9F` | SPI | **Working** |
+| Lenovo Legion 7 16ACHg6 (2021) | `17AA:3847` | I2C | Working |
+| Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B` | I2C | Working |
+| HP ZBook Fury 16 G9 | `103C:89C6` | SPI | Working |
+| ASUS ROG Strix G16 G614JI | `1043:1C9F` | SPI | Working with layout 21 at 48 kHz |
+| ASUS ROG Strix G16 G614JV | `1043:1C9F` required | SPI | Supported with matching board configuration and speaker tuning |
+
+G614JV uses the same profile when its subsystem ID and amplifier configuration match. Playback has been confirmed on G614JI.
 
 <details>
 <summary><strong>Other boards and controller support</strong></summary>
 
 | Configuration | Status |
 | --- | --- |
-| ASUS G614JV with verified `1043:1C9F` and matching CS35L41 wiring/tuning | Uses the same board profile as G614JI; macOS playback on G614JV has not yet been confirmed |
 | Other `CSC3551` boards | ACPI discovery available for supported properties; matching embedded firmware and board validation required |
 | `CLSA0101` or an unknown legacy Lenovo identity | Automatic initialization disabled |
 | Intel LPSS SPI | Supported SPT, BXT, CNL and TGL PCI profiles; controller identity selects the register family and root clock |
@@ -105,7 +105,7 @@ Native SPI uses the built-in controller drivers and does **not** require VoodooI
 
 | Endpoint | Responsible driver | Configuration notes |
 | --- | --- | --- |
-| Internal speakers | CirrusAudioFixup + host codec route | Working on the configurations listed above; DSP firmware and tuning are loaded by this kext |
+| Internal speakers | CirrusAudioFixup + host codec route | Requires a supported board profile and codec route; this kext loads DSP firmware and tuning |
 | 3.5 mm headphones | AppleHDA + AppleALC | Jack routing and detection belong to the codec layout; CirrusAudioFixup follows the speaker-output state |
 | Internal microphone | AppleHDA + AppleALC | Input routing and gain are configured by the codec driver |
 | HDMI / DisplayPort audio | Host audio stack and GPU configuration | Independent of the internal speaker amplifier driver |
@@ -139,11 +139,11 @@ CirrusAudioFixup loads the matching amplifier firmware and speaker tuning and ap
 
 Third-party EQ or convolution software on macOS can bring the tonal balance closer to Windows when configured from measured speaker response or correctly decoded OEM filter settings. A raw Windows DSP or calibration dump is not a ready-to-use EQ preset: amplifier calibration belongs in the matching driver/firmware path, and Windows effects need a compatible macOS equivalent.
 
-The result depends on the speaker, profile, listening level and effects used. Matching sound needs a level-matched comparison; this project does not claim a fixed percentage of Windows sound quality.
+Compare sound at matched output levels using the same track.
 
 ## Identify I2C or SPI
 
-The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 and ASUS G614JI use **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
+The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 and ASUS G614JI/G614JV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 

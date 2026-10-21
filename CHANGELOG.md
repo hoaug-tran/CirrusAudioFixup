@@ -4,25 +4,36 @@
 
 ### Added
 
-- Automatic board metadata for ASUS ROG Strix G16 G614JI (`1043:1C9F`), including shared reset, mixed native/GPIO chip select and speaker ID discovery from ACPI resources.
-- Matching ASUS CS35L41 firmware and separate left/right coefficients for speaker IDs 0 and 1. macOS playback is confirmed for the reporter's speaker-ID-1 configuration with AppleALC layout 21 at 48 kHz.
+- ASUS `1043:1C9F` board configuration and CS35L41 firmware, with separate left/right tuning for speaker IDs 0 and 1. G614JI playback is confirmed with speaker ID 1, AppleALC layout 21 and a 48 kHz hardware stream.
+- Shared board metadata and GPIO lookup interfaces. Amplifier modules can supply verified missing properties while preserving native ACPI data, without requiring a custom SSDT.
+- Speaker ID discovery from shared or per-amplifier GPIO resources, with explicit checks for conflicting identities and missing tuning.
+- Retained boot checkpoints, reset observations and Intel SPI transaction details, including initial identity responses, register readback, transferred bytes and separate transfer/cleanup failures. Publish calibration-record selection and the selected channel coefficient size.
+- Build manifests containing source, dependency and binary identity; the macOS collector captures these alongside loaded-bundle information. Add an offline ZIP comparison tool for captures from different boots.
 
 ### Fixed
 
-- Keep Intel SPI power requests pending while the power domain responds, instead of blocking startup and cancelling a late grant. Stop initialization if PCI identity disappears.
-- Cancel stale amplifier playback before changing the HDA stream format or tag, and keep unsupported streams muted until a compatible stream appears.
-- Require a known running speaker engine before unmute, quiesce playback before teardown, and acknowledge deferred wake completion.
+- Keep Intel SPI power requests pending until the power domain responds; complete startup on the workloop instead of blocking and cancelling a late grant. Preserve controller ownership and stop if PCI identity disappears.
+- Handle Intel PCI functions left in D3hot when the power domain already reports ready, verify the physical power transition and retain controller state when preparation fails.
+- Verify Intel SPI configuration and chip-select readback before clocking data. Record FIFO progress, check cleanup and preserve the original transfer failure.
+- Resolve shared reset and mixed native/GPIO chip selects through ACPI resources and verified board metadata. Keep read-only startup free of reset release and amplifier writes.
+- Cancel stale playback before changing HDA format or stream tag. Keep amplifiers muted while the hardware stream is unsupported, and check again for a compatible stream.
+- Require a known running speaker engine before unmute, stop playback before teardown and acknowledge deferred wake completion.
 - Fix Clang errors from unused host-test declarations.
-- Reject duplicate changelog versions and empty release notes before packaging.
+- Reject duplicate changelog versions and empty release notes. Keep module and bundle versions aligned, and require the Windows collector checks as well as the kext build before publishing.
 
 ### Changed
 
-- Separate service, runtime, platform and transport modules; split CS35L41 hardware, firmware, playback and diagnostics implementations.
-- Define embedded firmware data in one translation unit and update the importer, Xcode project, tests and build tools for the new layout.
-- Remove the temporary bootstrap catalogue scanner and its timer; retain early Lilu registration and bounded driver diagnostics.
-- Update hardware support and collection instructions. ASUS sleep/wake, other layouts and other models remain unverified; 44.1 kHz hardware output remains unsupported.
-- Rename the full Windows driver-package collector to `Collect-AudioDriverPackages.ps1`/`.cmd` and remove the old HP-specific Linux collector. Use `collect_audio_amp_linux.sh` for Linux collection.
-- Keep Xcode module and bundle versions aligned, and require both build and Windows collector jobs before release publication.
+- Split service attachment, runtime, power and diagnostics into separate files. Split CS35L41 hardware, firmware, playback and diagnostics, and group ACPI, board, I2C and SPI code by responsibility.
+- Define embedded firmware data in one translation unit; update resource selection, the importer, Xcode references, build scripts and tests for the new layout.
+- Remove the bootstrap catalogue scanner and timer while keeping early Lilu hook registration.
+- Rename the full Windows package collector to `Collect-AudioDriverPackages.ps1`/`.cmd`. Remove the old HP-specific Linux collector; use `collect_audio_amp_linux.sh` instead.
+- Remove obsolete design notes and hardware reports, simplify README and diagnostic instructions, and correct the published 1.1.0 release date and PR references.
+- Extend host regressions for board metadata, Intel SPI transfers and power, deferred startup, playback transitions, build identity and release validation.
+
+### Limits
+
+- Hardware output remains limited to 48 kHz stereo. G614JI sleep/wake and layout 22 are not confirmed. G614JV can use the same profile when its subsystem ID, wiring and tuning match; macOS playback on that model is not yet confirmed.
+- Other amplifier families and unsupported board/power configurations remain disabled.
 
 ## [1.1.0] - 2026-10-19
 

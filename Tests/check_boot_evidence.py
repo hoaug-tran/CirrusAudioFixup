@@ -60,7 +60,7 @@ cpp = r'''
 #include <map>
 using IOReturn=int;
 constexpr bool kOSBooleanTrue=true;
-constexpr int kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnError=-2,kIOReturnBadArgument=-3,IOPMAckImplied=0;
+constexpr int kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-3,IOPMAckImplied=0;
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
 #define OSDynamicCast(T,p) static_cast<T*>(p)

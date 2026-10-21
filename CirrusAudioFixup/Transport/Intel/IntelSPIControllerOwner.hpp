@@ -11,7 +11,9 @@ class IntelSPIControllerOwner final : public NativeSPIControllerOwner {
     // NativeSPIHost retains the target until this owner is destroyed.
     IOACPIPlatformDevice* mTarget{nullptr};
     IOService* mOwner{nullptr};
+#if defined(KERNEL)
     bool mChipSelectsReady{false};
+#endif
     uint32_t mPCIIdentity{0};
 
 public:

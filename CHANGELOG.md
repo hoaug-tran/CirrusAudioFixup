@@ -2,6 +2,8 @@
 
 ## [1.1.1] - 2026-10-21
 
+Release changes: [#9](https://github.com/hoaug-tran/CirrusAudioFixup/pull/9).
+
 ### Added
 
 - ASUS `1043:1C9F` board configuration and CS35L41 firmware, with separate left/right tuning for speaker IDs 0 and 1. G614JI playback is confirmed with speaker ID 1, AppleALC layout 21 and a 48 kHz hardware stream.

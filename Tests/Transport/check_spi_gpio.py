@@ -1,9 +1,8 @@
+"""ACPI GPIO decoding and Intel output safety using the HP capture's pad states."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""ACPI GPIO decoding and Intel output safety using the HP capture's pad states."""
-from pathlib import Path
 import subprocess
 import tempfile
 

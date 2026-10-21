@@ -12,6 +12,9 @@ def validate(changelog, info, tag=None):
     releases = [b for b in blocks if b.group(1) != "Unreleased"]
     if not releases:
         raise ValueError("No versioned changelog entry")
+    versions = [block.group(1) for block in releases]
+    if len(versions) != len(set(versions)):
+        raise ValueError("Duplicate changelog version")
     version = releases[0].group(1)
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Release version must be X.Y.Z")
@@ -21,7 +24,10 @@ def validate(changelog, info, tag=None):
         raise ValueError("Tag and release version differ")
     if tag and any(b.group(1) == "Unreleased" and b.group(2).strip() for b in blocks):
         raise ValueError("Cannot publish with pending Unreleased notes")
-    return version, releases[0].group(2).strip()
+    notes = releases[0].group(2).strip()
+    if not any(line.strip() and not line.lstrip().startswith("#") for line in notes.splitlines()):
+        raise ValueError("Release notes are empty")
+    return version, notes
 
 
 def main():

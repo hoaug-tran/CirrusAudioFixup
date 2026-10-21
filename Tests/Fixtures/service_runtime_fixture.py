@@ -1,10 +1,10 @@
-from production_source_fixture import driver_source
 """Production orchestration extraction with mocked silicon primitives.
 
 This fixture intentionally borrows mock chip state to inspect isolated stage
 faults. It is not the production ownership contract. check_cs35l41_driver links
 and exercises the complete independent production driver.
 """
+from production_source_fixture import driver_source
 from pathlib import Path
 from production_source_fixture import method
 ROOT=Path(__file__).resolve().parents[2]

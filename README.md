@@ -81,6 +81,7 @@ Additional families need their own driver, board configuration and firmware.
 | **Lenovo Legion 7 16ACHg6 (2021)** | `17AA:3847` | I2C | **Working** |
 | **Lenovo Legion 5 Pro 16ACH6H (2021)** | `17AA:382B` | I2C | **Working** |
 | **HP ZBook Fury 16 G9** | `103C:89C6` | SPI | **Working** |
+| **[ASUS ROG Strix G16 G614JI](https://github.com/hoaug-tran/CirrusAudioFixup/issues/5)** | `1043:1C9F` | SPI | **Working** |
 
 <details>
 <summary><strong>Other boards and controller support</strong></summary>
@@ -142,7 +143,7 @@ The result depends on the speaker, profile, listening level and effects used. Ma
 
 ## Identify I2C or SPI
 
-The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 uses **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
+The supported Lenovo Legion 2021 configurations listed above use **I2C**. The listed HP ZBook Fury 16 G9 and ASUS G614JI use **SPI**. Other models must be checked; the CPU vendor or `CSC3551` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 
@@ -424,7 +425,7 @@ Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when match
 
 ## Adding hardware support
 
-For a new board or amplifier family, start with the [driver framework and porting guide](docs/architecture/extensible_driver.md#adding-hardware-support). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
+For a new board or amplifier family, follow [the contribution requirements](CONTRIBUTING.md). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
 
 ## Build from source
 
@@ -463,24 +464,6 @@ python3 Tests/run.py
 Fixtures cover register access, firmware parsing, OTP/errata, controller ownership, ACPI discovery, calibration, playback transitions, PM and failure rollback. Some tests deliberately inject errors; judge the result by assertions and exit status. C++ compilers and shell tools are required. Sanitizer variants run where supported; Windows explicitly skips unavailable ASan/UBSan runtimes.
 
 Host tests establish tested source behavior. Load compatibility, physical stereo output and sleep/wake must also be checked with the resulting macOS bundle.
-
-## Documentation
-
-| Guide | Contents |
-| --- | --- |
-| [Boot argument reference](docs/diagnostics/boot_arguments.md) | All supported options, stage stops and measured overrides |
-| [Codec dump and speaker routing](docs/hardware/codec_route.md) | Linux codec dump and AppleALC resource comparison |
-| [Windows and Linux collectors](docs/guides/audio_collectors.md) | Collection commands, output files and options |
-| [Diagnostics](docs/diagnostics/diagnostics.md) | Service inspection, collection and output/input transition checks |
-| [Board bring-up](docs/diagnostics/safe_bringup_protocol.md) | Read-only discovery, staged initialization and hardware checks |
-| [Source layout](docs/architecture/source_layout.md) | Service, runtime, platform, transport and silicon module boundaries |
-| [Driver framework](docs/architecture/extensible_driver.md) | Registration, endpoint ownership and module boundaries |
-| [Runtime transitions](docs/architecture/runtime_transition_design.md) | Grouped playback, deadlines and rollback |
-| [Register reference](docs/hardware/register_reference.md) | Linux constants, register addresses, tables and payload hashes |
-| [I2C provider](docs/hardware/i2c_provider.md) | Required provider interface and request layout |
-| [Native SPI](docs/hardware/spi_support.md) | Controller families, chip select, transfer limits and power handling |
-| [Contributing](CONTRIBUTING.md) | Code conventions and validation requirements |
-| [Changelog](CHANGELOG.md) | Version changes |
 
 ## Sources and acknowledgments
 

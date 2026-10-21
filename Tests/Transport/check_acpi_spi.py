@@ -1,9 +1,8 @@
+"""Exercise bounded production _CRS SPI decoding and malformed firmware data."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Exercise bounded production _CRS SPI decoding and malformed firmware data."""
-from pathlib import Path
 import tempfile, subprocess
 ROOT=Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='cirrus-acpi-spi-') as directory:

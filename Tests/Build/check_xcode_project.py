@@ -1,11 +1,9 @@
+"""Validate Xcode navigation paths, source membership, and the build gate."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Validate Xcode navigation paths, source membership, and the build gate."""
-from pathlib import Path
 import json
 import subprocess
-import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 from xcode_project import parse_project

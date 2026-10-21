@@ -1,10 +1,8 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from pathlib import Path
 import importlib.util
 import subprocess
-import sys
 import shlex
 import re
 import os
@@ -27,6 +25,7 @@ triggers = workflow.split("\njobs:", 1)[0]
 assert re.search(r"  push:\n    branches: \['\*\*'\]\n    tags: \['v\*'\]", triggers)
 assert re.search(r"  pull_request:\n  workflow_dispatch:", triggers)
 build_job, release_job = workflow.split("\n  release:\n", 1)
+assert 'needs: [build, windows-collector]' in release_job
 for name in ("Package kext bundles", "Upload Release artifact", "Upload Debug artifact", "Upload matching debug symbols"):
     step = build_job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
     assert not re.search(r"^        if:", step, re.M), name + " must run after successful builds on every branch"
@@ -74,6 +73,9 @@ for text, plist, tag in [
     (notes, {**info, "CFBundleVersion": "1.0.0"}, "v1.0.1"),
     ("## [Unreleased]\nPending fixes.\n" + notes, info, "v1.0.1"),
     ("## [Unreleased]\n", info, None),
+    (notes + "\n## [1.0.1]\nDuplicate.\n", info, "v1.0.1"),
+    ("## [1.0.1]\n\n", info, "v1.0.1"),
+    ("## [1.0.1]\n\n### Fixed\n\n", info, "v1.0.1"),
 ]:
     try:
         module.validate(text, plist, tag)

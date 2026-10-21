@@ -1,5 +1,5 @@
-// Verified missing-firmware facts for this silicon. Resource indices refer to
-// the actual AMP _CRS; no Intel/AMD registers, fixed GPIO numbers or paths.
+// Fill missing board properties from verified firmware data.
+// Resource indices select entries in the amplifier's evaluated _CRS.
 #pragma once
 #include "Platform/Board/BoardConfiguration.hpp"
 #include "Platform/ACPI/ACPIBoardMetadata.hpp"
@@ -12,7 +12,7 @@ inline bool prepareBoardMetadata(const platform::BoardIdentity& identity, IOACPI
         uint16_t csResource, resetResource, speakerResource;
         uint32_t inductor, peak, capacitor;
     };
-    // Linux v6.12 cs35l41_hda_property.c + issue #5 stock AML and bind log.
+    // ASUS G614JI: Linux v6.12 electrical values and the board's stock _CRS order.
     static constexpr Facts boards[] = {{0x10431c9f, 0, 1, 2, 1000, 4500, 24}};
     const Facts* facts = nullptr;
     if (!identity.acpiHid || strcmp(identity.acpiHid, "CSC3551"))

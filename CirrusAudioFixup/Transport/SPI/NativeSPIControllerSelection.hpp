@@ -1,4 +1,4 @@
-// Shipping communication-owner composition. Platform data may select its own
+// Select the built-in SPI controller owner. Platform data may supply its own
 // factory; selection failure never falls back to a different owner/provider ABI.
 #pragma once
 #include "Transport/SPI/AMD/AMDSPIControllerOwner.hpp"

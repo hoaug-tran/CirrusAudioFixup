@@ -1,9 +1,8 @@
+"""Production generic register maps, board identity, assets and lifecycle failures."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Production generic register maps, board identity, assets and lifecycle failures."""
-from pathlib import Path
 import tempfile,subprocess
 ROOT=Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='cirrus-core-') as directory:

@@ -1,15 +1,17 @@
+"""Check build identity, logging defaults and the declared deployment floor."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
-"""Check build identity, logging defaults and the declared deployment floor."""
-from pathlib import Path
 import re
 import subprocess
 import tempfile
+import plistlib
 
 ROOT = Path(__file__).resolve().parents[2]
 project = (ROOT / "CirrusAudioFixup.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
+version = plistlib.loads((ROOT / "CirrusAudioFixup/Info.plist").read_bytes())["CFBundleVersion"]
+assert re.findall(r"MODULE_VERSION = ([0-9.]+);", project) == [version, version]
 targets = re.findall(r"MACOSX_DEPLOYMENT_TARGET = ([0-9.]+);", project)
 assert targets == ["11.0"] * 4, "Project and target configurations must agree on Big Sur"
 assert "GCC_OPTIMIZATION_LEVEL = 0;" in project

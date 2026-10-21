@@ -128,7 +128,7 @@ failures += [c['name'] for c in checks if not c['match']]
 # semantics. Firmware bytes are verified separately by payload hashes/parsers.
 inventory = []
 for path in sorted((ROOT/'CirrusAudioFixup').rglob('*')):
-    if path.suffix not in ('.hpp', '.cpp') or path.name == 'Firmware.hpp':
+    if path.suffix not in ('.hpp', '.cpp'):
         continue
     for line, text in enumerate(path.read_text().splitlines(), 1):
         for literal in re.findall(r'\b(?:0[xX][0-9a-fA-F]+|\d+)(?:[uUlL]+)?\b', text.split('//')[0]):

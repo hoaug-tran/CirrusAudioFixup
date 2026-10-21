@@ -71,11 +71,13 @@ The limits apply to collected data; they are not a promise that every relevant f
 
 For macOS, use `sudo bash Tools/Collectors/collect_macos.sh`; see [macOS diagnostics](../diagnostics/diagnostics.md).
 
-## Existing collection formats
+## Full Windows driver packages
 
-Use these when an investigation needs the older report structure or a complete selected Windows package export:
+For complete selected DriverStore packages, run PowerShell as administrator:
 
-| Guide | Purpose |
-| --- | --- |
-| [HP Windows collector](hp_windows_collection.md) | Selected driver packages with payload planning and deduplication |
-| [HP Linux collector](hp_linux_collection.md) | Existing HP ACPI, firmware and ALSA report format |
+```powershell
+.\Tools\Collectors\Collect-AudioDriverPackages.ps1 -PlanOnly -NoZip
+.\Tools\Collectors\Collect-AudioDriverPackages.ps1
+```
+
+The default payload budget is 512 MiB. `-MaxPayloadMB` changes it; `-OutputRoot` changes the destination. The default output is under `%PUBLIC%\Documents`, with a ZIP beside the directory. An over-budget selection records its plan without copying payload and exits with code 2. Keep `payload-plan.csv` with the deduplicated `payload/` files; it maps original paths to SHA-256 blobs. Check `status.csv` for missing data before sharing the ZIP.

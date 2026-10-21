@@ -1,9 +1,8 @@
+"""Exercise Intel LPSS FIFO engine and CS35L41 frames against a register model."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Exercise Intel LPSS FIFO engine and CS35L41 frames against a register model."""
-from pathlib import Path
 import subprocess
 import tempfile
 

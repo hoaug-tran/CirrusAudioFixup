@@ -1,4 +1,4 @@
-// Common lifecycle ordering for future silicon drivers. Owner serializes all
+// Shared amplifier lifecycle. The owner serializes all
 // calls on a sleepable workloop and guarantees controller/platform lifetime.
 // Firmware formats, calibration, reset, boost and HDA routing stay in driver
 // and board/resource providers; no generic register cache is replayed on wake.

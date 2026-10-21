@@ -1,9 +1,8 @@
+"""Exercise production CS35L41 SPI frames, chunking and failures without hardware."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Exercise production CS35L41 SPI frames, chunking and failures without hardware."""
-from pathlib import Path
 import subprocess
 import tempfile
 

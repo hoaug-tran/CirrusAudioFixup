@@ -1,14 +1,13 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from production_source_fixture import driver_sources
-from host_build import sanitizer_flags
 """Link the complete independent production driver and factory; audit ownership.
 
 Only kernel resources and bus responses are fake. Real silicon, firmware lookup,
 errata, OTP, idle checks, shutdown and lifecycle methods execute unchanged.
 """
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
+from production_source_fixture import driver_sources
+from host_build import sanitizer_flags
 import subprocess,tempfile
 from driver_kernel_fixture import install
 ROOT=Path(__file__).resolve().parents[2]

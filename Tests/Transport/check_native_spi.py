@@ -1,10 +1,9 @@
+"""Production native SPI discovery, namespace lookup, ownership and PM failures."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from host_build import sanitizer_flags
-"""Production native SPI discovery, namespace lookup, ownership and PM failures."""
-from pathlib import Path
 import subprocess,tempfile
 from service_runtime_fixture import PLATFORM_ADAPTER
 ROOT=Path(__file__).resolve().parents[2]

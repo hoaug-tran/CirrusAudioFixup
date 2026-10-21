@@ -1,12 +1,11 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 """Run the production PM evidence helper with a deterministic callback-drain seam.
 
 The seam models PMstop's SDK drain contract; it does not validate Apple's PM
 scheduler or prove that a target PCI domain will grant power.
 """
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import shutil
 import subprocess
 import tempfile

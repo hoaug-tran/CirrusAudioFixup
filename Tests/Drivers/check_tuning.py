@@ -1,9 +1,8 @@
+"""Check embedded tuning parsing against explicit layout and malformed cases."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import source as production_source, chip_state
-"""Check embedded tuning parsing against explicit layout and malformed cases."""
-from pathlib import Path
 import importlib.util
 import struct
 import subprocess

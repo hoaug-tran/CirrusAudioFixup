@@ -1,16 +1,14 @@
+"""Execute provenance and offline ZIP comparisons using isolated inputs."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Execute provenance and offline ZIP comparisons using isolated inputs."""
 import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import plistlib
 import shutil
 import subprocess
-import sys
 import tempfile
 from unittest.mock import patch
 import zipfile

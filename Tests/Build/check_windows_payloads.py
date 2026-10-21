@@ -1,11 +1,10 @@
+"""Test payload comparison without requiring OEM files."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Test payload comparison without requiring OEM files."""
 import importlib.util
 import base64
 import struct
-from pathlib import Path
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]

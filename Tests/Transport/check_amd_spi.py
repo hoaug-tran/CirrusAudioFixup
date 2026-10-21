@@ -1,9 +1,8 @@
+"""Production AMD command engine with CS35L41 frames and fault injection."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Production AMD command engine with CS35L41 frames and fault injection."""
-from pathlib import Path
 import subprocess,tempfile
 ROOT=Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='cirrus-amd-spi-') as directory:

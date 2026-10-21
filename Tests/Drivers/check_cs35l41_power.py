@@ -1,10 +1,8 @@
+"""Internal/external CS35L41 power sequences with real playback state machines."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Internal/external CS35L41 power sequences with real playback state machines."""
-from pathlib import Path
 import subprocess
-import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -3,7 +3,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from production_source_fixture import method
-from pathlib import Path
 import re
 import subprocess
 import tempfile

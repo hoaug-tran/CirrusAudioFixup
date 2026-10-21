@@ -33,8 +33,7 @@ UUID with the intended build; missing new fields may simply mean an older binary
 `ATTACH` and `ATTACH_FAIL` are essential records. Verbose provider enumeration
 requires a Debug build or `-cirrusdbg`; phase acceptance is module-specific and
 published in `Cirrus_Debug_Phase`. A failed `start()` may leave no service node,
-so also inspect kernel failure records. See the [attachment matrix](../hardware/attachment_matrix.md)
-for Intel/AMD, I2C/SPI and unsupported-controller/AMP combinations.
+so also inspect kernel failure records.
 
 ## Retained logs and live messages
 

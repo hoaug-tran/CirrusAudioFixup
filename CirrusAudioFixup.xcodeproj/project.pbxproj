@@ -178,7 +178,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1;
+				MODULE_VERSION = 1.1.1;
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -226,7 +226,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1;
+				MODULE_VERSION = 1.1.1;
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",
@@ -1688,16 +1688,16 @@
 			path = "Collect-AudioAMP-Windows.ps1";
 			sourceTree = "<group>";
 		};
-		D1A28EB88E28C9C137518818 = {
+		8195FCE22BEEDD08BA27E6D3 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text;
-			path = "Collect-HP-CS35L41.cmd";
+			path = "Collect-AudioDriverPackages.cmd";
 			sourceTree = "<group>";
 		};
-		FCF95F8766B9111C5D64E59F = {
+		FB538E6A86645282FDEDC855 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text;
-			path = "Collect-HP-CS35L41.ps1";
+			path = "Collect-AudioDriverPackages.ps1";
 			sourceTree = "<group>";
 		};
 		D280781DBF4E1C36DE072A97 = {
@@ -1728,8 +1728,8 @@
 			isa = PBXGroup;
 			children = (
 				C34DA2739E751FF478D0C496,
-				D1A28EB88E28C9C137518818,
-				FCF95F8766B9111C5D64E59F,
+				8195FCE22BEEDD08BA27E6D3,
+				FB538E6A86645282FDEDC855,
 				D280781DBF4E1C36DE072A97,
 				1630A33203BED6EC5231FB4B,
 				93E13AE8D1AFEC6837762B9E,
@@ -1763,34 +1763,6 @@
 			sourceTree = "<group>";
 			path = Tools;
 		};
-		A3911E30F137116B8E1D03F3 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = extensible_driver.md;
-			sourceTree = "<group>";
-		};
-		EFCD37A28E7EA84AFC51AE25 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = runtime_transition_design.md;
-			sourceTree = "<group>";
-		};
-		C60416E9D2399EDBFEF1EB5C = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = source_layout.md;
-			sourceTree = "<group>";
-		};
-		1DC36EE4C19214DAA4B1D0C3 = {
-			isa = PBXGroup;
-			children = (
-				A3911E30F137116B8E1D03F3,
-				EFCD37A28E7EA84AFC51AE25,
-				C60416E9D2399EDBFEF1EB5C,
-			);
-			sourceTree = "<group>";
-			path = architecture;
-		};
 		1E93082D8AE1B5A1CAEC66D1 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text;
@@ -1803,18 +1775,11 @@
 			path = diagnostics.md;
 			sourceTree = "<group>";
 		};
-		513109EC12444281783D0994 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = safe_bringup_protocol.md;
-			sourceTree = "<group>";
-		};
 		B16EE2CE738A3EE50ABFC6B8 = {
 			isa = PBXGroup;
 			children = (
 				1E93082D8AE1B5A1CAEC66D1,
 				7E95FC859B9BBB7519B435B0,
-				513109EC12444281783D0994,
 			);
 			sourceTree = "<group>";
 			path = diagnostics;
@@ -1825,44 +1790,18 @@
 			path = audio_collectors.md;
 			sourceTree = "<group>";
 		};
-		79B68CF5E88BD0F0479541FB = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = hp_linux_collection.md;
-			sourceTree = "<group>";
-		};
-		2598858E6A91632662EE6730 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = hp_windows_collection.md;
-			sourceTree = "<group>";
-		};
 		6CB916932CFFD07F603B3065 = {
 			isa = PBXGroup;
 			children = (
 				E7E868CF7FE0075CB3731BC4,
-				79B68CF5E88BD0F0479541FB,
-				2598858E6A91632662EE6730,
 			);
 			sourceTree = "<group>";
 			path = guides;
-		};
-		5CB1581DB5440A0A39F83218 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = attachment_matrix.md;
-			sourceTree = "<group>";
 		};
 		EF9343649F8CDA170F32C57D = {
 			isa = PBXFileReference;
 			lastKnownFileType = text;
 			path = codec_route.md;
-			sourceTree = "<group>";
-		};
-		6594F68B194CC8A2D487E376 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = hp_spi_bringup.md;
 			sourceTree = "<group>";
 		};
 		31068C16A4CF1F4B5E4F8467 = {
@@ -1871,34 +1810,11 @@
 			path = i2c_provider.md;
 			sourceTree = "<group>";
 		};
-		98A1792295B554F7FA2E6911 = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = linux_reference_sources.json;
-			sourceTree = "<group>";
-		};
-		F4E01A27D6F3D6AB21D083AE = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = register_reference.md;
-			sourceTree = "<group>";
-		};
-		D71D8799E255800C728E63AF = {
-			isa = PBXFileReference;
-			lastKnownFileType = text;
-			path = spi_support.md;
-			sourceTree = "<group>";
-		};
 		DF87E108886EADBE395434A0 = {
 			isa = PBXGroup;
 			children = (
-				5CB1581DB5440A0A39F83218,
 				EF9343649F8CDA170F32C57D,
-				6594F68B194CC8A2D487E376,
 				31068C16A4CF1F4B5E4F8467,
-				98A1792295B554F7FA2E6911,
-				F4E01A27D6F3D6AB21D083AE,
-				D71D8799E255800C728E63AF,
 			);
 			sourceTree = "<group>";
 			path = hardware;
@@ -1906,7 +1822,6 @@
 		1B4FFFFBDA5103C7E9E4DCCA = {
 			isa = PBXGroup;
 			children = (
-				1DC36EE4C19214DAA4B1D0C3,
 				B16EE2CE738A3EE50ABFC6B8,
 				6CB916932CFFD07F603B3065,
 				DF87E108886EADBE395434A0,

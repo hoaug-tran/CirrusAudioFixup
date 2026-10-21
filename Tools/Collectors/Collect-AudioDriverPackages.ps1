@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
-Windows audio evidence collector. The historical filename is retained for callers;
-selection is based on installed devices and INF relationships, not a laptop model.
+Selected Windows audio driver-package collector.
+Selection follows installed devices and INF relationships.
 Reads devices, packages and registry; writes only its output. No ACPI table dump,
 driver installation, device restart, registry modification or network upload.
 #>

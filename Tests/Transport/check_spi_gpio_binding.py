@@ -1,9 +1,8 @@
+"""Run production _DSD -> evaluated _CRS -> GPIO provider/map ownership."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Run production _DSD -> evaluated _CRS -> GPIO provider/map ownership."""
-from pathlib import Path
 import subprocess
 import tempfile
 from acpi_kernel_fixture import install

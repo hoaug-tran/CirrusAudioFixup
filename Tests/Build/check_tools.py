@@ -1,13 +1,11 @@
+"""Check firmware CLI failures and collector structure without claiming macOS runtime coverage."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Check firmware CLI failures and collector structure without claiming macOS runtime coverage."""
-from pathlib import Path
 import shutil
 import struct
 import subprocess
 import tempfile
-import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 subprocess.run([sys.executable, str(ROOT / 'Tests/Build/check_tools_provenance.py')], check=True)

@@ -1,8 +1,7 @@
+"""Exercise the production checked name cast with unavailable imported identity."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Exercise the production checked name cast with unavailable imported identity."""
-from pathlib import Path
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]

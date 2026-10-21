@@ -1,6 +1,32 @@
 # Changelog
 
-## [1.1.0] - Unreleased
+## [1.1.1] - 2026-10-21
+
+### Added
+
+- Automatic board metadata for ASUS ROG Strix G16 G614JI (`1043:1C9F`), including shared reset, mixed native/GPIO chip select and speaker ID discovery from ACPI resources.
+- Matching ASUS CS35L41 firmware and separate left/right coefficients for speaker IDs 0 and 1. macOS playback is confirmed for the reporter's speaker-ID-1 configuration with AppleALC layout 21 at 48 kHz.
+
+### Fixed
+
+- Keep Intel SPI power requests pending while the power domain responds, instead of blocking startup and cancelling a late grant. Stop initialization if PCI identity disappears.
+- Cancel stale amplifier playback before changing the HDA stream format or tag, and keep unsupported streams muted until a compatible stream appears.
+- Require a known running speaker engine before unmute, quiesce playback before teardown, and acknowledge deferred wake completion.
+- Fix Clang errors from unused host-test declarations.
+- Reject duplicate changelog versions and empty release notes before packaging.
+
+### Changed
+
+- Separate service, runtime, platform and transport modules; split CS35L41 hardware, firmware, playback and diagnostics implementations.
+- Define embedded firmware data in one translation unit and update the importer, Xcode project, tests and build tools for the new layout.
+- Remove the temporary bootstrap catalogue scanner and its timer; retain early Lilu registration and bounded driver diagnostics.
+- Update hardware support and collection instructions. ASUS sleep/wake, other layouts and other models remain unverified; 44.1 kHz hardware output remains unsupported.
+- Rename the full Windows driver-package collector to `Collect-AudioDriverPackages.ps1`/`.cmd`; the general bounded audio collector keeps its existing name.
+- Keep Xcode module and bundle versions aligned, and require both build and Windows collector jobs before release publication.
+
+## [1.1.0] - 2026-10-19
+
+Released in [#7](https://github.com/hoaug-tran/CirrusAudioFixup/pull/7), including native SPI support from [#6](https://github.com/hoaug-tran/CirrusAudioFixup/pull/6).
 
 ### Added
 
@@ -73,6 +99,8 @@
 - Allow host fixtures to run on Windows while explicitly skipping unavailable sanitizer runtimes; retain sanitizer variants on supported hosts.
 
 ## [1.0.0] - 2026-10-07
+
+Initial driver implementation: [#1](https://github.com/hoaug-tran/CirrusAudioFixup/pull/1).
 
 ### Added
 

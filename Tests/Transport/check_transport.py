@@ -1,10 +1,9 @@
+"""Verify production service port tracing/PM and provider/map framing boundaries."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from production_source_fixture import method
-"""Verify production service port tracing/PM and provider/map framing boundaries."""
-from pathlib import Path
 import re,subprocess,tempfile
 ROOT=Path(__file__).resolve().parents[2]
 SOURCE=service_source()

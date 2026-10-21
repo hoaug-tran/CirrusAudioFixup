@@ -615,7 +615,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             } else if (mAmplifierManager.stage() == cirrus::core::AmplifierStage::Playing && routePermitsPlayback)
                 mProbeTimer->setTimeoutMS(100);
             else if (routePermitsPlayback)
-                // Format changes can occur without an IOAudio state event.
+                // Observe format changes without an IOAudio event. A waiting
+                // stream cannot start AMP preparation until its format is valid.
                 mProbeTimer->setTimeoutMS(250);
             return;
         }

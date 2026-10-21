@@ -1,9 +1,8 @@
+"""Check source naming and dependency boundaries used for amplifier expansion."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source, driver_source
-"""Check source naming and dependency boundaries used for amplifier expansion."""
-from pathlib import Path
 import re
 ROOT = Path(__file__).resolve().parents[2] / "CirrusAudioFixup"
 files = sorted(p for p in ROOT.rglob("*") if p.suffix in {".hpp", ".cpp"})

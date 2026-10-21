@@ -1,8 +1,7 @@
+"""Replay stock issue #5 resources with no injected _DSD/CSDP/SSDT."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Replay stock issue #5 resources with no injected _DSD/CSDP/SSDT."""
-from pathlib import Path
 import subprocess
 import tempfile
 from acpi_kernel_fixture import install

@@ -1,9 +1,8 @@
+"""Driver-owned ACPI configuration, legacy identity isolation and asset provenance."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
-"""Driver-owned ACPI configuration, legacy identity isolation and asset provenance."""
-from pathlib import Path
 import hashlib
 import re
 import subprocess

@@ -1,9 +1,8 @@
+"""Replay mixed native/GPIO CS through the production LPSS FIFO engine."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Replay mixed native/GPIO CS through the production LPSS FIFO engine."""
-from pathlib import Path
 import subprocess
 import tempfile
 

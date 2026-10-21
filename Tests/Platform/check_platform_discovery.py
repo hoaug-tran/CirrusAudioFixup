@@ -1,10 +1,9 @@
+"""Execute the service's real discovery callback over evaluated ACPI packages."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from host_build import sanitizer_flags
-"""Execute the service's real discovery callback over evaluated ACPI packages."""
-from pathlib import Path
 import subprocess
 import tempfile
 from acpi_kernel_fixture import install

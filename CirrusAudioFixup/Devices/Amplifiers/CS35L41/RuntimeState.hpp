@@ -1,7 +1,5 @@
-// CS35L41 live silicon, firmware and playback state. No IOService or provider
-// ownership belongs here. Embedded firmware views are borrowed and never freed.
-// Each driver instance owns this state; platform ports and immutable firmware
-// views remain borrowed until shutdown and driver destruction complete.
+// Silicon, firmware, playback and recovery state owned by one CS35L41 driver.
+// Register ports and immutable firmware data remain borrowed through shutdown.
 #pragma once
 
 #include "Core/AmplifierLifecycle.hpp"

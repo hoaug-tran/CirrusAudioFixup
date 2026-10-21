@@ -149,6 +149,8 @@ bool CirrusAudioFixup::start(IOService* provider) {
 }
 
 void CirrusAudioFixup::continueStartup() {
+    // Keep the same power request alive. Reset and identity probing start only
+    // after every pending controller has finished binding.
     const auto result = mNativeSPI.continueBind();
     if (mNativeSPI.powerPending()) {
         mProbeTimer->setTimeoutMS(10);

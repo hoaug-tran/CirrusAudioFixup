@@ -1,9 +1,8 @@
+"""Exercise the production retained boot journal, including first-error limits."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
-"""Exercise the production retained boot journal, including first-error limits."""
-from pathlib import Path
 import subprocess
 import tempfile
 from acpi_kernel_fixture import install

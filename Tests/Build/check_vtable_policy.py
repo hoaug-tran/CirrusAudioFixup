@@ -1,11 +1,9 @@
+"""Check real C++ mangling for global and namespaced IOKit-style classes."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Check real C++ mangling for global and namespaced IOKit-style classes."""
-from pathlib import Path
 import importlib.util
 import subprocess
-import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]

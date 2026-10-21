@@ -97,7 +97,7 @@ shipping lifecycle ownership lives in `AmplifierManager` and driver hooks.
 
 ### Driver boundaries
 
-Keep silicon registers, firmware and lifecycle in the amplifier module. Keep controller ownership, framing and PM in transport modules. The service supplies discovery, verified board bindings and serialized runtime coordination. Read the [framework guide](docs/architecture/extensible_driver.md) before adding a module.
+Keep silicon registers, firmware and lifecycle in the amplifier module. Keep controller ownership, framing and PM in transport modules. The service supplies discovery, verified board bindings and serialized runtime coordination.
 
 Factories and destructors perform no hardware I/O. Shutdown completes before drivers and their borrowed register ports are released. Preserve the original failure when cleanup also fails.
 
@@ -170,8 +170,10 @@ Include first microphone activation after idle/wake in transition tests. Use the
 | --- | --- |
 | `CirrusAudioFixup/Core` | Shared register, endpoint and lifecycle contracts |
 | `CirrusAudioFixup/Devices/Amplifiers` | Per-family amplifier drivers and resources |
-| `CirrusAudioFixup/Platform` | Board discovery, driver registry and HDA integration |
-| `CirrusAudioFixup/Transport` | I2C, native SPI, ACPI and controller access |
+| `CirrusAudioFixup/Service` | IOService lifecycle, attachment, power and diagnostic publication |
+| `CirrusAudioFixup/Runtime` | Registered amplifier drivers and group coordination |
+| `CirrusAudioFixup/Platform` | ACPI resources, board discovery and HDA integration |
+| `CirrusAudioFixup/Transport` | I2C and SPI controller ownership and transactions |
 | `Tests` | Maintained host regressions and fixtures |
 | `Tools` | Build, collection, import and release tools |
 | `docs` | Hardware guides and technical references |
@@ -184,4 +186,4 @@ and property corrections belong under that amplifier's `Board/` directory.
 Python and shell helpers use snake_case; PowerShell entry points use Verb-Noun.
 The root `Tests/` and `Tools/` paths are retained. Add suites explicitly to
 `Tests/run.py`, and update Xcode source membership whenever a translation unit
-is added. See [source layout](docs/architecture/source_layout.md).
+is added.

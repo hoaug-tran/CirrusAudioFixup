@@ -1,8 +1,7 @@
+"""Exercise the production hook and mailbox code with a small IOKit fixture."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-"""Exercise the production hook and mailbox code with a small IOKit fixture."""
-from pathlib import Path
 import re
 import plistlib
 import subprocess
@@ -19,9 +18,11 @@ metadata = plistlib.loads((ROOT / 'CirrusAudioFixup/Info.plist').read_bytes())
 bootstrap = metadata['IOKitPersonalities']['CirrusAudioBootstrap']
 assert bootstrap['IOProviderClass'] == 'IOResources' and bootstrap['IOResourceMatch'] == 'IOKit'
 assert metadata['OSBundleRequired'] == 'Root'
-bootstrap_start = source[source.index('bool start(IOService* provider)'):source.index('void stop(IOService* provider)')]
-assert 'auditMatching();' not in bootstrap_start, 'Debug catalogue audit must not run synchronously in bootstrap start'
-assert 'self->auditMatching();' in source and 'auditTimer->setTimeoutMS(1000)' in bootstrap_start
+bootstrap_start = source[source.index('bool start(IOService* provider)'):source.index('OSDefineMetaClassAndStructors(CirrusAudioBootstrap')]
+assert 'IOService::start(provider)' in bootstrap_start
+assert 'checkKernelArgument("-cirrusoff")' in bootstrap_start
+assert 'IOCatalogue' not in source and 'IOTimerEventSource' not in source
+assert 'CSC3551' not in bootstrap_start and 'getMatchingServices' not in bootstrap_start
 
 fixture = r'''
 #include <cassert>

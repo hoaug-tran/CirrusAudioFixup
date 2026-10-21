@@ -1,6 +1,6 @@
 #requires -Version 5.1
 $ErrorActionPreference='Stop'
-$source=Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Tools/Collectors/Collect-HP-CS35L41.ps1'
+$source=Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Tools/Collectors/Collect-AudioDriverPackages.ps1'
 $errors=$null; $tokens=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($source,[ref]$tokens,[ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }

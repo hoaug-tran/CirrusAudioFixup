@@ -1,9 +1,8 @@
+"""Exercise the production PCI association method, including late publication."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-"""Exercise the production PCI association method, including late publication."""
-from pathlib import Path
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]

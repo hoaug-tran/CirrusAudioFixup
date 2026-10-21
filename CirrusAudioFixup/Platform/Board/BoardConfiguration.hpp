@@ -1,5 +1,5 @@
-// Transport-neutral board manifest for future drivers. This does not infer
-// reset, boost, ASP routing or tuning from a silicon ID or a subsystem vendor.
+// Board identity, endpoints and verified wiring shared by amplifier drivers.
+// Silicon identity alone does not determine power, routing or speaker tuning.
 #pragma once
 #include "Core/BusEndpoint.hpp"
 namespace cirrus::platform {

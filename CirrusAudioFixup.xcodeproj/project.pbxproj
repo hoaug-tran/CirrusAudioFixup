@@ -1706,12 +1706,6 @@
 			path = collect_audio_amp_linux.sh;
 			sourceTree = "<group>";
 		};
-		1630A33203BED6EC5231FB4B = {
-			isa = PBXFileReference;
-			lastKnownFileType = text.script.sh;
-			path = collect_linux.sh;
-			sourceTree = "<group>";
-		};
 		93E13AE8D1AFEC6837762B9E = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.script.sh;
@@ -1731,7 +1725,6 @@
 				8195FCE22BEEDD08BA27E6D3,
 				FB538E6A86645282FDEDC855,
 				D280781DBF4E1C36DE072A97,
-				1630A33203BED6EC5231FB4B,
 				93E13AE8D1AFEC6837762B9E,
 				A5C200000000000000000005,
 			);

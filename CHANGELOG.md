@@ -21,7 +21,7 @@
 - Define embedded firmware data in one translation unit and update the importer, Xcode project, tests and build tools for the new layout.
 - Remove the temporary bootstrap catalogue scanner and its timer; retain early Lilu registration and bounded driver diagnostics.
 - Update hardware support and collection instructions. ASUS sleep/wake, other layouts and other models remain unverified; 44.1 kHz hardware output remains unsupported.
-- Rename the full Windows driver-package collector to `Collect-AudioDriverPackages.ps1`/`.cmd`; the general bounded audio collector keeps its existing name.
+- Rename the full Windows driver-package collector to `Collect-AudioDriverPackages.ps1`/`.cmd` and remove the old HP-specific Linux collector. Use `collect_audio_amp_linux.sh` for Linux collection.
 - Keep Xcode module and bundle versions aligned, and require both build and Windows collector jobs before release publication.
 
 ## [1.1.0] - 2026-10-19

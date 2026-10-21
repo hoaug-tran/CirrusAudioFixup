@@ -4,7 +4,7 @@ I2C needs the custom [VoodooI2C main branch](https://github.com/hoaug-tran/Voodo
 
 ## Request layout
 
-`Transport/I2C/VoodooI2CProvider.hpp` defines a 40-byte, 8-byte-aligned request on x86_64. Do not pack or reorder it.
+[`VoodooI2CProvider.hpp`](../../CirrusAudioFixup/Transport/I2C/VoodooI2CProvider.hpp) defines a 40-byte, 8-byte-aligned request on x86_64. Do not pack or reorder it.
 
 | Offset | Size | Field |
 | --- | --- | --- |

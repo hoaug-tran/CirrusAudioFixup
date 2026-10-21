@@ -55,7 +55,7 @@ sudo /usr/bin/log show --last 1h --style syslog --info --debug \
 
 Neither command guarantees a result. Live streaming does not retrieve earlier messages, and historical queries cannot recover messages that were not saved. Empty output does not prove the kext failed to load or that playback passed. If the narrow filter is empty, inspect unfiltered kernel messages and the driver's IORegistry properties before concluding that no diagnostics exist.
 
-The [InsanelyMac logging discussion](https://www.insanelymac.com/forum/topic/348957-stupid-question-viewing-acpi-smcbatterymanager-debug-logs/) describes live and historical kernel-log queries. The older [darwin-drivers IOLog discussion](https://groups.google.com/g/darwin-drivers/c/OdyfY6b9Jwk) includes Apple's explanation of legacy logging through the unified system. These are useful references, not a guarantee of retention on every macOS build. Apple's [logging guide](https://developer.apple.com/documentation/os/viewing-log-messages) covers log viewing.
+See Apple's [logging guide](https://developer.apple.com/documentation/os/viewing-log-messages) for log viewing.
 
 ### Kernel-buffer fallbacks
 
@@ -97,7 +97,7 @@ This inspects that file; it does not prove the loaded extension is the same bina
 
 ## First microphone activation causes a speaker pop
 
-Treat this as a reported transition problem, not a confirmed layout-id or amplifier defect. The driver observes HDA output descriptors, not microphone widgets. Opening an input can coincide with a codec power, route or clock transition; the current evidence does not identify which component produces the pop.
+The driver observes HDA output descriptors, not microphone widgets. If opening an input causes a pop, capture the output route, stream and amplifier state before and after the transition.
 
 Keep the OS, layout, firmware and volume unchanged during a comparison. On a known working board, with low speaker volume:
 
@@ -116,7 +116,7 @@ Compare `Cirrus_Audio_Event_Mode`, `Cirrus_HDA_Status`, stream metadata, both pl
 
 ## Louder sound, EQ and DSP bypass
 
-Ask what “without it” means: without this kext, without DSP, without a Windows enhancement, or without an EQ app. These are different comparisons. Record the track, output device, OS volume, firmware/tuning identity and any active effects.
+When comparing sound, record the track, output device, OS volume, firmware/tuning identity and active effects. State whether DSP bypass or software EQ is enabled.
 
 Louder output does not establish better frequency response or correct protection. Firmware and channel coefficients can affect DSP behavior; Windows Lenovo/Nahimic processing is a separate part of the audio chain and is not reproduced merely by uploading amplifier firmware. This driver does not reproduce that user-space effects stack.
 
@@ -185,33 +185,23 @@ transfer returns. The legacy `Cirrus_NOACK_Count` remains an alias for Offline
 returns for existing collectors; it is not proof of an electrical NACK. Internal
 legacy `retries` counts Timeout returns, not measured controller retries.
 
-The first transfer failure freezes trace history even when invasive snapshots are
-not requested. A later chip-level snapshot can update latest history without
-replacing that first trace. The maintained test executes both nested reporting
-steps explicitly.
+The first transfer failure freezes trace history. A later register snapshot can
+update the latest history without replacing the first trace.
 
-Reference: the upstream [Linux dynamic-debug documentation](https://www.kernel.org/doc/html/v6.12/admin-guide/dynamic-debug-howto.html)
-describes explicit activation of debug call sites. The driver uses the same
-policy distinction to the existing macOS driver verbosity switch; it does not
-claim Linux jump-label patching or zero instruction overhead on macOS.
 
 ## Runtime properties
 
-All 32-bit service properties narrow values before widening to the IORegistry
-number argument. Negative native returns therefore appear as raw 32-bit codes
-(e.g. `0xE00002BC`) rather than sign-extended 64-bit decimal values. Internal
-IOReturns, failure decisions and trace native returns are unchanged.
+Native I/O returns appear as raw 32-bit codes, such as `0xE00002BC`.
 
 `Cirrus_Runtime_Stage` and `Cirrus_Runtime_<index>_Stage` follow actual
-coordinator lifecycle transitions rather than remaining bringup snapshots.
+coordinator lifecycle transitions.
 `Cirrus_Runtime_Count` is the number of bound driver instances; each slot's
 `Bound` field distinguishes live state from retained historical evidence.
 Per-slot `FirstFailure`, `LatestFailure`, `FailureStage`, `CleanupReturn` and
 `FailureCount` update when their structured status changes. Common enum values
 are Detached=0, Ready=6, Playing=8, Suspended=11 and Faulted=12.
 
-A fixed workloop-owned cache compares stages/failure values. This publisher performs no property writes, formatting, log publication or
-statistics snapshots when its observed status is unchanged.
+Runtime properties update when the observed status changes.
 A transition refreshes the aggregate verdict/AMP status and, when tracing is
 actually enabled, the existing transfer statistics. Quiet Release does not enable
 transfer recording as a side effect of these updates.

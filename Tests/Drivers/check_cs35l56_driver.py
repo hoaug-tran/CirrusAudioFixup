@@ -15,6 +15,8 @@ CPP = r'''
 #include <string>
 #include <vector>
 #include "Devices/Amplifiers/CS35L56/CS35L56DriverRegistration.hpp"
+#include "Devices/Amplifiers/CS35L56/CS35L56Device.hpp"
+#include "Runtime/AmplifierHost.hpp"
 using namespace cirrus;
 using namespace cirrus::devices::amplifiers::cs35l56;
 struct Bus : core::RegisterBus {
@@ -50,7 +52,8 @@ struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
  }
 };
 int main(){
- auto format=spiFormat();assert(core::RegisterMap::isValidConfig(format));
+ auto probe=[](core::RegisterIO& io){CS35L56Device device("test",{});device.probe(io);return device.state();};
+ auto format=cs35l56RegisterFormat();assert(core::RegisterMap::isValidConfig(format));
  Bus bus;core::RegisterMap io(bus,format,true);auto r=probe(io);
  assert(r.result==0&&r.identified&&r.revisionSupported&&r.readMask==15&&r.deviceId==0xab035a56&&r.otpId==3);
  assert(bus.frames==std::vector<std::vector<uint8_t>>({{0x80,0,0,0,0,0},{0x80,0,0,4,0,0},{0x80,0,0,12,0,0},{0x80,0,0,16,0,0}}));
@@ -71,9 +74,9 @@ int main(){
  Bus unknown;unknown.rev=0xc0;core::RegisterMap unknownIO(unknown,format);
  auto unverified=probe(unknownIO);assert(unverified.identified&&!unverified.revisionSupported);
  platform::AmplifierDriverRegistry registry;assert(registerDrivers(registry));
- assert(registry.find("CSC3556",0x35a56,core::BusTransportType::SPI)==&kRegistration);
+ assert(registry.find("CSC3556",0x35a56,core::BusTransportType::SPI)==&kDriverRegistrations[0]);
  assert(!registry.find("CSC3556",0x35a56,core::BusTransportType::I2C));
- assert(kRegistration.diagnosticOnly&&!kRegistration.firmwareReset&&!kRegistration.supportsDeferredFirmware);
+ assert(kDriverRegistrations[0].diagnosticOnly&&!kDriverRegistrations[0].firmwareReset&&!kDriverRegistrations[0].supportsDeferredFirmware);
  assert(registry.acceptsDebugPhase("CSC3556","probe")&&!registry.acceptsDebugPhase("CSC3556","dsp"));
  core::BusEndpoint endpoint{core::BusTransportType::SPI,"\\_SB.PC00.SPI0",0,false,0,4000000,0};
  platform::BoardIdentity identity{0x1043,0x1c63,"CSC3556"};
@@ -88,10 +91,10 @@ int main(){
  assert(host.strings["Cirrus_CS35L56_1_Probe_Status"]=="FAILED_NO_WAKE_ATTEMPT");
  assert(host.numbers["Cirrus_CS35L56_0_Probe_Read_Mask"]==15&&host.numbers["Cirrus_CS35L56_1_Probe_Read_Mask"]==1);
  Properties properties;GPIO gpio;platform::BoardDiscoveryContext discovery{identity,nullptr,2,properties,&gpio};const char* reason=nullptr;
- assert(!inspectBoard(discovery,reason)&&std::string(reason)=="CS35L56_READ_ONLY_SPKID0"&&gpio.calls==2);
- gpio.values[1]=1;assert(!inspectBoard(discovery,reason)&&std::string(reason)=="CS35L56_SPEAKER_ID_UNAVAILABLE_OR_INCONSISTENT");
- gpio.values[0]=1;assert(!inspectBoard(discovery,reason)&&std::string(reason)=="CS35L56_READ_ONLY_SPKID1");
- gpio.ok=false;assert(!inspectBoard(discovery,reason)&&std::string(reason)=="CS35L56_SPEAKER_ID_UNAVAILABLE_OR_INCONSISTENT");
+ assert(!discoverBoard(discovery,reason)&&std::string(reason)=="CS35L56_READ_ONLY_SPKID0"&&gpio.calls==2);
+ gpio.values[1]=1;assert(!discoverBoard(discovery,reason)&&std::string(reason)=="CS35L56_SPEAKER_ID_UNAVAILABLE_OR_INCONSISTENT");
+ gpio.values[0]=1;assert(!discoverBoard(discovery,reason)&&std::string(reason)=="CS35L56_READ_ONLY_SPKID1");
+ gpio.ok=false;assert(!discoverBoard(discovery,reason)&&std::string(reason)=="CS35L56_SPEAKER_ID_UNAVAILABLE_OR_INCONSISTENT");
 }
 '''
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-") as directory:
@@ -102,6 +105,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-") as directory:
         exe = tmp / "test"
         subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
                         "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),
-                        str(tmp / "test.cpp"), "-o", str(exe)], check=True)
+                        str(tmp / "test.cpp"), str(ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L56/CS35L56DriverFactory.cpp"),
+                        str(ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L56/CS35L56Diagnostics.cpp"), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
 print("PASS CS35L56 SPI frames, bounded identity reads, native errors, per-endpoint evidence and lifecycle/write rejection")

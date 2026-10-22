@@ -86,6 +86,19 @@ assert "0x35a40" not in composition and "RegisterFormat" not in composition and 
 assert "kDriverRegistrations" in (ROOT / "Devices/Amplifiers/CS35L41/CS35L41DriverRegistration.hpp").read_text()
 print("PASS AMP-owned registration/framing/access metadata and shared module composition")
 
+for model in ("CS35L41", "CS35L56"):
+    module = ROOT / "Devices/Amplifiers" / model
+    for name in (f"{model}Device.hpp", f"{model}Driver.hpp", f"{model}DriverFactory.hpp",
+                 f"{model}DriverFactory.cpp", f"{model}DriverRegistration.hpp", f"{model}Diagnostics.cpp",
+                 f"{model}SPIRegisterIO.hpp", "InstanceState.hpp", "Hardware/Registers.hpp",
+                 f"Board/{model}BoardDiscovery.hpp"):
+        assert (module / name).is_file(), (model, name)
+    registration = (module / f"{model}DriverRegistration.hpp").read_text()
+    assert "kDriverRegistrations[]" in registration
+    assert "void inspectDevice(" not in registration and "struct ProbeResult" not in registration
+assert not (ROOT / "Devices/Amplifiers/CS35L56/CS35L56Probe.hpp").exists()
+print("PASS CS35L41/CS35L56 module naming and device/register/diagnostics/factory/board separation")
+
 # Communication ownership is a module contract as well as a transaction port.
 native_host=(ROOT / "Transport/SPI/NativeSPIHost.hpp").read_text()
 assert "mOwners" in native_host and "NativeSPIControllerFactory factory" in native_host

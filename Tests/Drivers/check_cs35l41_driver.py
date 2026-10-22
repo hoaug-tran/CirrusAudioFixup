@@ -215,5 +215,5 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],'-o',str(p/'driver')],check=True)
+        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L56/CS35L56DriverFactory.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L56/CS35L56Diagnostics.cpp'),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

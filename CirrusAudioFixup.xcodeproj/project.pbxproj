@@ -105,6 +105,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				62F7C487267DBD58635A22E8,
+				BBCE923D36207A125987460C,
 				CA6D495D96D3625F8D00875E,
 				D4C2F8C602AE7174255331BB,
 				A5CEE17407689C27010E43D7,
@@ -603,27 +605,6 @@
 			);
 			sourceTree = "<group>";
 			path = Amplifiers;
-		};
-		CAFE56000000000000000001 = {
-			isa = PBXGroup;
-			children = (
-				CAFE56000000000000000002,
-				CAFE56000000000000000003,
-			);
-			sourceTree = "<group>";
-			path = CS35L56;
-		};
-		CAFE56000000000000000002 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = CS35L56DriverRegistration.hpp;
-			sourceTree = "<group>";
-		};
-		CAFE56000000000000000003 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.h;
-			path = CS35L56Probe.hpp;
-			sourceTree = "<group>";
 		};
 		7B82C29E22E0B705C32E30EF = {
 			isa = PBXGroup;
@@ -1924,6 +1905,108 @@
 			isa = PBXBuildFile;
 			fileRef = A5C200000000000000000002;
 		};
+		AD3BC1FE01F973B9D39C2CF9 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56BoardDiscovery.hpp;
+			sourceTree = "<group>";
+		};
+		D8AB24EAF2FB7ABA455C75F8 = {
+			isa = PBXGroup;
+			children = (
+				AD3BC1FE01F973B9D39C2CF9,
+			);
+			sourceTree = "<group>";
+			path = Board;
+		};
+		DC6847EA9B113FE17A7A18F0 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56Device.hpp;
+			sourceTree = "<group>";
+		};
+		96AFD6D1362B7A6ADB6BDEF2 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L56Diagnostics.cpp;
+			sourceTree = "<group>";
+		};
+		62F7C487267DBD58635A22E8 = {
+			isa = PBXBuildFile;
+			fileRef = 96AFD6D1362B7A6ADB6BDEF2;
+		};
+		49D5790903760E38845D5943 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56Driver.hpp;
+			sourceTree = "<group>";
+		};
+		C0D842F9A45A9E98B4784FB1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L56DriverFactory.cpp;
+			sourceTree = "<group>";
+		};
+		BBCE923D36207A125987460C = {
+			isa = PBXBuildFile;
+			fileRef = C0D842F9A45A9E98B4784FB1;
+		};
+		44F6F7A914589723AA58F3B1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56DriverFactory.hpp;
+			sourceTree = "<group>";
+		};
+		67A0571041A1D5D42187D74E = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56DriverRegistration.hpp;
+			sourceTree = "<group>";
+		};
+		5EB3DDEA9CFDAAF77955B24B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56SPIRegisterIO.hpp;
+			sourceTree = "<group>";
+		};
+		49AE264D2184420EFC8620F5 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Registers.hpp;
+			sourceTree = "<group>";
+		};
+		A341D0EE614FB25A2370C788 = {
+			isa = PBXGroup;
+			children = (
+				49AE264D2184420EFC8620F5,
+			);
+			sourceTree = "<group>";
+			path = Hardware;
+		};
+		CC77EEF64C1CF5FEF462AFFD = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = InstanceState.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE56000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				D8AB24EAF2FB7ABA455C75F8,
+				DC6847EA9B113FE17A7A18F0,
+				96AFD6D1362B7A6ADB6BDEF2,
+				49D5790903760E38845D5943,
+				C0D842F9A45A9E98B4784FB1,
+				44F6F7A914589723AA58F3B1,
+				67A0571041A1D5D42187D74E,
+				5EB3DDEA9CFDAAF77955B24B,
+				A341D0EE614FB25A2370C788,
+				CC77EEF64C1CF5FEF462AFFD,
+			);
+			sourceTree = "<group>";
+			path = CS35L56;
+		};
+
 	};
 	rootObject = CAFE00000050;
 }

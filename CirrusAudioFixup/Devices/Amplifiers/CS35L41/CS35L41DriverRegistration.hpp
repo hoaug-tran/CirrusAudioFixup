@@ -5,9 +5,6 @@
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
-#if defined(KERNEL)
-#include "Devices/Amplifiers/CS35L41/Board/BoardMetadataFallback.hpp"
-#endif
 
 namespace cirrus::devices::amplifiers::cs35l41 {
 constexpr bool cs35l41RegisterAccess(uint32_t reg) { return !(reg & 3) && reg <= registers::kLastRegister; }
@@ -28,12 +25,7 @@ inline constexpr platform::AmplifierDriverRegistration kDriverRegistrations[] = 
      destroyDriver, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectDevice, validDebugPhase},
     {"cs35l41-csc3551", "CSC3551", registers::kValDeviceId, 3, cs35l41RegisterFormat(false), cs35l41RegisterFormat(true), createDriver,
      destroyDriver, true, 0, 0xffffffffU, core::AmplifierModel::CS35L41, nullptr, inspectDevice, validDebugPhase, discoverBoard,
-     &kFirmwareReset,
-#if defined(KERNEL)
-     prepareBoardMetadata
-#else
-     nullptr
-#endif
+     &kFirmwareReset
     },
 };
 inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) {

@@ -16,6 +16,12 @@ with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-metadata-") as directory
 #include "Transport/SPI/Intel/IntelSPIChipSelects.hpp"
 using namespace cirrus;
 int main() {
+ cirrus::transport::nativePropertyEvaluator=[](IOACPIPlatformDevice* device,OSObject** out)->IOReturn {
+  auto found=device->values.find("INTERPRETER_DSD");
+  if(found==device->values.end())return kIOReturnUnsupported;
+  *out=found->second;(*out)->retain();return kIOReturnSuccess;
+ };
+
     IOACPIPlatformDevice spi, amp, gpio;
     IOService owner;
     spi.path="IOACPIPlane:/_SB/PC00/SPI0";
@@ -34,17 +40,17 @@ int main() {
     auto array=[](std::initializer_list<OSObject*> values){return make<OSArray>(std::vector<OSObject*>(values));};
     auto number=[](uint32_t n)->OSObject*{return make<OSNumber>(n);};
     const std::vector<uint8_t> uuid{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01};
-    auto* version=array({make<OSString>("cirrus,acpi-adapter-version"),number(1)});
+
     auto* csProperty=array({make<OSString>("cs-gpios"),array({number(0),make<OSString>("\\\\_SB.PC00.SPI0.SPK1"),number(0),number(0),number(0)})});
     auto* speaker=array({make<OSString>("spk-id-gpios"),array({make<OSString>("\\\\_SB.PC00.SPI0.SPK1"),number(2),number(0),number(0),make<OSString>("\\\\_SB.PC00.SPI0.SPK1"),number(2),number(0),number(0)})});
-    spi.values["CSDP"]=array({make<OSData>(uuid),array({version,csProperty})});
-    amp.values["CSDP"]=array({make<OSData>(uuid),array({version,speaker})});
+    spi.values["INTERPRETER_DSD"]=array({make<OSData>(uuid),array({csProperty})});
+    amp.values["INTERPRETER_DSD"]=array({make<OSData>(uuid),array({speaker})});
     spi.values["_DSD"]=amp.values["_DSD"]=make<OSNumber>(0);
     spi.dsdNullResult=amp.dsdNullResult=true;
     for(auto* device:{&spi,&amp}) {
         transport::ACPIDeviceProperties properties;
-        assert(properties.load(device,&owner)==kIOReturnSuccess);
-        assert(!strcmp(properties.source(),"CSDP"));
+        assert(properties.load(device)==kIOReturnSuccess);
+        assert(!strcmp(properties.source(),"_DSD_INTERPRETER"));
         assert(properties.get(device==&spi?"cs-gpios":"spk-id-gpios"));
     }
     auto* cs=make<IOMemoryMap>();
@@ -59,13 +65,12 @@ int main() {
         assert(cs->r[(0x700+27*16)/4]==0x84000201);
     }
     assert(!gpio.opened&&gpio.opens==gpio.closes);
-    auto* badVersion=array({make<OSString>("cirrus,acpi-adapter-version"),number(2)});
-    amp.values["CSDP"]=array({make<OSData>(uuid),array({badVersion,speaker})});
+    amp.values["INTERPRETER_DSD"]=make<OSNumber>(0);
     transport::ACPIDeviceProperties invalid;
-    assert(invalid.load(&amp,&owner)!=kIOReturnSuccess);
-    amp.values.erase("CSDP");
+    assert(invalid.load(&amp)!=kIOReturnSuccess);
+    amp.values.erase("INTERPRETER_DSD");
     transport::ACPIDeviceProperties missing;
-    assert(missing.load(&amp,&owner)!=kIOReturnSuccess);
+    assert(missing.load(&amp)!=kIOReturnSuccess);
 
 }
 ''')
@@ -73,4 +78,4 @@ int main() {
     subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-I"+str(tmp),
                     "-I"+str(ROOT/"CirrusAudioFixup"), str(tmp/"test.cpp"), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
-print("PASS CS35L56 CSDP reference adapter, native/GPIO CS, unchanged pad state and missing/invalid adapter rejection")
+print("PASS CS35L56 interpreter references, native/GPIO CS, unchanged pad state and missing/invalid metadata rejection")

@@ -23,12 +23,12 @@ public:
         mTrace = trace;
         ACPIDeviceProperties properties;
         report("CS_DSD_BEGIN");
-        auto result = properties.load(controller, owner);
+        auto result = properties.load(controller);
         diagnostics::ACPIObjectEvidence::publish(owner, "Cirrus_SPI_DSD", properties.object());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Source", properties.source());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Native_Object_Type", properties.nativeObjectType());
-        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Adapter_Return", uint64_t(uint32_t(properties.adapterReturn())), 32);
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reference_Return", uint64_t(uint32_t(properties.referenceReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Validate_Return", uint64_t(uint32_t(properties.validationReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Evaluate_Return", uint64_t(uint32_t(properties.evaluationReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Object_Type", ACPIDeviceProperties::objectType(properties.object()));
@@ -191,7 +191,7 @@ public:
         if (result != kIOReturnSuccess || !source || !property || index >= kCapacity)
             return result != kIOReturnSuccess ? result : kIOReturnBadArgument;
         ACPIDeviceProperties properties;
-        result = properties.load(source, mOwner);
+        result = properties.load(source);
         if (result != kIOReturnSuccess)
             return result;
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
@@ -254,7 +254,7 @@ public:
         if (result != kIOReturnSuccess)
             return result;
         ACPIDeviceProperties properties;
-        result = properties.load(source, mOwner);
+        result = properties.load(source);
         if (result != kIOReturnSuccess)
             return result;
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
@@ -390,7 +390,7 @@ private:
     void observeReset(IOACPIPlatformDevice* source) {
         mOwner->setProperty("Cirrus_SPI_Reset_Observation", "PAD_TX_LATCH_READBACK_NOT_EXTERNAL_WAVEFORM");
         ACPIDeviceProperties properties;
-        const auto result = properties.load(source, mOwner);
+        const auto result = properties.load(source);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Return", uint64_t(uint32_t(result)), 32);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Reason", properties.reason());
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Source", properties.source());
@@ -542,13 +542,13 @@ private:
         mOwner->setProperty("Cirrus_SPI_GPIO_HID", hid ? hid->getCStringNoCopy() : "UNAVAILABLE");
         mOwner->setProperty("Cirrus_SPI_GPIO_HID_Return", uint64_t(uint32_t(result)), 32);
         ACPIDeviceProperties native;
-        const auto nativeResult = native.load(provider, mOwner);
+        const auto nativeResult = native.load(provider);
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Return", uint64_t(uint32_t(nativeResult)), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Reason", native.reason());
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Source", native.source());
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Validate_Return", uint64_t(uint32_t(native.validationReturn())), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Evaluate_Return", uint64_t(uint32_t(native.evaluationReturn())), 32);
-        mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Adapter_Return", uint64_t(uint32_t(native.adapterReturn())), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Reference_Return", uint64_t(uint32_t(native.referenceReturn())), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Native_Object_Type", native.nativeObjectType());
         diagnostics::ACPIObjectEvidence::publish(mOwner, "Cirrus_SPI_GPIO_DSD", native.object());
         // GPIO metadata is optional when firmware exposes an unmodified,

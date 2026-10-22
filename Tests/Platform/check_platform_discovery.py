@@ -56,6 +56,12 @@ OSArray* dsd(OSArray* entries){
 }
 ''' + owner + r'''
 int main(){
+ cirrus::transport::nativePropertyEvaluator=[](IOACPIPlatformDevice* device,OSObject** out)->IOReturn {
+  auto found=device->values.find("INTERPRETER_DSD");
+  if(found==device->values.end())return kIOReturnUnsupported;
+  *out=found->second;(*out)->retain();return kIOReturnSuccess;
+ };
+
  IOACPIPlatformDevice amp;
  auto* entries=make<OSArray>(std::vector<OSObject*>{pair("cirrus,dev-index",{0,1}),pair("cirrus,speaker-position",{1,0}),
   pair("cirrus,boost-type",{0,0}),pair("cirrus,gpio1-func",{0,0}),pair("cirrus,gpio2-func",{2,2}),
@@ -74,16 +80,15 @@ int main(){
   assert(!strcmp(board.amplifiers[0].endpoint.controllerPath,service.mNativeSPI.endpoints[0].controllerPath));
   assert(package->refs==1);
  }
- // Captured macOS success/NULL requires the AMP adapter as well as SPI/GPIO.
+ // Native interpreter references must reach platform discovery as well as SPI/GPIO.
  amp.dsdNullResult=true;
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
-  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Reason"]=="DSD_EMPTY_RESULT");}
- auto* version=make<OSArray>(std::vector<OSObject*>{make<OSString>("cirrus,acpi-adapter-version"),make<OSNumber>(1)});
- entries->v.push_back(version);amp.values["CSDP"]=package;
+  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Reason"]=="DSD_REFERENCE_CONVERSION_FAILED");}
+ amp.values["INTERPRETER_DSD"]=package;
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
-  assert(service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Source"]=="CSDP");
+  assert(service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Source"]=="_DSD_INTERPRETER");
   assert(service.strings["Cirrus_Platform_DSD_Status"]=="COMPLETE");}
- amp.dsdNullResult=false;amp.values.erase("CSDP");entries->v.pop_back();
+ amp.dsdNullResult=false;amp.values.erase("INTERPRETER_DSD");
  // Speaker-specific board data must survive discovery, with the same asset
  // gate as generic coefficients. Never assume one speaker for every SSID.
  auto* speaker=pair("cirrus,speaker-id",{1,1});entries->v.push_back(speaker);requiredSpeaker=1;

@@ -1,7 +1,8 @@
 // Owned ACPI device-properties package and namespace reference resolution.
 #pragma once
-#include "Support/KernelDeviceCast.hpp"
+#include "Platform/ACPI/ACPIEvaluation.hpp"
 #include "Platform/ACPI/ACPIPath.hpp"
+#include "Support/KernelDeviceCast.hpp"
 #include <IOKit/IORegistryEntry.h>
 #include <IOKit/acpi/IOACPIPlatformDevice.h>
 #include <libkern/c++/OSArray.h>
@@ -70,23 +71,17 @@ public:
     ACPIDeviceProperties() = default;
     ACPIDeviceProperties(const ACPIDeviceProperties&) = delete;
     ACPIDeviceProperties& operator=(const ACPIDeviceProperties&) = delete;
-    ~ACPIDeviceProperties() {
-        OSSafeReleaseNULL(mFallback);
-        OSSafeReleaseNULL(mObject);
-    }
+    ~ACPIDeviceProperties() { OSSafeReleaseNULL(mObject); }
     const char* reason() const { return mReason; }
     IOReturn validationReturn() const { return mValidationReturn; }
     IOReturn evaluationReturn() const { return mEvaluationReturn; }
     unsigned failureIndex() const { return mFailureIndex; }
     OSObject* object() const { return mObject; }
     bool missingNativeMetadata() const {
-        return !mObject && !strcmp(mSource, "_DSD") &&
-               (mAdapterReturn == kIOReturnNotFound || mAdapterReturn == kIOReturnError) &&
-               (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
-                (mValidationReturn == kIOReturnSuccess && mEvaluationReturn == kIOReturnSuccess));
+        return !mObject && (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError);
     }
     const char* source() const { return mSource; }
-    IOReturn adapterReturn() const { return mAdapterReturn; }
+    IOReturn referenceReturn() const { return mReferenceReturn; }
     const char* nativeObjectType() const { return mNativeObjectType; }
     static const char* objectType(OSObject* object) {
         if (!object)
@@ -103,90 +98,29 @@ public:
             return "IOACPIPlatformDevice";
         return "OTHER";
     }
-    IOReturn load(IOACPIPlatformDevice* device, IOService* owner = nullptr) {
-        if (mFallback)
-            return kIOReturnBadArgument;
-        const auto native = loadNative(device);
-        if (!owner || !device)
-            return native;
-        // Board metadata is owned by this attachment, never installed into the
-        // firmware namespace or another device. Entries use discovered paths.
-        auto* nodes = OSDynamicCast(OSArray, owner->getProperty("Cirrus_Board_Metadata"));
-        if (!nodes)
-            return native;
-        char path[256]{}, canonical[256]{};
-        int length = sizeof(path);
-        if (nodes->getCount() > 16 || !device->getPath(path, &length, IORegistryEntry::getPlane("IOACPIPlane")) ||
-            !canonicalACPIPath(path, canonical, sizeof(canonical)))
-            return fail("BOARD_METADATA_INVALID", kIOReturnUnsupported);
-        OSArray* selected = nullptr;
-        for (unsigned i = 0; i < nodes->getCount(); ++i) {
-            auto* node = OSDynamicCast(OSArray, nodes->getObject(i));
-            auto* name = node && node->getCount() == 2 ? OSDynamicCast(OSString, node->getObject(0)) : nullptr;
-            auto* entries = node && node->getCount() == 2 ? OSDynamicCast(OSArray, node->getObject(1)) : nullptr;
-            if (!name || !entries || entries->getCount() > 128)
-                return fail("BOARD_METADATA_INVALID", kIOReturnUnsupported);
-            if (name->isEqualTo(canonical)) {
-                if (selected)
-                    return fail("BOARD_METADATA_AMBIGUOUS", kIOReturnUnsupported);
-                selected = entries;
-            }
-        }
-        if (!selected)
-            return native;
-        // A known board may fill absence, never conceal a returned malformed
-        // _DSD/CSDP, evaluation failure, or unsupported adapter version.
-        if (native != kIOReturnSuccess && !missingNativeMetadata())
-            return native;
-        for (unsigned i = 0; i < selected->getCount(); ++i) {
-            auto* pair = OSDynamicCast(OSArray, selected->getObject(i));
-            auto* key = pair && pair->getCount() == 2 ? OSDynamicCast(OSString, pair->getObject(0)) : nullptr;
-            if (!key)
-                return fail("BOARD_METADATA_INVALID", kIOReturnUnsupported);
-            for (unsigned j = 0; j < i; ++j) {
-                auto* earlier = OSDynamicCast(OSArray, selected->getObject(j));
-                auto* earlierKey = OSDynamicCast(OSString, earlier->getObject(0));
-                if (key->isEqualTo(earlierKey))
-                    return fail("BOARD_METADATA_AMBIGUOUS", kIOReturnUnsupported);
-            }
-        }
-        mFallback = selected;
-        mFallback->retain();
-        mSource = mProperties ? "FIRMWARE_AND_BOARD_TABLE" : "BOARD_TABLE";
-        mReason = "BOARD_METADATA_READY";
-        return kIOReturnSuccess;
-    }
-private:
-    IOReturn loadNative(IOACPIPlatformDevice* device) {
-        if (!device || mObject)
+    IOReturn load(IOACPIPlatformDevice* device) {
+        if (!device || mLoaded)
             return fail("INVALID_LOAD_ARGUMENT", kIOReturnBadArgument);
+        mLoaded = true;
         mValidationReturn = device->validateObject("_DSD");
-        // Apple may report generic Error rather than NotFound for a missing
-        // object. Only an explicit, schema-validated adapter can recover that
-        // condition; never reinterpret it as native-only CS wiring.
-        if (mValidationReturn != kIOReturnSuccess) {
-            const auto adapter = loadAdapter(device);
-            if (mValidationReturn == kIOReturnNotFound && adapter == kIOReturnNotFound) {
-                mReason = "DSD_ABSENT";
-                return kIOReturnSuccess;
-            }
-            if (adapter != kIOReturnSuccess)
-                return fail("DSD_VALIDATION_FAILED", mValidationReturn);
-        } else {
-            mEvaluationReturn = device->evaluateObject("_DSD", &mObject);
-            mNativeObjectType = objectType(mObject);
-            // Some macOS ACPI conversions discard reference-bearing packages.
-            // CSDP is an optional firmware adapter using the same UUID/schema,
-            // version 1, with references represented by namespace strings.
-            // It never overrides a successfully returned native object.
-            if ((mEvaluationReturn == kIOReturnSuccess && !mObject) || mEvaluationReturn == kIOReturnUnsupported) {
-                const auto adapter = loadAdapter(device);
-                if (adapter != kIOReturnSuccess)
-                    return fail(mEvaluationReturn == kIOReturnSuccess ? "DSD_EMPTY_RESULT" : "DSD_EVALUATION_FAILED",
-                                mEvaluationReturn == kIOReturnSuccess ? kIOReturnUnsupported : mEvaluationReturn);
-            } else if (mEvaluationReturn != kIOReturnSuccess)
-                return fail("DSD_EVALUATION_FAILED", mEvaluationReturn);
+        if (mValidationReturn == kIOReturnNotFound) {
+            mReason = "DSD_ABSENT";
+            return kIOReturnSuccess;
         }
+        if (mValidationReturn != kIOReturnSuccess)
+            return fail("DSD_VALIDATION_FAILED", mValidationReturn);
+        mEvaluationReturn = device->evaluateObject("_DSD", &mObject);
+        mNativeObjectType = objectType(mObject);
+        // Apple drops an entire package when it cannot convert a namespace
+        // reference. Read that same object through the running interpreter.
+        // A returned malformed object or an execution failure is never hidden.
+        if (!mObject && (mEvaluationReturn == kIOReturnSuccess || mEvaluationReturn == kIOReturnUnsupported)) {
+            mReferenceReturn = evaluateNativeProperties(device, &mObject);
+            if (mReferenceReturn != kIOReturnSuccess)
+                return fail("DSD_REFERENCE_CONVERSION_FAILED", mReferenceReturn);
+            mSource = "_DSD_INTERPRETER";
+        } else if (mEvaluationReturn != kIOReturnSuccess)
+            return fail("DSD_EVALUATION_FAILED", mEvaluationReturn);
         auto* root = OSDynamicCast(OSArray, mObject);
         if (!root)
             return fail("DSD_ROOT_TYPE", kIOReturnUnsupported);
@@ -221,41 +155,25 @@ private:
                 }
             }
         }
-        if (!strcmp(mSource, "CSDP")) {
-            auto* version = OSDynamicCast(OSNumber, get("cirrus,acpi-adapter-version"));
-            if (!version || version->unsigned64BitValue() != 1)
-                return fail("ADAPTER_VERSION_UNSUPPORTED", kIOReturnUnsupported);
-        }
         mReason = mProperties ? "DSD_READY" : "DSD_PROPERTIES_UUID_ABSENT";
         return kIOReturnSuccess;
     }
-public:
+
     OSObject* get(const char* name) const {
         if (!name)
             return nullptr;
-        OSArray* sources[]{mProperties, mFallback};
-        for (auto* entries : sources)
-            for (unsigned i = 0; entries && i < entries->getCount(); ++i) {
-                auto* pair = OSDynamicCast(OSArray, entries->getObject(i));
-                auto* key = pair && pair->getCount() == 2 ? OSDynamicCast(OSString, pair->getObject(0)) : nullptr;
-                if (!key)
-                    return nullptr;
-                if (key->isEqualTo(name))
-                    return pair->getObject(1);
-            }
+        for (unsigned i = 0; mProperties && i < mProperties->getCount(); ++i) {
+            auto* pair = OSDynamicCast(OSArray, mProperties->getObject(i));
+            auto* key = pair && pair->getCount() == 2 ? OSDynamicCast(OSString, pair->getObject(0)) : nullptr;
+            if (!key)
+                return nullptr;
+            if (key->isEqualTo(name))
+                return pair->getObject(1);
+        }
         return nullptr;
     }
 
 private:
-    IOReturn loadAdapter(IOACPIPlatformDevice* device) {
-        mAdapterReturn = device->validateObject("CSDP");
-        if (mAdapterReturn != kIOReturnSuccess)
-            return mAdapterReturn;
-        OSSafeReleaseNULL(mObject);
-        mSource = "CSDP";
-        mAdapterReturn = device->evaluateObject("CSDP", &mObject);
-        return mAdapterReturn;
-    }
     IOReturn fail(const char* reason, IOReturn result) {
         mReason = reason;
         mProperties = nullptr;
@@ -263,11 +181,11 @@ private:
     }
     OSObject* mObject{nullptr};
     OSArray* mProperties{nullptr};
-    OSArray* mFallback{nullptr};
+    bool mLoaded{false};
     const char* mReason{"NOT_LOADED"};
     const char* mSource{"_DSD"};
     const char* mNativeObjectType{"NOT_EVALUATED"};
-    IOReturn mAdapterReturn{kIOReturnNotReady};
+    IOReturn mReferenceReturn{kIOReturnNotReady};
     IOReturn mValidationReturn{kIOReturnNotReady}, mEvaluationReturn{kIOReturnNotReady};
     unsigned mFailureIndex{0};
 };

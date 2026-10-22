@@ -24,7 +24,6 @@ inline constexpr platform::AmplifierDriverRegistration kDriverRegistrations[] = 
      validDebugPhase,
      discoverBoard,
      &kFirmwareReset,
-     nullptr,
      false},
 };
 inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) {

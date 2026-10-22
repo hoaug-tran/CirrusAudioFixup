@@ -223,6 +223,10 @@ public:
                 result = fail("NO_REGISTERED_SPI_DRIVER", kIOReturnUnsupported, i, e.controllerPath, binding->siliconId);
                 break;
             }
+            if (definition->diagnosticOnly && allowWrites) {
+                result = fail("DIAGNOSTIC_DRIVER_WRITE_AUTHORIZATION_REJECTED", kIOReturnNotPermitted, i, e.controllerPath);
+                break;
+            }
             // A shared firmware group needs one consistent silicon contract
             // across all endpoints. Reject mixed semantics before any GPIO IO.
             if (i && reset != definition->firmwareReset) {

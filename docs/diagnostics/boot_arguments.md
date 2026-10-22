@@ -2,6 +2,12 @@
 
 Start the first boot with `-cirrusro -cirrusdbg` for read-only inspection and logging. After checking the hardware, remove `-cirrusro` and reboot to allow initialization. Normal playback on a supported board needs no CirrusAudioFixup arguments. Configure the codec route separately through AppleALC.
 
+CS35L56 is diagnostic-only: keep `-cirrusro` enabled. Without it, attachment is
+rejected before acquiring the SPI controller. Reads still configure SPI and
+toggle chip select; amplifier register writes, reset, firmware and playback are
+blocked. A sleeping or reset-held amplifier can fail to respond; diagnostics do
+not issue Linux's wake transaction or release reset to make it answer.
+
 Append options to OpenCore `NVRAM → Add → 7C436110-AB2A-4BBB-A880-FE41995C9F82 → boot-args`, preserving existing arguments. Restart after changing them and remove diagnostic overrides after testing.
 
 Flags with a value of `0` are treated as disabled. Debug builds enable routine logging by default; `-cirrusdbg=0` does not override that build default.

@@ -521,6 +521,11 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
         return true;
     }
+    if (selected->diagnosticOnly && !bootArgEnabled("-cirrusro")) {
+        setProperty("Cirrus_Amplifier_Access", "EXPLICIT_READ_ONLY_REQUIRED");
+        recordAttachmentFailure("POLICY", "DIAGNOSTIC_DRIVER_REQUIRES_CIRRUSRO", kIOReturnNotPermitted);
+        return false;
+    }
     mAttachment.amplifier = "REGISTERED_NOT_PROBED";
     const auto format = *selected->format(cirrus::core::BusTransportType::SPI);
     CIRRUS_LOG("BOOT_FLOW SPI_BIND_BEGIN");
@@ -538,7 +543,7 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     bool writable = false;
     if (ret == kIOReturnSuccess && selected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard)
         discoverPlatformConfiguration(acpi, *selected);
-    if (ret == kIOReturnSuccess && mPlatformAuthorized && mPlatformProfile->boardConfiguration) {
+    if (ret == kIOReturnSuccess && !selected->diagnosticOnly && mPlatformAuthorized && mPlatformProfile->boardConfiguration) {
         cirrus::platform::BoardIdentity actual{uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId),
                                                mPlatformProfile->acpiHid};
         ret = mNativeSPI.configureAuthorized(mDriverRegistry, *mPlatformProfile->boardConfiguration, actual, mPlatformProfile->acpiHid,

@@ -274,6 +274,40 @@ int main(){
  mem->r[0x114/4]=1U<<19;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnNotPermitted);}
  assert(!gpio.opened&&gpio.refs==1&&mem->refs==1);
+ // GU605MV DSDT topology: CS1 on GPP_E_2; reset and speaker ID in community 5.
+ {
+  IOACPIPlatformDevice mtlSpi,mtlAmp,mtlGpio;IOService mtlOwner;
+  mtlSpi.path="IOACPIPlane:/_SB/PC00/SPI0";mtlAmp.path=mtlSpi.path+"/SPK1";mtlGpio.path="IOACPIPlane:/_SB/GPI0";
+  devices={&mtlSpi,&mtlAmp,&mtlGpio};
+  mtlGpio.values["_HID"]=make<OSString>("INTC1083");
+  auto* csMap=make<IOMemoryMap>();auto* otherMap=make<IOMemoryMap>();
+  mtlGpio.maps={{1,csMap},{4,otherMap}};
+  csMap->r[0]=otherMap->r[0]=0x940000;csMap->r[3]=otherMap->r[3]=0x700;
+  const unsigned csOffset=0x700+27*16,resetOffset=0x700+26*16,inputOffset=0x700+8*16;
+  csMap->r[csOffset/4]=0x84000201;otherMap->r[resetOffset/4]=0x44000200;otherMap->r[inputOffset/4]=0x84000100;
+  auto descriptor=[&](unsigned pin,bool input){
+   auto d=crs;d.resize(d.size()-2);d[23]=pin;d[24]=pin>>8;d[7]=input?1:2;return d;
+  };
+  auto resources=descriptor(0x82,false);
+  for(auto d:{descriptor(0x181,false),descriptor(0x168,true)})resources.insert(resources.end(),d.begin(),d.end());
+  resources.insert(resources.end(),{0x79,0});mtlAmp.values["_CRS"]=make<OSData>(resources);
+  mtlSpi.values["_DSD"]=properties(array({number(0),&mtlAmp,number(0),number(0),number(0)}));
+  auto* metadata=properties(array({number(0)}));auto* entries=OSDynamicCast(OSArray,metadata->getObject(1));
+  entries->v.push_back(array({make<OSString>("reset-gpios"),array({&mtlAmp,number(1),number(0),number(0),&mtlAmp,number(1),number(0),number(0)})}));
+  entries->v.push_back(array({make<OSString>("spk-id-gpios"),array({&mtlAmp,number(2),number(0),number(0),&mtlAmp,number(2),number(0),number(0)})}));
+  mtlAmp.values["_DSD"]=metadata;
+  std::vector<uint32_t> before(otherMap->r,otherMap->r+0x10000/4);
+  {IntelSPIChipSelects selects;assert(selects.bind(&mtlSpi,&mtlOwner,nullptr,true)==0);
+   assert(selects.select(0)==nullptr&&selects.select(1));
+   assert(mtlOwner.numbers["Cirrus_SPI_Reset_0_Memory_Index"]==4&&mtlOwner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==0);
+   uint32_t speaker=99;assert(selects.readGPIO(&mtlAmp,"spk-id-gpios",0,speaker)==0&&speaker==0);
+   assert(selects.readGPIO(&mtlAmp,"spk-id-gpios",1,speaker)==0&&speaker==0);
+   assert(mtlOwner.numbers["Cirrus_GPIO_Input_Memory_Index"]==4);
+   assert(selects.select(1)->setActive(true)==0&&selects.select(1)->setActive(false)==0);
+   assert(std::vector<uint32_t>(otherMap->r,otherMap->r+0x10000/4)==before);
+  }
+  assert(!mtlGpio.opened&&mtlGpio.opens==1&&mtlGpio.closes==1&&csMap->refs==1&&otherMap->refs==1);
+ }
 }
 ''')
     for flags in sanitizer_flags():

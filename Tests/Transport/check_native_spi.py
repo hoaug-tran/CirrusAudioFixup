@@ -573,6 +573,23 @@ int main(){
  before=writeTransfers;
  assert(!verifiedReadOnly.mNativeSPI.registers(0)->write(4,1)&&!verifiedReadOnly.bindAmplifierDrivers()&&writeTransfers==before);
  verifiedReadOnly.teardownCommunication();assert(!liveControllers);
+ // The production SPI attachment path must reject diagnostic modules before
+ // controller acquisition, even with an otherwise authorized board profile.
+ auto diagnosticDefinition=shipDefinition;diagnosticDefinition.diagnosticOnly=true;
+ CirrusAudioFixup diagnostic;diagnostic.mProvider=&amp;diagnostic.mPlatformProfile=&shipProfile;
+ diagnostic.mPlatformSubsystemId=0x12345678;diagnostic.mPlatformAuthorized=true;
+ assert(diagnostic.mDriverRegistry.add(diagnosticDefinition));
+ const auto beforeDiagnostic=nativeCreates;
+ assert(!diagnostic.setupCommunication(&amp)&&nativeCreates==beforeDiagnostic&&!diagnostic.mNativeSPI.bound());
+ assert(diagnostic.strings["Cirrus_Amplifier_Access"]=="EXPLICIT_READ_ONLY_REQUIRED");
+ diagnostic.flags["-cirrusro"]=true;
+ assert(diagnostic.setupCommunication(&amp)&&!diagnostic.mPlatformAuthorized);
+ before=writeTransfers;
+ assert(!diagnostic.mNativeSPI.registers(0)->write(4,1)&&writeTransfers==before);
+ assert(diagnostic.mNativeSPI.configureAuthorized(diagnostic.mDriverRegistry,shipBoard,shipBoard.identity,"CSC3551",true)==kIOReturnNotPermitted);
+ assert(!strcmp(diagnostic.mNativeSPI.failure().reason,"DIAGNOSTIC_DRIVER_WRITE_AUTHORIZATION_REJECTED"));
+ assert(diagnostic.mNativeSPI.prepareHardware(&amp)==kIOReturnNotPermitted);
+ diagnostic.teardownCommunication();assert(!liveControllers);
  // Actual configured I2C discovery and binder use this driver's one-byte
  // address format, rather than silently imposing CS35L41 four-byte framing.
  IOService i2cProvider;i2cProvider.path="fixture-i2c-controller";

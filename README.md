@@ -68,8 +68,14 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | **CS35L41** | **Supported** | Revision B2; I2C and SPI; supported board profiles and matching firmware |
 | CS35L45 | Not yet supported | Requires a dedicated amplifier driver |
 | CS35L51 | Not yet supported | Requires a dedicated amplifier driver |
-| CS35L56 | Not yet supported | Requires a dedicated amplifier driver |
+| CS35L56 | Read-only diagnostics | SPI `CSC3556`, identity probe only with `-cirrusro`; DSP and playback are not implemented |
 | Other Cirrus amplifiers | Not yet supported | Additional families can use the shared framework |
+
+CS35L56 diagnostics are experimental and await target macOS validation. See the
+[CS35L56 roadmap](docs/hardware/CS35L56-roadmap.md). Keep `-cirrusro` enabled:
+removing it rejects CS35L56 attachment. Read-only probing still configures the
+SPI controller and toggles chip select to transfer reads; it does not write
+amplifier registers, toggle amplifier reset, load firmware or start playback.
 
 ### Supported laptops
 

@@ -91,7 +91,9 @@ int main(){
         const auto* registered = f.registry.find("CSC3551", 0x35a40, core::BusTransportType::SPI);
         assert(registered && registered->model == core::AmplifierModel::CS35L41);
         assert(!f.registry.find("CSC3551", 0, core::BusTransportType::SPI));
-        assert(!f.registry.findModel("CSC3556", core::AmplifierModel::CS35L56, core::BusTransportType::SPI));
+        const auto* probe = f.registry.findModel("CSC3556", core::AmplifierModel::CS35L56, core::BusTransportType::SPI);
+        assert(probe && probe->diagnosticOnly && !probe->supportsDeferredFirmware && !probe->firmwareReset);
+        assert(!probe->format(core::BusTransportType::I2C));
     }
 
     // Exercise the real resource-discovery path, not a copied selector.

@@ -11,15 +11,15 @@ inline IOReturn readIntelGPIOInput(IntelGPIOWindow& window, size_t bytes, const 
                                   IntelGPIOInputEvidence& evidence) {
     value = 0;
     evidence = {};
-    if (bytes < 0x200 || pad.bit >= 32 || 0xa4U + uint32_t(pad.ownershipWord) * 4 > bytes)
+    if (bytes < 0x200 || pad.bit >= 32 || uint32_t(pad.ownershipBase) + 4 + uint32_t(pad.ownershipWord) * 4 > bytes)
         return kIOReturnBadArgument;
     const uint32_t revision = window.read32(0), padbar = window.read32(0x0c);
     evidence.revision = revision;
     evidence.padbar = padbar;
-    if (revision == 0xffffffffU || revision >> 16 < 0x94 || !padbar || (padbar & 3) || padbar > bytes ||
+    if (revision == 0xffffffffU || revision >> 16 < 0x94 || revision >> 16 >= 0x110 || !padbar || (padbar & 3) || padbar > bytes ||
         uint64_t(pad.pad) * 16 + 4 > bytes - padbar)
         return kIOReturnUnsupported;
-    const uint32_t own = window.read32(0xa0 + uint32_t(pad.ownershipWord) * 4);
+    const uint32_t own = window.read32(pad.ownershipBase + uint32_t(pad.ownershipWord) * 4);
     const uint32_t config = window.read32(padbar + uint32_t(pad.pad) * 16);
     evidence.ownership = own;
     evidence.config = config;

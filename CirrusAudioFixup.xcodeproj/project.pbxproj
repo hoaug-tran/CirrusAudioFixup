@@ -599,9 +599,31 @@
 			isa = PBXGroup;
 			children = (
 				1F0624E71DB62691796BC906,
+				CAFE56000000000000000001,
 			);
 			sourceTree = "<group>";
 			path = Amplifiers;
+		};
+		CAFE56000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				CAFE56000000000000000002,
+				CAFE56000000000000000003,
+			);
+			sourceTree = "<group>";
+			path = CS35L56;
+		};
+		CAFE56000000000000000002 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56DriverRegistration.hpp;
+			sourceTree = "<group>";
+		};
+		CAFE56000000000000000003 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56Probe.hpp;
+			sourceTree = "<group>";
 		};
 		7B82C29E22E0B705C32E30EF = {
 			isa = PBXGroup;

@@ -232,9 +232,10 @@ private:
     cirrus::platform::DiscoveredBoard* mDiscoveredBoard{nullptr};
     cirrus::platform::PlatformProfile mDiscoveredProfile{};
     size_t expectedAmplifierCount() const {
-        return mPlatformProfile
-                   ? (mPlatformProfile->boardConfiguration ? mPlatformProfile->boardConfiguration->count : mPlatformProfile->endpointCount)
-                   : 0;
+        return mPlatformProfile ? (mPlatformProfile->boardConfiguration ? mPlatformProfile->boardConfiguration->count
+                                   : mPlatformProfile->endpointCount    ? mPlatformProfile->endpointCount
+                                                                        : mNativeSPI.count())
+                                : 0;
     }
     bool mPlatformAuthorized{false};
     uint32_t mPlatformSubsystemId{0};

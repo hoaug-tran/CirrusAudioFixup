@@ -80,6 +80,8 @@ static constexpr PlatformProfile kPlatformProfiles[] = {
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
     {"acpi-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 0, nullptr, false, nullptr, nullptr, 0, nullptr, nullptr,
      nullptr, BoardIdentitySource::ACPI},
+    {"acpi-csc3556-cs35l56-probe", "CSC3556", core::AmplifierModel::CS35L56, nullptr, 0, nullptr, false, nullptr, nullptr, 0, nullptr,
+     nullptr, nullptr, BoardIdentitySource::ACPI},
 };
 
 static constexpr PlatformProfile kSafeUnknownPlatform = {

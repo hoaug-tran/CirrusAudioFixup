@@ -2,8 +2,8 @@
 
 Tracking: [hardware request #8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8).
 
-CS35L56 is not supported yet. The first implementation target is read-only
-diagnostics for the ASUS GU605MV; playback is a later, separately reviewed stage.
+CS35L56 playback is not supported yet. Experimental read-only diagnostics are
+implemented for SPI `CSC3556` and await target validation on the ASUS GU605MV.
 The reporter currently accepts read-only builds only. Writable testing requires
 a willing tester and a recoverable EFI before that stage can be validated.
 
@@ -25,6 +25,46 @@ The three upstream firmware/tuning assets match the hashes supplied in #8:
 
 Firmware, calibration records and machine dumps stay outside this roadmap.
 Confirm upstream licensing and required notices before embedding any new assets.
+
+## Read-only implementation
+
+Boot with `-cirrusro -cirrusdbg`, keeping the existing AppleALC configuration.
+Without `-cirrusro`, diagnostic-only attachment is rejected before SPI ownership.
+Read transactions configure the controller and toggle native/GPIO chip select;
+they never write amplifier registers, release reset, wake the amplifier, load
+firmware or start playback. A sleeping or reset-held device may not respond.
+
+The SPI map permits only four identity registers: `DEVID=0x0`, `REVID=0x4`,
+`RELID=0xc`, `OTPID=0x10`. Frames use 32-bit big-endian addresses and values,
+two padding bytes and read flag `0x80`. Identity compares `DEVID & 0x00ffffff`
+with `0x035a56`; revision `REVID & 0xff == 0xb0` is the captured B0 revision.
+Other revisions are reported as unverified, never authorized for initialization.
+
+GPIO layout comes from Linux's full Meteor Lake-P groups, including numbering
+holes, the `0xb0` ownership base and the per-community group ownership words.
+For the supplied DSDT, GPIO `0x82` maps to memory resource 1 / pad 27,
+reset `0x181` to resource 4 / pad 26, and speaker ID `0x168` to resource 4 / pad 8.
+Memory resources are resolved from the live ACPI provider; no physical MMIO
+addresses or GU605MV-only wiring is embedded in the driver.
+
+`Cirrus_SPI_*` properties preserve initial transfer results.
+`Cirrus_CS35L56_<endpoint>_*` properties report identity reads and their validity
+mask (bits 0..3 correspond to DEVID, REVID, RELID, OTPID).
+`Cirrus_SPI_Reset_*` observes the reset output latch without toggling it;
+`Cirrus_GPIO_Input_*` and `Cirrus_Platform_Discovery` report speaker ID sampling.
+The Linux regmap captures contain `XXXXXXXX`; they do not establish live register
+values and are not used to invent reset defaults or power sequences.
+
+Collect target results from the repository root:
+
+```sh
+ioreg -lw0 -p IOService -r -c CirrusAudioFixup
+sudo bash Tools/Collectors/collect_macos.sh
+```
+
+Host fixtures cover wire bytes, transfer failures, write/lifecycle rejection,
+and the supplied ACPI cross-community topology. They do not prove target kext
+load, actual SPI communication or physical audio behavior.
 
 ## Delivery gates
 
@@ -55,9 +95,15 @@ actually complete. Release changes follow `feature/* -> develop -> main`.
 ## Primary references
 
 - [Issue #8 and supplied logs](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8)
-- [Linux CS35L56 HDA driver](https://github.com/torvalds/linux/blob/master/sound/hda/codecs/side-codecs/cs35l56_hda.c)
-- [Linux CS35L56 shared implementation](https://github.com/torvalds/linux/blob/master/sound/soc/codecs/cs35l56-shared.c)
-- [Linux Meteor Point GPIO driver](https://github.com/torvalds/linux/blob/master/drivers/pinctrl/intel/pinctrl-meteorpoint.c)
+- [Linux CS35L56 HDA driver](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/sound/hda/codecs/side-codecs/cs35l56_hda.c)
+- [Linux CS35L56 register definitions](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/include/sound/cs35l56.h)
+- [Linux CS35L56 shared implementation](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/sound/soc/codecs/cs35l56-shared.c)
+- [Linux SPI regmap bus](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/drivers/base/regmap/regmap-spi.c)
+- [Linux Meteor Lake GPIO driver](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/drivers/pinctrl/intel/pinctrl-meteorlake.c)
+- [Linux Intel GPIO ownership and revision handling](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/drivers/pinctrl/intel/pinctrl-intel.c)
+- [Linux LPSS PCI controller profiles](https://github.com/torvalds/linux/blob/7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614/drivers/mfd/intel-lpss-pci.c)
 - [linux-firmware asset manifest](https://gitlab.com/kernel-firmware/linux-firmware/-/blob/main/WHENCE)
 
-Pin the relevant upstream revisions when implementing the corresponding code.
+Register and GPIO facts above are pinned to Linux commit
+`7be4bc52fd9e0e55dc9a2e0232b89427d2c4b614`. Further DSP and playback work must pin
+its sources and validate each lifecycle stage separately.

@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Experimental CS35L56 SPI identity diagnostics for `CSC3556`, requiring `-cirrusro`; no DSP, firmware loading or playback support.
+- Meteor Lake-P GPIO mapping for `INTC1083`/`INTC105E`, including the distinct ownership-register layout and cross-community speaker ID reads.
+
 ## [1.1.1] - 2026-10-21
 
 [Pull request #9](https://github.com/hoaug-tran/CirrusAudioFixup/pull/9)

@@ -7,6 +7,8 @@
 #include "Firmware/WMFW/WMFWFormat.hpp"
 #include <IOKit/IOLib.h>
 
+#include "Support/Logging.hpp"
+
 #define WMFW_MAGIC_0 'W'
 #define WMFW_MAGIC_1 'M'
 #define WMFW_MAGIC_2 'F'
@@ -24,7 +26,7 @@
 #define WMFW_ADSP2_XM 0x05
 #define WMFW_ADSP2_YM 0x06
 
-#define MAX_FIRMWARE_REGIONS 32
+#define MAX_FIRMWARE_REGIONS cirrus::firmware::wmfw::kMaxFirmwareRegions
 #define MAX_MAPPED_REGIONS 192
 
 enum class MappingStatus {
@@ -133,7 +135,7 @@ struct FirmwareImage {
     };
 
     uint32_t algorithmCount;
-    AlgorithmInfo algorithms[32];
+    AlgorithmInfo algorithms[64];
 
     union {
         uint32_t algorithmId;
@@ -161,13 +163,13 @@ struct FirmwareImage {
     };
 
     uint32_t wmfwAlgorithmCount;
-    WMFWAlgorithm wmfwAlgorithms[8];
+    WMFWAlgorithm wmfwAlgorithms[64];
 
     uint32_t wmfwControlCount;
     WMFWControl wmfwControls[512];
 
     uint32_t regionCount;
-    FirmwareRegion regions[32];
+    FirmwareRegion regions[MAX_FIRMWARE_REGIONS];
 
     uint32_t coefficientCount;
     CoefficientBlock coefficients[128];
@@ -318,7 +320,7 @@ public:
     static bool mapCoefficients(const FirmwareImage& image, MappedImage& outMapped) {
         outMapped.regionCount = 0;
         outMapped.mappingCrc = 0xFFFFFFFF;
-        if (image.coefficientCount > 128 || image.algorithmCount > 32)
+        if (image.coefficientCount > 128 || image.algorithmCount > 64)
             return false;
 
         for (uint32_t i = 0; i < image.coefficientCount; i++) {
@@ -439,7 +441,7 @@ public:
 
     static bool resolveControl(const FirmwareImage& fw, const WMFWControlRef& ref, uint32_t& reg) {
         reg = 0;
-        if (!ref.algorithm || !ref.control || fw.algorithmCount > 32)
+        if (!ref.algorithm || !ref.control || fw.algorithmCount > 64)
             return false;
         const auto& ctl = *ref.control;
         if (!ctl.len)
@@ -470,7 +472,7 @@ public:
 
     static bool findControl(const FirmwareImage* fw, const char* name, WMFWControlRef& out) {
         out = {};
-        if (!fw || !name || fw->wmfwAlgorithmCount > 8 || fw->wmfwControlCount > 512)
+        if (!fw || !name || fw->wmfwAlgorithmCount > 64 || fw->wmfwControlCount > 512)
             return false;
         for (uint32_t i = 0; i < fw->wmfwAlgorithmCount; i++) {
             const WMFWAlgorithm& alg = fw->wmfwAlgorithms[i];
@@ -531,7 +533,7 @@ public:
         CIRRUS_LOG("  name    = %s", alg_name);
         CIRRUS_LOG("  coeffs  = %u", ncoeff);
 
-        if (outImage->wmfwAlgorithmCount >= 8) {
+        if (outImage->wmfwAlgorithmCount >= 64) {
             CIRRUS_LOG("Warning: Maximum algorithms reached.");
             return false;
         }
@@ -671,7 +673,7 @@ public:
                 return false;
             }
 
-            if (outImage->regionCount < 32) {
+            if (outImage->regionCount < MAX_FIRMWARE_REGIONS) {
                 FirmwareRegion& reg = outImage->regions[outImage->regionCount++];
                 reg.baseWordOffset = offset;
                 reg.length = len;
@@ -735,7 +737,7 @@ public:
         if (!vmem || size < 40)
             return false;
         uint32_t count = readUnpacked32BE(vmem, 9);
-        if (!count || count > 31 || size < 40 + size_t(count) * 24)
+        if (!count || count > 63 || size < 40 + size_t(count) * 24)
             return false;
         for (uint32_t i = 0; i <= count; ++i) {
             uint32_t word = i ? 10 + (i - 1) * 6 : 3;

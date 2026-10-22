@@ -41,6 +41,7 @@ struct UploadStats {
     uint32_t crcMs;
     uint32_t totalMs;
     uint32_t retries;
+    int32_t nativeError{0};
 };
 
 }

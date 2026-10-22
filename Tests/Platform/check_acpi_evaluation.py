@@ -1,5 +1,4 @@
 """Exercise the production interpreter bridge and bounded reference conversion."""
-import os
 import subprocess
 import sys
 import tempfile
@@ -8,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "Tests/Fixtures"))
 from acpi_kernel_fixture import install
+from host_build import sanitizer_flags
 
 with tempfile.TemporaryDirectory(prefix="cirrus-acpi-evaluation-") as directory:
     tmp = Path(directory)
@@ -123,9 +123,7 @@ int main(){
     command = ["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation",
                "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), "-I" + str(ROOT / "Lilu/Lilu"),
                str(tmp / "test.cpp"), "-o", str(executable)]
-    subprocess.run(command, check=True)
-    subprocess.run([str(executable)], check=True)
-    if sys.platform != "win32":
-        subprocess.run(command + ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"], check=True)
-        subprocess.run([str(executable)], env=dict(os.environ, ASAN_OPTIONS="detect_leaks=1"), check=True)
+    for flags in sanitizer_flags():
+        subprocess.run(command + flags, check=True)
+        subprocess.run([str(executable)], check=True)
 print("PASS native ACPI references, symbol availability, owned conversion, bounded malformed results and failure cleanup")

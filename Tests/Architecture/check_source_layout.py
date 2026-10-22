@@ -108,8 +108,10 @@ assert 'evaluateInteger("_PSC"' not in native_host
 assert "spiControllerFactory" in (ROOT / "Platform/Board/PlatformProfile.hpp").read_text()
 print("PASS generic native communication ownership/factory/PM with module-owned Intel/AMD policy")
 
-firmware = ROOT / "Devices/Amplifiers/CS35L41/Resources"
-assert (firmware / "FirmwareData.cpp").read_text().count('Resources/Generated/FirmwareData.inc"') == 1
-assert sum('Resources/Generated/FirmwareData.inc"' in p.read_text() for p in files) == 1
-assert "extern const FirmwareResource cs35l41Firmware[];" in (firmware / "FirmwareData.hpp").read_text()
-assert "const uint8_t" not in (firmware / "FirmwareData.hpp").read_text()
+for chip in ("CS35L41", "CS35L56"):
+    firmware = ROOT / f"Devices/Amplifiers/{chip}/Resources"
+    include = f'Devices/Amplifiers/{chip}/Resources/Generated/FirmwareData.inc"'
+    assert (firmware / "FirmwareData.cpp").read_text().count(include) == 1
+    assert sum(include in p.read_text() for p in files) == 1
+    assert f"extern const FirmwareResource {chip.lower()}Firmware[];" in (firmware / "FirmwareData.hpp").read_text()
+    assert "const uint8_t" not in (firmware / "FirmwareData.hpp").read_text()

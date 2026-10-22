@@ -6,7 +6,7 @@ errata, OTP, idle checks, shutdown and lifecycle methods execute unchanged.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from production_source_fixture import driver_sources
+from production_source_fixture import driver_sources, cs35l56_sources
 from host_build import sanitizer_flags
 import subprocess,tempfile
 from driver_kernel_fixture import install
@@ -92,7 +92,7 @@ int main(){
         assert(registered && registered->model == core::AmplifierModel::CS35L41);
         assert(!f.registry.find("CSC3551", 0, core::BusTransportType::SPI));
         const auto* probe = f.registry.findModel("CSC3556", core::AmplifierModel::CS35L56, core::BusTransportType::SPI);
-        assert(probe && probe->diagnosticOnly && !probe->supportsDeferredFirmware && !probe->firmwareReset);
+        assert(probe && !probe->diagnosticOnly && probe->supportsDeferredFirmware && probe->firmwareReset);
         assert(!probe->format(core::BusTransportType::I2C));
     }
 
@@ -215,5 +215,5 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L56/CS35L56DriverFactory.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L56/CS35L56Diagnostics.cpp'),'-o',str(p/'driver')],check=True)
+        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

@@ -16,6 +16,9 @@ public:
     int32_t lastError() const override { return mMap.lastError(); }
     bool read(uint32_t reg, uint32_t* value) override { return mMap.read(reg, value); }
     bool write(uint32_t reg, uint32_t value) override { return mMap.write(reg, value); }
+    bool writeSequence(const uint32_t* registers, const uint32_t* values, size_t count, uint32_t delayUs) override {
+        return mMap.writeSequence(registers, values, count, delayUs);
+    }
     bool updateBits(uint32_t reg, uint32_t mask, uint32_t value) override { return mMap.updateBits(reg, mask, value); }
     bool bulkRead(uint32_t reg, uint8_t* data, size_t bytes) override { return mMap.bulkRead(reg, data, bytes); }
     bool bulkWrite(uint32_t reg, const uint8_t* data, size_t bytes) override { return mMap.bulkWrite(reg, data, bytes); }
@@ -24,11 +27,19 @@ public:
     }
 
 public:
-    static constexpr bool readableRegister(uint32_t reg) {
-        return reg == registers::kRegDeviceId || reg == registers::kRegRevisionId || reg == registers::kRegReleaseId ||
-               reg == registers::kRegOtpId;
+    static constexpr bool writableRegister(uint32_t reg) {
+        using namespace registers;
+        return dspMemoryRegister(reg) || reg == kRegAspEnables || reg == kRegAspControl1 || reg == kRegAspControl2 ||
+               reg == kRegAspControl3 || reg == kRegAspFrame1 || reg == kRegAspFrame5 || reg == kRegAspData1 || reg == kRegAspData5 ||
+               (reg >= kRegAspTx1 && reg <= kRegAspTx4) || (reg >= kRegSoundWireInput1 && reg <= kRegSoundWireInput4) ||
+               reg == kRegIrqMask18 || reg == kRegIrqMask20 || reg == kRegDspRawMailbox1 || reg == kRegDspVirtualMailbox1;
     }
-    static constexpr bool writableRegister(uint32_t) { return false; }
+    static constexpr bool readableRegister(uint32_t reg) {
+        using namespace registers;
+        return writableRegister(reg) || reg == kRegDeviceId || reg == kRegRevisionId || reg == kRegReleaseId || reg == kRegOtpId ||
+               reg == kRegIrqStatus || reg == kRegRestricted || (reg >= kRegOtpMemory53 && reg <= kRegOtpMemory53 + 8) ||
+               reg == kRegDspVirtualMailbox2 || reg == kRegIrqFault1 || reg == kRegIrqFault8;
+    }
     static constexpr core::RegisterMapConfig config() {
         core::RegisterMapConfig c{};
         c.paddingBytes = 2;

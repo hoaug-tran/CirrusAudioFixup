@@ -8,7 +8,9 @@ namespace cirrus::devices::amplifiers::cs35l56 {
 void CS35L56Driver::probeAmplifier() {
     CS35L56Device device(mHost.name(), mContext.endpoint);
     device.probe(mContext.io);
+    const auto runtime = static_cast<const RuntimeState&>(mAmplifier);
     mAmplifier = device.state();
+    static_cast<RuntimeState&>(mAmplifier) = runtime;
 }
 void CS35L56Driver::inspect() {
     probeAmplifier();

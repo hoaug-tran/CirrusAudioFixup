@@ -105,6 +105,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				95376C5690F5C469B5D94BC4,
+				73152A689B4B7B6AE33A6799,
+				BD159F9D2494BC75FAADA552,
+				F48ACD6413858572D03FDBD4,
+				12831FEB41B5E7A34CBE71CE,
 				62F7C487267DBD58635A22E8,
 				BBCE923D36207A125987460C,
 				CA6D495D96D3625F8D00875E,
@@ -708,6 +713,7 @@
 		ED302F0D07641DB0AB3FFF8D = {
 			isa = PBXGroup;
 			children = (
+				641075A4EF723F1F9B402853,
 				6D40FF03FC7BE8EE2E66E123,
 				60CD727161402076075D9B61,
 			);
@@ -1989,9 +1995,23 @@
 			path = InstanceState.hpp;
 			sourceTree = "<group>";
 		};
+		560D5C000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = DSPControl.hpp;
+			sourceTree = "<group>";
+		};
 		CAFE56000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				A6990BE2288C34D0A751AF8B,
+				CC31B1EA76EA07B5FC690D5A,
+				DB4FDC1909E8034E3F0BFE3F,
+				D3E7F4A587FC0AD5F8B4940A,
+				58A437700FA37E7F6260982C,
+				DABB9B2B47F07652A399DD5A,
+				560D5C000000000000000001,
+				086647FEC1117C886D9E2C4A,
 				D8AB24EAF2FB7ABA455C75F8,
 				DC6847EA9B113FE17A7A18F0,
 				96AFD6D1362B7A6ADB6BDEF2,
@@ -2007,6 +2027,126 @@
 			path = CS35L56;
 		};
 
+		8A9C90E4215CB787DF90A328 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ResourceSchema.hpp;
+			sourceTree = "<group>";
+		};
+		8AD4806FA7B1F8FE3E9D9AF2 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareData.hpp;
+			sourceTree = "<group>";
+		};
+		EF5A33B33E5DF0AD282EADED = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = FirmwareData.cpp;
+			sourceTree = "<group>";
+		};
+		E88A273A5A6A81A272C1ED19 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareSelection.hpp;
+			sourceTree = "<group>";
+		};
+		B21E22A74FEB3AE5A63C34B5 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = FirmwareData.inc;
+			sourceTree = "<group>";
+		};
+		175A30132D3DDA662D135E80 = {
+			isa = PBXGroup;
+			children = (
+				B21E22A74FEB3AE5A63C34B5,
+			);
+			path = Generated;
+			sourceTree = "<group>";
+		};
+		086647FEC1117C886D9E2C4A = {
+			isa = PBXGroup;
+			children = (
+				8A9C90E4215CB787DF90A328,
+				8AD4806FA7B1F8FE3E9D9AF2,
+				EF5A33B33E5DF0AD282EADED,
+				E88A273A5A6A81A272C1ED19,
+				175A30132D3DDA662D135E80,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		12831FEB41B5E7A34CBE71CE = {
+			isa = PBXBuildFile;
+			fileRef = EF5A33B33E5DF0AD282EADED;
+		};
+		DABB9B2B47F07652A399DD5A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L56Driver.cpp;
+			sourceTree = "<group>";
+		};
+		F48ACD6413858572D03FDBD4 = {
+			isa = PBXBuildFile;
+			fileRef = DABB9B2B47F07652A399DD5A;
+		};
+		58A437700FA37E7F6260982C = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L56Firmware.cpp;
+			sourceTree = "<group>";
+		};
+		BD159F9D2494BC75FAADA552 = {
+			isa = PBXBuildFile;
+			fileRef = 58A437700FA37E7F6260982C;
+		};
+		D3E7F4A587FC0AD5F8B4940A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L56Hardware.cpp;
+			sourceTree = "<group>";
+		};
+		73152A689B4B7B6AE33A6799 = {
+			isa = PBXBuildFile;
+			fileRef = D3E7F4A587FC0AD5F8B4940A;
+		};
+		DB4FDC1909E8034E3F0BFE3F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = CS35L56Internal.hpp;
+			sourceTree = "<group>";
+		};
+		CC31B1EA76EA07B5FC690D5A = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = CS35L56Playback.cpp;
+			sourceTree = "<group>";
+		};
+		95376C5690F5C469B5D94BC4 = {
+			isa = PBXBuildFile;
+			fileRef = CC31B1EA76EA07B5FC690D5A;
+		};
+		A6990BE2288C34D0A751AF8B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = RuntimeState.hpp;
+			sourceTree = "<group>";
+		};
+		641075A4EF723F1F9B402853 = {
+			isa = PBXGroup;
+			children = (
+				BB431315E91320C6507B5508,
+			);
+			path = Calibration;
+			sourceTree = "<group>";
+		};
+		BB431315E91320C6507B5508 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = EFICalibration.hpp;
+			sourceTree = "<group>";
+		};
 	};
 	rootObject = CAFE00000050;
 }

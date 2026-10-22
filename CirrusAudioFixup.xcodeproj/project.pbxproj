@@ -5,6 +5,34 @@
 	};
 	objectVersion = 56;
 	objects = {
+		536E5868C8A24281E4D743A4 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIObjectConverter.hpp;
+			sourceTree = "<group>";
+		};
+		376EDE0A6A4513F67036BD90 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIObject.hpp;
+			sourceTree = "<group>";
+		};
+		255D49113E4CD0F54CF499B6 = {
+			isa = PBXBuildFile;
+			fileRef = DF960C1387D6951EB58D365F;
+		};
+		DF960C1387D6951EB58D365F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = ACPIEvaluation.cpp;
+			sourceTree = "<group>";
+		};
+		1AB756B95D0CC47EF0DF1343 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIEvaluation.hpp;
+			sourceTree = "<group>";
+		};
 		A5C100000000000000000002 = {
 			isa = PBXBuildFile;
 			fileRef = A5C100000000000000000001;
@@ -105,6 +133,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				255D49113E4CD0F54CF499B6,
 				95376C5690F5C469B5D94BC4,
 				73152A689B4B7B6AE33A6799,
 				BD159F9D2494BC75FAADA552,
@@ -765,6 +794,10 @@
 		EEA1B1663A570631C0449F01 = {
 			isa = PBXGroup;
 			children = (
+				1AB756B95D0CC47EF0DF1343,
+				DF960C1387D6951EB58D365F,
+				376EDE0A6A4513F67036BD90,
+				536E5868C8A24281E4D743A4,
 				A5C100000000000000000004,
 				BB7372D2E62BC2AA18F2E02A,
 				9B1AA0FF3764E3D5DBFA46BE,

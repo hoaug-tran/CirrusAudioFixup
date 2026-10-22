@@ -8,6 +8,7 @@
 #include <libkern/c++/OSNumber.h>
 #if defined(KERNEL)
 #include "Support/BuildConfig.hpp"
+#include "Platform/ACPI/ACPIEvaluation.hpp"
 #endif
 
 bool ADDPR(debugEnabled) = false;
@@ -54,6 +55,15 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
     mach_vm_address_t originalSetState = 0;
     const char* audioPaths[] = {"/System/Library/Extensions/IOAudioFamily.kext/Contents/MacOS/IOAudioFamily"};
     KernelPatcher::KextInfo audioInfo[] = {{"com.apple.iokit.IOAudioFamily", audioPaths, 1, {true}, {}, 0}};
+
+#if defined(KERNEL)
+    const char* acpiPaths[] = {"/System/Library/Extensions/AppleACPIPlatform.kext/Contents/MacOS/AppleACPIPlatform"};
+    KernelPatcher::KextInfo acpiInfo[] = {{"com.apple.driver.AppleACPIPlatform", acpiPaths, 1, {true}, {}, 0}};
+    void acpiLoaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
+        if (index == acpiInfo[0].loadIndex)
+            cirrus::transport::configureACPIEvaluation(patcher, index, address, size);
+    }
+#endif
 
     bool readNumber(IORegistryEntry * entry, const char* key, uint32_t& value) {
         // Registry values can be replaced on another thread. A retained property
@@ -143,6 +153,10 @@ extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup
     IOLog("CirrusAudioFixup: BOOT_FLOW LILU_ACCESS_END ret=%u\n", unsigned(error));
     if (error == LiluAPI::Error::NoError) {
         registered = lilu.onKextLoad(audioInfo, 1, loaded) == LiluAPI::Error::NoError;
+#if defined(KERNEL)
+        const bool acpiRegistered = lilu.onKextLoad(acpiInfo, 1, acpiLoaded) == LiluAPI::Error::NoError;
+        registered = registered || acpiRegistered;
+#endif
         lilu.releaseAccess();
     }
     if (!registered)

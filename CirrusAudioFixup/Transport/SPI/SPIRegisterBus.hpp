@@ -20,6 +20,14 @@ public:
         return mController->command(mEndpoint, tx, nt, rx, nr);
     }
 
+    IOReturn writeSequence(const uint8_t* frames, size_t frameBytes, size_t count, uint32_t delayUs) override {
+        if (!mController)
+            return kIOReturnNotReady;
+        if (!mEndpoint.clockHz || mEndpoint.mode > 3)
+            return kIOReturnBadArgument;
+        return mController->writeSequence(mEndpoint, frames, frameBytes, count, delayUs);
+    }
+
 private:
     SPIController* mController;
     SPIEndpoint mEndpoint;

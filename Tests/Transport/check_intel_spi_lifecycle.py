@@ -30,7 +30,12 @@ inline void IOLockFree(IOLock* l) {assert(!l->held);++frees;}
 inline void IOLockLock(IOLock* l) {assert(!l->held);l->held=true;}
 inline void IOLockUnlock(IOLock* l) {assert(l->held);l->held=false;}
 inline void IODelay(unsigned us) {fakeNs+=uint64_t(us)*1000;}
-inline void IOSleep(unsigned ms) {fakeNs+=uint64_t(ms)*1000000;}
+inline bool requireLockedSleep=false;
+inline unsigned lockedSleeps=0;
+inline void IOSleep(unsigned ms) {
+    if(requireLockedSleep){assert(lockStorage.held);++lockedSleeps;}
+    fakeNs+=uint64_t(ms)*1000000;
+}
 inline void OSSynchronizeIO() {}
 ''')
     (tmp/'IOKit/IOService.h').write_text(r'''
@@ -113,11 +118,29 @@ int main(){
     {
         IntelLPSSSPIController bus;
         assert(bus.exchange(ep,tx,rx,10)==kIOReturnNotReady);
+        assert(bus.writeSequence(ep,tx,10,1,1000)==kIOReturnNotReady);
+        assert(bus.writeSequence(ep,nullptr,10,1,1000)==kIOReturnBadArgument);
+        assert(bus.writeSequence(ep,tx,10,bus.maxTransferBytes()/10+1,1000)==kIOReturnBadArgument);
+        assert(bus.writeSequence(ep,tx,10,0,1000)==kIOReturnBadArgument);
+        assert(bus.writeSequence(ep,tx,10,1,100001)==kIOReturnBadArgument);
+        assert(bus.writeSequence(ep,tx,10,2,50001)==kIOReturnBadArgument);
+        assert(bus.writeSequence(ep,tx,10,2,0xffffffffU)==kIOReturnBadArgument);
         assert(bus.bind(&pci,&owner)==0&&pci.refs==2&&pci.opened&&pci.memory);
         assert(bus.bind(&pci,&owner)==kIOReturnBusy);
+        uint8_t frames[20]{};
+        requireLockedSleep=true;
+        auto sequenceResult=bus.writeSequence(ep,frames,10,2,1000);
+        requireLockedSleep=false;
+        assert(sequenceResult!=kIOReturnSuccess);
+        assert(lockedSleeps==2&&!lockStorage.held);
+        uint8_t otherFrames[30]{};
+        assert(bus.writeSequence(ep,otherFrames,10,3,0)!=kIOReturnBadArgument);
+        assert(lockedSleeps==2&&!lockStorage.held);
         auto clock=pci.map.regs[0x200/4];
         bus.suspend();
         assert(bus.exchange(ep,tx,rx,10)==kIOReturnNotReady&&pci.map.regs[0x200/4]==clock);
+        assert(bus.writeSequence(ep,frames,10,2,1000)==kIOReturnNotReady);
+        assert(lockedSleeps==2&&!lockStorage.held);
         pci.state=3;assert(bus.resume()==kIOReturnNotReady);
         bus.suspend();assert(bus.exchange(ep,tx,rx,10)==kIOReturnNotReady);
         pci.state=0; pci.memory=false; pci.rejectMemory=true;

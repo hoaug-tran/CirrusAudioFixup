@@ -61,6 +61,7 @@ public:
     IOReturn resume();
     size_t maxTransferBytes() const override { return LPSSSPIEngine::kMaxFrameBytes; }
     IOReturn exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) override;
+    IOReturn writeSequence(const SPIEndpoint& endpoint, const uint8_t* frames, size_t frameBytes, size_t count, uint32_t delayUs) override;
 
 private:
     class MMIOWindow final : public RegisterWindow {

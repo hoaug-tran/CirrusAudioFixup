@@ -587,6 +587,47 @@ void IntelLPSSSPIController::publishTransactionEvidence(const char* prefix, cons
 #endif
 }
 
+IOReturn IntelLPSSSPIController::writeSequence(const SPIEndpoint& endpoint, const uint8_t* frames, size_t frameBytes, size_t count,
+                                             uint32_t delayUs) {
+    // Bound the time the reset sequence can exclude all other bus clients.
+    constexpr uint32_t maxSequenceDelayUs = 100000;
+    if (!frames || !frameBytes || frameBytes > maxTransferBytes() || !count || count > maxTransferBytes() / frameBytes ||
+        uint64_t(count) * delayUs > maxSequenceDelayUs)
+        return kIOReturnBadArgument;
+    if (!mLock)
+        return kIOReturnNotReady;
+#if defined(KERNEL)
+    // Power validation may enter AML and must precede the transaction lock.
+    const auto powerResult = mChipSelects.validatePower();
+    if (powerResult != kIOReturnSuccess)
+        return powerResult;
+#endif
+    IOLockLock(mLock);
+    IOReturn result = kIOReturnNotReady;
+    if (mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U)) {
+        result = kIOReturnSuccess;
+        for (size_t i = 0; i < count; ++i) {
+            IOReturn transferResult;
+#if defined(KERNEL)
+            transferResult = mChipSelects.validateOutputs();
+            if (transferResult == kIOReturnSuccess)
+                transferResult = mEngine.exchange(endpoint, frames + i * frameBytes, nullptr, frameBytes,
+                                                  mChipSelects.select(endpoint.chipSelect));
+#else
+            transferResult = mEngine.exchange(endpoint, frames + i * frameBytes, nullptr, frameBytes);
+#endif
+            if (result == kIOReturnSuccess)
+                result = transferResult;
+            // CS35L56 requires the following PING even if SYSTEM_RESET failed.
+            // Preserve the first error, and retain the bus through every delay.
+            if (delayUs)
+                IOSleep(delayUs / 1000 + (delayUs % 1000 != 0));
+        }
+    }
+    IOLockUnlock(mLock);
+    return result;
+}
+
 IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uint8_t* tx, uint8_t* rx, size_t length) {
     if (!mLock)
         return kIOReturnNotReady;

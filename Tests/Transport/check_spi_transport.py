@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-spi-') as directory:
     (tmp/'IOKit/IOLib.h').write_text('''#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
-              kIOReturnNotPermitted=-3,kIOReturnTimeout=-4;
+              kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnUnsupported=-5;
 inline unsigned sleeps=0;
 inline void IOSleep(unsigned) { ++sleeps; }
 ''')
@@ -45,6 +45,23 @@ struct Controller : SPIController {
     }
 };
 int main() {
+    {
+        struct SequenceController : Controller {
+            unsigned sequences=0;
+            IOReturn writeSequence(const SPIEndpoint& endpoint,const uint8_t* frames,size_t bytes,size_t count,uint32_t delay) override {
+                assert(endpoint.chipSelect==1&&endpoint.clockHz==1000000&&endpoint.mode==0);
+                assert(bytes==10&&count==2&&delay==4700);
+                assert(frames[3]==0x20&&frames[9]==7&&frames[16]==0x0a);
+                ++sequences;return -77;
+            }
+        } controller;
+        SPIRegisterBus bus(&controller,{1,1000000,0});
+        cirrus::core::RegisterMapConfig config;config.paddingBytes=2;
+        cirrus::core::RegisterMap map(bus,config,true);
+        uint32_t registers[]={0x11020,0x11000},values[]={0x02000007,0x0a000000};
+        assert(!map.writeSequence(registers,values,2,4700));
+        assert(map.lastReturn()==-77&&controller.sequences==1&&controller.calls==0);
+    }
     SPIEndpoint ep{1,1000000,0};
     Controller c;
     cirrus::devices::amplifiers::cs35l41::CS35L41SPIRegisterIO io(&c,ep,true);

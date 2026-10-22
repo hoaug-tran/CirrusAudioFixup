@@ -24,6 +24,11 @@ public:
     virtual bool readForDiagnostic(uint32_t reg, uint32_t* value) { return read(reg, value); }
     virtual bool bulkReadForDiagnostic(uint32_t reg, uint8_t* data, size_t length) { return bulkRead(reg, data, length); }
     virtual bool write(uint32_t reg, uint32_t value) = 0;
+    // Preflight all frames, then hold the bus across every write and delay,
+    // including the final delay. Attempt the remaining writes after a transfer
+    // error (reset delimiters may still be required), returning the first error.
+    // Unsupported transports reject the complete sequence without transfers.
+    virtual bool writeSequence(const uint32_t*, const uint32_t*, size_t, uint32_t) { return false; }
     // Optional traced views keep operation provenance when an independent chip
     // driver borrows the service port. Native transports need no tracing policy.
     virtual bool readWithTrace(uint32_t reg, uint32_t* value, diagnostics::TraceSource source) {

@@ -127,6 +127,15 @@ public:
     bool read(uint32_t address, uint32_t* value) override { return mService->readRegister(mAmplifier, address, value, mSource); }
 
     bool write(uint32_t address, uint32_t value) override { return mService->writeRegister(mAmplifier, address, value, mSource); }
+    bool writeSequence(const uint32_t* registers, const uint32_t* values, size_t count, uint32_t delayUs) override {
+        if (!mService->communicationReady() || !mAmplifier.registerIO) {
+            mService->mLastTransferReturn = kIOReturnNotReady;
+            return false;
+        }
+        const bool result = mAmplifier.registerIO->writeSequence(registers, values, count, delayUs);
+        mService->mLastTransferReturn = mAmplifier.registerIO->lastError();
+        return result;
+    }
 
     bool readWithTrace(uint32_t r, uint32_t* v, TraceSource source) override { return mService->readRegister(mAmplifier, r, v, source); }
     bool writeWithTrace(uint32_t r, uint32_t v, TraceSource source) override { return mService->writeRegister(mAmplifier, r, v, source); }

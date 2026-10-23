@@ -4,7 +4,7 @@
 #include "Core/AudioTypes.hpp"
 #include "Devices/Amplifiers/CS35L41/DeviceConfiguration.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
-#include "Devices/Amplifiers/CS35L41/Board/BoardPropertyCorrections.hpp"
+#include "Devices/Amplifiers/CS35L41/Board/BoardProperties.hpp"
 #include "Platform/Board/BoardDiscovery.hpp"
 namespace cirrus::devices::amplifiers::cs35l41 {
 using ResourceAvailable = bool (*)(uint16_t, uint16_t, uint32_t);
@@ -111,13 +111,13 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         consumed[index] = true;
         usedChannel[channels[index]] = true;
         auto& device = result->devices[i];
-        // Subsystem-specific firmware correction, not a machine transport or
-        // speaker map. Linux v6.12 cs35l41_hda_property.c documents this defect.
-        if (const auto* correction = propertyCorrection(context.identity.subsystemVendor, context.identity.subsystemDevice)) {
-            boost[index] = 0;
-            inductor[index] = correction->power.inductorNanohenry;
-            peak[index] = correction->power.peakMilliamp;
-            capacitor[index] = correction->power.capacitorMicrofarad;
+        // Linux's known-board configuration supplies authoritative electrical
+        // values even when firmware contains an incorrect boost declaration.
+        if (const auto* correction = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice)) {
+            boost[index] = correction->internalBoost ? 0 : 1;
+            inductor[index] = correction->inductor;
+            peak[index] = correction->peak;
+            capacitor[index] = correction->capacitor;
         }
         // Only the implemented internal topology may be discovered here.
         // External-with-switch/shared-boost require their own power contracts;

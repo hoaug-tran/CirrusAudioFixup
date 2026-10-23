@@ -385,7 +385,7 @@
 		68D902B001E3BD196D84BBF4 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
-			path = BoardPropertyCorrections.hpp;
+			path = BoardProperties.hpp;
 			sourceTree = "<group>";
 		};
 		57080D45B33F828D5736F88B = {

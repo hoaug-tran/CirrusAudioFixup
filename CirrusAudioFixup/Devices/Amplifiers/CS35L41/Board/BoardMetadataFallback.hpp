@@ -33,8 +33,9 @@ inline bool prepareBoardMetadata(const platform::BoardIdentity& identity, IOACPI
     const bool valid = resources && result == kIOReturnSuccess && bytes &&
                        transport::parseACPISPIResources(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(),
                                                         *resources) == transport::ACPISPIResult::Success &&
-                       resources->count == 2 && resources->endpoints[0].endpoint.chipSelect == 0 &&
-                       resources->endpoints[1].endpoint.chipSelect == 1 &&
+                       resources->count == 2 && resources->endpoints[0].endpoint.chipSelect <= 1 &&
+                       resources->endpoints[1].endpoint.chipSelect <= 1 &&
+                       resources->endpoints[0].endpoint.chipSelect != resources->endpoints[1].endpoint.chipSelect &&
                        !strcmp(resources->endpoints[0].source, resources->endpoints[1].source);
     auto* controller = valid ? transport::resolveACPIDevice(amplifier, resources->endpoints[0].source) : nullptr;
     delete resources;

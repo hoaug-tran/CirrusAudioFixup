@@ -22,6 +22,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-board-metadata-") as directory:
     install(tmp)
     (tmp / "test.cpp").write_text(r'''
 #define KERNEL 1
+#include <algorithm>
 #include "Fixture.hpp"
 #include "Devices/Amplifiers/CS35L41/Board/BoardMetadataFallback.hpp"
 #include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
@@ -62,25 +63,33 @@ int main(){
   if(board.internalBoost)assert(board.inductor&&board.peak&&board.capacitor);
   else assert(!board.inductor&&!board.peak&&!board.capacitor);
  }
- for(bool renamed:{false,true}){
+ for(bool renamed:{false,true})for(bool reversed:{false,true}){
   IOACPIPlatformDevice spi,amp,gpio;IOService owner;
   spi.path=renamed?"IOACPIPlane:/_SB/TEST/SPI7":"IOACPIPlane:/_SB/PC00/SPI3";
   amp.path=spi.path+(renamed?"/AMPS":"/SPK1");gpio.path="IOACPIPlane:/_SB/GPI0";
   ::devices={&spi,&amp,&gpio};
   auto crs=capturedCRS();
+  if(reversed){const size_t descriptorBytes=3+crs[1]+(size_t(crs[2])<<8);
+   std::rotate(crs.begin(),crs.begin()+descriptorBytes,crs.begin()+2*descriptorBytes);}
   if(renamed){const std::string old="PC00.SPI3",replacement="TEST.SPI7";
    for(size_t i=0;i+old.size()<=crs.size();++i)
     if(!memcmp(crs.data()+i,old.data(),old.size()))memcpy(crs.data()+i,replacement.data(),replacement.size());}
-  amp.values["_CRS"]=make<OSData>(crs);
+  const platform::BoardIdentity identity{0x1043,0x1c9f,"CSC3551"};
   spi.dsdValidation=amp.dsdValidation=gpio.dsdValidation=kIOReturnError;
   spi.absentValidation=amp.absentValidation=gpio.absentValidation=kIOReturnError;
+  for(uint8_t selection:{crs[19],uint8_t(2)}){
+   auto invalid=crs;const size_t descriptorBytes=3+crs[1]+(size_t(crs[2])<<8);
+   invalid[descriptorBytes+19]=selection;
+   amp.values["_CRS"]=make<OSData>(invalid);IOService rejected;
+   assert(!prepareBoardMetadata(identity,&amp,&rejected)&&!rejected.getProperty("Cirrus_Board_Metadata"));
+  }
+  amp.values["_CRS"]=make<OSData>(crs);
   gpio.values["_HID"]=make<OSString>("INTC1085");
   auto* cs=make<IOMemoryMap>();auto* reset=make<IOMemoryMap>();auto* speaker=make<IOMemoryMap>();
   for(auto* map:{cs,reset,speaker}){map->r[0]=0x960000;map->r[3]=0x700;}
   cs->r[(0x700+20*16)/4]=0x84000201;reset->r[0x700/4]=0x44000200;
   const auto input=(0x700+24*16)/4;speaker->r[input]=0x84000102;
   gpio.maps={{4,cs},{3,reset},{1,speaker}};
-  const platform::BoardIdentity identity{0x1043,0x1c9f,"CSC3551"};
   assert(prepareBoardMetadata(identity,&amp,&owner));
   assert(owner.strings["Cirrus_Board_Metadata_Source"]=="CS35L41_VERIFIED_BOARD_TABLE");
   // Metadata does not mutate firmware/provider devices or publish AML methods.

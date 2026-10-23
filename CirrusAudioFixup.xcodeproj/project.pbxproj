@@ -5,6 +5,24 @@
 	};
 	objectVersion = 56;
 	objects = {
+		A5C300000000000000000001 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.python;
+			path = check_board_metadata.py;
+			sourceTree = "<group>";
+		};
+		A5C100000000000000000004 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = ACPIBoardMetadata.hpp;
+			sourceTree = "<group>";
+		};
+		2AEE4CC8D4CE5926ACF3BC3F = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = BoardMetadataFallback.hpp;
+			sourceTree = "<group>";
+		};
 		536E5868C8A24281E4D743A4 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.h;
@@ -397,6 +415,7 @@
 		65D959E5E3E9B5CAFC8B7078 = {
 			isa = PBXGroup;
 			children = (
+				2AEE4CC8D4CE5926ACF3BC3F,
 				68D902B001E3BD196D84BBF4,
 				57080D45B33F828D5736F88B,
 			);
@@ -785,6 +804,7 @@
 				DF960C1387D6951EB58D365F,
 				376EDE0A6A4513F67036BD90,
 				536E5868C8A24281E4D743A4,
+				A5C100000000000000000004,
 				BB7372D2E62BC2AA18F2E02A,
 				9B1AA0FF3764E3D5DBFA46BE,
 				906368FCA2EB8FE548BD7705,
@@ -1517,6 +1537,7 @@
 			children = (
 				F591CFC96A34BE99AC448C58,
 				F23737CE79C498D379A1C69C,
+				A5C300000000000000000001,
 				A5C100000000000000000007,
 				A5C200000000000000000006,
 				30E3DFCA2E12167BA7C20612,

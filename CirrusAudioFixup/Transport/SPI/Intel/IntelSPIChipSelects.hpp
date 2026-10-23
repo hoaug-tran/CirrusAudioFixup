@@ -23,7 +23,7 @@ public:
         mTrace = trace;
         ACPIDeviceProperties properties;
         report("CS_DSD_BEGIN");
-        auto result = properties.load(controller);
+        auto result = properties.load(controller, owner);
         diagnostics::ACPIObjectEvidence::publish(owner, "Cirrus_SPI_DSD", properties.object());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Source", properties.source());
@@ -191,7 +191,7 @@ public:
         if (result != kIOReturnSuccess || !source || !property || index >= kCapacity)
             return result != kIOReturnSuccess ? result : kIOReturnBadArgument;
         ACPIDeviceProperties properties;
-        result = properties.load(source);
+        result = properties.load(source, mOwner);
         if (result != kIOReturnSuccess)
             return result;
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
@@ -254,7 +254,7 @@ public:
         if (result != kIOReturnSuccess)
             return result;
         ACPIDeviceProperties properties;
-        result = properties.load(source);
+        result = properties.load(source, mOwner);
         if (result != kIOReturnSuccess)
             return result;
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
@@ -390,7 +390,7 @@ private:
     void observeReset(IOACPIPlatformDevice* source) {
         mOwner->setProperty("Cirrus_SPI_Reset_Observation", "PAD_TX_LATCH_READBACK_NOT_EXTERNAL_WAVEFORM");
         ACPIDeviceProperties properties;
-        const auto result = properties.load(source);
+        const auto result = properties.load(source, mOwner);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Return", uint64_t(uint32_t(result)), 32);
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Reason", properties.reason());
         mOwner->setProperty("Cirrus_SPI_Reset_Properties_Source", properties.source());
@@ -542,7 +542,7 @@ private:
         mOwner->setProperty("Cirrus_SPI_GPIO_HID", hid ? hid->getCStringNoCopy() : "UNAVAILABLE");
         mOwner->setProperty("Cirrus_SPI_GPIO_HID_Return", uint64_t(uint32_t(result)), 32);
         ACPIDeviceProperties native;
-        const auto nativeResult = native.load(provider);
+        const auto nativeResult = native.load(provider, mOwner);
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Return", uint64_t(uint32_t(nativeResult)), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Reason", native.reason());
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Source", native.source());

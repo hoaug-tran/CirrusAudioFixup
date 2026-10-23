@@ -54,6 +54,9 @@ struct AmplifierDriverRegistration {
     bool (*validDebugPhase)(const char*){nullptr};
     DiscoveredBoard* (*discoverBoard)(const BoardDiscoveryContext&, const char*& reason){nullptr};
     const FirmwareResetSequence* firmwareReset{nullptr};
+    // Optional module-owned missing-firmware facts. No hardware writes, AML
+    // injection or bus-specific board switches belong in the shared service.
+    bool (*prepareBoardMetadata)(const BoardIdentity&, IOACPIPlatformDevice*, IOService*){nullptr};
     // Diagnostic modules never authorize board writes or create a lifecycle.
     bool diagnosticOnly{false};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
@@ -69,6 +72,20 @@ public:
     static constexpr size_t kCapacity = 32;
     size_t count() const { return mCount; }
     const AmplifierDriverRegistration* at(size_t i) const { return i < mCount ? mDefinitions[i] : nullptr; }
+    bool prepareBoardMetadata(const BoardIdentity& identity, IOACPIPlatformDevice* device, IOService* owner,
+                              core::BusTransportType bus) const {
+        decltype(AmplifierDriverRegistration::prepareBoardMetadata) callback = nullptr;
+        for (size_t i = 0; i < mCount; ++i) {
+            const auto& definition = *mDefinitions[i];
+            if (!identity.acpiHid || strcmp(definition.acpiHid, identity.acpiHid) || !definition.format(bus) ||
+                !definition.prepareBoardMetadata)
+                continue;
+            if (callback && callback != definition.prepareBoardMetadata)
+                return false;
+            callback = definition.prepareBoardMetadata;
+        }
+        return !callback || callback(identity, device, owner);
+    }
     bool add(const AmplifierDriverRegistration& definition) {
         if (mCount == kCapacity || !definition.name || !*definition.name || !definition.acpiHid || !*definition.acpiHid ||
             !definition.siliconId || !definition.transportMask || (definition.transportMask & ~3U) ||

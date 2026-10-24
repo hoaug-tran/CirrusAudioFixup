@@ -1,6 +1,7 @@
 #include "Devices/Amplifiers/CS35L41/CS35L41Internal.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareData.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
+#include "Firmware/Calibration/EFICalibrationSource.hpp"
 #include "Firmware/WMFW/WMFWParser.hpp"
 #include "Firmware/WMFW/WMFWUploader.hpp"
 
@@ -57,9 +58,11 @@ void CS35L41Driver::initializeFirmware(AmplifierState& amp, const char* phaseArg
     if (wmfwMapped) {
         if (WMFWMemoryMapper::mapFirmwareImage(*image, *wmfwMapped)) {
             CIRRUS_LOG("mapping wmfw image successful on %s, starting upload", amp.name);
-            UploadSession session;
+            auto* session = static_cast<UploadSession*>(IOMalloc(sizeof(UploadSession)));
             DriverRegisterIO io(this, amp);
-            wmfwUploaded = WMFWUploadScheduler::run(amp.name, io, *wmfwMapped, session);
+            wmfwUploaded = session && WMFWUploadScheduler::run(amp.name, io, *wmfwMapped, *session);
+            if (session)
+                IOFree(session, sizeof(UploadSession));
         } else {
             CIRRUS_ERR("failed to map wmfw image on %s", amp.name);
             recordDiagnosticFailure(amp, DIAG_FIRMWARE_PARSE);
@@ -171,9 +174,11 @@ void CS35L41Driver::initializeFirmware(AmplifierState& amp, const char* phaseArg
         if (coeffMapped) {
             if (WMFWMemoryMapper::mapCoefficients(*image, *coeffMapped) && coeffMapped->regionCount > 0) {
                 CIRRUS_LOG("starting coefficient file upload on %s", amp.name);
-                UploadSession session;
+                auto* session = static_cast<UploadSession*>(IOMalloc(sizeof(UploadSession)));
                 DriverRegisterIO io(this, amp);
-                coefficientsUploaded = WMFWUploadScheduler::run(amp.name, io, *coeffMapped, session);
+                coefficientsUploaded = session && WMFWUploadScheduler::run(amp.name, io, *coeffMapped, *session);
+                if (session)
+                    IOFree(session, sizeof(UploadSession));
             } else {
                 CIRRUS_ERR("coefficient mapping produced no uploadable regions on %s", amp.name);
                 recordDiagnosticFailure(amp, DIAG_COEFFICIENT_PARSE);
@@ -295,15 +300,8 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
         }
     };
 
-    IORegistryEntry* options = IORegistryEntry::fromPath("IODeviceTree:/options");
-    if (!options) {
-        options = IORegistryEntry::fromPath("IODeviceTree:/chosen");
-    }
-    if (options) {
-        OSObject* prop = options->copyProperty("02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData");
-        if (!prop) {
-            prop = options->copyProperty("CirrusSmartAmpCalibrationData");
-        }
+    {
+        OSObject* prop = firmware::copyEFICalibrationProperty();
         invalidData = prop != nullptr;
         OSData* calData = OSDynamicCast(OSData, prop);
         if (calData) {
@@ -383,7 +381,6 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
         }
         if (prop)
             prop->release();
-        options->release();
     }
     if (uidReadFailed) {
         publishStatus("UID_READ_FAILED");
@@ -1351,14 +1348,16 @@ void CS35L41Driver::uploadFirmware(AmplifierState& amp, const char* phaseArg) {
         return;
     }
 
-    UploadSession session;
+    auto* session = static_cast<UploadSession*>(IOMalloc(sizeof(UploadSession)));
     DriverRegisterIO io(this, amp);
-    if (WMFWUploadScheduler::run(amp.name, io, *mappedImg, session)) {
+    if (session && WMFWUploadScheduler::run(amp.name, io, *mappedImg, *session)) {
         CIRRUS_LOG("firmware upload complete on %s", amp.name);
     } else {
         CIRRUS_ERR("firmware upload failed on %s", amp.name);
     }
 
+    if (session)
+        IOFree(session, sizeof(UploadSession));
     IOFree(mappedImg, sizeof(MappedImage));
     IOFree(image, sizeof(FirmwareImage));
 }

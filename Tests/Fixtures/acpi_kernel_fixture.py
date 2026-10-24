@@ -20,7 +20,7 @@ def install(tmp):
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnUnsupported=-3,kIOReturnNoDevice=-4,kIOReturnIOError=-5,kIOReturnNotPermitted=-6,
-kIOReturnNotFound=-7,kIOReturnExclusiveAccess=-8,kIOReturnNoResources=-9,kIOReturnTimeout=-10,kIOReturnError=-11;
+kIOReturnNoMemory=-12,kIOReturnNotFound=-7,kIOReturnExclusiveAccess=-8,kIOReturnNoResources=-9,kIOReturnTimeout=-10,kIOReturnError=-11;
 struct OSObject {unsigned refs=1;virtual ~OSObject()=default;virtual OSObject* metaCast(const char*){return nullptr;}
  void retain(){++refs;}void release(){assert(refs>1);--refs;}};
 inline std::vector<std::unique_ptr<OSObject>> arena;
@@ -34,7 +34,7 @@ struct OSString:OSObject {std::string s;explicit OSString(const char* v):s(v){}c
  bool isEqualTo(const char* v){return s==v;}bool isEqualTo(OSString* v){return v&&s==v->s;}};
 struct OSNumber:OSObject {uint64_t v;explicit OSNumber(uint64_t n):v(n){}uint64_t unsigned64BitValue(){return v;}uint32_t unsigned32BitValue(){return v;}
  static OSNumber* withNumber(uint64_t n,unsigned){auto* object=make<OSNumber>(n);object->retain();return object;}};
-struct OSData:OSObject {std::vector<uint8_t> v;explicit OSData(std::vector<uint8_t> b):v(std::move(b)){}size_t getLength(){return v.size();}void* getBytesNoCopy(){return v.data();}};
+struct OSData:OSObject {static OSData* withBytes(const void* data,unsigned size){auto* object=make<OSData>(size?std::vector<uint8_t>((const uint8_t*)data,(const uint8_t*)data+size):std::vector<uint8_t>{});object->retain();return object;}std::vector<uint8_t> v;explicit OSData(std::vector<uint8_t> b):v(std::move(b)){}size_t getLength(){return v.size();}void* getBytesNoCopy(){return v.data();}};
 struct OSArray:OSObject {std::vector<OSObject*> v;explicit OSArray(std::vector<OSObject*> b):v(std::move(b)){}
  static OSArray* withCapacity(unsigned){auto* object=make<OSArray>(std::vector<OSObject*>{});object->retain();return object;}
  bool setObject(OSObject* object){if(!object)return false;object->retain();v.push_back(object);return true;}

@@ -57,6 +57,8 @@ struct AmplifierDriverRegistration {
     // Optional module-owned missing-firmware facts. No hardware writes, AML
     // injection or bus-specific board switches belong in the shared service.
     bool (*prepareBoardMetadata)(const BoardIdentity&, IOACPIPlatformDevice*, IOService*){nullptr};
+    // Diagnostic modules never authorize board writes or create a lifecycle.
+    bool diagnosticOnly{false};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if (bus == core::BusTransportType::I2C && (transportMask & 1))
             return &i2cFormat;
@@ -87,8 +89,8 @@ public:
     bool add(const AmplifierDriverRegistration& definition) {
         if (mCount == kCapacity || !definition.name || !*definition.name || !definition.acpiHid || !*definition.acpiHid ||
             !definition.siliconId || !definition.transportMask || (definition.transportMask & ~3U) ||
-            (definition.platformContract && !*definition.platformContract) || !definition.identityMask || !definition.create ||
-            !definition.destroy ||
+            (definition.platformContract && !*definition.platformContract) || !definition.identityMask ||
+            (!definition.diagnosticOnly && (!definition.create || !definition.destroy)) ||
             ((definition.transportMask & 1) && (!core::RegisterMap::isValidConfig(definition.i2cFormat) || !definition.i2cFormat.readable ||
                                                 !definition.i2cFormat.writable)) ||
             ((definition.transportMask & 2) &&
@@ -162,7 +164,8 @@ public:
         if (definition && definition->platformContract &&
             (!context.platformContext || !context.platformContract || strcmp(definition->platformContract, context.platformContract)))
             return nullptr;
-        if (!definition || (context.firmware.format == firmware::FirmwareFormat::Deferred && !definition->supportsDeferredFirmware))
+        if (!definition || definition->diagnosticOnly ||
+            (context.firmware.format == firmware::FirmwareFormat::Deferred && !definition->supportsDeferredFirmware))
             return nullptr;
         auto* instance = definition->create(context);
         if (instance)

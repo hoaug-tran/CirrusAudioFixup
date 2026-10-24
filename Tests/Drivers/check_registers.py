@@ -234,15 +234,10 @@ def to_pascal(macro_name):
     parts = n.split('_')
     return 'k' + ''.join(p.capitalize() if not p.isdigit() else p for p in parts)
 
-test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"\n\n'
+test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"\n#include "Devices/Amplifiers/CS35L56/Hardware/Registers.hpp"\n\n'
 for m, v in LEGACY_MACROS:
     test_cpp += f'#define {m} {v}\n'
-test_cpp += '\nusing namespace cirrus::devices::amplifiers::cs35l41;\n\nint main() {\n'
-
-test_cpp = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"\n\n'
-for m, v in LEGACY_MACROS:
-    test_cpp += f'#define {m} {v}\n'
-test_cpp += '\nusing namespace cirrus::devices::amplifiers::cs35l41;\n\nint main() {\n'
+test_cpp += '\nusing namespace cirrus::devices::amplifiers::cs35l41;\n\nnamespace cs35l56 = cirrus::devices::amplifiers::cs35l56::registers;\nint main() {\n'
 
 count = 0
 for macro, _ in LEGACY_MACROS:
@@ -262,7 +257,86 @@ test_cpp += '''
     static_assert(registers::kPlaybackDspGain == 0x233);
     static_assert(registers::kPlaybackBypassGain == 0x84);
 '''
-test_cpp += f'    std::printf("PASS legacy register aliases (%u mapped) and independent Linux reset/volume/gain policy.\\n", {count});\n    return 0;\n}}\n'
+# Independent CS35L56 B0 definitions from Linux 7be4bc52fd9e cs35l56.h.
+test_cpp += '''
+    static_assert(cs35l56::kRegDeviceId == 0x00000000);
+    static_assert(cs35l56::kRegRevisionId == 0x00000004);
+    static_assert(cs35l56::kRegReleaseId == 0x0000000C);
+    static_assert(cs35l56::kRegOtpId == 0x00000010);
+    static_assert(cs35l56::kDeviceIdMask == 0x00FFFFFF);
+    static_assert(cs35l56::kRevisionB0 == 0x000000B0);
+    static_assert(cs35l56::kRegDspRawMailbox1 == 0x00011000);
+    static_assert(cs35l56::kRegDspVirtualMailbox1 == 0x00011020);
+    static_assert(cs35l56::kRegDspVirtualMailbox2 == 0x00011024);
+    static_assert(cs35l56::kRegDspHaloState == 0x028021E0);
+    static_assert(cs35l56::kRegDspPowerState == 0x02804308);
+    static_assert(cs35l56::kRegDspXMemory == 0x02800000);
+    static_assert(cs35l56::kCommandSystemReset == 0x02000007);
+    static_assert(cs35l56::kCommandPing == 0x0A000000);
+    static_assert(cs35l56::kCommandShutdown == 0x02000005);
+    static_assert(cs35l56::kSPIResetToPortReadyUs == 0x0000125C);
+    static_assert(cs35l56::kRegIrqStatus == 0x0000E004);
+    static_assert(cs35l56::kRegIrqMask20 == 0x0000E0DC);
+    static_assert(cs35l56::kRegIrqMask18 == 0x0000E0D4);
+    static_assert(cs35l56::kRegIrqFault1 == 0x0000E010);
+    static_assert(cs35l56::kRegIrqFault8 == 0x0000E02C);
+    static_assert(cs35l56::kRegOtpMemory53 == 0x000300D4);
+    static_assert(cs35l56::kRegRestricted == 0x000190F0);
+    static_assert(cs35l56::kRegFirmwareVersion == 0x02800010);
+    static_assert(cs35l56::kRegProtectionStatus == 0x034000D8);
+    static_assert(cs35l56::kRegUserMute == 0x03400024);
+    static_assert(cs35l56::kRegUserVolume == 0x0340002C);
+    static_assert(cs35l56::kRegPosture == 0x03400094);
+    static_assert(cs35l56::kRegTransducerState == 0x03400150);
+    static_assert(cs35l56::kRegAspEnables == 0x00004800);
+    static_assert(cs35l56::kRegAspControl1 == 0x00004804);
+    static_assert(cs35l56::kRegAspControl2 == 0x00004808);
+    static_assert(cs35l56::kRegAspControl3 == 0x0000480C);
+    static_assert(cs35l56::kRegAspFrame1 == 0x00004810);
+    static_assert(cs35l56::kRegAspFrame5 == 0x00004820);
+    static_assert(cs35l56::kRegAspData1 == 0x00004830);
+    static_assert(cs35l56::kRegAspData5 == 0x00004840);
+    static_assert(cs35l56::kRegAspTx1 == 0x00004C20);
+    static_assert(cs35l56::kRegAspTx2 == 0x00004C24);
+    static_assert(cs35l56::kRegAspTx3 == 0x00004C28);
+    static_assert(cs35l56::kRegAspTx4 == 0x00004C2C);
+    static_assert(cs35l56::kRegSoundWireInput1 == 0x00004C70);
+    static_assert(cs35l56::kRegSoundWireInput2 == 0x00004C74);
+    static_assert(cs35l56::kRegSoundWireInput3 == 0x00004C78);
+    static_assert(cs35l56::kRegSoundWireInput4 == 0x00004C7C);
+    static_assert(cs35l56::kFirmwareMissingMask == 0x00000001);
+    static_assert(cs35l56::kCommandPreventHibernate == 0x02000003);
+    static_assert(cs35l56::kCommandAudioPlay == 0x0B000001);
+    static_assert(cs35l56::kCommandAudioPause == 0x0B000002);
+    static_assert(cs35l56::kCommandAudioReinit == 0x0B000003);
+    static_assert(cs35l56::kControlPortReadyUs == 0x00000898);
+    static_assert(cs35l56::kWakeHoldTimeUs == 0x000003E8);
+    static_assert(cs35l56::kHaloStatePollUs == 0x000003E8);
+    static_assert(cs35l56::kHaloStateTimeoutUs == 0x0003D090);
+    static_assert(cs35l56::kMailboxPollUs == 0x000000FA);
+    static_assert(cs35l56::kMailboxTimeoutUs == 0x00001388);
+    static_assert(cs35l56::kPS0PollUs == 0x000001F4);
+    static_assert(cs35l56::kPS0TimeoutUs == 0x0000C350);
+    static_assert(cs35l56::kPS3PollUs == 0x000001F4);
+    static_assert(cs35l56::kPS3TimeoutUs == 0x000493E0);
+    static_assert(cs35l56::kRestrictedMask == 0x00000007);
+    static_assert(cs35l56::kProtectionFaultMask == 0x80000000);
+    static_assert(cs35l56::kLastRegister == 0x03804FE8);
+    static_assert(cs35l56::kRevisionIdMask == 0xFF);
+    static_assert(cs35l56::kAspReceiveMask == 0x30000);
+    static_assert(cs35l56::dspMemoryRange(0x02000000, 0x6000));
+    static_assert(!cs35l56::dspMemoryRange(0x02006000, 4));
+    static_assert(cs35l56::dspMemoryRange(0x02800000, 0x8000));
+    static_assert(!cs35l56::dspMemoryRange(0x02808000, 4));
+    static_assert(cs35l56::dspMemoryRange(0x02C00000, 0x47F4));
+    static_assert(!cs35l56::dspMemoryRange(0x02C047F4, 4));
+    static_assert(cs35l56::dspMemoryRange(0x03400000, 0x5FF8));
+    static_assert(!cs35l56::dspMemoryRange(0x03405FF8, 4));
+    static_assert(cs35l56::dspMemoryRange(0x03800000, 0x4FEC));
+    static_assert(!cs35l56::dspMemoryRange(0x03804FEC, 4));
+'''
+
+test_cpp += f'    std::printf("PASS legacy register aliases (%u mapped) and independent CS35L41/CS35L56 Linux register policy.\\n", {count});\n    return 0;\n}}\n'
 
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp = Path(tmpdir)

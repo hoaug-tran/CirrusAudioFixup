@@ -28,7 +28,7 @@ public:
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Source", properties.source());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Native_Object_Type", properties.nativeObjectType());
-        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Adapter_Return", uint64_t(uint32_t(properties.adapterReturn())), 32);
+        owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reference_Return", uint64_t(uint32_t(properties.referenceReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Validate_Return", uint64_t(uint32_t(properties.validationReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Evaluate_Return", uint64_t(uint32_t(properties.evaluationReturn())), 32);
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Object_Type", ACPIDeviceProperties::objectType(properties.object()));
@@ -548,7 +548,7 @@ private:
         mOwner->setProperty("Cirrus_SPI_GPIO_Properties_Source", native.source());
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Validate_Return", uint64_t(uint32_t(native.validationReturn())), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Evaluate_Return", uint64_t(uint32_t(native.evaluationReturn())), 32);
-        mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Adapter_Return", uint64_t(uint32_t(native.adapterReturn())), 32);
+        mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Reference_Return", uint64_t(uint32_t(native.referenceReturn())), 32);
         mOwner->setProperty("Cirrus_SPI_GPIO_DSD_Native_Object_Type", native.nativeObjectType());
         diagnostics::ACPIObjectEvidence::publish(mOwner, "Cirrus_SPI_GPIO_DSD", native.object());
         // GPIO metadata is optional when firmware exposes an unmodified,

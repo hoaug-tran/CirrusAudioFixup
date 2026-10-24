@@ -64,6 +64,33 @@ public:
         Guard guard(mLock);
         return writeUnlocked(reg, value);
     }
+    bool writeSequence(const uint32_t* registers, const uint32_t* values, size_t count, uint32_t delayUs) override {
+        Guard guard(mLock);
+        if (!validConfig() || !registers || !values || !count)
+            return fail(kIOReturnBadArgument);
+        if (!mAllowWrites)
+            return fail(kIOReturnNotPermitted);
+        const size_t header = mConfig.addressBytes + mConfig.paddingBytes;
+        const size_t frameBytes = header + mConfig.valueBytes;
+        if (count > kFrameBytes / frameBytes || mBus.maxPayloadBytes(header, false) < mConfig.valueBytes)
+            return fail(kIOReturnBadArgument);
+        uint8_t frames[kFrameBytes]{};
+        for (size_t i = 0; i < count; ++i) {
+            const auto reg = registers[i];
+            if (reg % mConfig.stride || reg > mConfig.maxRegister || (values[i] & ~valueMask()))
+                return fail(kIOReturnBadArgument);
+            if (mConfig.writable && !mConfig.writable(reg))
+                return fail(kIOReturnNotPermitted);
+            auto* frame = frames + i * frameBytes;
+            encode(frame, reg, mConfig.addressBytes, mConfig.addressEndian);
+            if (frame[0] & (mConfig.readFlag | mConfig.writeFlag))
+                return fail(kIOReturnBadArgument);
+            frame[0] |= mConfig.writeFlag;
+            encode(frame + header, values[i], mConfig.valueBytes, mConfig.valueEndian);
+        }
+        mLastReturn = mBus.writeSequence(frames, frameBytes, count, delayUs);
+        return mLastReturn == kIOReturnSuccess;
+    }
     bool updateBits(uint32_t reg, uint32_t mask, uint32_t value) override {
         Guard guard(mLock);
         if (!validConfig() || (mask & ~valueMask()))

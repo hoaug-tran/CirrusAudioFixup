@@ -26,7 +26,7 @@ constexpr uint32_t kWmfwHaloYmPacked = 0x12;
 constexpr uint32_t kWmfwAdsp2Xm = 0x05;
 constexpr uint32_t kWmfwAdsp2Ym = 0x06;
 
-constexpr size_t kMaxFirmwareRegions = 32;
+constexpr size_t kMaxFirmwareRegions = 96;
 constexpr size_t kMaxMappedRegions = 192;
 
 #pragma pack(push, 1)

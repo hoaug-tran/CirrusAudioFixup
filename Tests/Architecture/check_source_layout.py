@@ -86,6 +86,19 @@ assert "0x35a40" not in composition and "RegisterFormat" not in composition and 
 assert "kDriverRegistrations" in (ROOT / "Devices/Amplifiers/CS35L41/CS35L41DriverRegistration.hpp").read_text()
 print("PASS AMP-owned registration/framing/access metadata and shared module composition")
 
+for model in ("CS35L41", "CS35L56"):
+    module = ROOT / "Devices/Amplifiers" / model
+    for name in (f"{model}Device.hpp", f"{model}Driver.hpp", f"{model}DriverFactory.hpp",
+                 f"{model}DriverFactory.cpp", f"{model}DriverRegistration.hpp", f"{model}Diagnostics.cpp",
+                 f"{model}SPIRegisterIO.hpp", "InstanceState.hpp", "Hardware/Registers.hpp",
+                 f"Board/{model}BoardDiscovery.hpp"):
+        assert (module / name).is_file(), (model, name)
+    registration = (module / f"{model}DriverRegistration.hpp").read_text()
+    assert "kDriverRegistrations[]" in registration
+    assert "void inspectDevice(" not in registration and "struct ProbeResult" not in registration
+assert not (ROOT / "Devices/Amplifiers/CS35L56/CS35L56Probe.hpp").exists()
+print("PASS CS35L41/CS35L56 module naming and device/register/diagnostics/factory/board separation")
+
 # Communication ownership is a module contract as well as a transaction port.
 native_host=(ROOT / "Transport/SPI/NativeSPIHost.hpp").read_text()
 assert "mOwners" in native_host and "NativeSPIControllerFactory factory" in native_host
@@ -95,8 +108,10 @@ assert 'evaluateInteger("_PSC"' not in native_host
 assert "spiControllerFactory" in (ROOT / "Platform/Board/PlatformProfile.hpp").read_text()
 print("PASS generic native communication ownership/factory/PM with module-owned Intel/AMD policy")
 
-firmware = ROOT / "Devices/Amplifiers/CS35L41/Resources"
-assert (firmware / "FirmwareData.cpp").read_text().count('Resources/Generated/FirmwareData.inc"') == 1
-assert sum('Resources/Generated/FirmwareData.inc"' in p.read_text() for p in files) == 1
-assert "extern const FirmwareResource cs35l41Firmware[];" in (firmware / "FirmwareData.hpp").read_text()
-assert "const uint8_t" not in (firmware / "FirmwareData.hpp").read_text()
+for chip in ("CS35L41", "CS35L56"):
+    firmware = ROOT / f"Devices/Amplifiers/{chip}/Resources"
+    include = f'Devices/Amplifiers/{chip}/Resources/Generated/FirmwareData.inc"'
+    assert (firmware / "FirmwareData.cpp").read_text().count(include) == 1
+    assert sum(include in p.read_text() for p in files) == 1
+    assert f"extern const FirmwareResource {chip.lower()}Firmware[];" in (firmware / "FirmwareData.hpp").read_text()
+    assert "const uint8_t" not in (firmware / "FirmwareData.hpp").read_text()

@@ -216,6 +216,7 @@ public:
             for (uint32_t i = 0; i < plan.transactionCount; ++i) {
                 const auto& tx = plan.transactions[i];
                 if (!io.bulkRead(tx.dspRegister, backupBuffer + tx.payloadOffset, tx.size)) {
+                    if (outStats) outStats->nativeError = io.lastError();
                     IOFreeData(backupBuffer, totalSize);
                     IOFreeData(verifyBuffer, totalSize);
                     return false;
@@ -263,6 +264,7 @@ public:
             accWriteMs += writeMs;
 
             if (!writeOk) {
+                if (outStats) outStats->nativeError = io.lastError();
                 CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, %d ms)", deviceName, writeMs);
                 CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
@@ -290,6 +292,7 @@ public:
             accRbMs += rbMs;
 
             if (!readOk) {
+                if (outStats) outStats->nativeError = io.lastError();
                 CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", deviceName, rbMs);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
@@ -381,19 +384,21 @@ struct RegionResult {
 };
 
 struct UploadSession {
-    RegionResult results[32];
+    RegionResult results[MAX_MAPPED_REGIONS];
     uint32_t regionCount;
     uint32_t passCount;
     uint32_t totalBytes;
     uint32_t totalTransactions;
     uint32_t totalMs;
     bool complete;
+    int32_t nativeError{0};
 };
 
 class WMFWUploadScheduler {
 public:
     static bool run(const char* deviceName, cirrus::core::RegisterIO& io, MappedImage& mappedImg, UploadSession& session) {
-        session = {};
+        // Avoid an aggregate temporary on the kernel stack in Debug builds.
+        memset(static_cast<void*>(&session), 0, sizeof(session));
         if (mappedImg.regionCount > MAX_MAPPED_REGIONS)
             return false;
         uint32_t expectedRegions = 0;
@@ -407,7 +412,7 @@ public:
             if (region.regionType == RegionType::INFO_TEXT || region.regionType == RegionType::NAME_TEXT ||
                 region.regionType == RegionType::METADATA || region.regionType == RegionType::ALGORITHM_DATA)
                 continue;
-            if (++expectedRegions > 32 || !WMFWUploadPlanner::generatePlan(i, region, policy, *preflight)) {
+            if (++expectedRegions > MAX_MAPPED_REGIONS || !WMFWUploadPlanner::generatePlan(i, region, policy, *preflight)) {
                 valid = false;
                 break;
             }
@@ -475,6 +480,7 @@ public:
                 session.totalTransactions += res.transactionCount;
                 CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", deviceName, i, rname, region.dspRegister, elapsedMs);
             } else {
+                session.nativeError = stats.nativeError;
                 CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", deviceName, i, rname);
                 break;
             }

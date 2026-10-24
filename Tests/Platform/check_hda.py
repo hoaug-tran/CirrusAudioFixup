@@ -180,3 +180,46 @@ with tempfile.TemporaryDirectory(prefix='cirrus-hda-check-') as directory:
     source.write_text(preamble + function('clearHdaCache') + function('synchronizeHdaStream') + '\n' + function('supportedHdaFormat') + checks, encoding='utf-8')
     subprocess.run(['g++', '-std=c++17', '-O0', '-I', str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'hda.exe')], check=True)
     subprocess.run([str(tmp / 'hda.exe')], check=True)
+
+# Matching iterators own borrowed candidates until release, including termination.
+controller = SOURCE[SOURCE.index('IOService* CirrusAudioFixup::audioController()'):SOURCE.index('IOService* CirrusAudioFixup::getAudioController()')]
+fallback = controller[controller.index('    OSDictionary* matching = serviceMatching("IOPCIDevice");'):controller.rfind('}')]
+lifetime = r'''
+#include <cassert>
+#include <cstdint>
+#include <cstddef>
+#include <cstring>
+#include <cstdio>
+struct OSObject { virtual ~OSObject()=default; };
+struct OSData:OSObject { size_t getLength(){return 0;} void* getBytesNoCopy(){return nullptr;} };
+struct IOService:OSObject {
+ unsigned refs=1;bool selected=true;
+ void retain(){assert(refs);++refs;}void release(){assert(refs);--refs;}
+ OSObject* getProperty(const char*){return nullptr;}
+ const char* getName(){return selected?"HDEF":"HDAU";}
+};
+struct IOPCIDevice:IOService { uint16_t configRead16(int){return selected?0x8086:0x10de;} };
+static IOPCIDevice device;
+struct OSDictionary {void release(){}};
+struct OSIterator {bool read=false;OSObject* getNextObject(){if(read)return nullptr;read=true;return &device;}
+ void release(){device.release();}};
+static OSDictionary dict;static OSIterator iterator;
+OSDictionary* serviceMatching(const char*){return &dict;}
+OSIterator* getMatchingServices(OSDictionary*){return &iterator;}
+constexpr int kIOPCIConfigVendorID=0;
+#define OSDynamicCast(T,p) dynamic_cast<T*>(p)
+IOService* fallback(){
+''' + fallback + r'''
+}
+int main(){
+ auto* result=fallback();assert(result==&device&&device.refs==1);result->release();assert(!device.refs);
+ device.refs=1;device.selected=false;iterator.read=false;
+ assert(!fallback()&&!device.refs);
+ puts("PASS HDA fallback retains selected controller before iterator release; rejected candidates released");
+}
+'''
+with tempfile.TemporaryDirectory(prefix='cirrus-hda-lifetime-') as directory:
+    tmp = Path(directory)
+    (tmp / 'lifetime.cpp').write_text(lifetime, encoding='utf-8')
+    subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror', str(tmp / 'lifetime.cpp'), '-o', str(tmp / 'lifetime.exe')], check=True)
+    subprocess.run([str(tmp / 'lifetime.exe')], check=True)

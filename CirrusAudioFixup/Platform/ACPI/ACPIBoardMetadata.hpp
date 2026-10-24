@@ -7,6 +7,7 @@
 namespace cirrus::support {
 class ACPIBoardMetadata {
     OSArray* mNodes{OSArray::withCapacity(4)};
+
 public:
     ~ACPIBoardMetadata() { OSSafeReleaseNULL(mNodes); }
     static bool path(IOACPIPlatformDevice* device, char (&output)[256]) {
@@ -56,8 +57,8 @@ public:
     }
     // One CRS resource may represent a shared line used by several endpoints.
     // Native SPI selections are represented by leading zero entries.
-    static bool references(OSArray* entries, const char* name, IOACPIPlatformDevice* source,
-                           uint16_t resource, uint16_t pin, bool activeLow, unsigned count, unsigned nativePrefix = 0) {
+    static bool references(OSArray* entries, const char* name, IOACPIPlatformDevice* source, uint16_t resource, uint16_t pin,
+                           bool activeLow, unsigned count, unsigned nativePrefix = 0) {
         char namePath[256]{};
         if (!count || count > 16 || nativePrefix > 16 || !path(source, namePath))
             return false;
@@ -67,8 +68,8 @@ public:
             ok = appendNumber(values, 0);
         for (unsigned i = 0; ok && i < count; ++i) {
             auto* reference = OSString::withCString(namePath);
-            ok = reference && values->setObject(reference) && appendNumber(values, resource) &&
-                 appendNumber(values, pin) && appendNumber(values, activeLow);
+            ok = reference && values->setObject(reference) && appendNumber(values, resource) && appendNumber(values, pin) &&
+                 appendNumber(values, activeLow);
             OSSafeReleaseNULL(reference);
         }
         ok = ok && property(entries, name, values);

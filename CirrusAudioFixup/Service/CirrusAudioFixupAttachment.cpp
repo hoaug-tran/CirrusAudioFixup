@@ -354,7 +354,7 @@ void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
     setProperty("Cirrus_Platform_Properties_Source", properties.source());
     setProperty("Cirrus_Platform_DSD_Validate_Return", uint64_t(uint32_t(properties.validationReturn())), 32);
     setProperty("Cirrus_Platform_DSD_Evaluate_Return", uint64_t(uint32_t(properties.evaluationReturn())), 32);
-    setProperty("Cirrus_Platform_DSD_Adapter_Return", uint64_t(uint32_t(properties.adapterReturn())), 32);
+    setProperty("Cirrus_Platform_DSD_Reference_Return", uint64_t(uint32_t(properties.referenceReturn())), 32);
     if (gCirrusDebug)
         cirrus::diagnostics::ACPIObjectEvidence::publish(this, "Cirrus_Platform_DSD", properties.object());
     const char* reason = "ACPI_PROPERTIES_UNAVAILABLE";
@@ -521,6 +521,11 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
         return true;
     }
+    if (selected->diagnosticOnly && !bootArgEnabled("-cirrusro")) {
+        setProperty("Cirrus_Amplifier_Access", "EXPLICIT_READ_ONLY_REQUIRED");
+        recordAttachmentFailure("POLICY", "DIAGNOSTIC_DRIVER_REQUIRES_CIRRUSRO", kIOReturnNotPermitted);
+        return false;
+    }
     mAttachment.amplifier = "REGISTERED_NOT_PROBED";
     const auto format = *selected->format(cirrus::core::BusTransportType::SPI);
     CIRRUS_LOG("BOOT_FLOW SPI_BIND_BEGIN");
@@ -538,7 +543,7 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     bool writable = false;
     if (ret == kIOReturnSuccess && selected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard)
         discoverPlatformConfiguration(acpi, *selected);
-    if (ret == kIOReturnSuccess && mPlatformAuthorized && mPlatformProfile->boardConfiguration) {
+    if (ret == kIOReturnSuccess && !selected->diagnosticOnly && mPlatformAuthorized && mPlatformProfile->boardConfiguration) {
         cirrus::platform::BoardIdentity actual{uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId),
                                                mPlatformProfile->acpiHid};
         ret = mNativeSPI.configureAuthorized(mDriverRegistry, *mPlatformProfile->boardConfiguration, actual, mPlatformProfile->acpiHid,

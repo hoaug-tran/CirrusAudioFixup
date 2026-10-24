@@ -12,6 +12,7 @@ public:
     virtual size_t maxPayloadBytes(size_t headerBytes, bool read) const = 0;
     // One command/combined transaction: no STOP/CS release between header/RX.
     virtual IOReturn command(const uint8_t* tx, size_t txLength, uint8_t* rx, size_t rxLength) = 0;
+    virtual IOReturn writeSequence(const uint8_t*, size_t, size_t, uint32_t) { return kIOReturnUnsupported; }
 };
 class RegisterOperationLock {
 public:

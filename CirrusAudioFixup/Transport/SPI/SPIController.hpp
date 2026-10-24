@@ -30,6 +30,8 @@ public:
     // Limit includes header and payload. Zero means unavailable, not unlimited.
     virtual size_t maxTransferBytes() const = 0;
 
+    virtual IOReturn writeSequence(const SPIEndpoint&, const uint8_t*, size_t, size_t, uint32_t) { return kIOReturnUnsupported; }
+
     // Command then receive under one CS. AMD command/FIFO controllers can
     // implement this without pretending to provide simultaneous full duplex.
     // Default bridges bounded amplifier frames through exchange().

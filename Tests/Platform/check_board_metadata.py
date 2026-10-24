@@ -4,15 +4,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
+import hashlib
+import re
 from acpi_kernel_fixture import install
 from host_build import sanitizer_flags
 
 ROOT = Path(__file__).resolve().parents[2]
+# Frozen Linux v6.12 generic_dsd_config table, including every GPIO resource
+# index, channel, boost type and electrical value. No network dependency in CI.
+table = (ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Board/BoardProperties.hpp").read_text()
+rows = re.findall(r"^\s*(\{0x[0-9a-f]{8},[^\n]+),$", table, re.M)
+assert len(rows) == 95
+normalized = "\n".join(re.sub(r"\s+", "", row) for row in rows)
+assert hashlib.sha256(normalized.encode()).hexdigest() == "1248b2a72ddcea222020c7c1bb65c9482079baeca73fae1fc7de456db1f0af27"
 with tempfile.TemporaryDirectory(prefix="cirrus-board-metadata-") as directory:
     tmp = Path(directory)
     install(tmp)
     (tmp / "test.cpp").write_text(r'''
 #define KERNEL 1
+#include <algorithm>
 #include "Fixture.hpp"
 #include "Devices/Amplifiers/CS35L41/Board/BoardMetadataFallback.hpp"
 #include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
@@ -45,29 +55,47 @@ std::vector<uint8_t> capturedCRS(){
  return bytes;
 }
 int main(){
- for(bool renamed:{false,true}){
+ assert(!boardProperties(0x1043,0xffff));
+ for(const auto& board:kBoardProperties){
+  assert(board.count==2||board.count==4);
+  for(unsigned i=0;i<board.count;++i)assert(board.channels[i]<=1);
+  assert(board.resetResource>=-1&&board.speakerResource>=-1&&board.csResource>=-1);
+  if(board.internalBoost)assert(board.inductor&&board.peak&&board.capacitor);
+  else assert(!board.inductor&&!board.peak&&!board.capacitor);
+ }
+ for(bool renamed:{false,true})for(bool reversed:{false,true}){
   IOACPIPlatformDevice spi,amp,gpio;IOService owner;
   spi.path=renamed?"IOACPIPlane:/_SB/TEST/SPI7":"IOACPIPlane:/_SB/PC00/SPI3";
   amp.path=spi.path+(renamed?"/AMPS":"/SPK1");gpio.path="IOACPIPlane:/_SB/GPI0";
   ::devices={&spi,&amp,&gpio};
   auto crs=capturedCRS();
+  if(reversed){const size_t descriptorBytes=3+crs[1]+(size_t(crs[2])<<8);
+   std::rotate(crs.begin(),crs.begin()+descriptorBytes,crs.begin()+2*descriptorBytes);}
   if(renamed){const std::string old="PC00.SPI3",replacement="TEST.SPI7";
    for(size_t i=0;i+old.size()<=crs.size();++i)
     if(!memcmp(crs.data()+i,old.data(),old.size()))memcpy(crs.data()+i,replacement.data(),replacement.size());}
-  amp.values["_CRS"]=make<OSData>(crs);
+  const platform::BoardIdentity identity{0x1043,0x1c9f,"CSC3551"};
   spi.dsdValidation=amp.dsdValidation=gpio.dsdValidation=kIOReturnError;
   spi.absentValidation=amp.absentValidation=gpio.absentValidation=kIOReturnError;
+  for(uint8_t selection:{crs[19],uint8_t(2)}){
+   auto invalid=crs;const size_t descriptorBytes=3+crs[1]+(size_t(crs[2])<<8);
+   invalid[descriptorBytes+19]=selection;
+   amp.values["_CRS"]=make<OSData>(invalid);IOService rejected;
+   assert(!prepareBoardMetadata(identity,&amp,&rejected)&&!rejected.getProperty("Cirrus_Board_Metadata"));
+  }
+  amp.values["_CRS"]=make<OSData>(crs);
   gpio.values["_HID"]=make<OSString>("INTC1085");
   auto* cs=make<IOMemoryMap>();auto* reset=make<IOMemoryMap>();auto* speaker=make<IOMemoryMap>();
   for(auto* map:{cs,reset,speaker}){map->r[0]=0x960000;map->r[3]=0x700;}
   cs->r[(0x700+20*16)/4]=0x84000201;reset->r[0x700/4]=0x44000200;
   const auto input=(0x700+24*16)/4;speaker->r[input]=0x84000102;
   gpio.maps={{4,cs},{3,reset},{1,speaker}};
-  const platform::BoardIdentity identity{0x1043,0x1c9f,"CSC3551"};
   assert(prepareBoardMetadata(identity,&amp,&owner));
   assert(owner.strings["Cirrus_Board_Metadata_Source"]=="CS35L41_VERIFIED_BOARD_TABLE");
   // Metadata does not mutate firmware/provider devices or publish AML methods.
   assert(amp.values.size()==1&&spi.values.empty()&&gpio.values.size()==1);
+  {transport::ACPIDeviceProperties p;assert(p.load(&amp,&owner)==0);
+   assert(p.load(&amp,&owner)==kIOReturnBadArgument&&!p.get("cirrus,dev-index"));}
   {
    transport::intel::IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
    assert(selects.count()==2&&!selects.select(0)&&selects.select(1));
@@ -110,14 +138,26 @@ int main(){
   // Known-board fallback must not hide native malformed data.
   amp.dsdValidation=0;amp.values["_DSD"]=make<OSData>(std::vector<uint8_t>{1});
   {transport::ACPIDeviceProperties p;assert(p.load(&amp,&owner)==kIOReturnUnsupported);}
+  {IOService rejected;assert(!prepareBoardMetadata(identity,&amp,&rejected));
+   assert(!rejected.getProperty("Cirrus_Board_Metadata"));}
+  amp.dsdEvaluation=kIOReturnIOError;
+  {IOService rejected;assert(!prepareBoardMetadata(identity,&amp,&rejected));}
+  amp.dsdEvaluation=0;
+  // As in Linux, existing native device properties prevent installation of
+  // additional driver GPIO mappings. Board electrical facts remain available.
+  amp.values["_DSD"]=array({make<OSData>(std::vector<uint8_t>{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01}),
+                           array({array({make<OSString>("cirrus,dev-index"),array({number(0),number(1)})})})});
+  {IOService nativeOwner;assert(prepareBoardMetadata(identity,&amp,&nativeOwner));
+   transport::ACPIDeviceProperties p;assert(p.load(&amp,&nativeOwner)==0&&p.hasNativeProperties());
+   assert(!p.get("reset-gpios")&&!p.get("speaker-id-gpios"));
+   transport::ACPIDeviceProperties controller;assert(controller.load(&spi,&nativeOwner)==0&&!controller.get("cs-gpios"));}
   amp.values.erase("_DSD");amp.dsdValidation=kIOReturnError;
-  // A returned adapter without its required version is malformed, not absent.
-  amp.values["CSDP"]=array({make<OSData>(std::vector<uint8_t>{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01}),array({})});
-  {transport::ACPIDeviceProperties p;assert(p.load(&amp,&owner)==kIOReturnUnsupported);
-   assert(!strcmp(p.reason(),"ADAPTER_VERSION_UNSUPPORTED"));}
-  amp.values.erase("CSDP");
-  IOService unknown;assert(prepareBoardMetadata({0x1043,0x14d3,"CSC3551"},&amp,&unknown));
+  IOService unknown;assert(prepareBoardMetadata({0x1043,0xffff,"CSC3551"},&amp,&unknown));
   assert(!unknown.getProperty("Cirrus_Board_Metadata"));
+  IOService unsupported;
+  assert(!prepareBoardMetadata({0x1043,0x1683,"CSC3551"},&amp,&unsupported));
+  assert(!unsupported.getProperty("Cirrus_Board_Metadata"));
+  assert(!prepareBoardMetadata({0x17aa,0x38c7,"CSC3551"},&amp,&unsupported));
  }
 }
 ''')

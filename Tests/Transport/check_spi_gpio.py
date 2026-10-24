@@ -21,6 +21,7 @@ kIOReturnUnsupported=-3,kIOReturnNoDevice=-5,kIOReturnIOError=-6,kIOReturnNotPer
 #include <vector>
 #include "Platform/ACPI/ACPIGPIOResources.hpp"
 #include "Transport/SPI/Intel/IntelGPIOOutput.hpp"
+#include "Transport/SPI/Intel/IntelGPIOInput.hpp"
 using namespace cirrus::transport;
 using namespace cirrus::transport::intel;
 std::vector<uint8_t> descriptor(uint16_t pin) {
@@ -77,6 +78,33 @@ int main(){
  assert(!strcmp(line.evidence().reason,"PAD_WRITE_READBACK_FAILED"));
  line.unbind();assert(line.setActive(false)==kIOReturnNotReady);
  Window shortMap;IntelGPIOOutput invalid;assert(invalid.bind(shortMap,0x710,pad,true)==kIOReturnUnsupported);
+ // Meteor Lake-P: Linux pinctrl-meteorlake.c GPIO numbering and PAD_OWN=0xb0.
+ assert(lookupIntelGPIOPad("INTC1083",0x82,pad));
+ assert(pad.memoryIndex==1&&pad.pad==27&&pad.group==1&&pad.bit==2&&pad.ownershipWord==4&&pad.ownershipBase==0xb0);
+ Window mtl;const auto csOffset=0x700+27*16;mtl.r[csOffset/4]=0x84000201;
+ // A nonzero old-layout ownership register must not reject this pad.
+ mtl.r[(0xa0+4*4)/4]=0xffffffff;
+ IntelGPIOOutput csLine;assert(csLine.bind(mtl,sizeof(mtl.r),pad,true)==0);
+ assert(csLine.setActive(true)==0&&csLine.setActive(false)==0);
+ for(auto offset:mtl.writes)assert(offset==unsigned(csOffset));
+ auto writes=mtl.writes.size();mtl.r[(0xb0+4*4)/4]=1U<<8;
+ assert(csLine.setActive(true)==kIOReturnNotPermitted&&mtl.writes.size()==writes);
+ assert(lookupIntelGPIOPad("INTC1083",0x181,pad));
+ assert(pad.memoryIndex==4&&pad.pad==26&&pad.group==1&&pad.bit==1&&pad.ownershipWord==4);
+ assert(lookupIntelGPIOPad("INTC1083",0x168,pad));
+ assert(pad.memoryIndex==4&&pad.pad==8&&pad.group==0&&pad.bit==8&&pad.ownershipWord==1);
+ Window input;const auto inputOffset=0x700+8*16;input.r[inputOffset/4]=0x84000102;
+ IntelGPIOInputEvidence evidence;uint32_t level=99;
+ input.r[(0xa0+4)/4]=0xffffffff;
+ assert(readIntelGPIOInput(input,sizeof(input.r),pad,false,level,evidence)==0&&level==1&&input.writes.empty());
+ assert(readIntelGPIOInput(input,sizeof(input.r),pad,true,level,evidence)==0&&level==0);
+ input.r[(0xb0+4)/4]=1;
+ assert(readIntelGPIOInput(input,sizeof(input.r),pad,false,level,evidence)==kIOReturnNotPermitted&&input.writes.empty());
+ for(unsigned pin:{5U,31U,121U,127U,153U,159U,451U,65535U})assert(!lookupIntelGPIOPad("INTC1083",pin,pad));
+ assert(!lookupIntelGPIOPad("INTC1082",0x82,pad));
+ assert(lookupIntelGPIOPad("INTC105E",0x82,pad));
+ Window newLayout;newLayout.r[0]=0x01100000;
+ assert(IntelGPIOOutput{}.bind(newLayout,sizeof(newLayout.r),pad,true)==kIOReturnUnsupported);
 }
 ''')
     for flags in sanitizer_flags():

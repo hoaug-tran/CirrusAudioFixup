@@ -81,6 +81,42 @@ struct HeapHooks:Hooks {
 AmplifierLifecycleHooks* heapFactory(const cirrus::platform::AmplifierDriverContext& context){return int(context.bindingIndex)==failFactory?nullptr:new HeapHooks(context);}
 void heapDestroy(AmplifierLifecycleHooks* hooks){delete hooks;}
 int main(){
+ {
+  struct SequenceBus : Bus {
+   uint32_t delay=0;
+   IOReturn result=kIOReturnSuccess;
+   IOReturn writeSequence(const uint8_t* data,size_t bytes,size_t count,uint32_t wait) override {
+    assert(lock&&lock->held);delay=wait;++calls;
+    frames.emplace_back(data,data+bytes*count);
+    return result;
+   }
+  } bus;
+  Lock lock;bus.lock=&lock;
+  RegisterMapConfig config;config.paddingBytes=2;
+  RegisterMap map(bus,config,true,&lock);
+  uint32_t registers[]={0x11020,0x11000},values[]={0x02000007,0x0a000000};
+  assert(map.writeSequence(registers,values,2,4700));
+  assert(bus.calls==1&&bus.delay==4700&&!lock.held);
+  assert((bus.frames[0]==std::vector<uint8_t>{0,1,0x10,0x20,0,0,2,0,0,7,0,1,0x10,0,0,0,0x0a,0,0,0}));
+  bus.result=-99;
+  assert(!map.writeSequence(registers,values,2,4700));
+  assert(map.lastReturn()==-99&&!lock.held);
+  config.writable=deny;RegisterMap guarded(bus,config,true,&lock);
+  registers[1]=4;
+  assert(!guarded.writeSequence(registers,values,2,4700));
+  assert(bus.calls==2&&guarded.lastReturn()==kIOReturnNotPermitted&&!lock.held);
+ }
+ {
+  Bus sequenceBus;RegisterMapConfig config;RegisterMap map(sequenceBus,config,true);
+  uint32_t registers[]={0,4},values[]={1,2};
+  assert(!map.writeSequence(registers,values,2,4700));
+  assert(map.lastReturn()==kIOReturnUnsupported&&sequenceBus.calls==0);
+  RegisterMap readonly(sequenceBus,config,false);
+  assert(!readonly.writeSequence(registers,values,2,4700));
+  assert(readonly.lastReturn()==kIOReturnNotPermitted&&sequenceBus.calls==0);
+  assert(!map.writeSequence(nullptr,values,2,4700));
+  assert(map.lastReturn()==kIOReturnBadArgument&&sequenceBus.calls==0);
+ }
  for(unsigned width=1;width<=4;++width)for(auto endian:{RegisterEndian::Big,RegisterEndian::Little}){
   Bus bus;RegisterMapConfig config;config.addressBytes=2;config.valueBytes=uint8_t(width);
   config.stride=8;config.maxRegister=0xfff8;config.addressEndian=endian;config.valueEndian=endian;

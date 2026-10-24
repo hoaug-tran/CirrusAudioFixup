@@ -1,9 +1,9 @@
+#include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 #include "Firmware/WMFW/WMFWFormat.hpp"
 #include "Firmware/WMFW/WMFWUploadPlan.hpp"
-#include "uploader.hpp"
 #include "arrays.hpp"
 #include "resources.hpp"
-#include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
+#include "uploader.hpp"
 #include <vector>
 
 void putBE(std::vector<uint8_t>& v, unsigned word, uint32_t n) {
@@ -142,15 +142,16 @@ int main() {
     }
     std::vector<uint8_t> bad(wmfw,wmfw+wmfwSize);
     bad.push_back(0);
-    assert(!WMFWParser::parseWMFW(bad.data(),bad.size(),&fw));
-    assert(fw.regionCount==0 && fw.wmfwControlCount==0);
-    bad.assign(wmfw,wmfw+wmfwSize);
-    putLE(bad,44,0xFFFFFFFF);
-    assert(!WMFWParser::parseWMFW(bad.data(),bad.size(),&fw));
-    bad.assign(wmfw,wmfw+40);
-    for(unsigned i=0;i<33;i++) {
-        size_t p=bad.size(); bad.resize(p+8);
-        putLE(bad,unsigned(p),0xFE000000);
+    assert(!WMFWParser::parseWMFW(bad.data(), bad.size(), &fw));
+    assert(fw.regionCount == 0 && fw.wmfwControlCount == 0);
+    bad.assign(wmfw, wmfw + wmfwSize);
+    putLE(bad, 44, 0xFFFFFFFF);
+    assert(!WMFWParser::parseWMFW(bad.data(), bad.size(), &fw));
+    bad.assign(wmfw, wmfw + 40);
+    for (unsigned i = 0; i < MAX_FIRMWARE_REGIONS + 1; i++) {
+        size_t p = bad.size();
+        bad.resize(p + 8);
+        putLE(bad, unsigned(p), 0xFE000000);
     }
     assert(!WMFWParser::parseWMFW(bad.data(),bad.size(),&fw));
     assert(!WMFWParser::parseAlgorithmTable(table.data(),63,fw));
@@ -179,26 +180,33 @@ int main() {
     UploadPlan plan_pm{};
     assert(WMFWUploadPlanner::generatePlan(0,r_pm,{252,true,true},plan_pm));
     CirrusAudioFixup bus_pm;
-    assert(WMFWUploader::upload(amp.name,bus_pm,plan_pm));
-    assert(bus_pm.reads==0 && bus_pm.writes==2);
-    for(unsigned i=0;i<504;i++) assert(bus_pm.memory[r_pm.dspRegister+i]==0xAB);
-    MappedImage mapped{}; UploadSession session{}; CirrusAudioFixup bus;
-    mapped.regionCount=33;
-    for(unsigned i=0;i<33;i++) mapped.regions[i]=r;
-    assert(!WMFWUploadScheduler::run(amp.name,bus,mapped,session));
-    assert(!session.complete && bus.reads==0 && bus.writes==0);
-    mapped.regionCount=32;
-    assert(WMFWUploadScheduler::run(amp.name,bus,mapped,session));
-    assert(session.complete && session.passCount==32);
-    r.dspRegister=0xFFFFFFFC;
-    assert(!WMFWUploadPlanner::generatePlan(0,r,{252,true,true},plan));
-    assert(plan.transactionCount==0);
-    r.dspRegister=0x02800001;
-    assert(!WMFWUploadPlanner::generatePlan(0,r,{252,true,true},plan));
-    r.dspRegister=0x02800000;
-    assert(!WMFWUploadPlanner::generatePlan(0,r,{0,true,true},plan));
-    assert(!WMFWUploadPlanner::generatePlan(0,r,{256,true,true},plan));
-    r.data.begin=nullptr;
-    assert(!WMFWUploadPlanner::generatePlan(0,r,{252,true,true},plan));
-    puts("PASS malformed parser, planner boundaries, 32/33-region preflight, backup/write/read/CRC/restore faults");
+    assert(WMFWUploader::upload(amp.name, bus_pm, plan_pm));
+    assert(bus_pm.reads == 0 && bus_pm.writes == 2);
+    for (unsigned i = 0; i < 504; i++)
+        assert(bus_pm.memory[r_pm.dspRegister + i] == 0xAB);
+    MappedImage mapped{};
+    UploadSession session{};
+    CirrusAudioFixup bus;
+    mapped.regionCount = MAX_MAPPED_REGIONS + 1;
+    for (unsigned i = 0; i < MAX_MAPPED_REGIONS; i++)
+        mapped.regions[i] = r;
+    assert(!WMFWUploadScheduler::run(amp.name, bus, mapped, session));
+    assert(!session.complete && bus.reads == 0 && bus.writes == 0);
+    mapped.regionCount = 32;
+    assert(WMFWUploadScheduler::run(amp.name, bus, mapped, session));
+    assert(session.complete && session.passCount == 32);
+    mapped.regionCount = MAX_MAPPED_REGIONS;
+    assert(WMFWUploadScheduler::run(amp.name, bus, mapped, session));
+    assert(session.complete && session.passCount == MAX_MAPPED_REGIONS);
+    r.dspRegister = 0xFFFFFFFC;
+    assert(!WMFWUploadPlanner::generatePlan(0, r, {252, true, true}, plan));
+    assert(plan.transactionCount == 0);
+    r.dspRegister = 0x02800001;
+    assert(!WMFWUploadPlanner::generatePlan(0, r, {252, true, true}, plan));
+    r.dspRegister = 0x02800000;
+    assert(!WMFWUploadPlanner::generatePlan(0, r, {0, true, true}, plan));
+    assert(!WMFWUploadPlanner::generatePlan(0, r, {256, true, true}, plan));
+    r.data.begin = nullptr;
+    assert(!WMFWUploadPlanner::generatePlan(0, r, {252, true, true}, plan));
+    puts("PASS malformed parser, planner boundaries, configured-region preflight, backup/write/read/CRC/restore faults");
 }

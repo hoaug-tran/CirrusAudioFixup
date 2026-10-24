@@ -740,12 +740,10 @@ IOService* CirrusAudioFixup::audioController() {
         }
     }
 
-    iter->release();
-    if (bestScore >= 40 && bestController) {
+    if (bestScore >= 40 && bestController)
         bestController->retain();
-        return bestController;
-    }
-    return nullptr;
+    iter->release();
+    return bestScore >= 40 ? bestController : nullptr;
 }
 
 IOService* CirrusAudioFixup::getAudioController() { return audioController(); }

@@ -1,5 +1,6 @@
 #include "Devices/Amplifiers/CS35L56/CS35L56Internal.hpp"
 #include "Firmware/Calibration/EFICalibration.hpp"
+#include "Firmware/Calibration/EFICalibrationSource.hpp"
 #include "Firmware/WMFW/WMFWUploader.hpp"
 #include <IOKit/IOService.h>
 #include <libkern/c++/OSData.h>
@@ -37,16 +38,7 @@ bool validMemory(const MappedImage& mapped) {
 }
 bool CS35L56Driver::applyCalibration(FirmwareImage& image) {
     firmware::EFICalibration calibration{};
-    auto* options = IORegistryEntry::fromPath("IODeviceTree:/options");
-    if (!options)
-        options = IORegistryEntry::fromPath("IODeviceTree:/chosen");
-    OSObject* property = nullptr;
-    if (options) {
-        property = options->copyProperty("02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData");
-        if (!property)
-            property = options->copyProperty("CirrusSmartAmpCalibrationData");
-        options->release();
-    }
+    OSObject* property = firmware::copyEFICalibrationProperty();
     auto* data = OSDynamicCast(OSData, property);
     uint64_t uid = 0;
     const bool uidKnown = data && DSPControl::readSiliconUid(mContext.io, uid);

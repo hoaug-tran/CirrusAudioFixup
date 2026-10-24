@@ -14,6 +14,8 @@ method_start=SOURCE.index('bool CirrusAudioFixup::applyCalibration(')
 method_end=SOURCE.index('\n}',method_start)+2
 crc_start=SOURCE.index('static uint32_t crc32Le(')
 crc_end=SOURCE.index('\n}',crc_start)+2
+efi_source=(ROOT / 'CirrusAudioFixup/Firmware/Calibration/EFICalibrationSource.hpp').read_text()
+efi_source=efi_source[efi_source.index('namespace cirrus::firmware {'):]+'\nnamespace firmware = cirrus::firmware;\n'
 calibration=SOURCE[crc_start:crc_end]+SOURCE[start:struct_end]+SOURCE[method_start:method_end]
 gate_start = re.search(r'if\s*\(!applyCalibration\(amp,\s*image\)\)', SOURCE).start()
 m_boot = re.search(r'bool\s+booted\s*=\s*bringUpDSP\(amp\);', SOURCE[gate_start:])
@@ -53,14 +55,17 @@ struct OSData : OSObject {
 };
 struct IORegistryEntry {
     static OSObject* data;
-    static bool legacyOnly;
-    static IORegistryEntry* fromPath(const char*) { static IORegistryEntry r; return &r; }
-    OSObject* getProperty(const char* name) { return legacyOnly && strchr(name,':') ? nullptr : data; }
+    static bool legacyOnly, useProperties;
+    static std::map<std::string,OSObject*> optionsProperties,chosenProperties;
+    bool chosen=false;
+    static IORegistryEntry* fromPath(const char* path) { static IORegistryEntry options,chosen; chosen.chosen=true; return strstr(path,"/chosen")?&chosen:&options; }
+    OSObject* getProperty(const char* name) { if(useProperties){auto& properties=chosen?chosenProperties:optionsProperties;auto it=properties.find(name);return it==properties.end()?nullptr:it->second;} return legacyOnly && strchr(name,':') ? nullptr : data; }
     OSObject* copyProperty(const char* name) { auto p=getProperty(name); if(p) p->retain(); return p; }
     void release() {}
 };
 OSObject* IORegistryEntry::data=nullptr;
-bool IORegistryEntry::legacyOnly=false;
+bool IORegistryEntry::legacyOnly=false,IORegistryEntry::useProperties=false;
+std::map<std::string,OSObject*> IORegistryEntry::optionsProperties,IORegistryEntry::chosenProperties;
 std::map<std::string,uint32_t> args;
 bool PE_parse_boot_argn(const char* name,void* p,size_t n) {
     auto it=args.find(name); if(it==args.end()) return false;
@@ -130,6 +135,21 @@ OSData efi(unsigned count=2) {
     return d;
 }
 int main() {
+    IORegistryEntry::useProperties=true;
+    OSData vendorData; OSObject invalidVendorData;
+    const char* keys[]{"53559579-8753-4f5c-9130-e82acfb8d893:SmartAmpCalibrationData","SmartAmpCalibrationData",
+                      "02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData","CirrusSmartAmpCalibrationData"};
+    for(auto* properties:{&IORegistryEntry::optionsProperties,&IORegistryEntry::chosenProperties})
+        for(auto* key:keys){(*properties)[key]=&vendorData;auto* copied=firmware::copyEFICalibrationProperty();
+            check(copied==&vendorData&&vendorData.refs==2,"all vendor keys copied from either registry node");copied->release();properties->clear();}
+    IORegistryEntry::optionsProperties[keys[2]]=&vendorData;
+    IORegistryEntry::chosenProperties[keys[0]]=&invalidVendorData;
+    auto* preferred=firmware::copyEFICalibrationProperty();
+    check(preferred==&invalidVendorData,"HP priority retained across nodes; wrong type not concealed by fallback");preferred->release();
+    IORegistryEntry::optionsProperties.clear();IORegistryEntry::chosenProperties.clear();
+    check(!firmware::copyEFICalibrationProperty(),"absent EFI property stays absent");
+    check(vendorData.refs==1&&invalidVendorData.refs==1,"vendor lookup copy ownership balanced");
+    IORegistryEntry::useProperties=false;
     FirmwareImage image; CS35L41Amp amp;
     CirrusAudioFixup absent;
     check(absent.applyCalibration(amp,&image) && absent.writes==0,"missing EFI never invents calibration");
@@ -285,7 +305,7 @@ int main() {
 with tempfile.TemporaryDirectory(prefix='cirrus-calibration-') as directory:
     tmp = Path(directory)
     source = tmp / 'check.cpp'
-    source.write_text(preamble + calibration + '\nvoid CirrusAudioFixup::boot(CS35L41Amp& amp,FirmwareImage* image) {\n' + gate + '\n}\n' + checks, encoding='utf-8')
+    source.write_text(preamble + efi_source + calibration + '\nvoid CirrusAudioFixup::boot(CS35L41Amp& amp,FirmwareImage* image) {\n' + gate + '\n}\n' + checks, encoding='utf-8')
     exe = tmp / 'check.exe'
     subprocess.run(['g++', '-std=c++17', '-O0', str(source), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

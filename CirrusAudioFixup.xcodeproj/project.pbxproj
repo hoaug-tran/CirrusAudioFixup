@@ -2177,8 +2177,15 @@
 			isa = PBXGroup;
 			children = (
 				BB431315E91320C6507B5508,
+				B9B284A8F27B467DA4BC7341,
 			);
 			path = Calibration;
+			sourceTree = "<group>";
+		};
+		B9B284A8F27B467DA4BC7341 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = EFICalibrationSource.hpp;
 			sourceTree = "<group>";
 		};
 		BB431315E91320C6507B5508 = {

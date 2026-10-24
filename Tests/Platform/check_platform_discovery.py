@@ -110,6 +110,27 @@ int main(){
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_SPEAKER_TUNING_UNAVAILABLE");}
  entries->v.pop_back();requiredSpeaker=UINT32_MAX;
+ struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
+  bool fail=false;uint32_t legacy=1;unsigned calls=0;
+  bool read(const char* name,size_t,uint32_t& value)override{++calls;value=!strcmp(name,"spk-id-gpios")?1:legacy;return !fail;}
+ } gpio;
+ for(const char* name:{"spk-id-gpios","speaker-id-gpios"}){
+  entries->v.push_back(pair(name,{0,0}));requiredSpeaker=1;
+  transport::ACPIDeviceProperties properties;assert(properties.load(&amp)==0);transport::ACPIPlatformProperties source(properties);
+  Native native;platform::BoardDiscoveryContext context{{0x1043,0x1c9f,"CSC3551"},native.endpoints,2,source,&gpio};const char* reason=nullptr;
+  auto* board=devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason);
+  assert(board&&board->configuration.amplifiers[0].speakerId==1);delete board;
+  gpio.fail=true;assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason));
+  assert(!strcmp(reason,"CS35L41_SPEAKER_ID_UNREADABLE"));gpio.fail=false;
+  entries->v.push_back(pair(!strcmp(name,"spk-id-gpios")?"speaker-id-gpios":"spk-id-gpios",{0,0}));
+  transport::ACPIDeviceProperties both;assert(both.load(&amp)==0);transport::ACPIPlatformProperties bothSource(both);
+  platform::BoardDiscoveryContext bothContext{context.identity,native.endpoints,2,bothSource,&gpio};
+  gpio.legacy=2;assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(bothContext,resources,reason));
+  assert(!strcmp(reason,"CS35L41_SPEAKER_ID_MISMATCH"));gpio.legacy=1;
+  board=devices::amplifiers::cs35l41::resolveBoardConfiguration(bothContext,resources,reason);assert(board);delete board;
+  entries->v.pop_back();entries->v.pop_back();requiredSpeaker=UINT32_MAX;
+ }
+
  auto* first=entries->v[0];entries->v.erase(entries->v.begin());
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_PROPERTIES_INCOMPLETE:cirrus,dev-index");}

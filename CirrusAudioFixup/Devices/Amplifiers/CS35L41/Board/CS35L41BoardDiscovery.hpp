@@ -50,33 +50,36 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         }
     uint32_t speakers[capacity]{};
     const bool hasSpeaker = properties.contains("cirrus,speaker-id");
-    const bool hasSpeakerGPIO = properties.contains("speaker-id-gpios");
+    const char* speakerGPIOProperties[]{"spk-id-gpios", "speaker-id-gpios"};
     if (hasSpeaker && !properties.array("cirrus,speaker-id", speakers, context.count)) {
         reason = "CS35L41_SPEAKER_PROPERTIES_INVALID";
         return nullptr;
     }
     for (size_t i = 0; i < context.count; ++i) {
-        if (hasSpeakerGPIO) {
-            // Shared or per-endpoint input references are supplied by firmware
-            // or verified module data; the actual level comes from the host.
+        bool speakerKnown = hasSpeaker;
+        for (const auto* property : speakerGPIOProperties) {
+            if (!properties.contains(property))
+                continue;
             uint32_t observed = 0;
-            if (!context.gpio || !context.gpio->read("speaker-id-gpios", i, observed)) {
+            if (!context.gpio || !context.gpio->read(property, i, observed)) {
                 reason = "CS35L41_SPEAKER_ID_UNREADABLE";
                 return nullptr;
             }
-            if (hasSpeaker && speakers[i] != observed) {
+            if (speakerKnown && speakers[i] != observed) {
                 reason = "CS35L41_SPEAKER_ID_MISMATCH";
                 return nullptr;
             }
             speakers[i] = observed;
-        } else if (!hasSpeaker)
+            speakerKnown = true;
+        }
+        if (!speakerKnown)
             speakers[i] = UINT32_MAX;
-        if ((hasSpeaker || hasSpeakerGPIO) && speakers[i] > UINT8_MAX) {
+        if (speakerKnown && speakers[i] > UINT8_MAX) {
             reason = "CS35L41_SPEAKER_PROPERTIES_INVALID";
             return nullptr;
         }
         if (!available(context.identity.subsystemVendor, context.identity.subsystemDevice, speakers[i])) {
-            reason = hasSpeaker || hasSpeakerGPIO ? "CS35L41_SPEAKER_TUNING_UNAVAILABLE" : "CS35L41_GENERIC_TUNING_UNAVAILABLE";
+            reason = speakerKnown ? "CS35L41_SPEAKER_TUNING_UNAVAILABLE" : "CS35L41_GENERIC_TUNING_UNAVAILABLE";
             return nullptr;
         }
     }

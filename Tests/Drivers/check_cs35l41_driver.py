@@ -135,6 +135,18 @@ int main(){
         assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
     }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
+    // Both verified Legion SSIDs and I2C channels retain external no-switch power.
+    for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)})for(uint32_t channel:{0U,1U}){
+        Fixture f;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
+        f.endpoint.i2cAddress=uint16_t(0x40+channel);f.binding.endpoint=f.context.endpoint=f.endpoint;
+        f.binding.channelIndex=f.assets.target.channelIndex=channel;f.assets.target.subsystemDevice=ssid;
+        DeviceConfiguration configuration;
+        assert(decodeDeviceConfiguration(nullptr,0,nullptr,configuration));
+        assert(configuration.power.topology==BoostTopology::ExternalWithoutSwitch);
+        f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);
+        assert(!f.port.values.count(0x3810)&&!f.port.values.count(0x3814)&&!f.port.values.count(0x3808));
+        assert(f.runtime.unbind()==0);
+    }
     for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
         Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;
         f.binding.endpoint=f.context.endpoint=f.endpoint;f.bind();assert(f.runtime.bringUp()==0 && f.runtime.report(0).initialized);

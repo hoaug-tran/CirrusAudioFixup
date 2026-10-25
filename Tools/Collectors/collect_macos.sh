@@ -13,8 +13,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# sudo may set HOME to /var/root. Resolve the invoking account through Directory
-# Services instead; direct root execution uses the logged-in console account.
 evidence_user="${SUDO_USER:-}"
 if [ -z "$evidence_user" ] || [ "$evidence_user" = root ]; then
     evidence_user=$(/usr/bin/stat -f '%Su' /dev/console) || exit 1
@@ -43,16 +41,12 @@ archive="$output.zip"
 capture_failed=0
 collection_finished=0
 
-# Return partial captures too, including interrupted/error exits. Only this new
-# evidence directory is modified; existing Desktop files keep their permissions.
 finish_evidence() {
     local result=$?
     trap - EXIT
     if [ "$collection_finished" -ne 1 ]; then
         printf 'INTERRUPTED exit=%s\n' "$result" >>"$output/status.txt"
     fi
-    # Package as the recipient: ZIP entries and the ZIP itself must not inherit
-    # root-only ownership. Keep the directory even if packaging fails.
     if ! /usr/sbin/chown -R "$evidence_uid:$evidence_gid" "$output" ||
        ! /bin/chmod -R u+rwX "$output"; then
         printf 'Could not grant user access to evidence: %s\n' "$output" >&2
@@ -91,8 +85,6 @@ capture() {
     local header_size
     header_size=$(wc -c <"$output/$name.txt")
     printf 'Capturing %s\n' "$name"
-    # macOS ships no timeout(1). Bound each query; a stuck diagnostic must not
-    # prevent subsequent captures or the EXIT ownership repair.
     "$@" >>"$output/$name.txt" 2>&1 &
     local command_pid=$!
     (
@@ -128,8 +120,6 @@ capture_shell() {
     capture "$name" /bin/bash -o pipefail -c "$command"
 }
 
-# ioreg captures have a command header; plutil needs the XML payload alone.
-# This uses only macOS base tools, including on machines without Xcode/Python.
 extract_failed_evidence() {
     local xml="$output/services-payload.plist"
     local failed="$output/failed-service-evidence.plist"
@@ -204,8 +194,6 @@ capture amplifier-calibration \
     '02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData'
 
 capture loaded-kexts /usr/bin/kmutil showloaded
-# Keep the unfiltered result. Legacy kextstat is a secondary observation, not
-# proof that all OpenCore-injected extensions are absent when it returns empty.
 if [ -x /usr/sbin/kextstat ]; then
     capture loaded-kexts-legacy /usr/sbin/kextstat
 fi
@@ -235,6 +223,8 @@ capture_shell ioreg-cirrus '
 '
 
 capture sysctl-msgbuf /usr/sbin/sysctl -n kern.msgbuf
+capture kernel-log-settings /usr/sbin/sysctl kern.bootargs kern.msgbuf kern.msgbufsize
+capture unified-log-settings /usr/bin/log config --status
 
 capture dmesg /sbin/dmesg
 
@@ -252,7 +242,6 @@ boot_start=$(/bin/date -r "$boot_seconds" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) || b
 log_predicate='process == "kernel" AND (eventMessage CONTAINS[c] "Cirrus" OR eventMessage CONTAINS[c] "CS35" OR eventMessage CONTAINS[c] "CSC355" OR eventMessage CONTAINS[c] "BOOT_FLOW" OR eventMessage CONTAINS[c] "AppleALC" OR eventMessage CONTAINS[c] "Lilu" OR eventMessage CONTAINS[c] "Voodoo" OR eventMessage CONTAINS[c] "AppleHDA" OR eventMessage CONTAINS[c] "SPI" OR eventMessage CONTAINS[c] "panic" OR eventMessage CONTAINS[c] "watchdog")'
 if [ -z "$boot_start" ] || ! capture kernel-log /usr/bin/log show --start "$boot_start" --style syslog --info --debug \
     --predicate "$log_predicate"; then
-    # Preserve the failed since-boot query and try a bounded interval separately.
     capture kernel-log-fallback /usr/bin/log show --last 1h --style syslog --info --debug \
         --predicate "$log_predicate"
     kernel_log="$output/kernel-log-fallback.txt"
@@ -264,7 +253,7 @@ printf '%s\n' 'Collection reads existing diagnostics only; it does not load/unlo
     'Exit 2 means one or more optional captures failed; send the partial ZIP too.' \
     'A kext path identifies the supplied bundle, not proof that this exact binary is loaded.' >>"$output/README.txt"
 capture cirrus-audio-log /usr/bin/grep -Ei \
-    'Cirrus|CS35|CSC3551|AppleALC|Lilu|Voodoo|SPKR' "$kernel_log"
+    'Cirrus|CS35|CSC355|AppleALC|Lilu|Voodoo|SPKR' "$kernel_log" "$output/dmesg.txt"
 
 if [ "$#" -gt 0 ]; then
     kext="$1"

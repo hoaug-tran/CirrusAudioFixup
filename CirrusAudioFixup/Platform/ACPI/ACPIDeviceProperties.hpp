@@ -1,4 +1,3 @@
-// Owned ACPI device-properties package and namespace reference resolution.
 #pragma once
 #include "Platform/ACPI/ACPIEvaluation.hpp"
 #include "Platform/ACPI/ACPIPath.hpp"
@@ -109,8 +108,6 @@ public:
         const auto native = loadNative(device);
         if (!owner)
             return native;
-        // Board metadata is owned by this attachment, never installed into the
-        // firmware namespace or another device. Entries use discovered paths.
         auto* nodes = OSDynamicCast(OSArray, owner->getProperty("Cirrus_Board_Metadata"));
         if (!nodes)
             return native;
@@ -134,8 +131,6 @@ public:
         }
         if (!selected)
             return native;
-        // A known board may fill absence, never conceal a returned malformed
-        // _DSD or an evaluation failure.
         if (native != kIOReturnSuccess && !missingNativeMetadata())
             return native;
         for (unsigned i = 0; i < selected->getCount(); ++i) {
@@ -167,13 +162,15 @@ private:
             return fail("DSD_VALIDATION_FAILED", mValidationReturn);
         mEvaluationReturn = device->evaluateObject("_DSD", &mObject);
         mNativeObjectType = objectType(mObject);
-        // Apple drops an entire package when it cannot convert a namespace
-        // reference. Read that same object through the running interpreter.
-        // A returned malformed object or an execution failure is never hidden.
         if (!mObject && (mEvaluationReturn == kIOReturnSuccess || mEvaluationReturn == kIOReturnUnsupported)) {
             mReferenceReturn = evaluateNativeProperties(device, &mObject);
             if (mReferenceReturn != kIOReturnSuccess)
-                return fail("DSD_REFERENCE_CONVERSION_FAILED", mReferenceReturn);
+                return fail(mReferenceReturn == kIOReturnNotReady ? "DSD_INTERPRETER_UNAVAILABLE"
+                            : mReferenceReturn == kIOReturnIOError ? "DSD_INTERPRETER_EVALUATION_FAILED"
+                            : mReferenceReturn == kIOReturnNotFound ? "DSD_INTERPRETER_HANDLE_NOT_FOUND"
+                            : mReferenceReturn == kIOReturnNoMemory ? "DSD_INTERPRETER_ALLOCATION_FAILED"
+                            : mReferenceReturn == kIOReturnBadArgument ? "DSD_INTERPRETER_RESULT_INVALID"
+                            : "DSD_REFERENCE_CONVERSION_FAILED", mReferenceReturn);
             mSource = "_DSD_INTERPRETER";
         } else if (mEvaluationReturn != kIOReturnSuccess)
             return fail("DSD_EVALUATION_FAILED", mEvaluationReturn);

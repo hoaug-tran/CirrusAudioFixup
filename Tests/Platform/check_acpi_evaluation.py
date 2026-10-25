@@ -85,9 +85,10 @@ int main(){
  IOACPIPlatformDevice amp;amp.path="IOACPIPlane:/_SB/PC00/SPI0/SPK1";
  amp.values["_DSD"]=make<OSNumber>(0);amp.dsdNullResult=true;
  OSObject* result=nullptr;KernelPatcher patcher;
- assert(evaluateNativeProperties(&amp,&result)==kIOReturnUnsupported);
+ assert(evaluateNativeProperties(&amp,&result)==kIOReturnNotReady);
  for(missingSymbol=1;missingSymbol<=3;++missingSymbol){configureACPIEvaluation(patcher,0,0,0);assert(!nativePropertyEvaluator);}
- missingSymbol=0;configureACPIEvaluation(patcher,0,0,0);assert(nativePropertyEvaluator);
+ assert(amp.strings["Cirrus_ACPI_Interpreter_State"]=="UNAVAILABLE");
+  missingSymbol=0;configureACPIEvaluation(patcher,0,0,0);assert(nativePropertyEvaluator);
  {
   ACPIDeviceProperties properties;assert(properties.load(&amp)==0);
   assert(!strcmp(properties.source(),"_DSD_INTERPRETER"));
@@ -97,18 +98,24 @@ int main(){
   assert(properties.load(&amp)==kIOReturnBadArgument);
  }
  assert(!allocations&&evaluations==1&&names==1);
+  assert(amp.strings["Cirrus_ACPI_Interpreter_State"]=="READY");
+  assert(amp.numbers["Cirrus_ACPI_Evaluate_Status"]==0);
+  fault=3;{ACPIDeviceProperties properties;assert(properties.load(&amp)==kIOReturnIOError);}
+  assert(amp.numbers["Cirrus_ACPI_Evaluate_Status"]==5);
  for(fault=1;fault<=21;++fault){ACPIDeviceProperties properties;assert(properties.load(&amp)!=0);assert(!properties.get("reset-gpios")&&!allocations);}
+ fault=2;{ACPIDeviceProperties properties;assert(properties.load(&amp)!=0);}
+ assert(amp.strings["Cirrus_ACPI_Conversion_Reason"]=="REFERENCE_NAME_LOOKUP_FAILED");
+ assert(amp.numbers["Cirrus_ACPI_Reference_Name_Status"]==5);
+ fault=4;{ACPIDeviceProperties properties;assert(properties.load(&amp)!=0);}
+ assert(amp.strings["Cirrus_ACPI_Conversion_Reason"]=="REFERENCE_TYPE_UNSUPPORTED");
  fault=0;
- // Namespace lookup is independent of the machine's controller/device names.
  activePath="\\_SB.PCI0.SPI8.AMPS";amp.path="IOACPIPlane:/_SB/PCI0/SPI8/AMPS";
  {ACPIDeviceProperties properties;assert(properties.load(&amp)==0);}
- // Other standard _DSD UUIDs may contain package data-node references.
  Object dataNode{};dataNode.reference={20,4,reinterpret_cast<void*>(0x1234)};
  ObjectConverter dataConverter(&dataNode,sizeof(dataNode),getNameMock);
  auto* converted=dataConverter.copy(&dataNode);assert(OSDynamicCast(OSString,converted));converted->release();
  allocationFailure=true;{ACPIDeviceProperties properties;assert(properties.load(&amp)==kIOReturnNoMemory);}
  allocationFailure=false;
- // Returned malformed objects and AML execution errors never invoke recovery.
  amp.dsdNullResult=false;unsigned before=evaluations;
  {ACPIDeviceProperties properties;assert(properties.load(&amp)!=0);}assert(evaluations==before);
  amp.dsdEvaluation=kIOReturnIOError;

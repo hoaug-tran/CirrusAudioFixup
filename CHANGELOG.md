@@ -6,6 +6,7 @@
 
 - Experimental CS35L56 SPI identity diagnostics for `CSC3556`, requiring `-cirrusro`; no DSP, firmware loading or playback support.
 - Meteor Lake-P GPIO mapping for `INTC1083`/`INTC105E`, including the distinct ownership-register layout and cross-community speaker ID reads.
+- CS35L41 firmware and tuning integration for ASUS subsystem `1043:1683` (Zenbook 14 UM3402Y).
 
 ## [1.1.1] - 2026-10-21
 

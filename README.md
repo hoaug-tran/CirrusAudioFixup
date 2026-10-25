@@ -85,6 +85,7 @@ amplifier registers, toggle amplifier reset, load firmware or start playback.
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B` | I2C | Working |
 | HP ZBook Fury 16 G9 | `103C:89C6` | SPI | Working |
 | ASUS ROG Strix G16 G614JI | `1043:1C9F` | SPI | Working with layout 21 at 48 kHz |
+| ASUS Zenbook 14 UM3402Y | `1043:1683` | I2C | Integrated firmware & board configuration |
 
 <details>
 <summary><strong>Other boards and controller support</strong></summary>

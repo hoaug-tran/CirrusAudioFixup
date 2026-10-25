@@ -20,6 +20,9 @@ for symbol, size, digest in (
     ("cs35l41_dsp1_spk_prot_10431c9f_spkid0_r0_bin", 4656, "1ef25251ff164dfd74ddb41e5f9214e81c464592d60432687de7c21a08abf834"),
     ("cs35l41_dsp1_spk_prot_10431c9f_spkid1_l0_bin", 4648, "f71b292f33ef49e20308eb3d59523988f55c7acf50902bed97f4b07519d9a5cc"),
     ("cs35l41_dsp1_spk_prot_10431c9f_spkid1_r0_bin", 4660, "8c235171e36bd27a0bd31a4d8f30887cbe682e485eeb95b0678bf5381111828e"),
+    ("cs35l41_dsp1_spk_prot_10431683_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
+    ("cs35l41_dsp1_spk_prot_10431683_spkid1_l0_bin", 5532, "0c6dbcfef3d0e8f7a068dadf68b10e185c2c06b35633e82ce415742814c76668"),
+    ("cs35l41_dsp1_spk_prot_10431683_spkid1_r0_bin", 5532, "724fd7c9a88fb641ea3d2e4920c3bfd156126959af11982c3179ee2d474fe7e5"),
 ):
     found = re.findall(r"const uint8_t " + symbol + r"\[\] = \{(.*?)\};", header, re.S)
     assert len(found) == 1, symbol

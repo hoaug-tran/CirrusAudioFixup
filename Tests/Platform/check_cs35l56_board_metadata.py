@@ -15,6 +15,10 @@ with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-metadata-") as directory
 #include "Platform/ACPI/ACPIDeviceProperties.hpp"
 #include "Transport/SPI/Intel/IntelSPIChipSelects.hpp"
 using namespace cirrus;
+namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+}
 int main() {
  cirrus::transport::nativePropertyEvaluator=[](IOACPIPlatformDevice* device,OSObject** out)->IOReturn {
   auto found=device->values.find("INTERPRETER_DSD");

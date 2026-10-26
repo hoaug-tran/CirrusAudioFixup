@@ -2,6 +2,8 @@
 #pragma once
 #if defined(KERNEL)
 #include "Support/Logging.hpp"
+#include <kern/clock.h>
+#include <mach/mach_time.h>
 #endif
 #include "Transport/SPI/Intel/IntelLPSSSPIController.hpp"
 #include "Transport/SPI/NativeSPIControllerOwner.hpp"
@@ -13,6 +15,8 @@ class IntelSPIControllerOwner final : public NativeSPIControllerOwner {
     IOService* mOwner{nullptr};
 #if defined(KERNEL)
     bool mChipSelectsReady{false};
+    bool mACPIPending{false};
+    uint64_t mACPIDeadlineNs{0};
 #endif
     uint32_t mPCIIdentity{0};
 
@@ -40,13 +44,43 @@ public:
         mTarget = target;
         mOwner = owner;
     }
-    bool powerPending() const override { return mController.powerPending(); }
+    bool powerPending() const override {
+#if defined(KERNEL)
+        if (mACPIPending)
+            return true;
+#endif
+        return mController.powerPending();
+    }
     IOReturn continueBind(NativeSPIControllerFailure& failure) override {
         auto result = mController.continueBind();
         failure.result = result;
         failure.reason = mController.bindFailureReason();
 #if defined(KERNEL)
         if (result == kIOReturnSuccess && !mChipSelectsReady) {
+            // The boot-KC callback may arrive after PCI D0. Defer on the
+            // service workloop so Lilu can finish dispatching the real image.
+            ACPIDeviceProperties properties;
+            if (!__atomic_load_n(&nativePropertyEvaluator, __ATOMIC_ACQUIRE) &&
+                (mACPIPending || (properties.load(mTarget, mOwner) == kIOReturnNotReady &&
+                                  !strcmp(properties.reason(), "DSD_INTERPRETER_UNAVAILABLE")))) {
+                uint64_t nowNs = 0;
+                absolutetime_to_nanoseconds(mach_absolute_time(), &nowNs);
+                if (!mACPIDeadlineNs)
+                    mACPIDeadlineNs = nowNs + 60000000000ULL;
+                const auto* state = __atomic_load_n(&nativePropertySetupState, __ATOMIC_ACQUIRE);
+                // READY precedes evaluator publication; another CPU may see
+                // that intermediate state before the release store completes.
+                const bool awaiting = !strcmp(state, "CALLBACK_NOT_REACHED") || !strcmp(state, "READY");
+                mACPIPending = awaiting && nowNs < mACPIDeadlineNs;
+                failure.result = mACPIPending ? kIOReturnNotReady :
+                                 awaiting ? kIOReturnTimeout : kIOReturnUnsupported;
+                failure.reason = mACPIPending ? "WAITING_ACPI_INTERPRETER" :
+                                 failure.result == kIOReturnTimeout ? "ACPI_INTERPRETER_TIMEOUT" : "ACPI_INTERPRETER_SETUP_FAILED";
+                mOwner->setProperty("Cirrus_ACPI_Interpreter_Setup", state);
+                mOwner->setProperty("Cirrus_Intel_SPI_Bind_Reason", failure.reason);
+                return failure.result;
+            }
+            mACPIPending = false;
             result = configureChipSelects(mTarget, mOwner);
             mChipSelectsReady = result == kIOReturnSuccess;
             failure.result = result;

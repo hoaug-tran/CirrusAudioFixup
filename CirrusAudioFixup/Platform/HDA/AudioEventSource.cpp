@@ -59,23 +59,6 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
 #if defined(KERNEL)
     const char* acpiPaths[] = {"/System/Library/Extensions/AppleACPIPlatform.kext/Contents/MacOS/AppleACPIPlatform"};
     KernelPatcher::KextInfo acpiInfo[] = {{"com.apple.driver.AppleACPIPlatform", acpiPaths, 1, {true}, {}, 0}};
-    void acpiPatcherReady(void*, KernelPatcher& patcher) {
-        const auto index = patcher.loadKinfo(&acpiInfo[0]);
-        const auto loadError = patcher.getError();
-        patcher.clearError();
-        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_KINFO index=%lu ret=%u\n", index, unsigned(loadError));
-        if (loadError != KernelPatcher::Error::NoError && loadError != KernelPatcher::Error::AlreadyDone)
-            return;
-        patcher.updateRunningInfo(index);
-        const auto runningError = patcher.getError();
-        patcher.clearError();
-        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_RUNNING ret=%u\n", unsigned(runningError));
-        if (runningError != KernelPatcher::Error::NoError)
-            return;
-        cirrus::transport::configureACPIEvaluation(patcher, index, 0, 0);
-        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_EARLY_SETUP state=%s\n",
-              __atomic_load_n(&cirrus::transport::nativePropertySetupState, __ATOMIC_ACQUIRE));
-    }
     void acpiLoaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
         IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_CALLBACK index=%lu expected=%lu\n", index, acpiInfo[0].loadIndex);
         if (index == acpiInfo[0].loadIndex) {
@@ -181,9 +164,7 @@ extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup
         if (!acpiRegistered)
             __atomic_store_n(&cirrus::transport::nativePropertySetupState,
                              static_cast<const char*>("CALLBACK_REGISTRATION_FAILED"), __ATOMIC_RELEASE);
-        const auto patcherError = lilu.onPatcherLoad(acpiPatcherReady);
-        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_PATCHER_REGISTER ret=%u\n", unsigned(patcherError));
-        registered = registered || acpiRegistered || patcherError == LiluAPI::Error::NoError;
+        registered = registered || acpiRegistered;
 #endif
         lilu.releaseAccess();
     }

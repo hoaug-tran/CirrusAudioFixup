@@ -55,6 +55,10 @@ OSArray* dsd(OSArray* entries){
  return make<OSArray>(std::vector<OSObject*>{make<OSData>(std::vector<uint8_t>{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01}),entries});
 }
 ''' + owner + r'''
+namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+}
 int main(){
  cirrus::transport::nativePropertyEvaluator=[](IOACPIPlatformDevice* device,OSObject** out)->IOReturn {
   auto found=device->values.find("INTERPRETER_DSD");

@@ -54,6 +54,10 @@ std::vector<uint8_t> capturedCRS(){
  for(size_t i=0;hex[i];i+=2){unsigned value=0;assert(sscanf(hex+i,"%2x",&value)==1);bytes.push_back(uint8_t(value));}
  return bytes;
 }
+namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+}
 int main(){
  assert(!boardProperties(0x1043,0xffff));
  for(const auto& board:kBoardProperties){

@@ -3,6 +3,8 @@
 #include <Headers/kern_patcher.hpp>
 
 namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
 namespace {
 acpi::GetHandle getHandle{nullptr};
 acpi::GetName getName{nullptr};

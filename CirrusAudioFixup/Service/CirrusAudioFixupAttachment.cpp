@@ -534,8 +534,8 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                                                           : cirrus::transport::createNativeSPIController);
     CIRRUS_LOG("BOOT_FLOW SPI_BIND_END ret=0x%08X", uint32_t(ret));
     if (mNativeSPI.powerPending()) {
-        setProperty("Cirrus_SPI_Status", "WAITING_POWER");
-        mAttachment.communication = "WAITING_POWER";
+        setProperty("Cirrus_SPI_Status", "WAITING_CONTROLLER_RESOURCES");
+        mAttachment.communication = "WAITING_CONTROLLER_RESOURCES";
         publishAttachmentStatus();
         return true;
     }

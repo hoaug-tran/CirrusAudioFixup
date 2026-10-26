@@ -133,9 +133,9 @@ bool CirrusAudioFixup::start(IOService* provider) {
     }
     if (mNativeSPI.powerPending()) {
         mStartupPending = true;
-        setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_POWER");
+        setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_RESOURCES");
 #if defined(KERNEL)
-        publishBootCheckpoint(this, "START_WAITING_CONTROLLER_POWER");
+        publishBootCheckpoint(this, "START_WAITING_CONTROLLER_RESOURCES");
 #endif
         registerService();
         mProbeTimer->setTimeoutMS(10);
@@ -149,7 +149,7 @@ bool CirrusAudioFixup::start(IOService* provider) {
 }
 
 void CirrusAudioFixup::continueStartup() {
-    // Keep the same power request alive. Reset and identity probing start only
+    // Keep pending power/ACPI resources alive. Reset and identity probing start only
     // after every pending controller has finished binding.
     const auto result = mNativeSPI.continueBind();
     if (mNativeSPI.powerPending()) {

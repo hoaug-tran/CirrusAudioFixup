@@ -86,7 +86,21 @@ int main(){
  amp.values["_DSD"]=make<OSNumber>(0);amp.dsdNullResult=true;
  OSObject* result=nullptr;KernelPatcher patcher;
  assert(evaluateNativeProperties(&amp,&result)==kIOReturnNotReady);
- for(missingSymbol=1;missingSymbol<=3;++missingSymbol){configureACPIEvaluation(patcher,0,0,0);assert(!nativePropertyEvaluator);}
+ for(unsigned attempt=0;attempt<3;++attempt){
+  ACPIDeviceProperties properties;
+  assert(properties.load(&amp)==kIOReturnNotReady);
+  assert(!strcmp(properties.reason(),"DSD_INTERPRETER_UNAVAILABLE"));
+  assert(!properties.object()&&!properties.get("reset-gpios"));
+  assert(!evaluations&&!allocations);
+ }
+ assert(amp.strings["Cirrus_ACPI_Interpreter_Setup"]=="CALLBACK_NOT_REACHED");
+ for(missingSymbol=1;missingSymbol<=3;++missingSymbol){
+  configureACPIEvaluation(patcher,0,0,0);assert(!nativePropertyEvaluator);
+  const char* reasons[]={"GET_HANDLE_SYMBOL_MISSING","GET_NAME_SYMBOL_MISSING","EVALUATE_OBJECT_SYMBOL_MISSING"};
+  ACPIDeviceProperties properties;assert(properties.load(&amp)==kIOReturnNotReady);
+  assert(amp.strings["Cirrus_ACPI_Interpreter_Setup"]==reasons[missingSymbol-1]);
+  assert(!evaluations&&!allocations);
+ }
  assert(amp.strings["Cirrus_ACPI_Interpreter_State"]=="UNAVAILABLE");
   missingSymbol=0;configureACPIEvaluation(patcher,0,0,0);assert(nativePropertyEvaluator);
  {

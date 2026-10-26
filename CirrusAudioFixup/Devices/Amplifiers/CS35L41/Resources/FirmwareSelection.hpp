@@ -22,11 +22,14 @@ const Resource* selectFirmwareResource(const Resource* resources, size_t count, 
         return nullptr;
     const Resource* exact = nullptr;
     const Resource* generic = nullptr;
-    unsigned exactCount = 0, genericCount = 0;
+    const Resource* single = nullptr;
+    unsigned exactCount = 0, genericCount = 0, boardCount = 0;
     for (size_t i = 0; i < count; ++i) {
         const auto& resource = resources[i];
         if (resource.subsystemVendor != vendor || resource.subsystemDevice != device)
             continue;
+        single = &resource;
+        ++boardCount;
         if (resource.genericSpeaker) {
             generic = &resource;
             ++genericCount;
@@ -35,6 +38,12 @@ const Resource* selectFirmwareResource(const Resource* resources, size_t count, 
             ++exactCount;
         }
     }
-    return exactCount ? (exactCount == 1 ? exact : nullptr) : (genericCount == 1 ? generic : nullptr);
+    if (exactCount == 1)
+        return exact;
+    if (genericCount == 1)
+        return generic;
+    if (boardCount == 1 && speaker == UINT32_MAX)
+        return single;
+    return nullptr;
 }
 }

@@ -45,7 +45,9 @@ inline bool prepareBoardMetadata(const platform::BoardIdentity& identity, IOACPI
     support::ACPIBoardMetadata metadata;
     auto* spi = metadata.node(controller);
     auto* amp = metadata.node(amplifier);
-    const uint32_t indices[]{0, 1}, zero[]{0, 0}, two[]{2, 2};
+    const uint32_t indices[]{0, 1}, two[]{2, 2};
+    const uint32_t boostType[]{facts->internalBoost ? 0U : 1U, facts->internalBoost ? 0U : 1U};
+    const uint32_t gpio1Func[]{facts->internalBoost ? 0U : 1U, facts->internalBoost ? 0U : 1U};
     const uint32_t channels[]{facts->channels[0], facts->channels[1]};
     const uint32_t inductor[]{facts->inductor, facts->inductor}, peak[]{facts->peak, facts->peak};
     const uint32_t capacitor[]{facts->capacitor, facts->capacitor};
@@ -57,7 +59,7 @@ inline bool prepareBoardMetadata(const platform::BoardIdentity& identity, IOACPI
                     (!mapGPIO || facts->speakerResource < 0 ||
                      metadata.references(amp, "speaker-id-gpios", amplifier, uint16_t(facts->speakerResource), 0, false, 2)) &&
                     metadata.array(amp, "cirrus,dev-index", indices, 2) && metadata.array(amp, "cirrus,speaker-position", channels, 2) &&
-                    metadata.array(amp, "cirrus,boost-type", zero, 2) && metadata.array(amp, "cirrus,gpio1-func", zero, 2) &&
+                    metadata.array(amp, "cirrus,boost-type", boostType, 2) && metadata.array(amp, "cirrus,gpio1-func", gpio1Func, 2) &&
                     metadata.array(amp, "cirrus,gpio2-func", two, 2) && metadata.array(amp, "cirrus,boost-ind-nanohenry", inductor, 2) &&
                     metadata.array(amp, "cirrus,boost-peak-milliamp", peak, 2) &&
                     metadata.array(amp, "cirrus,boost-cap-microfarad", capacitor, 2) && metadata.publish(owner);

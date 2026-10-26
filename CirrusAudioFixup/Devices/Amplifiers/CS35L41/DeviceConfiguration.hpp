@@ -7,9 +7,8 @@ struct DeviceConfiguration {
     PowerConfiguration power{};
     uint8_t gpio1Function{0}, gpio2Function{2};
     bool valid() const {
-        // VSPK switch and MDSYNC need additional sequencing, deliberately not
-        // inferred from a recognized HID or a matching firmware resource.
-        return power.valid() && gpio1Function == 0 && (gpio2Function == 0 || gpio2Function == 2);
+        return power.valid() && (power.internal() ? gpio1Function == 0 : (gpio1Function == 0 || gpio1Function == 1)) &&
+               (gpio2Function == 0 || gpio2Function == 2);
     }
 };
 inline constexpr const char* kDeviceConfigurationKind = "cs35l41-device-v1";

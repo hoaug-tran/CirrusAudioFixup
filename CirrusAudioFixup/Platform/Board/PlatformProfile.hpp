@@ -114,8 +114,6 @@ inline bool permitsHardwareInitialization(const PlatformProfile& profile, uint32
         BoardIdentity actual{uint16_t(pciSubsystemId >> 16), uint16_t(pciSubsystemId), profile.acpiHid};
         return profile.allowAutomaticInitialization && profile.boardConfiguration->permits(actual);
     }
-    if (profile.acpiHid && strcmp(profile.acpiHid, "CSC3551") == 0 && pciSubsystemId == 0x10431683)
-        return true;
     return profile.allowAutomaticInitialization && profile.acpiHid && strcmp(profile.acpiHid, "CLSA0100") == 0 &&
            (pciSubsystemId == 0x17AA382B || pciSubsystemId == 0x17AA3847);
 }

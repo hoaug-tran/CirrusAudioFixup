@@ -102,7 +102,7 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         const auto& endpoint = context.endpoints[i];
         const uint32_t selection = endpoint.transport == core::BusTransportType::SPI ? endpoint.spiChipSelect : endpoint.i2cAddress;
         size_t index = 0;
-        while (index < context.count && indices[index] != selection)
+        while (index < context.count && indices[index] != selection && (endpoint.transport != core::BusTransportType::I2C || indices[index] != i))
             ++index;
         if (!endpoint.valid() || (endpoint.transport == core::BusTransportType::SPI && endpoint.spiClockHz > 4000000) ||
             strlen(endpoint.controllerPath) >= sizeof(result->controllerPaths[i]) || index == context.count || consumed[index] ||
@@ -114,23 +114,20 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         consumed[index] = true;
         usedChannel[channels[index]] = true;
         auto& device = result->devices[i];
-        // Linux's known-board configuration supplies authoritative electrical
-        // values even when firmware contains an incorrect boost declaration.
-        if (const auto* correction = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice)) {
+        const auto* correction = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice);
+        if (correction) {
             boost[index] = correction->internalBoost ? 0 : 1;
             inductor[index] = correction->inductor;
             peak[index] = correction->peak;
             capacitor[index] = correction->capacitor;
         }
-        // Only the implemented internal topology may be discovered here.
-        // External-with-switch/shared-boost require their own power contracts;
-        // the legacy no-VSPK-switch mode is never inferred from ACPI value 1.
-        if (boost[index] != 0) {
+        if (boost[index] != 0 && (!correction || correction->internalBoost)) {
             reason = "CS35L41_BOOST_TOPOLOGY_UNIMPLEMENTED";
             delete result;
             return nullptr;
         }
-        device.power = {BoostTopology::Internal, inductor[index], peak[index], capacitor[index]};
+        device.power = {boost[index] == 0 ? BoostTopology::Internal : BoostTopology::ExternalWithoutSwitch,
+                        inductor[index], peak[index], capacitor[index]};
         device.gpio1Function = uint8_t(gpio1[index]);
         device.gpio2Function = uint8_t(gpio2[index]);
         if (!device.valid()) {

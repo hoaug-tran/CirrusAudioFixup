@@ -426,6 +426,41 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
             setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
             recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
         }
+        if (expected && expected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard) {
+            char path[256]{};
+            int length = sizeof(path);
+            mProvider->getPath(path, &length, gIOServicePlane);
+            cirrus::core::BusEndpoint endpoints[2]{
+                {cirrus::core::BusTransportType::I2C, path, 0x40},
+                {cirrus::core::BusTransportType::I2C, path, 0x41}
+            };
+            cirrus::transport::ACPIDeviceProperties emptyProps;
+            cirrus::transport::ACPIPlatformProperties source(emptyProps);
+            const cirrus::platform::BoardDiscoveryContext context{
+                {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid},
+                endpoints,
+                2,
+                source,
+                nullptr
+            };
+            const char* reason = nullptr;
+            mDiscoveredBoard = expected->discoverBoard(context, reason);
+            if (mDiscoveredBoard && mDiscoveredBoard->configuration.permits(context.identity)) {
+                mDiscoveredProfile = *mPlatformProfile;
+                mDiscoveredProfile.name = "discovered-i2c-board";
+                mDiscoveredProfile.boardConfiguration = &mDiscoveredBoard->configuration;
+                mDiscoveredProfile.endpointCount = mDiscoveredBoard->configuration.count;
+                mDiscoveredProfile.allowAutomaticInitialization = true;
+                mPlatformProfile = &mDiscoveredProfile;
+                mPlatformAuthorized = true;
+                setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
+                setProperty("Cirrus_Platform_Authorized", kOSBooleanTrue);
+                setProperty("Cirrus_Board_Authorized", kOSBooleanTrue);
+            } else {
+                delete mDiscoveredBoard;
+                mDiscoveredBoard = nullptr;
+            }
+        }
         if (expected && !preflightI2CIdentity(expected))
             return false;
         publishAttachmentStatus();

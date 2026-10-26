@@ -80,21 +80,8 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
     }
     for (size_t i = 0; i < context.count; ++i) {
         bool speakerKnown = hasSpeaker;
-        const bool explicitSpeaker = context.speakerOverrides && channels[i] < 2 &&
-            context.speakerOverrides->known[channels[i]];
-        if (explicitSpeaker) {
-            if (speakerKnown && speakers[i] != context.speakerOverrides->values[channels[i]]) {
-                reason = "CS35L41_SPEAKER_ID_MISMATCH";
-                return nullptr;
-            }
-            speakers[i] = context.speakerOverrides->values[channels[i]];
-            speakerKnown = true;
-        }
         for (const auto* property : speakerGPIOProperties) {
             if (!properties.contains(property))
-                continue;
-            // An explicit measured ID can bridge a missing GPIO reader, never a failed read.
-            if (!context.gpio && explicitSpeaker)
                 continue;
             uint32_t observed = 0;
             if (!context.gpio || !context.gpio->read(property, i, observed)) {
@@ -109,8 +96,11 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
             speakerKnown = true;
         }
         if (!speakerKnown && facts && facts->speakerResource >= 0) {
-            reason = "CS35L41_SPEAKER_ID_REQUIRED";
-            return nullptr;
+            if (!context.gpio || !context.gpio->readResource(uint32_t(facts->speakerResource), 0, false, speakers[i])) {
+                reason = context.gpio ? "CS35L41_SPEAKER_ID_UNREADABLE" : "CS35L41_SPEAKER_ID_REQUIRED";
+                return nullptr;
+            }
+            speakerKnown = true;
         }
         if (!speakerKnown)
             speakers[i] = UINT32_MAX;

@@ -12,10 +12,6 @@ public:
     virtual bool array(const char* name, uint32_t* output, size_t count) const = 0;
 };
 struct BoardDiscoveryContext {
-    struct SpeakerOverrides {
-        uint32_t values[2]{};
-        bool known[2]{};
-    };
     BoardIdentity identity;
     const core::BusEndpoint* endpoints;
     size_t count;
@@ -24,9 +20,9 @@ struct BoardDiscoveryContext {
     public:
         virtual ~GPIOReader() = default;
         virtual bool read(const char* property, size_t index, uint32_t& value) = 0;
+        virtual bool readResource(uint32_t, uint32_t, bool, uint32_t&) { return false; }
     };
     GPIOReader* gpio{nullptr};
-    const SpeakerOverrides* speakerOverrides{nullptr};
 };
 class DiscoveredBoard {
 public:

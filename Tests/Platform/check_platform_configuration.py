@@ -180,13 +180,13 @@ void profileChecks(){
   delete generic;
   p.values["cirrus,boost-type"]={2,2};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));
  }
- // Per-channel overrides follow channel wiring, not endpoint/property order.
+ // Native per-device speaker IDs survive reversed channel wiring.
  {Properties p;p.values["cirrus,dev-index"]={0,1};
   core::BusEndpoint e[]={{core::BusTransportType::SPI,"\\_SB.SPI0",0,false,0,1000000},
                          {core::BusTransportType::SPI,"\\_SB.SPI0",0,false,1,1000000}};
-  platform::BoardDiscoveryContext::SpeakerOverrides ids{{3,7},{true,true}};
+  p.values["cirrus,speaker-id"]={7,3};
   const char* reason=nullptr;
-  auto* b=resolveBoardConfiguration({{0x1234,0x5678,"CSC3551"},e,2,p,nullptr,&ids},
+  auto* b=resolveBoardConfiguration({{0x1234,0x5678,"CSC3551"},e,2,p},
    [](uint16_t,uint16_t,uint32_t id){return id==3||id==7;},reason);
   assert(b&&b->configuration.amplifiers[0].channelIndex==1&&b->configuration.amplifiers[0].speakerId==7);
   assert(b->configuration.amplifiers[1].channelIndex==0&&b->configuration.amplifiers[1].speakerId==3);delete b;

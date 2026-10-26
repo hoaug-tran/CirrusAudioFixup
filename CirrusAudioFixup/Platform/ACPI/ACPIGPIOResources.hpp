@@ -43,9 +43,10 @@ inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t r
         if (!large && ((*d >> 3) == 6 || (*d >> 3) == 7))
             return false;
         if (*d == 0x8c && index++ == resourceIndex) {
-            // Input and output roles are explicit; no direction/mux changes.
+            // Read-only sampling accepts input/unrestricted shared resources;
+            // output leases remain exclusive. No direction/mux changes here.
             if (size < 23 || d[3] != 1 || d[4] != 1 || le16(d + 5) != 1 ||
-                le16(d + 7) != (outputOnly ? 2 : 1) || d[16] != 0)
+                (outputOnly ? le16(d + 7) != 2 : ((le16(d + 7) & ~uint16_t(0x19)) != 0)) || d[16] != 0)
                 return false;
             const size_t pins = le16(d + 14), source = le16(d + 17);
             const size_t vendor = le16(d + 19), vendorSize = le16(d + 21);

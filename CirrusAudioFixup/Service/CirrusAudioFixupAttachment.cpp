@@ -437,27 +437,14 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                 return true;
             }
             cirrus::transport::ACPIPlatformProperties nativeProperties(resources.properties);
-            cirrus::platform::BoardDiscoveryContext::SpeakerOverrides overrides;
-            uint32_t speaker = 0;
-            if (PE_parse_boot_argn("-cirrusspkid", &speaker, sizeof(speaker)))
-                for (size_t i = 0; i < 2; ++i) {
-                    overrides.values[i] = speaker;
-                    overrides.known[i] = true;
-                }
-            const char* speakerArguments[]{"-cirrusspkidl", "-cirrusspkidr"};
-            for (size_t i = 0; i < 2; ++i)
-                if (PE_parse_boot_argn(speakerArguments[i], &speaker, sizeof(speaker))) {
-                    overrides.values[i] = speaker;
-                    overrides.known[i] = true;
-                }
-            setProperty("Cirrus_Platform_Speaker_ID_Source", (overrides.known[0] || overrides.known[1]) ? "BOOT_ARGUMENT" : "ACPI_OR_UNKNOWN");
+            resources.setDiagnosticOwner(this);
+            setProperty("Cirrus_Platform_Speaker_ID_Source", "ACPI_PROPERTIES_OR_GPIO");
             const cirrus::platform::BoardDiscoveryContext context{
                 {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid},
                 resources.endpoints,
                 resources.count,
                 nativeProperties,
-                nullptr,
-                &overrides
+                &resources
             };
             const char* reason = nullptr;
             mDiscoveredBoard = expected->discoverBoard(context, reason);

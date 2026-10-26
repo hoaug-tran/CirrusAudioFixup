@@ -3,7 +3,7 @@
 def install(tmp):
     for name in ("IOKit", "IOKit/acpi", "IOKit/pci", "libkern/c++"):
         (tmp / name).mkdir(parents=True, exist_ok=True)
-    for name in ("IOKit/IOLib.h", "IOKit/IOService.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
+    for name in ("IOKit/IOMemoryDescriptor.h", "IOKit/IOLib.h", "IOKit/IOService.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
                  "IOKit/pci/IOPCIDevice.h", "libkern/c++/OSArray.h", "libkern/c++/OSData.h",
                  "libkern/c++/OSNumber.h", "libkern/c++/OSString.h"):
         (tmp / name).write_text('#pragma once\n#include "Fixture.hpp"\n')
@@ -49,13 +49,13 @@ class IOService:public IORegistryEntry {public:
  bool setProperty(const char* k,const char* v){strings[k]=v;return true;}
  bool setProperty(const char* k,uint64_t v,unsigned){numbers[k]=v;return true;}
  bool setProperty(const char* name,OSObject* value){objects[name]=value;return true;}
- void removeProperty(const char* name){objects.erase(name);}
+ void removeProperty(const char* name){objects.erase(name);numbers.erase(name);strings.erase(name);}
 };
 inline std::vector<IORegistryEntry*> devices;
 constexpr unsigned kIORegistryIterateRecursively=1;
 struct IORegistryIterator {unsigned i=0;static IORegistryIterator* iterateOver(IORegistryEntry*,const void*,unsigned){return new IORegistryIterator;}
  IORegistryEntry* getNextObject(){return i<devices.size()?devices[i++]:nullptr;}void release(){delete this;}};
-struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t getLength(){return sizeof(r);}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
+struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t bytes=sizeof(r);size_t getLength(){return bytes;}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
 class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObject*> values;IOMemoryMap* map=nullptr;std::map<unsigned,IOMemoryMap*> maps;bool opened=false;unsigned opens=0,closes=0,firmwareCalls=0;
  IOReturn dsdValidation=0,dsdEvaluation=0,absentValidation=kIOReturnNotFound;
  bool dsdNullResult=false;

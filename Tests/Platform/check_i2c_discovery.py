@@ -59,18 +59,87 @@ int main(){
  {
   transport::I2CPlatformResources resources;assert(resources.load(&nub,reason)&&resources.count==2);
   transport::ACPIPlatformProperties properties(resources.properties);
-  platform::BoardDiscoveryContext::SpeakerOverrides ids{{SPEAKER_LEFT,SPEAKER_RIGHT},{true,true}};
-  const platform::BoardDiscoveryContext context{{VENDOR,DEVICE,"CSC3551"},resources.endpoints,resources.count,properties,nullptr,&ids};
-  auto* board=resolveBoardConfiguration(context,assets,reason);assert(board&&board->configuration.count==2);
-  for(size_t i=0;i<2;++i){
-   const auto& binding=board->configuration.amplifiers[i];DeviceConfiguration config;
-   assert(binding.endpoint.i2cAddress==FIRST_ADDRESS+i&&binding.speakerId==ids.values[i]);
-   assert(!strcmp(binding.endpoint.controllerPath,nub.path.c_str()));
-   assert(decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config)&&config.power.switched());
+  const platform::BoardDiscoveryContext context{{VENDOR,DEVICE,"CSC3551"},resources.endpoints,resources.count,properties};
+  assert(!resolveBoardConfiguration(context,assets,reason)&&!strcmp(reason,"CS35L41_SPEAKER_ID_REQUIRED"));
+  platform::DiscoveredBoard* board=nullptr;
+ struct GPIO final:platform::BoardDiscoveryContext::GPIOReader {
+  unsigned calls=0;
+  bool read(const char*,size_t,uint32_t&)override{return false;}
+  bool readResource(uint32_t resource,uint32_t pin,bool low,uint32_t& value)override{
+   assert(resource==1&&pin==0&&!low);++calls;value=SPEAKER_LEFT;return true;
   }
-  delete board;
-  ids.known[0]=ids.known[1]=false;assert(!resolveBoardConfiguration(context,assets,reason)&&!strcmp(reason,"CS35L41_SPEAKER_ID_REQUIRED"));
+ } gpio;
+ platform::BoardDiscoveryContext autoContext{context.identity,resources.endpoints,resources.count,properties,&gpio};
+ board=resolveBoardConfiguration(autoContext,assets,reason);
+ assert(board&&gpio.calls==2);
+ for(size_t i=0;i<2;++i)assert(board->configuration.amplifiers[i].speakerId==SPEAKER_LEFT);
+ delete board;
+
  }
+ // Synthesized GPIO descriptors exercise the real ACPI/MMIO reader. Physical pin
+ // and live register values were not captured; they are not presented as a dump.
+ assert(transport::amd::supportsGPIOInput("AMD0030")&&transport::amd::supportsGPIOInput("AMDI0030")&&
+        transport::amd::supportsGPIOInput("AMDI0031")&&!transport::amd::supportsGPIOInput("AMDI0032"));
+ auto gpioDescriptor=[](unsigned pin,unsigned restriction){
+  const char source[]="\\_SB.GPIO";std::vector<uint8_t> d(25+sizeof(source));
+  d[0]=0x8c;d[1]=uint8_t(d.size()-3);d[3]=1;d[4]=1;d[5]=1;d[7]=restriction;
+  d[14]=23;d[17]=25;d[19]=uint8_t(d.size());d[23]=uint8_t(pin);d[24]=uint8_t(pin>>8);
+  memcpy(d.data()+25,source,sizeof(source));return d;
+ };
+ amp->path="IOACPIPlane:/_SB/I2CD/SPKR";
+ auto* controller=make<IOACPIPlatformDevice>();controller->path="IOACPIPlane:/_SB/GPIO";
+ const char hid[]="AMDI0030";
+ controller->objects["name"]=make<OSData>(std::vector<uint8_t>(hid,hid+sizeof(hid)));
+ auto* memory=make<IOMemoryMap>();controller->map=memory;memory->bytes=1024;
+ ::devices={amp,controller};
+ auto full=captured;full.resize(full.size()-2);
+ for(auto d:{gpioDescriptor(84,2),gpioDescriptor(67,0x19)})full.insert(full.end(),d.begin(),d.end());
+ full.insert(full.end(),{0x79,0});amp->values["_CRS"]=make<OSData>(full);
+ {
+  transport::I2CPlatformResources automatic;IOService owner;
+  automatic.setDiagnosticOwner(&owner);assert(automatic.load(&nub,reason));
+  transport::ACPIPlatformProperties native(automatic.properties);
+  platform::BoardDiscoveryContext context{{VENDOR,DEVICE,"CSC3551"},automatic.endpoints,automatic.count,native,&automatic};
+  memory->r[67]=1U<<16;
+  std::vector<uint32_t> before(memory->r,memory->r+sizeof(memory->r)/4);
+  auto* board=resolveBoardConfiguration(context,assets,reason);if(!board)fprintf(stderr,"board=%s gpio=%s pin=%llu\n",reason,owner.strings["Cirrus_GPIO_Input_Reason"].c_str(),(unsigned long long)owner.numbers["Cirrus_GPIO_Input_Pin"]);assert(board);
+  for(size_t i=0;i<2;++i)assert(board->configuration.amplifiers[i].speakerId==1);
+  delete board;
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"]=="GPIO_INPUT_READ_WITHOUT_WRITES");
+  uint32_t value=7;
+  assert(automatic.readResource(1,0,true,value)&&value==0);
+  memory->r[67]=0;assert(!resolveBoardConfiguration(context,assets,reason));
+  assert(!strcmp(reason,"CS35L41_SPEAKER_TUNING_UNAVAILABLE"));
+  for(auto config:{UINT32_MAX,1U<<23}){
+   memory->r[67]=config;value=7;
+   assert(!automatic.readResource(1,0,false,value)&&value==7);
+  }
+  memory->r[67]=1U<<16;memory->bytes=16;
+  assert(!automatic.readResource(1,0,false,value));memory->bytes=1024;
+  assert(!owner.numbers.count("Cirrus_GPIO_Input_Value"));
+  controller->values["_PSC"]=make<OSNumber>(3);
+  assert(!automatic.readResource(1,0,false,value));controller->values.erase("_PSC");
+  auto* identity=controller->objects["name"];controller->objects.erase("name");
+  assert(!automatic.readResource(1,0,false,value));controller->objects["name"]=identity;
+  assert(!automatic.readResource(2,0,false,value));
+  assert(!automatic.readResource(1,1,false,value));
+  assert(!memcmp(memory->r,before.data(),sizeof(memory->r)));
+  assert(!controller->opens&&!controller->closes);
+  // Native _DSD references take precedence over the board-table resource.
+  auto* tuples=make<OSArray>(std::vector<OSObject*>{amp,make<OSNumber>(1),make<OSNumber>(0),make<OSNumber>(0),
+                                                amp,make<OSNumber>(1),make<OSNumber>(0),make<OSNumber>(0)});
+  auto* pair=make<OSArray>(std::vector<OSObject*>{make<OSString>("spk-id-gpios"),tuples});
+  auto* entries=make<OSArray>(std::vector<OSObject*>{pair});
+  amp->values["_DSD"]=make<OSArray>(std::vector<OSObject*>{make<OSData>(std::vector<uint8_t>{
+   0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01}),entries});
+  amp->dsdValidation=0;
+  transport::I2CPlatformResources described;assert(described.load(&nub,reason));
+  assert(described.read("spk-id-gpios",1,value)&&value==1);
+  assert(!described.read("spk-id-gpios",2,value));
+  tuples->v[3]=make<OSNumber>(2);assert(!described.read("spk-id-gpios",0,value));
+  assert(!memcmp(memory->r,before.data(),sizeof(memory->r)));
+ }
+ assert(memory->refs==1&&controller->refs==1&&amp->refs==1);
  nub.objects["i2cAddress"]=make<OSNumber>(0x23);
  {transport::I2CPlatformResources bad;assert(!bad.load(&nub,reason)&&!strcmp(reason,"I2C_PROVIDER_ENDPOINT_UNMATCHED"));}
  nub.objects.erase("acpi-device");

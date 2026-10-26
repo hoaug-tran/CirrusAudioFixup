@@ -3,14 +3,41 @@
 #pragma once
 #include "Platform/ACPI/ACPII2CResources.hpp"
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
+#include "Platform/ACPI/ACPIGPIOInput.hpp"
 namespace cirrus::transport {
-class I2CPlatformResources final {
+class I2CPlatformResources final : public platform::BoardDiscoveryContext::GPIOReader {
+    IOACPIPlatformDevice* mACPI{nullptr};
+    IOService* mOwner{nullptr};
     char mPath[256]{};
 public:
+    ~I2CPlatformResources() { OSSafeReleaseNULL(mACPI); }
+    void setDiagnosticOwner(IOService* owner) { mOwner = owner; }
+    bool readResource(uint32_t resource, uint32_t pin, bool low, uint32_t& value) override {
+        return readACPIGPIOInput(mACPI, resource, pin, low, mOwner, value);
+    }
+    bool read(const char* property, size_t index, uint32_t& value) override {
+        auto* tuples = OSDynamicCast(OSArray, properties.get(property));
+        if (!tuples || tuples->getCount() % 4 || index >= tuples->getCount() / 4)
+            return false;
+        const unsigned i = unsigned(index * 4);
+        auto* resource = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
+        auto* pin = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
+        auto* low = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
+        if (!resource || !pin || !low || resource->unsigned64BitValue() > UINT32_MAX ||
+            pin->unsigned64BitValue() > UINT32_MAX || low->unsigned64BitValue() > 1)
+            return false;
+        auto* source = resolveACPIReference(mACPI, tuples->getObject(i));
+        const bool result = readACPIGPIOInput(source, resource->unsigned32BitValue(), pin->unsigned32BitValue(),
+                                              low->unsigned32BitValue() != 0, mOwner, value);
+        OSSafeReleaseNULL(source);
+        return result;
+    }
     core::BusEndpoint endpoints[ACPII2CResources::kCapacity]{};
     size_t count{0};
     ACPIDeviceProperties properties;
     bool load(IOService* provider, const char*& reason) {
+        count = 0;
+        OSSafeReleaseNULL(mACPI);
         reason = "I2C_ACPI_DEVICE_UNAVAILABLE";
         auto* acpi = provider ? support::acpiDeviceCast(provider->getProperty("acpi-device")) : nullptr;
         if (!acpi)
@@ -40,6 +67,8 @@ public:
             reason = properties.reason();
             return false;
         }
+        mACPI = acpi;
+        mACPI->retain();
         count = resources.count;
         for (size_t i = 0; i < count; ++i)
             endpoints[i] = {core::BusTransportType::I2C, mPath, resources.endpoints[i].address, resources.endpoints[i].tenBit};

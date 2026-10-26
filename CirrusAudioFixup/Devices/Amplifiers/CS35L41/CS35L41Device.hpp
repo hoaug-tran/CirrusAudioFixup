@@ -262,7 +262,7 @@ public:
     }
 
     bool setupGPIO(core::RegisterIO& io, uint8_t gpio1Function = 0, uint8_t gpio2Function = 2, bool configureGPIO1 = false) {
-        if (gpio1Function != 0 || (gpio2Function != 0 && gpio2Function != 2))
+        if ((gpio1Function != 0 && gpio1Function != 1) || (gpio2Function != 0 && gpio2Function != 2))
             return false;
         bool ok = true;
         ok = io.updateBits(registers::kRegGpio1Control1, 0x80001000, 0x80000000) && ok;

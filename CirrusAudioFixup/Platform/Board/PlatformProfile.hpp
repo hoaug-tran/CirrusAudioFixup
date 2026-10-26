@@ -78,7 +78,7 @@ static constexpr PlatformProfile kPlatformProfiles[] = {
     {"lenovo-clsa0100-cs35l41", "CLSA0100", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, &kAmdAmdi0030Reset, true, nullptr,
      nullptr, 0, &kLegionProtectionIRQ},
     {"lenovo-clsa0101-cs35l41", "CLSA0101", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false},
-    {"acpi-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, nullptr, 0, nullptr, false, nullptr, nullptr, 0, nullptr, nullptr,
+    {"acpi-csc3551-cs35l41", "CSC3551", core::AmplifierModel::CS35L41, kCs35l41StereoEndpoints, 2, nullptr, false, nullptr, nullptr, 0, nullptr, nullptr,
      nullptr, BoardIdentitySource::ACPI},
     {"acpi-csc3556-cs35l56", "CSC3556", core::AmplifierModel::CS35L56, nullptr, 0, nullptr, false, nullptr, nullptr, 0, nullptr,
      nullptr, nullptr, BoardIdentitySource::ACPI},
@@ -109,13 +109,13 @@ inline const PlatformProfile* findPlatformProfile(const char* acpiHid, uint32_t 
     return findPlatformProfileIn(kPlatformProfiles, sizeof(kPlatformProfiles) / sizeof(kPlatformProfiles[0]), acpiHid, subsystemId);
 }
 
-// PCI subsystem identity is available before the codec publishes its SSID.
-// This allowlist authorizes reference reset wiring, not generic CS35L41 support.
 inline bool permitsHardwareInitialization(const PlatformProfile& profile, uint32_t pciSubsystemId) {
     if (profile.boardConfiguration) {
         BoardIdentity actual{uint16_t(pciSubsystemId >> 16), uint16_t(pciSubsystemId), profile.acpiHid};
         return profile.allowAutomaticInitialization && profile.boardConfiguration->permits(actual);
     }
+    if (profile.acpiHid && strcmp(profile.acpiHid, "CSC3551") == 0 && pciSubsystemId == 0x10431683)
+        return true;
     return profile.allowAutomaticInitialization && profile.acpiHid && strcmp(profile.acpiHid, "CLSA0100") == 0 &&
            (pciSubsystemId == 0x17AA382B || pciSubsystemId == 0x17AA3847);
 }

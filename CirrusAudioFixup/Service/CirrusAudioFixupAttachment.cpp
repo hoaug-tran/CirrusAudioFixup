@@ -320,19 +320,21 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         if (const auto* exact = cirrus::platform::findPlatformProfile(acpiHid, acpiSubsystemId))
             if (exact->identitySource == cirrus::platform::BoardIdentitySource::ACPI)
                 mPlatformProfile = exact;
-    // Discovery results belong to this provider instance, never to a global
-    // model profile. Preserve them while identity and borrowers remain valid.
     if (mDiscoveredBoard && acpiHid) {
         const cirrus::platform::BoardIdentity identity{uint16_t(acpiSubsystemId >> 16), uint16_t(acpiSubsystemId), acpiHid};
         if (mDiscoveredBoard->configuration.permits(identity))
             mPlatformProfile = &mDiscoveredProfile;
     }
     mPlatformSubsystemId =
-        mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? acpiSubsystemId : pciSubsystemId;
+        (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && cirrus::support::acpiDeviceCast(mProvider))
+            ? acpiSubsystemId
+            : pciSubsystemId;
     mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, mPlatformSubsystemId);
     setProperty("Cirrus_Platform_ACPI_SSID", uint64_t(acpiSubsystemId), 32);
     setProperty("Cirrus_Platform_Identity_Source",
-                mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI ? "ACPI_SUB" : "AUDIO_PCI");
+                (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && cirrus::support::acpiDeviceCast(mProvider))
+                    ? "ACPI_SUB"
+                    : "AUDIO_PCI");
     if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != mPlatformSubsystemId) {
         setProperty("Cirrus_Platform_PCI_SSID", uint64_t(uint32_t(pciSubsystemId)), 32);
         setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);

@@ -56,15 +56,18 @@ struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
  }
 };
 struct DSPIO : core::RegisterIO {
- unsigned reads=0,writes=0,sequences=0,failRead=0; bool sequenceOK=true,writeOK=true;
- uint32_t mailbox2=1,halo=2,power=1,mailbox1=0;
+ unsigned reads=0,writes=0,sequences=0,failRead=0,readDelayMs=0; bool sequenceOK=true,writeOK=true,failAllReads=false;
+ uint32_t mailbox2=1,halo=2,power=1,mailbox1=0,revision=0xb0;
  std::vector<uint32_t> addresses;
  int32_t lastError()const override{return -77;}
  bool read(uint32_t reg,uint32_t* value)override{
-  addresses.push_back(reg);if(++reads==failRead)return false;
-  if(reg==registers::kRegDspVirtualMailbox2)*value=mailbox2;
+  fixtureTimeMs+=readDelayMs;
+  addresses.push_back(reg);if(++reads==failRead||failAllReads){*value=2;return false;}
+  if(reg==registers::kRegRevisionId)*value=revision;
+  else if(reg==registers::kRegDspVirtualMailbox2)*value=mailbox2;
   else if(reg==registers::kRegDspHaloState)*value=halo;
   else if(reg==registers::kRegDspPowerState)*value=power;
+  else if(reg==registers::kRegTransducerState)*value=3;
   else {assert(reg==registers::kRegDspVirtualMailbox1);*value=mailbox1;}
   return true;
  }
@@ -83,11 +86,32 @@ struct DSPIO : core::RegisterIO {
 static uint32_t slept=0;
 static void delay(uint32_t us){assert(us==1000||us==250);slept+=us;}
 static void checkDSP(){
+ DSPIO identity;assert(CS35L56Device::prepareIdentity(identity)==kIOReturnSuccess);
+ assert(identity.addresses==std::vector<uint32_t>({4,0x28021e0})&&!identity.writes&&!identity.sequences);
+ for(uint32_t revision:{0U,0xa0U,0xb2U,0xc0U,0xffffffffU}){DSPIO unsupported;unsupported.revision=revision;
+  assert(CS35L56Device::prepareIdentity(unsupported)==kIOReturnUnsupported&&unsupported.reads==1);}
+ DSPIO failedRevision;failedRevision.failRead=1;
+ assert(CS35L56Device::prepareIdentity(failedRevision)==-77&&failedRevision.reads==1);
  DSPIO io;assert(DSPControl::resetSPI(io,delay));
  assert(io.sequences==1&&io.addresses==std::vector<uint32_t>({0x11024,0x28021e0}));
  assert(DSPControl::shutdown(io,delay)&&io.writes==1);
- for(unsigned failure=1;failure<=2;++failure){DSPIO bad;bad.failRead=failure;
-  assert(!DSPControl::resetSPI(bad,delay)&&bad.reads==failure&&bad.lastError()==-77);}
+ for(unsigned failure=1;failure<=2;++failure){DSPIO transient;transient.failRead=failure;slept=0;
+  assert(DSPControl::resetSPI(transient,delay)&&transient.reads==3&&slept==1000&&transient.sequences==1);}
+ DSPIO transientBoot;transientBoot.failRead=1;slept=0;
+ assert(DSPControl::waitForBoot(transientBoot,delay)&&transientBoot.reads==2&&slept==1000);
+ DSPIO absentBoot;absentBoot.failAllReads=true;slept=0;
+ assert(!DSPControl::waitForBoot(absentBoot,delay)&&absentBoot.reads==251&&slept==250000&&absentBoot.lastError()==-77);
+ for(bool failed:{false,true}){DSPIO slow;slow.halo=0;slow.failAllReads=failed;slow.readDelayMs=100;slept=0;
+  assert(!DSPControl::waitForBoot(slow,delay)&&slow.reads==3&&slept==2000);}
+ DSPIO absentReset;absentReset.failAllReads=true;slept=0;
+ assert(!DSPControl::resetSPI(absentReset,delay)&&absentReset.reads==251&&slept==250000&&absentReset.sequences==1);
+ for(auto reg:absentReset.addresses)assert(reg==registers::kRegDspVirtualMailbox2);
+ DSPIO failedMailbox;failedMailbox.failRead=1;slept=0;
+ assert(!DSPControl::shutdown(failedMailbox,delay)&&failedMailbox.reads==1&&slept==0);
+ DSPIO failedPower;failedPower.failRead=2;slept=0;
+ assert(!DSPControl::shutdown(failedPower,delay)&&failedPower.reads==2&&slept==0);
+ DSPIO failedIdle;failedIdle.failRead=1;slept=0;
+ assert(!DSPControl::waitForIdle(failedIdle,delay)&&failedIdle.reads==1&&slept==0);
  DSPIO unsupported;unsupported.sequenceOK=false;
  assert(!DSPControl::resetSPI(unsupported,delay)&&unsupported.reads==0&&unsupported.writes==0);
  for(uint32_t invalid:{0U,0xffffffffU}){DSPIO bad;bad.mailbox2=invalid;slept=0;

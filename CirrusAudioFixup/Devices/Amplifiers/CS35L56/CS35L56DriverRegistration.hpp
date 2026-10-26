@@ -1,6 +1,7 @@
 #pragma once
 #include "Devices/Amplifiers/CS35L56/CS35L56DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L56/CS35L56SPIRegisterIO.hpp"
+#include "Devices/Amplifiers/CS35L56/CS35L56Device.hpp"
 #include "Devices/Amplifiers/CS35L56/Hardware/Registers.hpp"
 
 namespace cirrus::devices::amplifiers::cs35l56 {
@@ -25,7 +26,8 @@ inline constexpr platform::AmplifierDriverRegistration kDriverRegistrations[] = 
      discoverBoard,
      &kFirmwareReset,
      nullptr,
-     false},
+     false,
+     CS35L56Device::prepareIdentity},
 };
 inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) {
     for (const auto& definition : kDriverRegistrations)

@@ -59,6 +59,8 @@ struct AmplifierDriverRegistration {
     bool (*prepareBoardMetadata)(const BoardIdentity&, IOACPIPlatformDevice*, IOService*){nullptr};
     // Diagnostic modules never authorize board writes or create a lifecycle.
     bool diagnosticOnly{false};
+    // Read-only readiness after reset, before generic silicon identity reads.
+    IOReturn (*prepareIdentity)(core::RegisterIO&){nullptr};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if (bus == core::BusTransportType::I2C && (transportMask & 1))
             return &i2cFormat;

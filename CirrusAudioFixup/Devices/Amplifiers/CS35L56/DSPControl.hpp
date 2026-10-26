@@ -40,7 +40,7 @@ public:
         return poll(io, registers::kRegTransducerState, 3, 0xFFFE, registers::kPS3TimeoutUs, registers::kPS3PollUs, delayUs);
     }
     static bool waitForBoot(core::RegisterIO& io, void (*delayUs)(uint32_t)) {
-        return poll(io, registers::kRegDspHaloState, 2, 0xFFFE, registers::kHaloStateTimeoutUs, registers::kHaloStatePollUs, delayUs);
+        return poll(io, registers::kRegDspHaloState, 2, 0xFFFE, registers::kHaloStateTimeoutUs, registers::kHaloStatePollUs, delayUs, true);
     }
     static bool resetSPI(core::RegisterIO& io, void (*delayUs)(uint32_t)) {
         if (!delayUs)
@@ -49,7 +49,7 @@ public:
         const uint32_t values[]{registers::kCommandSystemReset, registers::kCommandPing};
         return io.writeSequence(addresses, values, 2, registers::kSPIResetToPortReadyUs) &&
                poll(io, registers::kRegDspVirtualMailbox2, 1, 0xFFFFFFFE, registers::kHaloStateTimeoutUs, registers::kHaloStatePollUs,
-                    delayUs) &&
+                    delayUs, true) &&
                waitForBoot(io, delayUs);
     }
     static bool sendMailbox(core::RegisterIO& io, uint32_t command, void (*delayUs)(uint32_t)) {
@@ -63,16 +63,22 @@ public:
 
 private:
     static bool poll(core::RegisterIO& io, uint32_t reg, uint32_t minimum, uint32_t maximum, uint32_t timeoutUs, uint32_t intervalUs,
-                     void (*delayUs)(uint32_t)) {
+                     void (*delayUs)(uint32_t), bool retryReadFailure = false) {
         if (!delayUs)
             return false;
+        const uint64_t started = mach_absolute_time();
         for (uint32_t elapsed = 0;; elapsed += intervalUs) {
             uint32_t value = 0;
-            if (!io.read(reg, &value))
+            const bool readable = io.read(reg, &value);
+            // Linux retries boot/MBOX2 reads; regmap mailbox, shutdown and idle polls fail on transport errors.
+            if (!readable && !retryReadFailure)
                 return false;
-            if (value >= minimum && value <= maximum)
+            if (readable && value >= minimum && value <= maximum)
                 return true;
-            if (elapsed == timeoutUs)
+            uint64_t elapsedNs = 0;
+            absolutetime_to_nanoseconds(mach_absolute_time() - started, &elapsedNs);
+            // Count transfer time too; retain the iteration bound if the clock stalls.
+            if (elapsedNs / 1000 >= timeoutUs || elapsed == timeoutUs)
                 return false;
             delayUs(intervalUs);
         }

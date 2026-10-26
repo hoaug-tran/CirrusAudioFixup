@@ -30,6 +30,7 @@ struct IO : core::RegisterIO {
  std::map<uint32_t,uint32_t> regs;
  std::map<uint32_t,uint8_t> bytes;
  unsigned scalar=0,failAt=0,writes=0,sequences=0,uploads=0,pauses=0,failBulkWrites=0;
+ uint32_t failedReadRegister=0xffffffff;
  int error=0;bool failed=false,stuckMailbox=false,stuckBoot=false,stuckPower=false,failUpload=false;
  std::vector<uint8_t> tuning;
  IO() {
@@ -49,7 +50,7 @@ struct IO : core::RegisterIO {
  bool operation(){error=0;if(++scalar==failAt){failed=true;error=-77;return false;}return true;}
  int32_t lastError()const override{return error;}
  bool read(uint32_t reg,uint32_t* out)override{
-  if(!operation())return false;
+  if(!operation()){failedReadRegister=reg;return false;}
   *out=regs[reg];
   if(reg==kRegDspHaloState&&stuckBoot)*out=0;
   if(reg==kRegDspPowerState&&stuckPower)*out=2;
@@ -168,7 +169,9 @@ int main(){
  assert(left!=right);
  for(unsigned failure=1;failure<=scalarCount;++failure){
   Fixture f;f.io.failAt=failure;const auto result=f.lifecycle.bringUp();assert(f.io.failed);
-  if(result==0){assert(failure==5||failure==6||std::string(f.driver.report().readyVerdict)=="READY_DSP_OUTPUT_DISABLED_CALIBRATION");}
+  if(result==0){assert(f.driver.report().initialized&&!f.driver.report().faulted);
+   assert(f.io.failedReadRegister==kRegIrqStatus||f.io.failedReadRegister==kRegDspHaloState||
+          f.io.failedReadRegister==kRegDspVirtualMailbox2||std::string(f.driver.report().readyVerdict)=="READY_DSP_OUTPUT_DISABLED_CALIBRATION");}
   else{assert(result==-77);assert(f.lifecycle.status().firstFailure==-77);assert(f.lifecycle.status().stage==core::AmplifierStage::Faulted);}
   f.idle();assert(f.driver.safeShutdown()==0);
  }
@@ -204,7 +207,10 @@ int main(){
   before=f.io.scalar;assert(f.driver.stopPlayback()==0);stopTransfers=f.io.scalar-before;assert(f.driver.safeShutdown()==0);}
  for(unsigned failure=1;failure<=startTransfers;++failure){Fixture f;assert(f.lifecycle.bringUp()==0);
   assert(f.driver.runtimeTick(f.playback())==0);f.io.failAt=f.io.scalar+failure;
-  assert(f.driver.startPlayback()==-77);f.idle();assert(f.driver.safeShutdown()==0);}
+  const auto result=f.driver.startPlayback();
+  if(failure==1)assert(result==0);
+  else assert(result==-77);
+  if(failure!=1)f.idle();assert(f.driver.safeShutdown()==0);}
  for(unsigned failure=1;failure<=stopTransfers;++failure){Fixture f;assert(f.lifecycle.bringUp()==0);
   assert(f.driver.runtimeTick(f.playback())==0);assert(f.driver.startPlayback()==0);f.io.failAt=f.io.scalar+failure;
   assert(f.driver.stopPlayback()==-77);assert(f.driver.safeShutdown()==0);f.idle();}
@@ -219,7 +225,7 @@ int main(){
   core::AmplifierLifecycle* members[]{&a.lifecycle,&b.lifecycle};core::AmplifierGroup group;
   assert(group.configure(members,2,false)&&group.bringUp()==0);
   assert(a.driver.runtimeTick(a.playback())==0&&b.driver.runtimeTick(b.playback())==0);
-  b.io.failAt=b.io.scalar+1;assert(group.startPlayback()==-77);a.idle();b.idle();
+  b.io.failAt=b.io.scalar+2;assert(group.startPlayback()==-77);a.idle();b.idle();
   assert(a.driver.safeShutdown()==0&&b.driver.safeShutdown()==0);}
  // A cold reset while idle invalidates readiness before AUDIO_PLAY.
  {Fixture f;assert(f.lifecycle.bringUp()==0);assert(f.driver.runtimeTick(f.playback())==0);

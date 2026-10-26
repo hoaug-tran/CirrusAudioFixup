@@ -434,13 +434,15 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                 {cirrus::core::BusTransportType::I2C, path, 0x40},
                 {cirrus::core::BusTransportType::I2C, path, 0x41}
             };
-            cirrus::transport::ACPIDeviceProperties emptyProps;
-            cirrus::transport::ACPIPlatformProperties source(emptyProps);
+            struct EmptyPlatformProperties final : cirrus::platform::PlatformProperties {
+                bool contains(const char*) const override { return false; }
+                bool array(const char*, uint32_t*, size_t) const override { return false; }
+            } emptyProps;
             const cirrus::platform::BoardDiscoveryContext context{
                 {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid},
                 endpoints,
                 2,
-                source,
+                emptyProps,
                 nullptr
             };
             const char* reason = nullptr;

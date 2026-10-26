@@ -77,7 +77,7 @@ FIXTURE_SHIM=r'''
 '''
 DRIVER=driver_source()
 for flow in ('initializeHardware','loadFirmwareFlow','verifyReadyFlow','shutdownFlow'):
-    body=method(DRIVER,'CS35L41Driver',flow).replace('CS35L41Driver::','').replace('mHost.debugHalted()','owner.mDebugPhaseHalted')
+    body=method(DRIVER,'CS35L41Driver',flow).replace('CS35L41Driver::','').replace('mHost.debugHalted()','owner.mDebugPhaseHalted').replace('DriverRegisterIO io(this, amp);', 'auto& io = mContext.io;')
     FIXTURE_SHIM+=body+'\n'
 FIXTURE_SHIM+=r'''
     };

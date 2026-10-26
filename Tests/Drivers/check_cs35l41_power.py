@@ -17,12 +17,13 @@ with tempfile.TemporaryDirectory(prefix="cirrus-power-") as directory:
 #include "Devices/Amplifiers/CS35L41/CS35L41Device.hpp"
 using namespace cirrus::devices::amplifiers::cs35l41;
 struct Port:cirrus::core::RegisterIO {
- std::map<uint32_t,uint32_t> r;std::vector<uint32_t> writes;unsigned calls=0,failAt=0;
+ std::map<uint32_t,uint32_t> r;std::vector<uint32_t> writes;std::vector<std::pair<uint32_t,uint32_t>> attempts;unsigned calls=0,failAt=0;
  bool step(){return ++calls!=failAt;}
  bool read(uint32_t reg,uint32_t* out)override{if(!step())return false;*out=r[reg];return true;}
  bool write(uint32_t reg,uint32_t value)override{
   // Linux CSPL commands used by this lifecycle
   if(reg==0x13020)assert(value==1||value==2||value==7);
+  attempts.emplace_back(reg,value);
   if(!step())return false;
   writes.push_back(reg);
   if(reg==0x10010)r[reg]&=~value;else r[reg]=value;
@@ -47,6 +48,15 @@ int main(){
   auto before=io.calls;assert(!device.startPlayback(io)&&io.calls==before);
   for(unsigned failure=1;failure<=4;++failure){Port broken;broken.failAt=failure;assert(!device.stopPlayback(broken));}
  }
+ Port gpio;CS35L41Device switchedDevice("switch",0x40);
+ assert(switchedDevice.setupGPIO(gpio,1,2,true));
+ assert((gpio.r[0x11008]&0x80000000U)==0); // VSPK must drive an output.
+ const PowerConfiguration switched{BoostTopology::ExternalWithSwitch,0,0,0};
+ assert(switched.valid()&&!switched.internal()&&switched.switched());
+ Port supply;assert(switched.configure(supply));
+ assert(supply.r[0x11008]==1&&supply.r[0x7414]==0x08c82222&&supply.r[0x742c]==9);
+ assert(switched.safeReset(supply,[](uint32_t ms){assert(ms==6);}));
+ assert(supply.r[0x7414]==0x00c82222&&supply.r[0x742c]==0&&supply.r[0x393c]==0);
  const PowerConfiguration internal{BoostTopology::Internal,1000,4500,24};
  assert(internal.valid()&&internal.activePower(true)==0x3021);
  assert(kLegacyPowerConfiguration.activePower(true)==0x3001);
@@ -54,6 +64,26 @@ int main(){
  // These are the actual Linux regmap values for both captured HP amps.
  assert(coefficients.r[0x3810]==0x4932&&coefficients.r[0x3814]==0x7500&&coefficients.r[0x3808]==0x4a);
  for(unsigned failure=1;failure<=10;++failure){Port broken;broken.failAt=failure;assert(!internal.configure(broken));}
+
+ // Every switched reset/configuration transfer can fail; both key locks are attempted.
+ for(unsigned failure=1;failure<=11;++failure){Port broken;broken.failAt=failure;assert(!switched.configure(broken));}
+ for(unsigned failure=1;failure<=9;++failure){Port broken;broken.failAt=failure;assert(!switched.safeReset(broken,[](uint32_t){}));
+  assert(broken.attempts[broken.attempts.size()-2]==std::make_pair(0x40U,0xccU));
+  assert(broken.attempts.back()==std::make_pair(0x40U,0x33U));}
+ for(bool dsp:{false,true}){
+  Port io;io.r[0x10098]=2;assert(switched.configure(io));PlaybackTransition playback{};
+  PlaybackProgress result=PlaybackProgress::Pending;
+  for(uint64_t now=0;now<20&&result==PlaybackProgress::Pending;++now)
+   result=Playback::advance(io,playback,now,dsp,0x2b01,nullptr,switched);
+  assert(result==PlaybackProgress::Prepared&&io.r[0x11008]==0x8001);
+  assert(Playback::commit(io,playback,17<<5,dsp,switched));
+  ShutdownTransition shutdown{};result=PlaybackProgress::Pending;
+  for(uint64_t now=20;now<40&&result==PlaybackProgress::Pending;++now)
+   result=Playback::shutdown(io,shutdown,now,dsp,0x2b01,nullptr,switched);
+  assert(result==PlaybackProgress::Prepared&&io.r[0x11008]==1&&!(io.r[0x2014]&1));
+  assert(switched.safeReset(io,[](uint32_t){}));
+ }
+ Port activeSwitch;activeSwitch.r[0x2014]=1;assert(!switched.configure(activeSwitch)&&activeSwitch.writes.empty());
  Port active;active.r[0x2014]=1;assert(!internal.configure(active)&&active.writes.empty());
  auto invalid=internal;invalid.peakMilliamp=4501;Port untouched;assert(!invalid.configure(untouched)&&untouched.writes.empty());
  invalid=internal;invalid.inductorNanohenry=900;assert(!invalid.configure(untouched)&&untouched.writes.empty());

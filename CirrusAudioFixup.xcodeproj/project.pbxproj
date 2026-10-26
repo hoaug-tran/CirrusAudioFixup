@@ -5,6 +5,8 @@
 	};
 	objectVersion = 56;
 	objects = {
+		CAFE00190000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = I2CPlatformResources.hpp; sourceTree = "<group>"; };
+		CAFE00190000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ACPII2CResources.hpp; sourceTree = "<group>"; };
 		A5C300000000000000000001 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.script.python;
@@ -800,6 +802,8 @@
 		EEA1B1663A570631C0449F01 = {
 			isa = PBXGroup;
 			children = (
+				CAFE00190000000000000002,
+				CAFE00190000000000000001,
 				1AB756B95D0CC47EF0DF1343,
 				DF960C1387D6951EB58D365F,
 				376EDE0A6A4513F67036BD90,

@@ -7,7 +7,8 @@ struct DeviceConfiguration {
     PowerConfiguration power{};
     uint8_t gpio1Function{0}, gpio2Function{2};
     bool valid() const {
-        return power.valid() && (power.internal() ? gpio1Function == 0 : (gpio1Function == 0 || gpio1Function == 1)) &&
+        return power.valid() &&
+               (power.switched() ? gpio1Function == 1 : power.internal() ? gpio1Function == 0 : (gpio1Function == 0 || gpio1Function == 1)) &&
                (gpio2Function == 0 || gpio2Function == 2);
     }
 };

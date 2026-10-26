@@ -79,10 +79,16 @@
             <string>CirrusAudioFixup</string>
             <key>IOProviderClass</key>
             <string>VoodooI2CDeviceNub</string>
-            <key>IONameMatch</key>
+            <key>IOPropertyMatch</key>
             <array>
-                <string>CLSA0100</string>
-                <string>CSC3551</string>
+                <dict>
+                    <key>IOName</key>
+                    <string>CLSA0100</string>
+                </dict>
+                <dict>
+                    <key>IOName</key>
+                    <string>CSC3551</string>
+                </dict>
             </array>
             <key>IOProbeScore</key>
             <integer>10000</integer>

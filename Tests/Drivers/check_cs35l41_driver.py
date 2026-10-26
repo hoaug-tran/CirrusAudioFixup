@@ -147,6 +147,38 @@ int main(){
         assert(!f.port.values.count(0x3810)&&!f.port.values.count(0x3814)&&!f.port.values.count(0x3808));
         assert(f.runtime.unbind()==0);
     }
+
+    // Captured Zenbook identity, bus, addresses and independent channel configuration.
+    for(uint32_t channel:{0U,1U}){
+        const DeviceConfiguration config{{BoostTopology::ExternalWithSwitch,0,0,0},1,2};
+        auto configure=[&](Fixture& f){
+            f.board.identity={0x1043,0x1683,"CSC3551"};f.board.useBoardFirmwareIdentity=true;
+            f.context.actualBoard=f.board.identity;f.context.actualDeviceHid="CSC3551";
+            f.endpoint.i2cAddress=uint16_t(0x40+channel);f.binding.endpoint=f.context.endpoint=f.endpoint;
+            f.binding.channelIndex=channel;f.binding.acpiHid="CSC3551";
+            f.binding.driverConfiguration=&config;f.binding.driverConfigurationSize=sizeof(config);
+            f.binding.driverConfigurationKind=kDeviceConfigurationKind;
+            f.assets.target.subsystemVendor=0x1043;f.assets.target.subsystemDevice=0x1683;
+            f.assets.target.channelIndex=channel;
+        };
+        Fixture zen;configure(zen);zen.bind();assert(zen.runtime.bringUp()==0);
+        assert(!(zen.port.values[0x11008]&0x80000000U));
+        assert((zen.port.values[0x242c]&0x30000)==0x10000);
+        assert(zen.port.values[0x7414]==0x08c82222&&zen.port.values[0x742c]==9);
+        assert(!zen.port.values.count(0x3810));
+        unsigned transfers=zen.port.calls;
+        assert(zen.runtime.suspend()==0&&zen.port.values[0x7414]==0x00c82222&&zen.port.values[0x742c]==0);
+        assert(zen.runtime.resume()==0&&zen.port.values[0x7414]==0x08c82222);
+        assert(zen.runtime.unbind()==0&&zen.port.values[0x11008]==1);
+        for(unsigned at=1;at<=transfers;++at){
+            Fixture broken;configure(broken);broken.port.failAt=at;broken.bind();
+            if(broken.runtime.bringUp()){
+                assert(broken.runtime.stage()==core::AmplifierStage::Faulted);
+                assert(!broken.runtime.report(0).initialized&&broken.runtime.status(0)->firstFailure!=0);
+            }
+            broken.runtime.unbind();
+        }
+    }
     for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
         Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;
         f.binding.endpoint=f.context.endpoint=f.endpoint;f.bind();assert(f.runtime.bringUp()==0 && f.runtime.report(0).initialized);

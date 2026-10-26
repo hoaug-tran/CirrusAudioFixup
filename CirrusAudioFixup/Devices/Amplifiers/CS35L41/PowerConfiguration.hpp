@@ -6,23 +6,49 @@
 #include <string.h>
 
 namespace cirrus::devices::amplifiers::cs35l41 {
-enum class BoostTopology : uint8_t { ExternalWithoutSwitch, Internal };
+enum class BoostTopology : uint8_t { ExternalWithoutSwitch, Internal, ExternalWithSwitch };
 struct PowerConfiguration {
     BoostTopology topology{BoostTopology::ExternalWithoutSwitch};
     uint32_t inductorNanohenry{0}, peakMilliamp{0}, capacitorMicrofarad{0};
     bool internal() const { return topology == BoostTopology::Internal; }
+    bool switched() const { return topology == BoostTopology::ExternalWithSwitch; }
     uint32_t dspSupplyMonitorSource() const { return internal() ? 0x28U : 0x29U; }
     uint32_t activePower(bool dsp) const { return (dsp ? 0x3001U : 1U) | (internal() ? 0x20U : 0U); }
     bool valid() const {
-        if (topology == BoostTopology::ExternalWithoutSwitch)
+        if (topology == BoostTopology::ExternalWithoutSwitch || switched())
             return !inductorNanohenry && !peakMilliamp && !capacitorMicrofarad;
         return internal() &&
                (inductorNanohenry == 1000 || inductorNanohenry == 1200 || inductorNanohenry == 1500 || inductorNanohenry == 2200) &&
                peakMilliamp >= 1600 && peakMilliamp <= 4500 && capacitorMicrofarad;
     }
+    // Linux safe_to_reset: disconnect VSPK before any silicon reset.
+    bool safeReset(core::RegisterIO& io, void (*delayMs)(uint32_t)) const {
+        if (!switched())
+            return true;
+        if (!delayMs)
+            return false;
+        bool ok = io.write(0x11008, 1) && io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x393C, 0xC0);
+        if (ok) {
+            delayMs(6);
+            ok = io.write(0x393C, 0) && io.write(0x7414, 0x00C82222) && io.write(0x742C, 0);
+        }
+        const bool first = io.write(0x40, 0xCC);
+        const bool second = io.write(0x40, 0x33);
+        return ok && first && second;
+    }
     bool configure(core::RegisterIO& io) const {
         if (!valid())
             return false;
+        if (switched()) {
+            uint32_t globalPower = 0;
+            if (!io.read(0x2014, &globalPower) || (globalPower & 1))
+                return false;
+            bool ok = io.write(0x11008, 1) && io.write(0x40, 0x55) && io.write(0x40, 0xAA) &&
+                      io.write(0x7438, 0x00585941) && io.write(0x7414, 0x08C82222) && io.write(0x742C, 9);
+            const bool first = io.write(0x40, 0xCC);
+            const bool second = io.write(0x40, 0x33);
+            return ok && first && second && io.updateBits(0x2018, 0x30, 0);
+        }
         if (!internal())
             return true;
         uint32_t globalPower = 0;

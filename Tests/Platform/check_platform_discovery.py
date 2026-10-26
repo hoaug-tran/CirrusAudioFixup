@@ -122,6 +122,27 @@ int main(){
   assert(board&&board->configuration.amplifiers[0].speakerId==1);delete board;
   gpio.fail=true;assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason));
   assert(!strcmp(reason,"CS35L41_SPEAKER_ID_UNREADABLE"));gpio.fail=false;
+platform::BoardDiscoveryContext::SpeakerOverrides ids{{1,1},{true,true}};
+context.speakerOverrides=&ids;
+context.gpio=nullptr;
+board=devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason);assert(board);delete board;
+ids.known[1]=false;
+assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason));
+assert(!strcmp(reason,"CS35L41_SPEAKER_ID_UNREADABLE"));ids.known[1]=true;
+context.gpio=&gpio;gpio.fail=true;
+assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason));
+assert(!strcmp(reason,"CS35L41_SPEAKER_ID_UNREADABLE"));gpio.fail=false;
+ids.values[0]=2;
+assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason));
+assert(!strcmp(reason,"CS35L41_SPEAKER_ID_MISMATCH"));ids.values[0]=1;
+entries->v.push_back(pair("cirrus,speaker-id",{2,2}));
+transport::ACPIDeviceProperties conflicting;assert(conflicting.load(&amp)==0);
+transport::ACPIPlatformProperties conflictingSource(conflicting);
+platform::BoardDiscoveryContext conflictContext{context.identity,native.endpoints,2,conflictingSource,&gpio,&ids};
+assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(conflictContext,resources,reason));
+assert(!strcmp(reason,"CS35L41_SPEAKER_ID_MISMATCH"));entries->v.pop_back();
+context.speakerOverrides=nullptr;
+
   entries->v.push_back(pair(!strcmp(name,"spk-id-gpios")?"speaker-id-gpios":"spk-id-gpios",{0,0}));
   transport::ACPIDeviceProperties both;assert(both.load(&amp)==0);transport::ACPIPlatformProperties bothSource(both);
   platform::BoardDiscoveryContext bothContext{context.identity,native.endpoints,2,bothSource,&gpio};

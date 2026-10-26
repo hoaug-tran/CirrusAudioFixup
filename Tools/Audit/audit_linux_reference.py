@@ -122,6 +122,16 @@ for local, upstream in (('k1', 'cs35l41_bst_k1_table'), ('k2', 'cs35l41_bst_k2_t
     checks.append(dict(name='Boost '+local, entries=sum(map(len, a)), match=a == b))
 a, b = array(power, 'slope'), array(library, 'cs35l41_bst_slope_table')
 checks.append(dict(name='Boost slope', entries=sum(map(len, a)), match=a == b))
+for method_name, end, upstream in (
+        ('safeReset', 'bool configure(', 'cs35l41_safe_to_reset'),
+        ('configure', 'if (!internal())', 'cs35l41_reset_to_safe')):
+    body = power[power.index('bool '+method_name+'('):]
+    body = body[:body.index(end)]
+    actual = [(int(reg, 0), int(value, 0)) for reg, value in
+              re.findall(r'io.write\((0x[\da-fA-F]+), (0x[\da-fA-F]+|\d+)\)', body)]
+    # GPIO1 is disconnected before the protected Linux sequence.
+    expected = [(number(macros['CS35L41_GPIO1_CTRL1'], macros), 1)] + [tuple(row[:2]) for row in array(library, upstream)]
+    checks.append(dict(name=upstream, entries=len(actual), match=actual == expected))
 failures += [c['name'] for c in checks if not c['match']]
 
 # Every numeric literal is inventoried, but occurrence is not proof of correct

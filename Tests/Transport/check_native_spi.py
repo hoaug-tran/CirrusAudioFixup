@@ -144,13 +144,37 @@ using namespace cirrus::diagnostics;
 #include "Devices/Amplifiers/CS35L41/CS35L41SPIRegisterIO.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
+#include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
 #include "Transport/I2C/VoodooI2CController.hpp"
 #include <map>
 #include <cstdio>
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) do{if(false)fprintf(stderr,__VA_ARGS__);}while(0)
 constexpr bool kOSBooleanFalse=false,kOSBooleanTrue=true;
-inline bool PE_parse_boot_argn(const char*,void*,int){return false;}
+
+#include "Platform/ACPI/ACPII2CResources.hpp"
+namespace cirrus::transport {
+// ACPI ownership/parser is exercised with real kernel fixtures in check_i2c_discovery.
+struct ACPIPlatformProperties final:platform::PlatformProperties {
+ ACPIPlatformProperties()=default;
+ bool contains(const char*)const override{return false;}
+ bool array(const char*,uint32_t*,size_t)const override{return false;}
+};
+struct I2CPlatformResources {
+ core::BusEndpoint endpoints[ACPII2CResources::kCapacity]{};size_t count=0;
+ ACPIPlatformProperties properties;
+ bool load(IOService* provider,const char*& reason){
+  count=2;endpoints[0]={core::BusTransportType::I2C,provider->path.c_str(),0x40};
+  endpoints[1]={core::BusTransportType::I2C,provider->path.c_str(),0x41};
+  reason="I2C_ACPI_RESOURCES_RESOLVED";return true;
+ }
+};
+}
+inline std::map<std::string,uint32_t> fixtureBootArguments;
+inline bool PE_parse_boot_argn(const char* key,void* out,int size){
+ auto i=fixtureBootArguments.find(key);if(i==fixtureBootArguments.end()||size!=sizeof(uint32_t))return false;
+ memcpy(out,&i->second,sizeof(uint32_t));return true;
+}
 struct Amp {
  bool present=false,initialized=false,playbackFaulted=false;uint32_t deviceId=0,revisionId=0;cirrus::diagnostics::DiagnosticState diagnostic{};
  char endpointLabel[16]{};const char* name=nullptr;uint8_t address=0;cirrus::core::AudioChannel channel{};
@@ -744,6 +768,33 @@ int main(){
  assert(deferred.continueBind()==kIOReturnTimeout&&!deferred.powerPending()&&!deferred.bound());
  assert(!strcmp(deferred.failure().reason,"DEFERRED_BIND_FAILED"));
  FixtureNativeSPI::failContinuation=false;delayNativePower=false;
+
+ // Real setupCommunication + resolver: the captured nub starts unauthorized,
+ // exposes a precise speaker gate, and never writes while discovery is blocked.
+ for(int speaker:{-1,0,1,256}){
+  fixtureBootArguments.clear();if(speaker>=0)fixtureBootArguments["-cirrusspkid"]=unsigned(speaker);
+  IOService nub;nub.path="IOService:/I2CD/SPKR";
+  CirrusAudioFixup zen;zen.mProvider=&nub;
+  zen.mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
+  zen.mPlatformSubsystemId=0x10431683;zen.mPlatformAuthorized=false;
+  auto registration=legacyDefinition;
+  registration.name="zenbook-discovery";registration.transportMask=1;
+  registration.i2cFormat=registration.spiFormat;
+  registration.i2cFormat.paddingBytes=0;registration.i2cFormat.readFlag=0;
+  registration.discoverBoard=[](const cirrus::platform::BoardDiscoveryContext& context,const char*& reason){
+   return cirrus::devices::amplifiers::cs35l41::resolveBoardConfiguration(context,
+    [](uint16_t v,uint16_t d,uint32_t id){return v==0x1043&&d==0x1683&&id==1;},reason);
+  };
+  assert(zen.mDriverRegistry.add(registration));i2cProbeID=0x35a40;
+  auto before=i2cWrites.size();assert(zen.setupCommunication(&nub));
+  assert(i2cWrites.size()==before&&zen.mPlatformAuthorized==(speaker==1));
+  const char* reason=speaker<0?"CS35L41_SPEAKER_ID_REQUIRED":speaker==0?"CS35L41_SPEAKER_TUNING_UNAVAILABLE":
+                     speaker==1?"CS35L41_ACPI_PROPERTIES_RESOLVED":"CS35L41_SPEAKER_PROPERTIES_INVALID";
+  if(zen.strings["Cirrus_Platform_Discovery"]!=reason)fprintf(stderr,"speaker=%d actual=%s expected=%s\n",speaker,zen.strings["Cirrus_Platform_Discovery"].c_str(),reason);
+  assert(zen.strings["Cirrus_Platform_Discovery"]==reason);
+  if(speaker!=1)assert(!strcmp(zen.mAttachment.first.reason,reason));
+ }
+ fixtureBootArguments.clear();
  puts("PASS Intel/AMD x I2C/SPI attachment/runtime matrix, unsupported controller/AMP separation, ACPI bus classification and no unsupported AMP writes");
  assert(pciMatchingDictionary.refs==1);
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;

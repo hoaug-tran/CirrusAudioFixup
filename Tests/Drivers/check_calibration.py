@@ -302,6 +302,25 @@ int main() {
     return failures?1:0;
 }
 '''
+# Replay the supplied EFI bytes, including per-silicon UID selection and real L/R R0.
+import json
+captured = json.loads((ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text())
+raw = bytes.fromhex(captured["calibration_hex"])
+replay = r'''
+    OSData captured;captured.bytes={CAPTURED_BYTES};
+    IORegistryEntry::data=&captured;
+    const auto* records=(const cs35l41_amp_efi_data*)captured.bytes.data();
+    for(unsigned side=0;side<2;++side){
+        CirrusAudioFixup d; amp.address=side?0x41:0x40;
+        d.memory[0x17040]=records->data[side].calTarget[0];
+        d.memory[0x17044]=records->data[side].calTarget[1];
+        check(d.applyCalibration(amp,&image),"captured Zenbook EFI accepted");
+        check(d.memory[4]==(side?CAPTURED_R:CAPTURED_L),"captured R0 matches Linux by silicon UID");
+        check(d.properties["Cirrus_Calibration_Selection_L"].find("EXACT_SILICON_UID")!=std::string::npos,"captured UID used without machine-specific constants");
+    }
+    IORegistryEntry::data=&data;
+'''.replace("CAPTURED_BYTES", ",".join(map(str, raw))).replace("CAPTURED_L", str(captured["r0"][0])).replace("CAPTURED_R", str(captured["r0"][1]))
+checks = checks.replace("    amp.address=0x40;\n    auto targeted=data;", replay+"    amp.address=0x40;\n    auto targeted=data;")
 with tempfile.TemporaryDirectory(prefix='cirrus-calibration-') as directory:
     tmp = Path(directory)
     source = tmp / 'check.cpp'

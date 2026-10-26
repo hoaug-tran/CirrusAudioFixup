@@ -8,6 +8,7 @@
 #include "Diagnostics/FailureNames.hpp"
 #include "Support/CPUIdentity.hpp"
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
+#include "Platform/ACPI/I2CPlatformResources.hpp"
 
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/pci/IOPCIDevice.h>

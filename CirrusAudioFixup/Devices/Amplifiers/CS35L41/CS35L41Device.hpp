@@ -265,7 +265,8 @@ public:
         if ((gpio1Function != 0 && gpio1Function != 1) || (gpio2Function != 0 && gpio2Function != 2))
             return false;
         bool ok = true;
-        ok = io.updateBits(registers::kRegGpio1Control1, 0x80001000, 0x80000000) && ok;
+        const bool vspk = configureGPIO1 && gpio1Function == 1;
+        ok = io.updateBits(registers::kRegGpio1Control1, 0x80001000, vspk ? 0 : 0x80000000) && ok;
         ok = io.updateBits(registers::kRegGpio2Control1, 0x80001000, 0x80000000) && ok;
         if (configureGPIO1)
             ok = io.updateBits(registers::kRegGpioPadControl, 0x00030000, uint32_t(gpio1Function) << 16) && ok;

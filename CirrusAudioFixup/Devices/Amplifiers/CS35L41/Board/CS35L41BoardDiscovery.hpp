@@ -43,11 +43,34 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         {"cirrus,boost-peak-milliamp", peak, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,boost-peak-milliamp"},
         {"cirrus,boost-cap-microfarad", capacitor, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,boost-cap-microfarad"},
     };
-    for (const auto& field : required)
-        if (!properties.array(field.name, field.values, context.count)) {
+    const auto* facts = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice);
+    for (size_t fieldIndex = 0; fieldIndex < sizeof(required) / sizeof(required[0]); ++fieldIndex) {
+        const auto& field = required[fieldIndex];
+        if (properties.array(field.name, field.values, context.count))
+            continue;
+        bool external = true;
+        for (size_t i = 0; i < context.count; ++i)
+            external = external && boost[i] == 1;
+        // External power has no internal inductor/current/capacitor settings.
+        if (fieldIndex >= 5 && external && !properties.contains(field.name))
+            continue;
+        if (properties.contains(field.name) || !facts || facts->count != context.count ||
+            context.endpoints[0].transport != core::BusTransportType::I2C) {
             reason = field.failure;
             return nullptr;
         }
+        for (size_t i = 0; i < context.count; ++i) {
+            if (context.endpoints[i].transport != core::BusTransportType::I2C) {
+                reason = field.failure;
+                return nullptr;
+            }
+            const uint32_t defaults[]{
+                uint32_t(i),
+                facts->channels[i], facts->internalBoost ? 0U : 1U, facts->internalBoost ? 0U : 1U, 2U,
+                facts->inductor, facts->peak, facts->capacitor};
+            field.values[i] = defaults[fieldIndex];
+        }
+    }
     uint32_t speakers[capacity]{};
     const bool hasSpeaker = properties.contains("cirrus,speaker-id");
     const char* speakerGPIOProperties[]{"spk-id-gpios", "speaker-id-gpios"};
@@ -57,8 +80,21 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
     }
     for (size_t i = 0; i < context.count; ++i) {
         bool speakerKnown = hasSpeaker;
+        const bool explicitSpeaker = context.speakerOverrides && channels[i] < 2 &&
+            context.speakerOverrides->known[channels[i]];
+        if (explicitSpeaker) {
+            if (speakerKnown && speakers[i] != context.speakerOverrides->values[channels[i]]) {
+                reason = "CS35L41_SPEAKER_ID_MISMATCH";
+                return nullptr;
+            }
+            speakers[i] = context.speakerOverrides->values[channels[i]];
+            speakerKnown = true;
+        }
         for (const auto* property : speakerGPIOProperties) {
             if (!properties.contains(property))
+                continue;
+            // An explicit measured ID can bridge a missing GPIO reader, never a failed read.
+            if (!context.gpio && explicitSpeaker)
                 continue;
             uint32_t observed = 0;
             if (!context.gpio || !context.gpio->read(property, i, observed)) {
@@ -71,6 +107,10 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
             }
             speakers[i] = observed;
             speakerKnown = true;
+        }
+        if (!speakerKnown && facts && facts->speakerResource >= 0) {
+            reason = "CS35L41_SPEAKER_ID_REQUIRED";
+            return nullptr;
         }
         if (!speakerKnown)
             speakers[i] = UINT32_MAX;
@@ -121,12 +161,12 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
             peak[index] = correction->peak;
             capacitor[index] = correction->capacitor;
         }
-        if (boost[index] != 0 && (!correction || correction->internalBoost)) {
+        if (boost[index] > 1) {
             reason = "CS35L41_BOOST_TOPOLOGY_UNIMPLEMENTED";
             delete result;
             return nullptr;
         }
-        device.power = {boost[index] == 0 ? BoostTopology::Internal : BoostTopology::ExternalWithoutSwitch,
+        device.power = {boost[index] == 0 ? BoostTopology::Internal : BoostTopology::ExternalWithSwitch,
                         inductor[index], peak[index], capacitor[index]};
         device.gpio1Function = uint8_t(gpio1[index]);
         device.gpio2Function = uint8_t(gpio2[index]);

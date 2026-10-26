@@ -10,6 +10,33 @@ import tempfile
 from production_source_fixture import method
 
 ROOT = Path(__file__).resolve().parents[2]
+import plistlib
+personality = plistlib.loads((ROOT / "CirrusAudioFixup/Info.plist").read_bytes())["IOKitPersonalities"]["CirrusAudioFixupI2C"]
+assert personality["IOProviderClass"] == "VoodooI2CDeviceNub"
+assert "IONameMatch" not in personality
+assert personality["IOPropertyMatch"] == [{"IOName": "CLSA0100"}, {"IOName": "CSC3551"}]
+# XNU IOService::passiveMatch accepts a dictionary or ORs a collection of dictionaries.
+# IOName is a property here; the nub registry name in the capture is SPKR.
+import json
+capture = json.loads((ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text())
+def property_match(personality, provider_class, properties):
+    predicates = personality["IOPropertyMatch"]
+    if isinstance(predicates, dict):
+        predicates = [predicates]
+    return personality["IOProviderClass"] == provider_class and any(
+        all(properties.get(key) == value for key, value in predicate.items()) for predicate in predicates)
+provider = capture["provider"]
+assert property_match(personality, provider["class"], {"IOName": provider["io_name"]})
+assert provider["name"] != provider["io_name"]
+assert not property_match(personality, provider["class"], {"IOName": provider["name"]})
+assert not property_match(personality, "IOACPIPlatformDevice", {"IOName": provider["io_name"]})
+assert not property_match(personality, provider["class"], {"IOName": "CSC3556"})
+assert not property_match(personality, provider["class"], {})
+for predicate in personality["IOPropertyMatch"]:
+    split = dict(personality, IOPropertyMatch=predicate)
+    assert property_match(split, provider["class"], predicate)
+print("PASS captured SPKR nub matches IOName property; split and OR-array predicates agree; unrelated providers rejected")
+
 header = (ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Generated/FirmwareData.inc").read_text()
 for symbol, size, digest in (
     ("cs35l41_dsp1_spk_prot_103c89c6_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
@@ -65,6 +92,38 @@ platform::DiscoveredBoard* resolve(Properties& p,platform::BoardIdentity identit
  return resolveBoardConfiguration({identity,endpoints,2,p},assets,reason);
 }
 void profileChecks(){
+ {
+  Properties empty;empty.values.clear();
+  core::BusEndpoint endpoints[]={{core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x40},
+                                 {core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x41}};
+  const char* reason=nullptr;
+  auto* zenbook=resolveBoardConfiguration({{0x1043,0x1683,"CSC3551"},endpoints,2,empty},assets,reason);
+  assert(!zenbook&&!strcmp(reason,"CS35L41_SPEAKER_ID_REQUIRED"));
+  empty.values["cirrus,speaker-id"]={1,1};
+  zenbook=resolveBoardConfiguration({{0x1043,0x1683,"CSC3551"},endpoints,2,empty},assets,reason);
+  // The synthetic assets callback accepts generic only; real tuning requires ID 1.
+  assert(!zenbook&&!strcmp(reason,"CS35L41_SPEAKER_TUNING_UNAVAILABLE"));
+  auto exactAssets=[](uint16_t vendor,uint16_t device,uint32_t speaker){
+   return selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,vendor,device,speaker)!=nullptr;
+  };
+  for(uint32_t speaker:{0U,1U,2U,UINT32_MAX}){
+   empty.values["cirrus,speaker-id"]={speaker,speaker};
+   zenbook=resolveBoardConfiguration({{0x1043,0x1683,"CSC3551"},endpoints,2,empty},exactAssets,reason);
+   assert(bool(zenbook)==(speaker==1));
+   if(zenbook){
+    for(size_t i=0;i<2;++i){
+     const auto& binding=zenbook->configuration.amplifiers[i];DeviceConfiguration config;
+     assert(binding.channelIndex==i&&binding.speakerId==1&&binding.endpoint.i2cAddress==0x40+i);
+     assert(decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config));
+     assert(config.power.switched()&&config.gpio1Function==1&&config.gpio2Function==2);
+    }
+    delete zenbook;
+   }
+  }
+  empty.values["cirrus,dev-index"]={0};
+  assert(!resolveBoardConfiguration({{0x1043,0x1683,"CSC3551"},endpoints,2,empty},assets,reason));
+  assert(!strcmp(reason,"CS35L41_PROPERTIES_INCOMPLETE:cirrus,dev-index"));
+ }
  for(uint32_t speaker:{0U,1U}){
   const auto* resource=selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,0x1043,0x1c9f,speaker);
   assert(resource&&!resource->genericSpeaker&&resource->spkid==speaker);
@@ -111,6 +170,27 @@ void profileChecks(){
  {Properties p;p.values["cirrus,gpio2-func"]={3,2};assert(!resolve(p));}
  {Properties p;p.values["cirrus,boost-type"]={1,1};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));}
  {Properties p;p.values["cirrus,boost-type"]={1,1};auto* corrected=resolve(p);assert(corrected);delete corrected;}
+
+ // Valid native external metadata works without an OEM table entry.
+ {Properties p;p.values["cirrus,boost-type"]={1,1};p.values["cirrus,gpio1-func"]={1,1};
+  for(auto key:{"cirrus,boost-ind-nanohenry","cirrus,boost-peak-milliamp","cirrus,boost-cap-microfarad"})p.values.erase(key);
+  auto* generic=resolve(p,{0x1234,0x5678,"CSC3551"});assert(generic);
+  const auto& b=generic->configuration.amplifiers[0];DeviceConfiguration c;
+  assert(decodeDeviceConfiguration(b.driverConfiguration,b.driverConfigurationSize,b.driverConfigurationKind,c)&&c.power.switched());
+  delete generic;
+  p.values["cirrus,boost-type"]={2,2};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));
+ }
+ // Per-channel overrides follow channel wiring, not endpoint/property order.
+ {Properties p;p.values["cirrus,dev-index"]={0,1};
+  core::BusEndpoint e[]={{core::BusTransportType::SPI,"\\_SB.SPI0",0,false,0,1000000},
+                         {core::BusTransportType::SPI,"\\_SB.SPI0",0,false,1,1000000}};
+  platform::BoardDiscoveryContext::SpeakerOverrides ids{{3,7},{true,true}};
+  const char* reason=nullptr;
+  auto* b=resolveBoardConfiguration({{0x1234,0x5678,"CSC3551"},e,2,p,nullptr,&ids},
+   [](uint16_t,uint16_t,uint32_t id){return id==3||id==7;},reason);
+  assert(b&&b->configuration.amplifiers[0].channelIndex==1&&b->configuration.amplifiers[0].speakerId==7);
+  assert(b->configuration.amplifiers[1].channelIndex==0&&b->configuration.amplifiers[1].speakerId==3);delete b;
+ }
  allowResources=false;assert(!resolve(properties));allowResources=true;
  assert(!resolve(properties,{0,0x89c6,"CSC3551"}));
  assert(platform::findPlatformProfile("CLSA0100")->resetQuirk);
@@ -125,7 +205,7 @@ constexpr int kIOReturnSuccess=0;
 constexpr bool kOSBooleanTrue=true,kOSBooleanFalse=false;
 constexpr unsigned kIOPCIConfigSubSystemVendorID=0x2c,kIOPCIConfigSubSystemID=0x2e;
 struct IORegistryEntry:OSObject {};
-class IOService:public IORegistryEntry {public:OSObject* getProperty(const char*){return nullptr;}const char* getName(){return "unrecognized";}};
+class IOService:public IORegistryEntry {public:OSString* ioName=nullptr;OSObject* getProperty(const char* name){return !strcmp(name,"IOName")?ioName:nullptr;}const char* getName(){return "SPKR";}};
 class IOACPIPlatformDevice:public IOService {public:OSString hid{"CSC3551"},sub{"103C89C6"};
  int evaluateObject(const char* name,OSObject** out){*out=!strcmp(name,"_HID")?&hid:!strcmp(name,"_SUB")?&sub:nullptr;if(!*out)return -1;(*out)->retain();return 0;}};
 class IOPCIDevice:public IOService {public:uint32_t ssid=0x103c8ca4;uint16_t configRead16(unsigned offset){return offset==0x2c?ssid>>16:ssid&0xffff;}};
@@ -177,6 +257,20 @@ int main(){
  amp.hid.value="CSC3551";amp.sub.value="103C89C6";service.resolvePlatformProfile();
  assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x103c89c6);
  assert(amp.hid.refs==1&&amp.sub.refs==1&&audio.refs==1);
+ delete service.mDiscoveredBoard;service.mDiscoveredBoard=nullptr;
+ IOService nub;OSString ioName("CSC3551");nub.ioName=&ioName;service.mProvider=&nub;audio.ssid=0x10431683;
+ service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
+ Properties zen;zen.values.clear();zen.values["cirrus,speaker-id"]={1,1};
+ core::BusEndpoint endpoints[]={{core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x40},
+                                {core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x41}};
+ const char* reason=nullptr;
+ service.mDiscoveredBoard=resolveBoardConfiguration({{0x1043,0x1683,"CSC3551"},endpoints,2,zen},
+  [](uint16_t v,uint16_t d,uint32_t id){return selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,v,d,id)!=nullptr;},reason);
+ assert(service.mDiscoveredBoard);service.mDiscoveredProfile=*service.mPlatformProfile;
+ service.mDiscoveredProfile.boardConfiguration=&service.mDiscoveredBoard->configuration;
+ service.mDiscoveredProfile.allowAutomaticInitialization=true;
+ for(unsigned repeat=0;repeat<2;++repeat){service.resolvePlatformProfile();assert(service.mPlatformAuthorized&&service.mPlatformSubsystemId==0x10431683);}
+ audio.ssid=0x12345678;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
  delete service.mDiscoveredBoard;
 }
 '''

@@ -167,6 +167,13 @@ IOReturn CS35L41Driver::shutdownFlow() {
             clean = false;
             recordDiagnosticFailure(amp, DIAG_DSP_BOOT);
         }
+        if (amp.power.switched()) {
+            DriverRegisterIO io(this, amp);
+            if (!clean || !amp.power.safeReset(io, [](uint32_t ms) { IOSleep(ms); })) {
+                clean = false;
+                recordDiagnosticFailure(amp, DIAG_IDLE_ROLLBACK, 0x393C);
+            }
+        }
     }
     amp.dspAlive = false;
     amp.monitorCount = 0;

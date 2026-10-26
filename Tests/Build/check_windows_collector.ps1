@@ -126,6 +126,24 @@ UNRELATED_GPU
     $code=$ast.Find({param($node) $node -is [Management.Automation.Language.StringConstantExpressionAst] -and $node.Value -like '*public static class WindowsAudioCalibrationReader*'},$true)
     Assert ($null -ne $code) 'Named calibration reader missing'
     Add-Type -TypeDefinition $code.Value
+    # Execute only the AMP collector's event block, with fixture providers.
+    $ampSource=Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Tools/Collectors/Collect-AudioAMP-Windows.ps1'
+    $ampAst=[Management.Automation.Language.Parser]::ParseFile($ampSource,[ref]$tokens,[ref]$errors)
+    Assert (-not $errors.Count) 'AMP collector syntax invalid'
+    $eventCommand=$ampAst.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Attempt' -and $n.CommandElements[1].Value -eq 'Audio event logs'},$true)
+    Assert ($null -ne $eventCommand) 'Audio event collection block missing'
+    $EventDays=3; $script:EventQueries=0; $script:EventFailures=0; $script:CapturedEvents=$null
+    function Get-WinEvent($FilterHashtable,$MaxEvents,$ErrorAction) {
+        $script:EventQueries++
+        if ($FilterHashtable.LogName -eq 'Application' -or $FilterHashtable.ProviderName -eq 'Microsoft-Windows-AudioEndpointBuilder') { throw 'The parameter is incorrect' }
+        [pscustomobject]@{TimeCreated='2026-10-26';Message='Cirrus speaker';Id=42;LevelDisplayName='Information'}
+    }
+    function Mark($Task,$State,$Details) { $script:EventFailures++ }
+    function Write-Evidence($Relative,$Data,$FileCap) { $script:CapturedEvents=@($Data); return $true }
+    $script:AmpPattern='Cirrus'
+    & ([scriptblock]::Create($eventCommand.CommandElements[2].ScriptBlock.Extent.Text.Trim('{}')))
+    Assert ($script:EventQueries -eq 8 -and $script:EventFailures -eq 5) 'Failed provider aborted remaining event queries'
+    Assert ($script:CapturedEvents.Count -eq 3) 'Successful events were discarded after another provider failed'
     Write-Output 'PASS Windows collector: exact device/INF closure, unrelated package exclusion, deduplication, payload budget, log filtering, ZIP and PS syntax'
 } finally {
     $resolved=[IO.Path]::GetFullPath($temp)

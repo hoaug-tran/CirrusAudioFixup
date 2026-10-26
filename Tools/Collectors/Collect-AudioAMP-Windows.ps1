@@ -333,7 +333,12 @@ try {
         $providers=@('Microsoft-Windows-Kernel-PnP','Microsoft-Windows-Audio','Microsoft-Windows-AudioEndpointBuilder','Microsoft-Windows-DriverFrameworks-UserMode')
         foreach ($provider in $providers) {
             foreach ($log in @('System','Application')) {
-                $events=@(Get-WinEvent -FilterHashtable @{LogName=$log;ProviderName=$provider;StartTime=(Get-Date).AddDays(-$EventDays)} -MaxEvents 300 -ErrorAction SilentlyContinue)
+                try {
+                    $events=@(Get-WinEvent -FilterHashtable @{LogName=$log;ProviderName=$provider;StartTime=(Get-Date).AddDays(-$EventDays)} -MaxEvents 300 -ErrorAction Stop)
+                } catch {
+                    Mark "Audio events $provider / $log" 'UNAVAILABLE' $_.Exception.Message
+                    continue
+                }
                 foreach ($ev in $events) {
                     $message=[string]$ev.Message
                     if ($provider -match 'Audio' -or $message -match $script:AmpPattern -or $message -match '(?i)HDAUDIO|INTELAUDIO|sound|codec|speaker') {

@@ -723,9 +723,8 @@ int main(){
   assert(!strcmp(missingFunction.mAttachment.communication,"UNSUPPORTED") && i2cWrites.size()==i2cWritesBefore);missingFunction.teardownCommunication();i2cResult=0;
  }
  pciNodes={&pci};a.amd=false;
- // Direct ACPI I2C must not be guessed as SPI; no controller/AMP traffic.
  std::string source="SPI0";std::vector<uint8_t> i2cCRS(18+source.size()+1);i2cCRS[0]=0x8e;i2cCRS[1]=uint8_t(i2cCRS.size()-3);i2cCRS[3]=1;i2cCRS[5]=1;i2cCRS[6]=2;i2cCRS[9]=1;i2cCRS[10]=6;i2cCRS[16]=0x40;memcpy(i2cCRS.data()+18,source.c_str(),source.size()+1);i2cCRS.push_back(0x79);i2cCRS.push_back(0);
- amp.crs.bytes=i2cCRS;CirrusAudioFixup acpiI2C;const auto busWrites=writeTransfers;
+ amp.crs.bytes=i2cCRS;CirrusAudioFixup acpiI2C;assert(acpiI2C.mDriverRegistry.add(i2cDefinition));const auto busWrites=writeTransfers;
  assert(!acpiI2C.setupCommunication(&amp) && acpiI2C.strings["Cirrus_Bus"]=="I2C" && writeTransfers==busWrites && !liveControllers);
  assert(!strcmp(acpiI2C.mAttachment.first.reason,"NATIVE_I2C_PROVIDER_CONTRACT_UNAVAILABLE"));
  assert(acpiI2C.numbers["Cirrus_Attach_First_Return"]==uint32_t(kIOReturnUnsupported) && acpiI2C.numbers["Cirrus_Attach_Latest_Return"]<=UINT32_MAX);

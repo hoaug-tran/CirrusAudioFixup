@@ -34,8 +34,30 @@ bool CirrusAudioFixup::init(OSDictionary* properties) {
 
 IOService* CirrusAudioFixup::probe(IOService* provider, SInt32* score) {
     IOService* result = super::probe(provider, score);
+    if (!result)
+        return nullptr;
+
+    if (auto* acpi = cirrus::support::acpiDeviceCast(provider)) {
+        OSObject* resources = nullptr;
+        const IOReturn resourceReturn = acpi->evaluateObject("_CRS", &resources);
+        auto* resourceData = OSDynamicCast(OSData, resources);
+        cirrus::transport::ACPISPIResources parsed{};
+        bool hasI2C = false;
+        const auto resourceKind = resourceReturn == kIOReturnSuccess && resourceData
+                                      ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
+                                                                                 resourceData->getLength(), parsed, &hasI2C)
+                                      : cirrus::transport::ACPISPIResult::Malformed;
+        OSSafeReleaseNULL(resources);
+        if (resourceKind != cirrus::transport::ACPISPIResult::Success) {
 #if defined(KERNEL)
-    publishMatchingEvent("PROBE", provider, result ? kIOReturnSuccess : kIOReturnUnsupported);
+            publishMatchingEvent("PROBE", provider, kIOReturnUnsupported);
+#endif
+            return nullptr;
+        }
+    }
+
+#if defined(KERNEL)
+    publishMatchingEvent("PROBE", provider, kIOReturnSuccess);
 #endif
 
     setProperty("CirrusReachedProbe", kOSBooleanTrue);
@@ -253,6 +275,7 @@ bool CirrusAudioFixup::finishStartup() {
     CIRRUS_LOG("BOOT_FLOW START_END");
 #if defined(KERNEL)
     publishBootCheckpoint(this, "START_END");
+    clearFailedServiceEvidence();
 #endif
     return true;
 }

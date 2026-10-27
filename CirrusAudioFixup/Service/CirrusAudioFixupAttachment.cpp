@@ -497,10 +497,10 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                   ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
                                                                              resourceData->getLength(), parsed, &hasI2C)
                                   : cirrus::transport::ACPISPIResult::Malformed;
-    if ((hasI2C || resourceKind == cirrus::transport::ACPISPIResult::Success) &&
+    if (resourceKind == cirrus::transport::ACPISPIResult::Success &&
         !mDriverRegistry.prepareBoardMetadata(
             {uint16_t(mPlatformSubsystemId >> 16), uint16_t(mPlatformSubsystemId), mPlatformProfile->acpiHid}, acpi, this,
-            hasI2C ? cirrus::core::BusTransportType::I2C : cirrus::core::BusTransportType::SPI)) {
+            cirrus::core::BusTransportType::SPI)) {
         OSSafeReleaseNULL(resources);
         recordAttachmentFailure("PLATFORM", "BOARD_METADATA_REJECTED", kIOReturnUnsupported);
         return false;

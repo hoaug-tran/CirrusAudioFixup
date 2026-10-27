@@ -107,6 +107,11 @@ using namespace cirrus::diagnostics;
         OSSafeReleaseNULL(evidence);
         properties->release();
     }
+    inline void clearFailedServiceEvidence() {
+        auto* root = IORegistryEntry::getRegistryRoot();
+        if (root)
+            root->removeProperty("Cirrus_Failed_Service_Evidence");
+    }
 }
 #endif
 

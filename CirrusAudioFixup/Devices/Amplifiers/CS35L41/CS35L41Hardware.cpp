@@ -351,7 +351,7 @@ bool CS35L41Driver::applyASP(AmplifierState& amp) {
     auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
-    if (!device.setupASP(io, amp.channel == cirrus::core::AudioChannel::Right, amp.firmwareValidated)) {
+    if (!device.setupASP(io, amp.channel == cirrus::core::AudioChannel::Right, amp.firmwareValidated, amp.power)) {
         return false;
     }
 

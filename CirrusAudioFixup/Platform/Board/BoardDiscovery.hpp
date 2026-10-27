@@ -21,12 +21,14 @@ struct BoardDiscoveryContext {
         virtual ~GPIOReader() = default;
         virtual bool read(const char* property, size_t index, uint32_t& value) = 0;
         virtual bool readResource(uint32_t, uint32_t, bool, uint32_t&) { return false; }
+        virtual bool reset(const char*, int32_t) { return false; }
     };
     GPIOReader* gpio{nullptr};
 };
 class DiscoveredBoard {
 public:
     virtual ~DiscoveredBoard() = default;
+    virtual bool prepareHardware(BoardDiscoveryContext::GPIOReader&) const { return true; }
     BoardConfiguration configuration{};
 };
 }

@@ -17,6 +17,7 @@ def install(tmp):
 #include <memory>
 #include <string>
 #include <vector>
+#include <functional>
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnUnsupported=-3,kIOReturnNoDevice=-4,kIOReturnIOError=-5,kIOReturnNotPermitted=-6,
@@ -28,7 +29,8 @@ template<class T,class... A>T* make(A&&... a){auto p=std::make_unique<T>(std::fo
 #define OSDynamicCast(t,o) dynamic_cast<t*>(o)
 #define OSSafeReleaseNULL(o) do{if(o){o->release();o=nullptr;}}while(0)
 inline void OSSynchronizeIO(){}
-inline void IOSleep(unsigned){}
+inline std::function<void(unsigned)> fixtureSleep;
+inline void IOSleep(unsigned ms){if(fixtureSleep)fixtureSleep(ms);}
 struct OSString:OSObject {std::string s;explicit OSString(const char* v):s(v){}const char* getCStringNoCopy(){return s.c_str();}
  static OSString* withCString(const char* v){auto* object=make<OSString>(v);object->retain();return object;}
  bool isEqualTo(const char* v){return s==v;}bool isEqualTo(OSString* v){return v&&s==v->s;}};
@@ -46,6 +48,7 @@ class IOService:public IORegistryEntry {public:
  std::map<std::string,std::string> strings;std::map<std::string,uint64_t> numbers;
  std::map<std::string,OSObject*> objects;
  OSObject* getProperty(const char* name){auto i=objects.find(name);return i==objects.end()?nullptr:i->second;}
+ bool setProperty(const char* k,bool v){numbers[k]=v;return true;}
  bool setProperty(const char* k,const char* v){strings[k]=v;return true;}
  bool setProperty(const char* k,uint64_t v,unsigned){numbers[k]=v;return true;}
  bool setProperty(const char* name,OSObject* value){objects[name]=value;return true;}

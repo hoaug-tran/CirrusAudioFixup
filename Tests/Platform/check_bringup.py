@@ -301,6 +301,10 @@ int main() {
     }
     CirrusAudioFixup single; single.mAmplifierCount=1; single.bringUpAmplifiers();
     check(single.uploads==0 && single.properties["Cirrus_Driver_Verdict"]=="INCOMPLETE_TOPOLOGY", "missing peer blocks pair initialization");
+    CirrusAudioFixup failedTransfer;failedTransfer.mAmplifierCount=0;
+    failedTransfer.mAttachment.record("COMMUNICATION","I2C_IDENTITY_TRANSFER_FAILED",int32_t(0xe00002bc),0);
+    failedTransfer.bringUpAmplifiers();
+    check(failedTransfer.properties["Cirrus_Driver_Verdict"]=="COMMUNICATION_FAILED", "captured transfer error is not reported as missing wiring");
     CirrusAudioFixup unsupportedBoard; unsupportedBoard.mPlatformAuthorized=false; unsupportedBoard.bringUpAmplifiers();
     check(unsupportedBoard.uploads==0 && unsupportedBoard.resets[0]==0 && unsupportedBoard.properties["Cirrus_Driver_Verdict"]=="UNSUPPORTED_PLATFORM", "unsupported board performs no reset or upload");
     unsupportedBoard.handlePowerChange(false);

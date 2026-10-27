@@ -11,7 +11,7 @@ struct ACPIGPIOResource {
     char source[128]{};
 };
 inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t resourceIndex, uint32_t pinIndex, ACPIGPIOResource& output,
-                                  bool outputOnly = true) {
+                                  bool outputOnly = true, bool resetOutput = false) {
     if (!data || !length)
         return false;
     auto le16 = [](const uint8_t* p) -> uint16_t { return uint16_t(p[0]) | uint16_t(p[1]) << 8; };
@@ -44,9 +44,10 @@ inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t r
             return false;
         if (*d == 0x8c && index++ == resourceIndex) {
             // Read-only sampling accepts input/unrestricted shared resources;
-            // output leases remain exclusive. No direction/mux changes here.
+            // reset may be shared; other output leases remain exclusive.
             if (size < 23 || d[3] != 1 || d[4] != 1 || le16(d + 5) != 1 ||
-                (outputOnly ? le16(d + 7) != 2 : ((le16(d + 7) & ~uint16_t(0x19)) != 0)) || d[16] != 0)
+                (outputOnly ? (resetOutput ? (le16(d + 7) & ~uint16_t(0x1a)) != 0 : le16(d + 7) != 2)
+                           : (le16(d + 7) & ~uint16_t(0x19)) != 0) || d[16] != 0)
                 return false;
             const size_t pins = le16(d + 14), source = le16(d + 17);
             const size_t vendor = le16(d + 19), vendorSize = le16(d + 21);

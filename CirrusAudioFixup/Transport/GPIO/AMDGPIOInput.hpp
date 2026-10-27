@@ -8,12 +8,14 @@ namespace cirrus::transport::amd {
 inline bool supportsGPIOInput(const char* hid) {
     return hid && (!strcmp(hid, "AMD0030") || !strcmp(hid, "AMDI0030") || !strcmp(hid, "AMDI0031"));
 }
+inline bool validGPIOOffset(size_t bytes, uint16_t pin) {
+    const size_t offset = size_t(pin) * 4;
+    return offset <= bytes && bytes - offset >= 4 && offset != 0xfc && offset != 0x2f8 && offset != 0x2fc;
+}
 inline bool readGPIOInput(const volatile uint32_t* registers, size_t bytes, uint16_t pin, bool activeLow,
                           uint32_t& value, const char*& reason) {
     reason = "GPIO_INPUT_BOUNDS_INVALID";
-    const size_t offset = size_t(pin) * 4;
-    if (!registers || (reinterpret_cast<uintptr_t>(registers) & 3) || offset > bytes || bytes - offset < 4 ||
-        offset == 0xfc || offset == 0x2f8 || offset == 0x2fc)
+    if (!registers || (reinterpret_cast<uintptr_t>(registers) & 3) || !validGPIOOffset(bytes, pin))
         return false;
     const uint32_t config = registers[pin];
     reason = "GPIO_REGISTER_UNAVAILABLE";

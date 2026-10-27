@@ -203,6 +203,19 @@ bool CirrusAudioFixup::performPlatformHardwareReset() {
         }
         return result == kIOReturnSuccess;
     }
+    if (mDiscoveredBoard) {
+        cirrus::transport::I2CPlatformResources resources;
+        resources.setDiagnosticOwner(this);
+        const char* reason = nullptr;
+        const bool ready = resources.load(mProvider, reason) && mDiscoveredBoard->prepareHardware(resources);
+        setProperty("Cirrus_Reset_Policy", ready ? "ACPI_GPIO_PREPARED" : "ACPI_GPIO_RESET_FAILED");
+        if (!ready) {
+            recordAttachmentFailure("RESET", "I2C_HARDWARE_PREPARATION_FAILED", kIOReturnNotReady);
+            mPlatformAuthorized = false;
+            setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+        }
+        return ready;
+    }
     const cirrus::platform::ResetControllerQuirk* quirkPtr = mPlatformProfile ? mPlatformProfile->resetQuirk : nullptr;
     if (quirkPtr) {
         const cirrus::platform::ResetControllerQuirk& quirk = *quirkPtr;
@@ -468,7 +481,7 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                 recordAttachmentFailure("PLATFORM", reason ? reason : "DISCOVERY_NO_REASON", kIOReturnUnsupported);
             }
         }
-        if (expected && !preflightI2CIdentity(expected))
+        if (expected && !mDiscoveredBoard && !preflightI2CIdentity(expected))
             return false;
         publishAttachmentStatus();
         return true;
@@ -523,7 +536,7 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                 setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
                 recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
             }
-            if (expected && !preflightI2CIdentity(expected))
+            if (expected && !mDiscoveredBoard && !preflightI2CIdentity(expected))
                 return false;
             publishAttachmentStatus();
             return true;

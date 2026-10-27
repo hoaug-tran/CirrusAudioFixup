@@ -3,7 +3,7 @@
 #pragma once
 #include "Platform/ACPI/ACPII2CResources.hpp"
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
-#include "Platform/ACPI/ACPIGPIOInput.hpp"
+#include "Platform/ACPI/ACPIGPIOAccess.hpp"
 namespace cirrus::transport {
 class I2CPlatformResources final : public platform::BoardDiscoveryContext::GPIOReader {
     IOACPIPlatformDevice* mACPI{nullptr};
@@ -29,6 +29,42 @@ public:
         auto* source = resolveACPIReference(mACPI, tuples->getObject(i));
         const bool result = readACPIGPIOInput(source, resource->unsigned32BitValue(), pin->unsigned32BitValue(),
                                               low->unsigned32BitValue() != 0, mOwner, value);
+        OSSafeReleaseNULL(source);
+        return result;
+    }
+    bool reset(const char* property, int32_t resourceIndex) override {
+        if (!property)
+            return resourceIndex >= 0 && pulseACPIGPIOReset(mACPI, uint32_t(resourceIndex), 0, false, mOwner);
+        auto* tuples = OSDynamicCast(OSArray, properties.get(property));
+        if (!tuples || !tuples->getCount() || tuples->getCount() % 4 || tuples->getCount() > 64)
+            return false;
+        // Current discovery supports one shared reset; reject distinct tuples
+        // before changing hardware rather than partially resetting a group.
+        IOACPIPlatformDevice* source = nullptr;
+        uint32_t resource = 0, pin = 0; bool low = false;
+        for (unsigned i = 0; i < tuples->getCount(); i += 4) {
+            auto* r = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
+            auto* p = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
+            auto* l = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
+            auto* candidate = resolveACPIReference(mACPI, tuples->getObject(i));
+            const bool valid = candidate && r && p && l && r->unsigned64BitValue() <= UINT32_MAX &&
+                p->unsigned64BitValue() <= UINT32_MAX && l->unsigned64BitValue() <= 1 &&
+                (!source || (source == candidate && resource == r->unsigned32BitValue() &&
+                             pin == p->unsigned32BitValue() && low == (l->unsigned32BitValue() != 0)));
+            if (!valid) {
+                OSSafeReleaseNULL(candidate);
+                OSSafeReleaseNULL(source);
+                return false;
+            }
+            if (!source) {
+                source = candidate;
+                resource = r->unsigned32BitValue();
+                pin = p->unsigned32BitValue();
+                low = l->unsigned32BitValue() != 0;
+            } else
+                candidate->release();
+        }
+        const bool result = pulseACPIGPIOReset(source, resource, pin, low, mOwner);
         OSSafeReleaseNULL(source);
         return result;
     }

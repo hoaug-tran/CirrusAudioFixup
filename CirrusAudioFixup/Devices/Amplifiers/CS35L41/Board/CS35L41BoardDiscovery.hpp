@@ -16,6 +16,11 @@ public:
     DeviceConfiguration devices[kCapacity]{};
     char controllerPaths[kCapacity][256]{};
     char hid[32]{};
+    bool resetDeclared{false};
+    int32_t resetResource{-1};
+    bool prepareHardware(platform::BoardDiscoveryContext::GPIOReader& gpio) const override {
+        return (!resetDeclared && resetResource < 0) || gpio.reset(resetDeclared ? "reset-gpios" : nullptr, resetResource);
+    }
 };
 inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::BoardDiscoveryContext& context, ResourceAvailable available,
                                                                const char*& reason) {
@@ -117,6 +122,10 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
     if (!result) {
         reason = "CS35L41_CONFIGURATION_ALLOCATION_FAILED";
         return nullptr;
+    }
+    if (context.endpoints[0].transport == core::BusTransportType::I2C) {
+        result->resetDeclared = properties.contains("reset-gpios");
+        result->resetResource = facts ? facts->resetResource : -1;
     }
     memcpy(result->hid, context.identity.acpiHid, strlen(context.identity.acpiHid) + 1);
     result->configuration = {{context.identity.subsystemVendor, context.identity.subsystemDevice, result->hid},

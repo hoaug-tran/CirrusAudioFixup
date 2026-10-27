@@ -30,5 +30,20 @@
     10628
   ],
   "calibration_hex": "300000000200000049671701cbcc0a0030fba4f4755dd9011701682849681701cbcc0a00b0b25ef9755dd90117018429",
-  "limits": "I2C resource descriptor bytes in tests are reconstructed from the supplied SSDT contract, not a captured raw _CRS. Linux confirms the two AMP identities and speaker IDs. Analog output, bus timing and actual macOS firmware/GPIO state are not simulated."
+  "limits": "I2C resource descriptor bytes in tests are reconstructed from the supplied SSDT contract, not a captured raw _CRS. Linux confirms the two AMP identities and speaker IDs. Analog output, bus timing and actual macOS firmware/GPIO state are not simulated.",
+  "followup": {
+    "archive": "cirrus-evidence.bAPCJU.tgz",
+    "sha256": "cee63eaf163d440f232ebb4cff5e87e38db87b440833005fd503f372407ef37c",
+    "commit": "05a17898a3443bd26e3343d5eb78115c8adfe135",
+    "speaker_gpio_pin": 142,
+    "speaker_id": 1,
+    "probe_returns": [
+      3758097084,
+      3758097084
+    ],
+    "detected_amplifiers": 0,
+    "reset_policy": "AUTHORIZED",
+    "verdict": "INCOMPLETE_TOPOLOGY",
+    "limitation": "No raw GPIO _CRS, reset-pin level or controller abort status in followup. Reset pin in tests remains synthetic."
+  }
 }

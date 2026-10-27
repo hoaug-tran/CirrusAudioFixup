@@ -5,9 +5,10 @@
 	};
 	objectVersion = 56;
 	objects = {
-		CAFE00200000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ACPIGPIOInput.hpp; sourceTree = "<group>"; };
+		CAFE00210000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = AMDGPIOOutput.hpp; sourceTree = "<group>"; };
+		CAFE00200000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ACPIGPIOAccess.hpp; sourceTree = "<group>"; };
 		CAFE00200000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = AMDGPIOInput.hpp; sourceTree = "<group>"; };
-		CAFE00200000000000000003 = {isa = PBXGroup; children = (CAFE00200000000000000002,); path = GPIO; sourceTree = "<group>"; };
+		CAFE00200000000000000003 = {isa = PBXGroup; children = (CAFE00200000000000000002, CAFE00210000000000000001,); path = GPIO; sourceTree = "<group>"; };
 		CAFE00190000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = I2CPlatformResources.hpp; sourceTree = "<group>"; };
 		CAFE00190000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ACPII2CResources.hpp; sourceTree = "<group>"; };
 		A5C300000000000000000001 = {

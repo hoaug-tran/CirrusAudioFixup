@@ -145,6 +145,9 @@ Quiet Release does not allocate a trace lock, timestamp or lock each transfer,
 serialize transfer history, or perform failure-snapshot register reads. Essential
 failure reporting and all safety/protection/readback checks remain enabled.
 `Cirrus_Trace_Enabled` distinguishes disabled history from a zero-transfer capture.
+The console `TRACE BUFFER DUMP START/END` markers bracket publication; individual
+entries are stored in `Cirrus_Trace_First_<amp>` / `Cirrus_Trace_Latest_<amp>`
+and the collected IORegistry payload, rather than printed between the markers.
 Trace allocation failure reports `DIAGNOSTICS_UNAVAILABLE` and does not prevent
 otherwise safe startup. A history is bounded to the newest 1,023 transfers.
 

@@ -42,7 +42,7 @@ private:
     void probeAmplifier();
     bool writable() const;
     bool stopAt(const char*);
-    IOReturn fail(IOReturn, diagnostics::DiagnosticFailure, uint32_t reg = 0);
+    IOReturn fail(IOReturn, diagnostics::DiagnosticFailure, uint32_t reg = 0, uint32_t expected = 0, uint32_t actual = 0);
     IOReturn transferFailure(diagnostics::DiagnosticFailure, uint32_t reg = 0);
     void publishState(const char*);
     IOReturn checkProtectionStatus();

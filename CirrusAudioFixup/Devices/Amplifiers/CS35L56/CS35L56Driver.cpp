@@ -15,7 +15,7 @@ void CS35L56Driver::publishState(const char* value) {
     snprintf(key, sizeof(key), "Cirrus_CS35L56_%u_State", unsigned(mHost.endpointIndex()));
     mHost.publish(key, value);
 }
-IOReturn CS35L56Driver::fail(IOReturn result, diagnostics::DiagnosticFailure failure, uint32_t reg) {
+IOReturn CS35L56Driver::fail(IOReturn result, diagnostics::DiagnosticFailure failure, uint32_t reg, uint32_t expected, uint32_t actual) {
     if (result == kIOReturnSuccess || result == -1)
         result = kIOReturnNotReady;
     if (mAmplifier.firstFailure == kIOReturnSuccess)
@@ -23,7 +23,7 @@ IOReturn CS35L56Driver::fail(IOReturn result, diagnostics::DiagnosticFailure fai
     mAmplifier.latestFailure = result;
     mAmplifier.faulted = true;
     mAmplifier.routePrepared = false;
-    mHost.recordDiagnosticFailure(failure, reg, 0, 0, result, false);
+    mHost.recordDiagnosticFailure(failure, reg, expected, actual, result, false);
     publishState("FAILED_OUTPUT_DISABLED");
     return result;
 }

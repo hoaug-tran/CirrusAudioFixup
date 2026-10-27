@@ -1,6 +1,7 @@
 """Execute the complete CS35L56 driver with real firmware and bounded OS mocks."""
 import subprocess
 import sys
+import json
 import tempfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,7 +31,8 @@ struct IO : core::RegisterIO {
  std::map<uint32_t,uint32_t> regs;
  std::map<uint32_t,uint8_t> bytes;
  unsigned scalar=0,failAt=0,writes=0,sequences=0,uploads=0,pauses=0,failBulkWrites=0;
- uint32_t failedReadRegister=0xffffffff;
+ uint32_t failedReadRegister=0xffffffff,corruptRegister=0xffffffff;
+ unsigned irqMask20Reads=0,irqMask20Writes=0;bool failMask20Configuration=false;
  int error=0;bool failed=false,stuckMailbox=false,stuckBoot=false,stuckPower=false,failUpload=false;
  std::vector<uint8_t> tuning;
  IO() {
@@ -51,14 +53,17 @@ struct IO : core::RegisterIO {
  int32_t lastError()const override{return error;}
  bool read(uint32_t reg,uint32_t* out)override{
   if(!operation()){failedReadRegister=reg;return false;}
-  *out=regs[reg];
+  if(reg==kRegIrqMask20)++irqMask20Reads;
+  *out=reg==corruptRegister?0:regs[reg];
   if(reg==kRegDspHaloState&&stuckBoot)*out=0;
   if(reg==kRegDspPowerState&&stuckPower)*out=2;
   if(reg==kRegDspVirtualMailbox1&&stuckMailbox)*out=1;
   return true;
  }
  bool write(uint32_t reg,uint32_t value)override{
-  if(!operation())return false;++writes;regs[reg]=value;
+  if(!operation())return false;
+  if(reg==kRegIrqMask20&&++irqMask20Writes==2&&failMask20Configuration){error=-77;return false;}
+  ++writes;regs[reg]=reg==kRegIrqMask20 ? value & CAPTURED_IRQ_MASK20_READBACK : value;
   if(reg==kRegDspVirtualMailbox1){
    if(value==kCommandShutdown)regs[kRegDspPowerState]=1;
    if(value==kCommandAudioPause){++pauses;regs[kRegTransducerState]=3;}
@@ -90,15 +95,19 @@ struct IO : core::RegisterIO {
  bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t)override{assert(false);return false;}
 };
 struct Host : platform::AmplifierHost {
+ diagnostics::DriverStage stage{};
+ diagnostics::DiagnosticFailure failure{};uint32_t failureReg=0,expected=0,actual=0;IOReturn failureReturn=0;
  bool allow=true,ro=false,route=true;const char* phase=nullptr;
  std::map<std::string,std::string> text;
  bool authorized()const override{return allow;}bool supportsResources()const override{return true;}
  const char* name()const override{return "cs35l56-test";}
  bool bootArgEnabled(const char* key)const override{return ro&&!strcmp(key,"-cirrusro");}
  bool stopAfterDebugStage(const char* key)override{return phase&&!strcmp(phase,key);}
- void setDiagnosticStage(diagnostics::DriverStage)override{}
+ void setDiagnosticStage(diagnostics::DriverStage value)override{stage=value;}
  void markDiagnosticSuccess(diagnostics::DriverStage)override{}
- void recordDiagnosticFailure(diagnostics::DiagnosticFailure,uint32_t,uint32_t,uint32_t,IOReturn,bool)override{}
+ void recordDiagnosticFailure(diagnostics::DiagnosticFailure f,uint32_t r,uint32_t e,uint32_t a,IOReturn ret,bool)override{
+  failure=f;failureReg=r;expected=e;actual=a;failureReturn=ret;
+ }
  void publish(const char* key,const char* value)override{text[key]=value;}
  bool hasRouteEvents()const override{return route;}
  bool routeUnchanged(uint32_t generation)const override{return route&&generation==7;}
@@ -153,6 +162,23 @@ int main(){
   props.indices[1]=0;assert(!resolveBoardConfiguration(c,reason));props.indices[1]=1;
   endpoints[1].spiChipSelect=1;assert(!resolveBoardConfiguration(c,reason));endpoints[1].spiChipSelect=0;
   c.identity.subsystemDevice=0xffff;assert(!resolveBoardConfiguration(c,reason));}
+ {Fixture f;const auto result=f.lifecycle.bringUp();
+  if(result)fprintf(stderr,"captured readback replay: stage=%u result=0x%08x reg0xe0dc=0x%08x\n",unsigned(f.lifecycle.status().stage),uint32_t(result),f.io.regs[kRegIrqMask20]);
+  assert(result==0);assert(f.driver.report().initialized);f.idle();
+  assert(f.io.irqMask20Writes==2&&f.io.irqMask20Reads==0);
+
+ }
+ {Fixture f;f.io.corruptRegister=kRegAspControl1;
+  assert(f.lifecycle.bringUp()==kIOReturnNotReady);
+  assert(f.host.failure==diagnostics::DIAG_ASP_CONFIG&&f.host.failureReg==kRegAspControl1);
+  assert(f.host.expected==0x21&&f.host.actual==0&&f.host.stage==diagnostics::STAGE_ASP);
+  f.idle();
+ }
+ {Fixture f;f.io.failMask20Configuration=true;
+  assert(f.lifecycle.bringUp()==-77);
+  assert(f.host.failure==diagnostics::DIAG_ASP_CONFIG&&f.host.failureReg==kRegIrqMask20&&f.host.failureReturn==-77);
+  f.idle();
+ }
  unsigned scalarCount=0;std::vector<uint8_t> left,right;
  for(unsigned channel:{0U,1U}){
   Fixture f;f.binding.channelIndex=channel;f.assets.target.channelIndex=channel;f.context.endpoint.spiChipSelect=f.endpoint.spiChipSelect=f.binding.endpoint.spiChipSelect=channel;
@@ -250,6 +276,10 @@ int main(){
  assert(fixtureLiveAllocations==0);
 }
 '''
+capture=json.loads((ROOT/"Tests/Fixtures/gu605mv-asp-readback.json").read_text())
+assert capture["register"]==0xe0dc and capture["written"]==0xffffffff
+assert capture["read_return"]==capture["write_return"]==0
+CPP=CPP.replace("CAPTURED_IRQ_MASK20_READBACK",hex(capture["readback"])+"U")
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-lifecycle-") as directory:
     tmp=Path(directory)
     install(tmp)

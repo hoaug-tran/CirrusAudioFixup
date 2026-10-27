@@ -115,21 +115,31 @@ IOReturn CS35L56Driver::loadFirmware() {
     // Replay only the HDA/firmware configuration prescribed by Linux, muted.
     struct RegisterValue {
         uint32_t reg, value;
+        bool verify{true};
     };
     constexpr RegisterValue configuration[]{
         {kRegAspEnables, 0},         {kRegUserMute, 1},           {kRegUserVolume, 0},         {kRegPosture, 0},
         {kRegSoundWireInput1, 0x18}, {kRegSoundWireInput2, 0x19}, {kRegSoundWireInput3, 0x29}, {kRegSoundWireInput4, 0x28},
-        {kRegIrqMask18, 0x1F7DF0FF}, {kRegIrqMask20, 0xFFFFFFFF}, {kRegAspControl1, 0x21},     {kRegAspControl2, 0x20200200},
+        {kRegIrqMask18, 0x1F7DF0FF}, {kRegIrqMask20, 0xFFFFFFFF, false},
+        {kRegAspControl1, 0x21},     {kRegAspControl2, 0x20200200},
         {kRegAspControl3, 3},        {kRegAspFrame1, 0x03020100}, {kRegAspFrame5, 0x00020100}, {kRegAspData5, 0x18},
         {kRegAspData1, 0x18},        {kRegAspTx1, 0x18},          {kRegAspTx2, 0x19},          {kRegAspTx3, 0x20},
         {kRegAspTx4, 0x28}};
+    // Linux masks IRQ20 with an all-ones write; reserved bits need not read as ones.
+    mHost.setDiagnosticStage(diagnostics::STAGE_ASP);
     for (const auto& entry : configuration) {
         uint32_t value = 0;
-        if (!mContext.io.write(entry.reg, entry.value) || !mContext.io.read(entry.reg, &value))
+        if (!mContext.io.write(entry.reg, entry.value))
+            return transferFailure(diagnostics::DIAG_ASP_CONFIG, entry.reg);
+        if (!entry.verify)
+            continue;
+        if (!mContext.io.read(entry.reg, &value))
             return transferFailure(diagnostics::DIAG_ASP_CONFIG, entry.reg);
         if (value != entry.value)
-            return fail(kIOReturnNotReady, diagnostics::DIAG_ASP_CONFIG, entry.reg);
+            return fail(kIOReturnNotReady, diagnostics::DIAG_ASP_CONFIG, entry.reg, entry.value, value);
     }
+    mHost.markDiagnosticSuccess(diagnostics::STAGE_ASP);
+    mHost.setDiagnosticStage(diagnostics::STAGE_DSP_BOOT);
     if (!mContext.io.updateBits(kRegProtectionStatus, kFirmwareMissingMask, 0))
         return transferFailure(diagnostics::DIAG_DSP_BOOT, kRegProtectionStatus);
     mAmplifier.calibrated = applyCalibration(image);

@@ -57,16 +57,16 @@ constexpr bool kOSBooleanFalse=false;
 RESET_METHOD
 struct ResetWindow {
  uint32_t value=(1U<<28)|(1U<<29)|(1U<<20);
- std::vector<uint32_t> writes;unsigned reads=0;bool rejectAssertion=false,rejectRelease=false;
- uint32_t read32(uint32_t offset){assert(offset==84*4);++reads;return value;}
+ std::vector<uint32_t> writes;unsigned reads=0,unavailableAt=0;bool rejectAssertion=false,rejectRelease=false;
+ uint32_t read32(uint32_t offset){assert(offset==84*4);return ++reads==unavailableAt?UINT32_MAX:value;}
  void write32(uint32_t offset,uint32_t v){assert(offset==84*4);writes.push_back(v);
   if((writes.size()==1&&rejectAssertion)||(writes.size()==2&&rejectRelease))return;
   value=v;
  }
 };
 int main(){
- for(unsigned fault=0;fault<3;++fault){
-  ResetWindow window;window.rejectAssertion=fault==1;window.rejectRelease=fault==2;
+ for(unsigned fault=0;fault<5;++fault){
+  ResetWindow window;window.rejectAssertion=fault==1;window.rejectRelease=fault==2;window.unavailableAt=fault>=3?fault-1:0;
   unsigned delays=0;const char* why=nullptr;
   const bool ok=transport::amd::pulseGPIOReset(window,1024,84,false,[&](uint32_t ms){assert(ms==2);++delays;},why);
   assert(ok==(fault==0)&&delays==2&&window.writes.size()==2);

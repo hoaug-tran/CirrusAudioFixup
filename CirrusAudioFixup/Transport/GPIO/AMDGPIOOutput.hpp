@@ -18,11 +18,13 @@ bool pulseGPIOReset(Window& window, size_t bytes, uint16_t pin, bool activeLow, 
     const uint32_t asserted = base | (activeLow ? 1U << 22 : 0);
     const uint32_t released = base | (activeLow ? 0 : 1U << 22);
     window.write32(offset, asserted);
-    const bool held = (window.read32(offset) & levelMask) == (asserted & levelMask);
+    const uint32_t heldValue = window.read32(offset);
+    const bool held = heldValue != UINT32_MAX && (heldValue & levelMask) == (asserted & levelMask);
     delay(2);
     // Always release a shared reset even after an assertion/readback failure.
     window.write32(offset, released);
-    const bool high = (window.read32(offset) & levelMask) == (released & levelMask);
+    const uint32_t releasedValue = window.read32(offset);
+    const bool high = releasedValue != UINT32_MAX && (releasedValue & levelMask) == (released & levelMask);
     delay(2);
     reason = held && high ? "RESET_PULSE_COMPLETE" : "RESET_READBACK_FAILED";
     return held && high;

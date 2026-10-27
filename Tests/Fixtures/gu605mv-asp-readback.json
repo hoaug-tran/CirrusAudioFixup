@@ -10,5 +10,10 @@
   "software_failure": 3758097112,
   "trace_lines": 356,
   "source": "services-payload.plist:Cirrus_Trace_First_spi0",
-  "limits": "Captured IRQ mask readback only; lifecycle hardware, scheduler and DSP state remain fixtures."
+  "limits": "Captured IRQ mask readback only; lifecycle hardware, scheduler and DSP state remain fixtures.",
+  "calibration_hex": "300000000200000000000000000000008021ad07734bda0117010119000000000000000050c76308734bda0117015719",
+  "calibration_r0": [
+    6401,
+    6487
+  ]
 }

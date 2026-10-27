@@ -149,7 +149,13 @@ struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
  uint32_t speaker[2]{0,0};bool valid=true;
  bool read(const char* key,size_t index,uint32_t& out)override{assert(!strcmp(key,"spk-id-gpios")&&index<2);out=speaker[index];return valid;}
 };
+const uint8_t capturedCalibration[]{CAPTURED_CALIBRATION};
 int main(){
+ for(size_t i=0;i<2;++i){firmware::EFICalibration value;
+  assert(firmware::EFICalibration::select(capturedCalibration,sizeof(capturedCalibration),0,i,value));
+  assert(value.resistance==(i?CAPTURED_R0_RIGHT:CAPTURED_R0_LEFT)&&value.ambient==23&&value.status==1);
+ }
+
  {Properties props;GPIO gpio;const char* reason=nullptr;
   core::BusEndpoint endpoints[2]{{core::BusTransportType::SPI,"\\\\_SB.SPI9",0,false,1,4000000,0},
                                {core::BusTransportType::SPI,"\\\\_SB.SPI9",0,false,0,4000000,0}};
@@ -162,7 +168,8 @@ int main(){
   props.indices[1]=0;assert(!resolveBoardConfiguration(c,reason));props.indices[1]=1;
   endpoints[1].spiChipSelect=1;assert(!resolveBoardConfiguration(c,reason));endpoints[1].spiChipSelect=0;
   c.identity.subsystemDevice=0xffff;assert(!resolveBoardConfiguration(c,reason));}
- {Fixture f;const auto result=f.lifecycle.bringUp();
+ {Fixture f;f.data.bytes.assign(capturedCalibration,capturedCalibration+sizeof(capturedCalibration));
+  const auto result=f.lifecycle.bringUp();
   if(result)fprintf(stderr,"captured readback replay: stage=%u result=0x%08x reg0xe0dc=0x%08x\n",unsigned(f.lifecycle.status().stage),uint32_t(result),f.io.regs[kRegIrqMask20]);
   assert(result==0);assert(f.driver.report().initialized);f.idle();
   assert(f.io.irqMask20Writes==2&&f.io.irqMask20Reads==0);
@@ -246,6 +253,17 @@ int main(){
  {Fixture f;assert(f.lifecycle.bringUp()==0);assert(f.driver.runtimeTick(f.playback())==0);
   assert(f.driver.startPlayback()==0);f.io.regs[kRegFirmwareVersion]=0;
   assert(f.driver.runtimeTick(f.playback())!=0);f.idle();assert(f.driver.safeShutdown()==0);}
+ // Both channels continue beyond the captured stop with the supplied EFI bytes.
+ {Fixture a,b;
+  a.data.bytes.assign(capturedCalibration,capturedCalibration+sizeof(capturedCalibration));
+  b.data.bytes=a.data.bytes;b.binding.channelIndex=b.assets.target.channelIndex=1;
+  b.context.endpoint.spiChipSelect=b.endpoint.spiChipSelect=b.binding.endpoint.spiChipSelect=1;
+  core::AmplifierLifecycle* members[]{&a.lifecycle,&b.lifecycle};core::AmplifierGroup group;
+  assert(group.configure(members,2)&&group.bringUp()==0);
+  assert(a.driver.report().initialized&&b.driver.report().initialized);
+  assert(std::string(a.driver.report().readyVerdict)=="READY_DSP"&&std::string(b.driver.report().readyVerdict)=="READY_DSP");
+  a.idle();b.idle();assert(group.suspend()==0&&group.resume()==0);a.idle();b.idle();
+ }
  // A failure on the second member must mute the already-started first member.
  {Fixture a,b;b.binding.channelIndex=b.assets.target.channelIndex=1;b.context.endpoint.spiChipSelect=b.endpoint.spiChipSelect=b.binding.endpoint.spiChipSelect=1;
   core::AmplifierLifecycle* members[]{&a.lifecycle,&b.lifecycle};core::AmplifierGroup group;
@@ -280,6 +298,8 @@ capture=json.loads((ROOT/"Tests/Fixtures/gu605mv-asp-readback.json").read_text()
 assert capture["register"]==0xe0dc and capture["written"]==0xffffffff
 assert capture["read_return"]==capture["write_return"]==0
 CPP=CPP.replace("CAPTURED_IRQ_MASK20_READBACK",hex(capture["readback"])+"U")
+CPP=CPP.replace("CAPTURED_CALIBRATION",",".join(hex(b) for b in bytes.fromhex(capture["calibration_hex"])))
+CPP=CPP.replace("CAPTURED_R0_LEFT",str(capture["calibration_r0"][0])).replace("CAPTURED_R0_RIGHT",str(capture["calibration_r0"][1]))
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-lifecycle-") as directory:
     tmp=Path(directory)
     install(tmp)

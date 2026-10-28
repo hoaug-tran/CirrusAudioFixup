@@ -27,6 +27,10 @@ inline const void* gIOServicePlane=IORegistryEntry::getPlane("IOService");
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 using namespace cirrus;
 using namespace devices::amplifiers::cs35l41;
+namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+}
 std::vector<uint8_t> crs(std::initializer_list<unsigned> addresses){
  std::vector<uint8_t> bytes;
  for(auto address:addresses){

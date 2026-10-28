@@ -5,6 +5,7 @@
 #include "Core/RegisterIO.hpp"
 #include "Devices/Amplifiers/CS35L56/Hardware/Registers.hpp"
 #include "Devices/Amplifiers/CS35L56/InstanceState.hpp"
+#include "Devices/Amplifiers/CS35L56/DSPControl.hpp"
 
 namespace cirrus::devices::amplifiers::cs35l56 {
 class CS35L56Device final {
@@ -13,6 +14,16 @@ public:
     const char* name() const { return mName; }
     core::BusEndpoint endpoint() const { return mEndpoint; }
     const InstanceState& state() const { return mState; }
+    static IOReturn prepareIdentity(core::RegisterIO& io) {
+        uint32_t revision = 0;
+        if (!io.read(registers::kRegRevisionId, &revision))
+            return io.lastError() == kIOReturnSuccess ? kIOReturnError : io.lastError();
+        if ((revision & registers::kRevisionIdMask) != registers::kRevisionB0)
+            return kIOReturnUnsupported;
+        if (DSPControl::waitForBoot(io, [](uint32_t us) { IOSleep((us + 999) / 1000); }))
+            return kIOReturnSuccess;
+        return io.lastError() == kIOReturnSuccess ? kIOReturnTimeout : io.lastError();
+    }
     bool probe(core::RegisterIO& io) {
         mState = {};
         auto& result = mState;

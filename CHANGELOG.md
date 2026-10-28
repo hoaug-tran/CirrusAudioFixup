@@ -4,9 +4,34 @@
 
 ### Added
 
-- Experimental CS35L56 SPI identity diagnostics for `CSC3556`, requiring `-cirrusro`; no DSP, firmware loading or playback support.
-- Meteor Lake-P GPIO mapping for `INTC1083`/`INTC105E`, including the distinct ownership-register layout and cross-community speaker ID reads.
+- CS35L56 B0 support over SPI, initially targeting the ASUS ROG Zephyrus G16 GU605MV (`CSC3556`, subsystem `10431C63`).
+- Dual-amplifier discovery, hardware reset, DSP initialization, mailbox control, playback management and power-state handling.
+- CS35L56 firmware 3.11.16 with board-specific left/right tuning, automatic speaker ID selection and EFI calibration applied to each amplifier.
+- Native ACPI `_DSD` evaluation and `_CRS` GPIO resource discovery, allowing supported hardware to initialize without a custom SSDT.
+- Meteor Lake-P GPIO support for `INTC1083`/`INTC105E`, including GPIO ownership handling and cross-community speaker ID reads.
 - CS35L41 firmware and tuning integration for ASUS subsystem `1043:1683` (Zenbook 14 UM3402Y).
+- CS35L56 regression tests covering SPI communication, firmware parsing, calibration, playback transitions, power management and failure recovery.
+
+### Changed
+
+- Extended the WMFW uploader to handle larger firmware images and varying region counts, preserve transfer errors and keep upload sessions off the kernel stack.
+- Improved SPI initialization, deferred device binding and serialized register writes during reset operations.
+- Consolidated CS35L41 board configurations into a Linux-referenced subsystem ID table while preserving native ACPI property validation.
+- Expanded hardware diagnostics to report amplifier identity, firmware state, calibration, playback activity and initialization failures.
+
+### Fixed
+
+- ACPI property discovery failing when `_DSD` contains namespace references unsupported by Apple's standard object conversion.
+- Premature SPI binding failures when PCI devices are published later in the boot sequence.
+- Incorrect CS35L56 IRQ mask readback validation that prevented successful DSP initialization.
+
+### Notes
+
+- CS35L56 initialization and physical speaker output were verified on the GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8).
+- The GU605MV requires ALC285 NID `0x17` to be configured for bass-speaker output. Manual HDA verbs restored audio during testing, but persistent routing requires a suitable AppleALC configuration.
+- Hardware sleep/wake recovery has not yet been verified.
+
+See [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10) for implementation details.
 
 ## [1.1.1] - 2026-10-21
 

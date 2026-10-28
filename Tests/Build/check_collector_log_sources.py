@@ -5,6 +5,8 @@ import tempfile
 
 root = Path(__file__).resolve().parents[2]
 source = (root / "Tools/Collectors/collect_macos.sh").read_text()
+assert source.count("capture dmesg /sbin/dmesg") == 1
+assert source.index("capture dmesg /sbin/dmesg") < source.index("capture system /usr/bin/sw_vers")
 start = source.index("capture cirrus-audio-log ")
 end = source.index('\n\nif [ "$#"', start)
 command = source[start:end]

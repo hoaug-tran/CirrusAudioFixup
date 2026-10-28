@@ -153,8 +153,7 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         consumed[index] = true;
         usedChannel[channels[index]] = true;
         auto& device = result->devices[i];
-        const auto* correction = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice);
-        if (correction) {
+        if (const auto* correction = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice)) {
             boost[index] = correction->internalBoost ? 0 : 1;
             inductor[index] = correction->inductor;
             peak[index] = correction->peak;

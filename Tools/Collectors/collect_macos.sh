@@ -180,6 +180,7 @@ verify_build_provenance() {
     fi
 }
 
+capture dmesg /sbin/dmesg
 capture system /usr/bin/sw_vers
 capture collector-sha256 /usr/bin/shasum -a 256 "${BASH_SOURCE[0]}"
 capture collected-at /bin/date '+%Y-%m-%dT%H:%M:%S%z'
@@ -225,8 +226,6 @@ capture_shell ioreg-cirrus '
 capture sysctl-msgbuf /usr/sbin/sysctl -n kern.msgbuf
 capture kernel-log-settings /usr/sbin/sysctl kern.bootargs kern.msgbuf kern.msgbufsize
 capture unified-log-settings /usr/bin/log config --status
-
-capture dmesg /sbin/dmesg
 
 printf '%s\n' \
     'Optional queries may be unavailable; inspect each exit code and raw output.' \

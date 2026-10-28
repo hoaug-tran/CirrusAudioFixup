@@ -591,8 +591,8 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
                                                                           : cirrus::transport::createNativeSPIController);
     CIRRUS_LOG("BOOT_FLOW SPI_BIND_END ret=0x%08X", uint32_t(ret));
     if (mNativeSPI.powerPending()) {
-        setProperty("Cirrus_SPI_Status", "WAITING_POWER");
-        mAttachment.communication = "WAITING_POWER";
+        setProperty("Cirrus_SPI_Status", "WAITING_CONTROLLER_RESOURCES");
+        mAttachment.communication = "WAITING_CONTROLLER_RESOURCES";
         publishAttachmentStatus();
         return true;
     }
@@ -678,6 +678,16 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
             continue;
         identityRegister = definition->identityRegister;
         identityMask = definition->identityMask;
+        if (io && definition->prepareIdentity && !bootArgEnabled("-cirrusro") && !bootArgStrEquals("-cirrusphase", "probe")) {
+            const auto ready = definition->prepareIdentity(*io);
+            snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Prepare_Return", i);
+            setProperty(key, uint64_t(uint32_t(ready)), 32);
+            if (ready != kIOReturnSuccess) {
+                mAttachment.communication = "FAILED";
+                recordAttachmentFailure("COMMUNICATION", "SPI_IDENTITY_PREPARATION_FAILED", ready, uint32_t(i));
+                continue;
+            }
+        }
         uint32_t id = 0;
         const bool readable = io && io->read(identityRegister, &id);
         const uint32_t rawId = id;

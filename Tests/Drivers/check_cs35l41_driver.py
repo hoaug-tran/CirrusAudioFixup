@@ -147,8 +147,6 @@ int main(){
         assert(!f.port.values.count(0x3810)&&!f.port.values.count(0x3814)&&!f.port.values.count(0x3808));
         assert(f.runtime.unbind()==0);
     }
-
-    // Captured Zenbook identity, bus, addresses and independent channel configuration.
     for(uint32_t channel:{0U,1U}){
         const DeviceConfiguration config{{BoostTopology::ExternalWithSwitch,0,0,0},1,2};
         auto configure=[&](Fixture& f){
@@ -258,6 +256,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
+    compiler = "g++" if sys.platform == "win32" else "clang++"
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
+        subprocess.run([compiler,'-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

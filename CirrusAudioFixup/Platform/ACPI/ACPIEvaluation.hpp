@@ -6,8 +6,8 @@
 class KernelPatcher;
 namespace cirrus::transport {
 using ACPIPropertyEvaluator = IOReturn (*)(IOACPIPlatformDevice*, OSObject**);
-inline ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
-inline const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+extern ACPIPropertyEvaluator nativePropertyEvaluator;
+extern const char* nativePropertySetupState;
 inline IOReturn evaluateNativeProperties(IOACPIPlatformDevice* device, OSObject** result) {
     if (!device || !result || *result)
         return kIOReturnBadArgument;

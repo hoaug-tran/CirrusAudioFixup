@@ -450,7 +450,7 @@ private:
                 properties->setObject("acpi-path", path);
                 waitMatching->setObject("IOPropertyMatch", properties);
                 owner->setProperty("Cirrus_SPI_PCI_Lookup_Status", "WAITING_PUBLICATION");
-                auto* service = IOService::waitForMatchingService(waitMatching, 5000000000ULL);
+                auto* service = IOService::waitForMatchingService(waitMatching, 30000000000ULL);
                 auto* waitedPCI = cirrus::support::pciDeviceCast(service);
                 if (waitedPCI) {
                     // Recheck identity and uniqueness after publication rather

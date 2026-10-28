@@ -26,6 +26,10 @@ public:
         auto result = properties.load(controller, owner);
         diagnostics::ACPIObjectEvidence::publish(owner, "Cirrus_SPI_DSD", properties.object());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reason", properties.reason());
+        owner->setProperty("Cirrus_ACPI_Interpreter_Setup",
+                           __atomic_load_n(&nativePropertySetupState, __ATOMIC_ACQUIRE));
+        owner->setProperty("Cirrus_ACPI_Interpreter_State",
+                           __atomic_load_n(&nativePropertyEvaluator, __ATOMIC_ACQUIRE) ? "READY" : "UNAVAILABLE");
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Source", properties.source());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Native_Object_Type", properties.nativeObjectType());
         owner->setProperty("Cirrus_Intel_SPI_CS_DSD_Reference_Return", uint64_t(uint32_t(properties.referenceReturn())), 32);

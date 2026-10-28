@@ -1,6 +1,7 @@
 """Execute the complete CS35L56 driver with real firmware and bounded OS mocks."""
 import subprocess
 import sys
+import json
 import tempfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +31,8 @@ struct IO : core::RegisterIO {
  std::map<uint32_t,uint32_t> regs;
  std::map<uint32_t,uint8_t> bytes;
  unsigned scalar=0,failAt=0,writes=0,sequences=0,uploads=0,pauses=0,failBulkWrites=0;
+ uint32_t failedReadRegister=0xffffffff,corruptRegister=0xffffffff;
+ unsigned irqMask20Reads=0,irqMask20Writes=0;bool failMask20Configuration=false;
  int error=0;bool failed=false,stuckMailbox=false,stuckBoot=false,stuckPower=false,failUpload=false;
  std::vector<uint8_t> tuning;
  IO() {
@@ -49,15 +52,18 @@ struct IO : core::RegisterIO {
  bool operation(){error=0;if(++scalar==failAt){failed=true;error=-77;return false;}return true;}
  int32_t lastError()const override{return error;}
  bool read(uint32_t reg,uint32_t* out)override{
-  if(!operation())return false;
-  *out=regs[reg];
+  if(!operation()){failedReadRegister=reg;return false;}
+  if(reg==kRegIrqMask20)++irqMask20Reads;
+  *out=reg==corruptRegister?0:regs[reg];
   if(reg==kRegDspHaloState&&stuckBoot)*out=0;
   if(reg==kRegDspPowerState&&stuckPower)*out=2;
   if(reg==kRegDspVirtualMailbox1&&stuckMailbox)*out=1;
   return true;
  }
  bool write(uint32_t reg,uint32_t value)override{
-  if(!operation())return false;++writes;regs[reg]=value;
+  if(!operation())return false;
+  if(reg==kRegIrqMask20&&++irqMask20Writes==2&&failMask20Configuration){error=-77;return false;}
+  ++writes;regs[reg]=reg==kRegIrqMask20 ? value & CAPTURED_IRQ_MASK20_READBACK : value;
   if(reg==kRegDspVirtualMailbox1){
    if(value==kCommandShutdown)regs[kRegDspPowerState]=1;
    if(value==kCommandAudioPause){++pauses;regs[kRegTransducerState]=3;}
@@ -89,15 +95,19 @@ struct IO : core::RegisterIO {
  bool pollBit(uint32_t,uint32_t,uint32_t,uint32_t)override{assert(false);return false;}
 };
 struct Host : platform::AmplifierHost {
+ diagnostics::DriverStage stage{};
+ diagnostics::DiagnosticFailure failure{};uint32_t failureReg=0,expected=0,actual=0;IOReturn failureReturn=0;
  bool allow=true,ro=false,route=true;const char* phase=nullptr;
  std::map<std::string,std::string> text;
  bool authorized()const override{return allow;}bool supportsResources()const override{return true;}
  const char* name()const override{return "cs35l56-test";}
  bool bootArgEnabled(const char* key)const override{return ro&&!strcmp(key,"-cirrusro");}
  bool stopAfterDebugStage(const char* key)override{return phase&&!strcmp(phase,key);}
- void setDiagnosticStage(diagnostics::DriverStage)override{}
+ void setDiagnosticStage(diagnostics::DriverStage value)override{stage=value;}
  void markDiagnosticSuccess(diagnostics::DriverStage)override{}
- void recordDiagnosticFailure(diagnostics::DiagnosticFailure,uint32_t,uint32_t,uint32_t,IOReturn,bool)override{}
+ void recordDiagnosticFailure(diagnostics::DiagnosticFailure f,uint32_t r,uint32_t e,uint32_t a,IOReturn ret,bool)override{
+  failure=f;failureReg=r;expected=e;actual=a;failureReturn=ret;
+ }
  void publish(const char* key,const char* value)override{text[key]=value;}
  bool hasRouteEvents()const override{return route;}
  bool routeUnchanged(uint32_t generation)const override{return route&&generation==7;}
@@ -139,7 +149,13 @@ struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
  uint32_t speaker[2]{0,0};bool valid=true;
  bool read(const char* key,size_t index,uint32_t& out)override{assert(!strcmp(key,"spk-id-gpios")&&index<2);out=speaker[index];return valid;}
 };
+const uint8_t capturedCalibration[]{CAPTURED_CALIBRATION};
 int main(){
+ for(size_t i=0;i<2;++i){firmware::EFICalibration value;
+  assert(firmware::EFICalibration::select(capturedCalibration,sizeof(capturedCalibration),0,i,value));
+  assert(value.resistance==(i?CAPTURED_R0_RIGHT:CAPTURED_R0_LEFT)&&value.ambient==23&&value.status==1);
+ }
+
  {Properties props;GPIO gpio;const char* reason=nullptr;
   core::BusEndpoint endpoints[2]{{core::BusTransportType::SPI,"\\\\_SB.SPI9",0,false,1,4000000,0},
                                {core::BusTransportType::SPI,"\\\\_SB.SPI9",0,false,0,4000000,0}};
@@ -152,6 +168,24 @@ int main(){
   props.indices[1]=0;assert(!resolveBoardConfiguration(c,reason));props.indices[1]=1;
   endpoints[1].spiChipSelect=1;assert(!resolveBoardConfiguration(c,reason));endpoints[1].spiChipSelect=0;
   c.identity.subsystemDevice=0xffff;assert(!resolveBoardConfiguration(c,reason));}
+ {Fixture f;f.data.bytes.assign(capturedCalibration,capturedCalibration+sizeof(capturedCalibration));
+  const auto result=f.lifecycle.bringUp();
+  if(result)fprintf(stderr,"captured readback replay: stage=%u result=0x%08x reg0xe0dc=0x%08x\n",unsigned(f.lifecycle.status().stage),uint32_t(result),f.io.regs[kRegIrqMask20]);
+  assert(result==0);assert(f.driver.report().initialized);f.idle();
+  assert(f.io.irqMask20Writes==2&&f.io.irqMask20Reads==0);
+
+ }
+ {Fixture f;f.io.corruptRegister=kRegAspControl1;
+  assert(f.lifecycle.bringUp()==kIOReturnNotReady);
+  assert(f.host.failure==diagnostics::DIAG_ASP_CONFIG&&f.host.failureReg==kRegAspControl1);
+  assert(f.host.expected==0x21&&f.host.actual==0&&f.host.stage==diagnostics::STAGE_ASP);
+  f.idle();
+ }
+ {Fixture f;f.io.failMask20Configuration=true;
+  assert(f.lifecycle.bringUp()==-77);
+  assert(f.host.failure==diagnostics::DIAG_ASP_CONFIG&&f.host.failureReg==kRegIrqMask20&&f.host.failureReturn==-77);
+  f.idle();
+ }
  unsigned scalarCount=0;std::vector<uint8_t> left,right;
  for(unsigned channel:{0U,1U}){
   Fixture f;f.binding.channelIndex=channel;f.assets.target.channelIndex=channel;f.context.endpoint.spiChipSelect=f.endpoint.spiChipSelect=f.binding.endpoint.spiChipSelect=channel;
@@ -168,7 +202,9 @@ int main(){
  assert(left!=right);
  for(unsigned failure=1;failure<=scalarCount;++failure){
   Fixture f;f.io.failAt=failure;const auto result=f.lifecycle.bringUp();assert(f.io.failed);
-  if(result==0){assert(failure==5||failure==6||std::string(f.driver.report().readyVerdict)=="READY_DSP_OUTPUT_DISABLED_CALIBRATION");}
+  if(result==0){assert(f.driver.report().initialized&&!f.driver.report().faulted);
+   assert(f.io.failedReadRegister==kRegIrqStatus||f.io.failedReadRegister==kRegDspHaloState||
+          f.io.failedReadRegister==kRegDspVirtualMailbox2||std::string(f.driver.report().readyVerdict)=="READY_DSP_OUTPUT_DISABLED_CALIBRATION");}
   else{assert(result==-77);assert(f.lifecycle.status().firstFailure==-77);assert(f.lifecycle.status().stage==core::AmplifierStage::Faulted);}
   f.idle();assert(f.driver.safeShutdown()==0);
  }
@@ -204,7 +240,10 @@ int main(){
   before=f.io.scalar;assert(f.driver.stopPlayback()==0);stopTransfers=f.io.scalar-before;assert(f.driver.safeShutdown()==0);}
  for(unsigned failure=1;failure<=startTransfers;++failure){Fixture f;assert(f.lifecycle.bringUp()==0);
   assert(f.driver.runtimeTick(f.playback())==0);f.io.failAt=f.io.scalar+failure;
-  assert(f.driver.startPlayback()==-77);f.idle();assert(f.driver.safeShutdown()==0);}
+  const auto result=f.driver.startPlayback();
+  if(failure==1)assert(result==0);
+  else assert(result==-77);
+  if(failure!=1)f.idle();assert(f.driver.safeShutdown()==0);}
  for(unsigned failure=1;failure<=stopTransfers;++failure){Fixture f;assert(f.lifecycle.bringUp()==0);
   assert(f.driver.runtimeTick(f.playback())==0);assert(f.driver.startPlayback()==0);f.io.failAt=f.io.scalar+failure;
   assert(f.driver.stopPlayback()==-77);assert(f.driver.safeShutdown()==0);f.idle();}
@@ -214,12 +253,23 @@ int main(){
  {Fixture f;assert(f.lifecycle.bringUp()==0);assert(f.driver.runtimeTick(f.playback())==0);
   assert(f.driver.startPlayback()==0);f.io.regs[kRegFirmwareVersion]=0;
   assert(f.driver.runtimeTick(f.playback())!=0);f.idle();assert(f.driver.safeShutdown()==0);}
+ // Both channels continue beyond the captured stop with the supplied EFI bytes.
+ {Fixture a,b;
+  a.data.bytes.assign(capturedCalibration,capturedCalibration+sizeof(capturedCalibration));
+  b.data.bytes=a.data.bytes;b.binding.channelIndex=b.assets.target.channelIndex=1;
+  b.context.endpoint.spiChipSelect=b.endpoint.spiChipSelect=b.binding.endpoint.spiChipSelect=1;
+  core::AmplifierLifecycle* members[]{&a.lifecycle,&b.lifecycle};core::AmplifierGroup group;
+  assert(group.configure(members,2)&&group.bringUp()==0);
+  assert(a.driver.report().initialized&&b.driver.report().initialized);
+  assert(std::string(a.driver.report().readyVerdict)=="READY_DSP"&&std::string(b.driver.report().readyVerdict)=="READY_DSP");
+  a.idle();b.idle();assert(group.suspend()==0&&group.resume()==0);a.idle();b.idle();
+ }
  // A failure on the second member must mute the already-started first member.
  {Fixture a,b;b.binding.channelIndex=b.assets.target.channelIndex=1;b.context.endpoint.spiChipSelect=b.endpoint.spiChipSelect=b.binding.endpoint.spiChipSelect=1;
   core::AmplifierLifecycle* members[]{&a.lifecycle,&b.lifecycle};core::AmplifierGroup group;
   assert(group.configure(members,2,false)&&group.bringUp()==0);
   assert(a.driver.runtimeTick(a.playback())==0&&b.driver.runtimeTick(b.playback())==0);
-  b.io.failAt=b.io.scalar+1;assert(group.startPlayback()==-77);a.idle();b.idle();
+  b.io.failAt=b.io.scalar+2;assert(group.startPlayback()==-77);a.idle();b.idle();
   assert(a.driver.safeShutdown()==0&&b.driver.safeShutdown()==0);}
  // A cold reset while idle invalidates readiness before AUDIO_PLAY.
  {Fixture f;assert(f.lifecycle.bringUp()==0);assert(f.driver.runtimeTick(f.playback())==0);
@@ -244,6 +294,12 @@ int main(){
  assert(fixtureLiveAllocations==0);
 }
 '''
+capture=json.loads((ROOT/"Tests/Fixtures/gu605mv-asp-readback.json").read_text())
+assert capture["register"]==0xe0dc and capture["written"]==0xffffffff
+assert capture["read_return"]==capture["write_return"]==0
+CPP=CPP.replace("CAPTURED_IRQ_MASK20_READBACK",hex(capture["readback"])+"U")
+CPP=CPP.replace("CAPTURED_CALIBRATION",",".join(hex(b) for b in bytes.fromhex(capture["calibration_hex"])))
+CPP=CPP.replace("CAPTURED_R0_LEFT",str(capture["calibration_r0"][0])).replace("CAPTURED_R0_RIGHT",str(capture["calibration_r0"][1]))
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-lifecycle-") as directory:
     tmp=Path(directory)
     install(tmp)

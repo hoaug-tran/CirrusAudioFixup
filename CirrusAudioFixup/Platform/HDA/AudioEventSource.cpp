@@ -60,8 +60,12 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
     const char* acpiPaths[] = {"/System/Library/Extensions/AppleACPIPlatform.kext/Contents/MacOS/AppleACPIPlatform"};
     KernelPatcher::KextInfo acpiInfo[] = {{"com.apple.driver.AppleACPIPlatform", acpiPaths, 1, {true}, {}, 0}};
     void acpiLoaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
-        if (index == acpiInfo[0].loadIndex)
+        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_CALLBACK index=%lu expected=%lu\n", index, acpiInfo[0].loadIndex);
+        if (index == acpiInfo[0].loadIndex) {
             cirrus::transport::configureACPIEvaluation(patcher, index, address, size);
+            IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_SETUP state=%s\n",
+                  __atomic_load_n(&cirrus::transport::nativePropertySetupState, __ATOMIC_ACQUIRE));
+        }
     }
 #endif
 
@@ -154,7 +158,12 @@ extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup
     if (error == LiluAPI::Error::NoError) {
         registered = lilu.onKextLoad(audioInfo, 1, loaded) == LiluAPI::Error::NoError;
 #if defined(KERNEL)
-        const bool acpiRegistered = lilu.onKextLoad(acpiInfo, 1, acpiLoaded) == LiluAPI::Error::NoError;
+        const auto acpiError = lilu.onKextLoad(acpiInfo, 1, acpiLoaded);
+        const bool acpiRegistered = acpiError == LiluAPI::Error::NoError;
+        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_REGISTER ret=%u hda_registered=%u\n", unsigned(acpiError), unsigned(registered));
+        if (!acpiRegistered)
+            __atomic_store_n(&cirrus::transport::nativePropertySetupState,
+                             static_cast<const char*>("CALLBACK_REGISTRATION_FAILED"), __ATOMIC_RELEASE);
         registered = registered || acpiRegistered;
 #endif
         lilu.releaseAccess();

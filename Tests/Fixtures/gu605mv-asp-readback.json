@@ -1,0 +1,19 @@
+{
+  "archive_sha256": "ce662866f000dcc6e9b60565981e4f7ca6993e4979f6755a22d0659cd32f8d61",
+  "commit": "554f497e32431c0b84f4e479473f6c502742cd35",
+  "binary_uuid": "4DB564BB-7E57-3B38-81AA-03E3EA42A8EF",
+  "register": 57564,
+  "written": 4294967295,
+  "readback": 369095068,
+  "write_return": 0,
+  "read_return": 0,
+  "software_failure": 3758097112,
+  "trace_lines": 356,
+  "source": "services-payload.plist:Cirrus_Trace_First_spi0",
+  "limits": "Captured IRQ mask readback only; lifecycle hardware, scheduler and DSP state remain fixtures.",
+  "calibration_hex": "300000000200000000000000000000008021ad07734bda0117010119000000000000000050c76308734bda0117015719",
+  "calibration_r0": [
+    6401,
+    6487
+  ]
+}

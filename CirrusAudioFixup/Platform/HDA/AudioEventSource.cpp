@@ -8,6 +8,7 @@
 #include <libkern/c++/OSNumber.h>
 #if defined(KERNEL)
 #include "Support/BuildConfig.hpp"
+#include "Platform/ACPI/ACPIEvaluation.hpp"
 #endif
 
 bool ADDPR(debugEnabled) = false;
@@ -54,6 +55,19 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
     mach_vm_address_t originalSetState = 0;
     const char* audioPaths[] = {"/System/Library/Extensions/IOAudioFamily.kext/Contents/MacOS/IOAudioFamily"};
     KernelPatcher::KextInfo audioInfo[] = {{"com.apple.iokit.IOAudioFamily", audioPaths, 1, {true}, {}, 0}};
+
+#if defined(KERNEL)
+    const char* acpiPaths[] = {"/System/Library/Extensions/AppleACPIPlatform.kext/Contents/MacOS/AppleACPIPlatform"};
+    KernelPatcher::KextInfo acpiInfo[] = {{"com.apple.driver.AppleACPIPlatform", acpiPaths, 1, {true}, {}, 0}};
+    void acpiLoaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
+        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_CALLBACK index=%lu expected=%lu\n", index, acpiInfo[0].loadIndex);
+        if (index == acpiInfo[0].loadIndex) {
+            cirrus::transport::configureACPIEvaluation(patcher, index, address, size);
+            IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_SETUP state=%s\n",
+                  __atomic_load_n(&cirrus::transport::nativePropertySetupState, __ATOMIC_ACQUIRE));
+        }
+    }
+#endif
 
     bool readNumber(IORegistryEntry * entry, const char* key, uint32_t& value) {
         // Registry values can be replaced on another thread. A retained property
@@ -143,6 +157,15 @@ extern "C" __attribute__((visibility("default"))) kern_return_t CirrusAudioFixup
     IOLog("CirrusAudioFixup: BOOT_FLOW LILU_ACCESS_END ret=%u\n", unsigned(error));
     if (error == LiluAPI::Error::NoError) {
         registered = lilu.onKextLoad(audioInfo, 1, loaded) == LiluAPI::Error::NoError;
+#if defined(KERNEL)
+        const auto acpiError = lilu.onKextLoad(acpiInfo, 1, acpiLoaded);
+        const bool acpiRegistered = acpiError == LiluAPI::Error::NoError;
+        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_REGISTER ret=%u hda_registered=%u\n", unsigned(acpiError), unsigned(registered));
+        if (!acpiRegistered)
+            __atomic_store_n(&cirrus::transport::nativePropertySetupState,
+                             static_cast<const char*>("CALLBACK_REGISTRATION_FAILED"), __ATOMIC_RELEASE);
+        registered = registered || acpiRegistered;
+#endif
         lilu.releaseAccess();
     }
     if (!registered)

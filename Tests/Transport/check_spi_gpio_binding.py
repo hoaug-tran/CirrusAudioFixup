@@ -24,7 +24,17 @@ OSArray* properties(OSObject* cs){
  auto* id=make<OSData>(std::vector<uint8_t>{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01});
  return array({id,array({array({make<OSString>("cs-gpios"),cs})})});
 }
+namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+}
 int main(){
+ cirrus::transport::nativePropertyEvaluator=[](IOACPIPlatformDevice* device,OSObject** out)->IOReturn {
+  auto found=device->values.find("INTERPRETER_DSD");
+  if(found==device->values.end())return kIOReturnUnsupported;
+  *out=found->second;(*out)->retain();return kIOReturnSuccess;
+ };
+
  IOACPIPlatformDevice spi,amp,gpio;IOService owner;auto* mem=make<IOMemoryMap>();gpio.map=mem;
  spi.path="IOACPIPlane:/_SB/PC00/SPI0";amp.path=spi.path+"/GSPK";gpio.path="IOACPIPlane:/_SB/GPI0";
  devices={&spi,&amp,&gpio};gpio.values["_HID"]=make<OSString>("INTC1056");gpio.values["_PSC"]=number(0);
@@ -112,13 +122,12 @@ int main(){
  auto* resetTuples=OSDynamicCast(OSArray,OSDynamicCast(OSArray,ampEntries->getObject(1))->getObject(1));
  resetTuples->v[0]=resetTuples->v[4]=make<OSString>("\\_SB.PC00.SPI0.GSPK");
  resetTuples->v[3]=number(1);
- ampEntries->v.push_back(array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}));
- amp.dsdNullResult=true;amp.values["CSDP"]=ampProperties;
+ amp.dsdNullResult=true;amp.values["INTERPRETER_DSD"]=ampProperties;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner,nullptr,true)==0);
-  assert(owner.strings["Cirrus_SPI_Reset_Properties_Source"]=="CSDP");
+  assert(owner.strings["Cirrus_SPI_Reset_Properties_Source"]=="_DSD_INTERPRETER");
   assert(owner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==1&&owner.numbers["Cirrus_SPI_Reset_0_LogicalLevel"]==0);
   assert(mem->r[resetPad/4]==0x84000201);}
- amp.dsdNullResult=false;amp.values.erase("CSDP");
+ amp.dsdNullResult=false;amp.values.erase("INTERPRETER_DSD");
  // Replay issue #5's INTC1085 topology: CS1 GPIO 468 in community 4,
  // shared reset GPIO 320 in community 3. Each map has independent storage.
  // Merely observing/preparing reset may map the owned provider, never pulse it.
@@ -171,7 +180,7 @@ int main(){
   assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="DSD_VALIDATION_FAILED");}
  spi.dsdValidation=0;spi.dsdEvaluation=kIOReturnUnsupported;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported&&selects.count()==0);
-  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="DSD_EVALUATION_FAILED");
+  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="DSD_REFERENCE_CONVERSION_FAILED");
   assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Object_Type"]=="NONE");}
  spi.dsdEvaluation=0;
  assert(gpio.opens==opensBefore);
@@ -193,65 +202,28 @@ int main(){
   auto* saved=retained->v[0];retained->v[0]=nullptr;
   assert(props.get("cs-gpios")==nullptr);retained->v[0]=saved;}
  // Captured macOS behavior: _DSD evaluates successfully but returns NULL.
- // The explicit data-only adapter preserves references as namespace strings.
+ // Interpreter references preserve the exact live namespace.
  auto* bridge=properties(array({number(0),make<OSString>("\\_SB.PC00.SPI0.GSPK"),number(0),number(0),number(0)}));
  auto* bridgeEntries=OSDynamicCast(OSArray,bridge->getObject(1));
- bridgeEntries->v.push_back(array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}));
- spi.dsdNullResult=true;spi.values["CSDP"]=bridge;
+ spi.dsdNullResult=true;spi.values["INTERPRETER_DSD"]=bridge;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
- assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Source"]=="CSDP");
- assert(owner.strings["Cirrus_SPI_DSD_Status"]=="COMPLETE");
- // A changed compatibility HID does not select a physical register layout.
- // Only explicit versioned metadata can preserve the original identity.
+ assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Source"]=="_DSD_INTERPRETER");
  gpio.values["_HID"]=make<OSString>("INT3450");
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
- auto* identity=array({dsd->getObject(0),array({
-  array({make<OSString>("cirrus,acpi-adapter-version"),number(1)}),
-  array({make<OSString>("cirrus,gpio-controller-hid"),make<OSString>("INTC1056")})})});
- gpio.values["CSDP"]=identity;
- // Captured xGwGcq: absent GPIO _DSD validates as generic Error, not NotFound.
- for(auto error:{kIOReturnError,kIOReturnUnsupported,kIOReturnNotReady,kIOReturnNotFound}){
-  gpio.dsdValidation=error;
-  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
-  assert(owner.strings["Cirrus_SPI_GPIO_Properties_Source"]=="CSDP");
-  assert(owner.numbers["Cirrus_SPI_GPIO_DSD_Validate_Return"]==uint32_t(error));
- }
- gpio.dsdValidation=kIOReturnError;gpio.values.erase("CSDP");
- const auto beforeMissing=gpio.opens;
- {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnError);}
- assert(gpio.opens==beforeMissing&&!gpio.opened&&gpio.refs==1);
- gpio.values["CSDP"]=identity;
- auto* identityEntries=OSDynamicCast(OSArray,identity->getObject(1));
- auto* identityVersion=OSDynamicCast(OSArray,identityEntries->getObject(0));
- identityVersion->v[1]=number(2);
- {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
- assert(gpio.opens==beforeMissing&&!gpio.opened);
- identityVersion->v[1]=number(1);
- gpio.dsdValidation=0;
- {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
- assert(owner.strings["Cirrus_SPI_GPIO_HID"]=="INT3450");
- assert(owner.strings["Cirrus_SPI_GPIO_Physical_HID"]=="INTC1056");
- assert(owner.numbers["Cirrus_SPI_GPIO_1_Revision"]==0x940000);
- // No fixed controller or amplifier namespace is required by the adapter.
+ gpio.values["_HID"]=make<OSString>("INTC1056");
  spi.path="IOACPIPlane:/_SB/NEW/SPI8";amp.path=spi.path+"/AMPS";
  auto* cs=OSDynamicCast(OSArray,OSDynamicCast(OSArray,bridgeEntries->getObject(0))->getObject(1));
  cs->v[1]=make<OSString>("\\_SB.NEW.SPI8.AMPS");
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);}
  spi.path="IOACPIPlane:/_SB/PC00/SPI0";amp.path=spi.path+"/GSPK";
  cs->v[1]=make<OSString>("\\_SB.PC00.SPI0.GSPK");
- auto* version=OSDynamicCast(OSArray,bridgeEntries->getObject(1));version->v[1]=number(2);
- {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);
-  assert(owner.strings["Cirrus_Intel_SPI_CS_DSD_Reason"]=="ADAPTER_VERSION_UNSUPPORTED");}
- version->v[1]=number(1);
  spi.dsdEvaluation=kIOReturnUnsupported;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0);}
  spi.dsdEvaluation=0;
- // A malformed native object is rejected, never hidden by the adapter.
+ // Returned malformed native objects must not be hidden by raw evaluation.
  spi.dsdNullResult=false;spi.values["_DSD"]=invalidRoot;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnUnsupported);}
- spi.values["_DSD"]=dsd;
- gpio.values.erase("CSDP");gpio.values["_HID"]=make<OSString>("INTC1056");
- spi.dsdNullResult=false;spi.values.erase("CSDP");
+ spi.values["_DSD"]=dsd;spi.values.erase("INTERPRETER_DSD");
  // Package cycles/deep/oversized payloads cannot make diagnostic traversal loop.
  auto* cycle=array({});cycle->v.push_back(cycle);
  cirrus::diagnostics::ACPIObjectEvidence::publish(&owner,"Cirrus_Test",cycle);
@@ -274,6 +246,40 @@ int main(){
  mem->r[0x114/4]=1U<<19;
  {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==kIOReturnNotPermitted);}
  assert(!gpio.opened&&gpio.refs==1&&mem->refs==1);
+ // GU605MV DSDT topology: CS1 on GPP_E_2; reset and speaker ID in community 5.
+ {
+  IOACPIPlatformDevice mtlSpi,mtlAmp,mtlGpio;IOService mtlOwner;
+  mtlSpi.path="IOACPIPlane:/_SB/PC00/SPI0";mtlAmp.path=mtlSpi.path+"/SPK1";mtlGpio.path="IOACPIPlane:/_SB/GPI0";
+  devices={&mtlSpi,&mtlAmp,&mtlGpio};
+  mtlGpio.values["_HID"]=make<OSString>("INTC1083");
+  auto* csMap=make<IOMemoryMap>();auto* otherMap=make<IOMemoryMap>();
+  mtlGpio.maps={{1,csMap},{4,otherMap}};
+  csMap->r[0]=otherMap->r[0]=0x940000;csMap->r[3]=otherMap->r[3]=0x700;
+  const unsigned csOffset=0x700+27*16,resetOffset=0x700+26*16,inputOffset=0x700+8*16;
+  csMap->r[csOffset/4]=0x84000201;otherMap->r[resetOffset/4]=0x44000200;otherMap->r[inputOffset/4]=0x84000100;
+  auto descriptor=[&](unsigned pin,bool input){
+   auto d=crs;d.resize(d.size()-2);d[23]=pin;d[24]=pin>>8;d[7]=input?1:2;return d;
+  };
+  auto resources=descriptor(0x82,false);
+  for(auto d:{descriptor(0x181,false),descriptor(0x168,true)})resources.insert(resources.end(),d.begin(),d.end());
+  resources.insert(resources.end(),{0x79,0});mtlAmp.values["_CRS"]=make<OSData>(resources);
+  mtlSpi.values["_DSD"]=properties(array({number(0),&mtlAmp,number(0),number(0),number(0)}));
+  auto* metadata=properties(array({number(0)}));auto* entries=OSDynamicCast(OSArray,metadata->getObject(1));
+  entries->v.push_back(array({make<OSString>("reset-gpios"),array({&mtlAmp,number(1),number(0),number(0),&mtlAmp,number(1),number(0),number(0)})}));
+  entries->v.push_back(array({make<OSString>("spk-id-gpios"),array({&mtlAmp,number(2),number(0),number(0),&mtlAmp,number(2),number(0),number(0)})}));
+  mtlAmp.values["_DSD"]=metadata;
+  std::vector<uint32_t> before(otherMap->r,otherMap->r+0x10000/4);
+  {IntelSPIChipSelects selects;assert(selects.bind(&mtlSpi,&mtlOwner,nullptr,true)==0);
+   assert(selects.select(0)==nullptr&&selects.select(1));
+   assert(mtlOwner.numbers["Cirrus_SPI_Reset_0_Memory_Index"]==4&&mtlOwner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==0);
+   uint32_t speaker=99;assert(selects.readGPIO(&mtlAmp,"spk-id-gpios",0,speaker)==0&&speaker==0);
+   assert(selects.readGPIO(&mtlAmp,"spk-id-gpios",1,speaker)==0&&speaker==0);
+   assert(mtlOwner.numbers["Cirrus_GPIO_Input_Memory_Index"]==4);
+   assert(selects.select(1)->setActive(true)==0&&selects.select(1)->setActive(false)==0);
+   assert(std::vector<uint32_t>(otherMap->r,otherMap->r+0x10000/4)==before);
+  }
+  assert(!mtlGpio.opened&&mtlGpio.opens==1&&mtlGpio.closes==1&&csMap->refs==1&&otherMap->refs==1);
+ }
 }
 ''')
     for flags in sanitizer_flags():

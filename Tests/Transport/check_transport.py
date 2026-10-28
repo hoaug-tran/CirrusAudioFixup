@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
 #include <cstddef>
 #include <cstdint>
 using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IOReturn=int;
-constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2,kIOReturnNotPermitted=-3,kIOReturnTimeout=-4;
+constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2,kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnUnsupported=-5;
 inline void IODelay(unsigned) {}
 inline void IOSleep(unsigned) {}
 ''', encoding='utf-8')

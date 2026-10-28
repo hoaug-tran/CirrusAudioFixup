@@ -45,7 +45,7 @@ for identifier in target['buildPhases']:
     if phase['isa'] == 'PBXSourcesBuildPhase':
         compiled.update(references[objects[item]['fileRef']] for item in phase['files'])
 assert compiled == set((ROOT / 'CirrusAudioFixup').rglob('*.cpp'))
-assert len(compiled) == 16
+assert len(compiled) == 24
 
 gates = [objects[i] for i in target['buildPhases']
          if objects[i]['isa'] == 'PBXShellScriptBuildPhase']

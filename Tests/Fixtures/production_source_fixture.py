@@ -46,3 +46,9 @@ def method(text, class_name, name):
             depth-=1
             if depth==0:return text[start:opening+token.end()]
     raise ValueError('unterminated method '+name)
+
+
+def cs35l56_sources():
+    directory = ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L56"
+    return [directory / ("CS35L56" + name + ".cpp") for name in
+            ("DriverFactory", "Hardware", "Firmware", "Playback", "Diagnostics", "Driver")] + [directory / "Resources/FirmwareData.cpp"]

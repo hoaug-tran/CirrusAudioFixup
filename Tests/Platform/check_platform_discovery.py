@@ -55,7 +55,17 @@ OSArray* dsd(OSArray* entries){
  return make<OSArray>(std::vector<OSObject*>{make<OSData>(std::vector<uint8_t>{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01}),entries});
 }
 ''' + owner + r'''
+namespace cirrus::transport {
+ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
+const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
+}
 int main(){
+ cirrus::transport::nativePropertyEvaluator=[](IOACPIPlatformDevice* device,OSObject** out)->IOReturn {
+  auto found=device->values.find("INTERPRETER_DSD");
+  if(found==device->values.end())return kIOReturnUnsupported;
+  *out=found->second;(*out)->retain();return kIOReturnSuccess;
+ };
+
  IOACPIPlatformDevice amp;
  auto* entries=make<OSArray>(std::vector<OSObject*>{pair("cirrus,dev-index",{0,1}),pair("cirrus,speaker-position",{1,0}),
   pair("cirrus,boost-type",{0,0}),pair("cirrus,gpio1-func",{0,0}),pair("cirrus,gpio2-func",{2,2}),
@@ -74,16 +84,15 @@ int main(){
   assert(!strcmp(board.amplifiers[0].endpoint.controllerPath,service.mNativeSPI.endpoints[0].controllerPath));
   assert(package->refs==1);
  }
- // Captured macOS success/NULL requires the AMP adapter as well as SPI/GPIO.
+ // Native interpreter references must reach platform discovery as well as SPI/GPIO.
  amp.dsdNullResult=true;
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
-  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Reason"]=="DSD_EMPTY_RESULT");}
- auto* version=make<OSArray>(std::vector<OSObject*>{make<OSString>("cirrus,acpi-adapter-version"),make<OSNumber>(1)});
- entries->v.push_back(version);amp.values["CSDP"]=package;
+  assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Reason"]=="DSD_REFERENCE_CONVERSION_FAILED");}
+ amp.values["INTERPRETER_DSD"]=package;
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
-  assert(service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Source"]=="CSDP");
+  assert(service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Properties_Source"]=="_DSD_INTERPRETER");
   assert(service.strings["Cirrus_Platform_DSD_Status"]=="COMPLETE");}
- amp.dsdNullResult=false;amp.values.erase("CSDP");entries->v.pop_back();
+ amp.dsdNullResult=false;amp.values.erase("INTERPRETER_DSD");
  // Speaker-specific board data must survive discovery, with the same asset
  // gate as generic coefficients. Never assume one speaker for every SSID.
  auto* speaker=pair("cirrus,speaker-id",{1,1});entries->v.push_back(speaker);requiredSpeaker=1;
@@ -105,6 +114,27 @@ int main(){
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_SPEAKER_TUNING_UNAVAILABLE");}
  entries->v.pop_back();requiredSpeaker=UINT32_MAX;
+ struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
+  bool fail=false;uint32_t legacy=1;unsigned calls=0;
+  bool read(const char* name,size_t,uint32_t& value)override{++calls;value=!strcmp(name,"spk-id-gpios")?1:legacy;return !fail;}
+ } gpio;
+ for(const char* name:{"spk-id-gpios","speaker-id-gpios"}){
+  entries->v.push_back(pair(name,{0,0}));requiredSpeaker=1;
+  transport::ACPIDeviceProperties properties;assert(properties.load(&amp)==0);transport::ACPIPlatformProperties source(properties);
+  Native native;platform::BoardDiscoveryContext context{{0x1043,0x1c9f,"CSC3551"},native.endpoints,2,source,&gpio};const char* reason=nullptr;
+  auto* board=devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason);
+  assert(board&&board->configuration.amplifiers[0].speakerId==1);delete board;
+  gpio.fail=true;assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(context,resources,reason));
+  assert(!strcmp(reason,"CS35L41_SPEAKER_ID_UNREADABLE"));gpio.fail=false;
+  entries->v.push_back(pair(!strcmp(name,"spk-id-gpios")?"speaker-id-gpios":"spk-id-gpios",{0,0}));
+  transport::ACPIDeviceProperties both;assert(both.load(&amp)==0);transport::ACPIPlatformProperties bothSource(both);
+  platform::BoardDiscoveryContext bothContext{context.identity,native.endpoints,2,bothSource,&gpio};
+  gpio.legacy=2;assert(!devices::amplifiers::cs35l41::resolveBoardConfiguration(bothContext,resources,reason));
+  assert(!strcmp(reason,"CS35L41_SPEAKER_ID_MISMATCH"));gpio.legacy=1;
+  board=devices::amplifiers::cs35l41::resolveBoardConfiguration(bothContext,resources,reason);assert(board);delete board;
+  entries->v.pop_back();entries->v.pop_back();requiredSpeaker=UINT32_MAX;
+ }
+
  auto* first=entries->v[0];entries->v.erase(entries->v.begin());
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_PROPERTIES_INCOMPLETE:cirrus,dev-index");}

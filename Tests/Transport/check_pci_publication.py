@@ -28,6 +28,7 @@ static std::vector<IOService*> published,late;
 static IOService* wakeService=nullptr;
 static unsigned waits=0;
 static uint64_t lastTimeout=0;
+static uint64_t publicationDelay=5500000000ULL;
 struct OSIterator {std::vector<IOService*> values;unsigned at=0;explicit OSIterator(const std::vector<IOService*>& v):values(v){}OSObject* getNextObject();void release(){delete this;}};
 struct IOService:IORegistryEntry {
  std::map<std::string,OSObject*> properties;std::map<std::string,std::string> strings;std::map<std::string,uint64_t> numbers;
@@ -42,6 +43,7 @@ struct IOService:IORegistryEntry {
   auto* props=OSDynamicCast(OSDictionary,match->getObject("IOPropertyMatch"));assert(props);
   auto* path=OSDynamicCast(OSString,props->getObject("acpi-path"));assert(path);
   assert(path->value=="IOACPIPlane:/_SB/PC00/SPI0@1e0002");
+  if(timeout<publicationDelay)return nullptr;
   published=late;if(wakeService)wakeService->retain();return wakeService;
  }
 };
@@ -69,7 +71,7 @@ int main(){
  pci.properties.erase("acpi-device");result=Association::findPCI(&target,&owner);assert(result==&pci&&waits==0);result->release();
  // The real HP ACPI path is published later; wait must target it and retain once.
  published.clear();late={&pci};wakeService=&pci;result=Association::findPCI(&target,&owner);
- assert(result==&pci&&waits==1&&lastTimeout==5000000000ULL);assert(owner.strings["Cirrus_SPI_PCI_Lookup_Status"]=="PUBLISHED_AFTER_WAIT");result->release();assert(pci.refs==1);
+ assert(result==&pci&&waits==1&&lastTimeout==30000000000ULL);assert(owner.strings["Cirrus_SPI_PCI_Lookup_Status"]=="PUBLISHED_AFTER_WAIT");result->release();assert(pci.refs==1);
  // No published device: bounded timeout, no unrelated association.
  published.clear();late.clear();wakeService=nullptr;assert(!Association::findPCI(&target,&owner));assert(waits==2);
  // Existing duplicates are rejected without waiting.

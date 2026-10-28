@@ -6,7 +6,7 @@ errata, OTP, idle checks, shutdown and lifecycle methods execute unchanged.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from production_source_fixture import driver_sources
+from production_source_fixture import driver_sources, cs35l56_sources
 from host_build import sanitizer_flags
 import subprocess,tempfile
 from driver_kernel_fixture import install
@@ -91,7 +91,9 @@ int main(){
         const auto* registered = f.registry.find("CSC3551", 0x35a40, core::BusTransportType::SPI);
         assert(registered && registered->model == core::AmplifierModel::CS35L41);
         assert(!f.registry.find("CSC3551", 0, core::BusTransportType::SPI));
-        assert(!f.registry.findModel("CSC3556", core::AmplifierModel::CS35L56, core::BusTransportType::SPI));
+        const auto* probe = f.registry.findModel("CSC3556", core::AmplifierModel::CS35L56, core::BusTransportType::SPI);
+        assert(probe && !probe->diagnosticOnly && probe->supportsDeferredFirmware && probe->firmwareReset);
+        assert(!probe->format(core::BusTransportType::I2C));
     }
 
     // Exercise the real resource-discovery path, not a copied selector.
@@ -133,6 +135,18 @@ int main(){
         assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
     }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
+    // Both verified Legion SSIDs and I2C channels retain external no-switch power.
+    for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)})for(uint32_t channel:{0U,1U}){
+        Fixture f;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
+        f.endpoint.i2cAddress=uint16_t(0x40+channel);f.binding.endpoint=f.context.endpoint=f.endpoint;
+        f.binding.channelIndex=f.assets.target.channelIndex=channel;f.assets.target.subsystemDevice=ssid;
+        DeviceConfiguration configuration;
+        assert(decodeDeviceConfiguration(nullptr,0,nullptr,configuration));
+        assert(configuration.power.topology==BoostTopology::ExternalWithoutSwitch);
+        f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);
+        assert(!f.port.values.count(0x3810)&&!f.port.values.count(0x3814)&&!f.port.values.count(0x3808));
+        assert(f.runtime.unbind()==0);
+    }
     for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
         Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;
         f.binding.endpoint=f.context.endpoint=f.endpoint;f.bind();assert(f.runtime.bringUp()==0 && f.runtime.report(0).initialized);
@@ -213,5 +227,5 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],'-o',str(p/'driver')],check=True)
+        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

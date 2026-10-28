@@ -223,6 +223,10 @@ public:
                 result = fail("NO_REGISTERED_SPI_DRIVER", kIOReturnUnsupported, i, e.controllerPath, binding->siliconId);
                 break;
             }
+            if (definition->diagnosticOnly && allowWrites) {
+                result = fail("DIAGNOSTIC_DRIVER_WRITE_AUTHORIZATION_REJECTED", kIOReturnNotPermitted, i, e.controllerPath);
+                break;
+            }
             // A shared firmware group needs one consistent silicon contract
             // across all endpoints. Reject mixed semantics before any GPIO IO.
             if (i && reset != definition->firmwareReset) {
@@ -446,7 +450,7 @@ private:
                 properties->setObject("acpi-path", path);
                 waitMatching->setObject("IOPropertyMatch", properties);
                 owner->setProperty("Cirrus_SPI_PCI_Lookup_Status", "WAITING_PUBLICATION");
-                auto* service = IOService::waitForMatchingService(waitMatching, 5000000000ULL);
+                auto* service = IOService::waitForMatchingService(waitMatching, 30000000000ULL);
                 auto* waitedPCI = cirrus::support::pciDeviceCast(service);
                 if (waitedPCI) {
                     // Recheck identity and uniqueness after publication rather

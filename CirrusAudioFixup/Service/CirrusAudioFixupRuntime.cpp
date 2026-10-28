@@ -482,7 +482,7 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
     }
     if (mNativeSPI.powerPending()) {
         mStartupPending = true;
-        setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_POWER");
+        setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_RESOURCES");
         if (mProbeTimer)
             mProbeTimer->setTimeoutMS(10);
         return true;
@@ -740,12 +740,10 @@ IOService* CirrusAudioFixup::audioController() {
         }
     }
 
-    iter->release();
-    if (bestScore >= 40 && bestController) {
+    if (bestScore >= 40 && bestController)
         bestController->retain();
-        return bestController;
-    }
-    return nullptr;
+    iter->release();
+    return bestScore >= 40 ? bestController : nullptr;
 }
 
 IOService* CirrusAudioFixup::getAudioController() { return audioController(); }

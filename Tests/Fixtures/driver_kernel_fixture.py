@@ -18,10 +18,14 @@ def install(root):
 using UInt8=uint8_t;using UInt16=uint16_t;using UInt32=uint32_t;using UInt64=uint64_t;
 using std::min;
 constexpr int kIOReturnError=-1,kIOReturnNotReady=-2,kIOReturnBadArgument=-3,kIOReturnNotPermitted=-4,kIOReturnNotFound=-5,kIOReturnNoMemory=-6,kIOReturnUnsupported=-7,kIOReturnTimeout=-8;
-#define CIRRUS_LOG(...) ((void)0)
-#define CIRRUS_ERR(...) ((void)0)
-inline void* IOMalloc(size_t n){return malloc(n);}inline void* IOMallocData(size_t n){return malloc(n);}
-inline void IOFree(void* p,size_t){free(p);}inline void IOFreeData(void* p,size_t){free(p);}
+template<class... Args> inline void kernelFixtureLog(const char*, Args...) {}
+#define CIRRUS_LOG(...) kernelFixtureLog(__VA_ARGS__)
+#define CIRRUS_ERR(...) kernelFixtureLog(__VA_ARGS__)
+inline unsigned fixtureAllocationFailAt=0,fixtureAllocations=0,fixtureLiveAllocations=0;
+inline void* IOMalloc(size_t n){if(++fixtureAllocations==fixtureAllocationFailAt)return nullptr;auto* p=malloc(n);if(p)++fixtureLiveAllocations;return p;}
+inline void* IOMallocData(size_t n){return IOMalloc(n);}
+inline void IOFree(void* p,size_t){if(p){--fixtureLiveAllocations;free(p);}}
+inline void IOFreeData(void* p,size_t n){IOFree(p,n);}
 inline uint64_t fixtureTimeMs=0;
 inline void IOSleep(unsigned n){fixtureTimeMs+=n;}
 inline uint64_t mach_absolute_time(){return fixtureTimeMs*1000000;}
@@ -45,13 +49,15 @@ struct OSData:OSObject {std::vector<uint8_t> bytes;size_t getLength(){return byt
 struct OSDictionary:OSObject {};
 struct OSIterator:OSObject {std::vector<OSObject*> objects;size_t pos=0;OSObject* getNextObject(){return pos<objects.size()?objects[pos++]:nullptr;}};
 inline unsigned registryLive=0;
+struct IORegistryEntry;
+inline IORegistryEntry* fixtureOptions=nullptr;
 struct IORegistryEntry:OSObject {
     std::map<std::string,OSObject*> properties;IORegistryEntry* parent=nullptr;
     virtual OSObject* getProperty(const char* key){return properties.count(key)?properties[key]:nullptr;}
     OSObject* copyProperty(const char* key){auto* p=getProperty(key);if(p)p->retain();return p;}
     IORegistryEntry* getParentEntry(const void*){return parent;}
     bool getPath(char*,int*,const void*){return false;}
-    static IORegistryEntry* fromPath(const char*){return nullptr;}
+    static IORegistryEntry* fromPath(const char*){if(fixtureOptions)fixtureOptions->retain();return fixtureOptions;}
 };
 inline const void* gIOServicePlane=nullptr;
 inline std::vector<OSObject*> fixtureCodecs;

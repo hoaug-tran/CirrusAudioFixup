@@ -183,6 +183,14 @@ int main(){
             }
             broken.runtime.unbind();
         }
+        {
+            Fixture dirty;configure(dirty);dirty.bind();assert(dirty.runtime.bringUp()==0);
+            assert(dirty.port.values[0x7414]==0x08c82222);
+            dirty.port.values[0x2014]=1;
+            dirty.port.values[0x10010]=0;
+            assert(dirty.runtime.unbind()!=0);
+            assert(dirty.port.values[0x7414]==0x00c82222&&dirty.port.values[0x742c]==0);
+        }
     }
     // Issue #3 HP and #5 G614JI plus both Lenovo profiles and the Zenbook branch.
     // Real driver lifecycle with fixture transport/time and explicit DSP bypass.

@@ -9,6 +9,7 @@
 - Added authorized AMD GPIO reset preparation before I2C amplifier identity reads.
 - Added switched external-boost initialization, playback and shutdown sequences, including safe reset and topology-specific DSP supply-monitor routing.
 - Consolidated Linux-referenced board defaults while preserving native ACPI property validation and existing power topologies.
+- Fixed board metadata fallback when the ACPI property interpreter is unavailable, restoring HP ZBook Fury 16 G9 (`103C:89C6`) speaker initialization without a custom SSDT.
 
 Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11).
 
@@ -27,6 +28,7 @@ Initialization and physical speaker output were verified on GU605MV by @trinhflo
 ### Shared infrastructure
 
 - Added native ACPI `_DSD` reference evaluation and `_CRS` serial-bus/GPIO resource discovery.
+- Treated unavailable ACPI evaluation and missing handle states as absent metadata in `ACPIDeviceProperties` to allow verified table fallbacks.
 - Added Meteor Lake-P GPIO support for `INTC1083`/`INTC105E`, including ownership checks and cross-community GPIO access.
 - Extended bounded WMFW uploads for larger images and region counts, preserving transfer errors and keeping upload workspaces off the kernel stack.
 - Improved deferred SPI/PCI attachment and serialized register writes during reset.

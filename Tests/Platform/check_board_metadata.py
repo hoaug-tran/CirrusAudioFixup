@@ -162,6 +162,19 @@ int main(){
   assert(!prepareBoardMetadata({0x1043,0x1683,"CSC3551"},&amp,&unsupported));
   assert(!unsupported.getProperty("Cirrus_Board_Metadata"));
   assert(!prepareBoardMetadata({0x17aa,0x38c7,"CSC3551"},&amp,&unsupported));
+  amp.dsdValidation=0;amp.values["_DSD"]=make<OSNumber>(0);amp.dsdNullResult=true;
+  IOService hpOwner;const platform::BoardIdentity hpIdentity{0x103c,0x89c6,"CSC3551"};
+  assert(prepareBoardMetadata(hpIdentity,&amp,&hpOwner));
+  assert(hpOwner.strings["Cirrus_Board_Metadata_Source"]=="CS35L41_VERIFIED_BOARD_TABLE");
+  {transport::ACPIDeviceProperties hpProps;assert(hpProps.load(&amp,&hpOwner)==0);
+   assert(!strcmp(hpProps.source(),"BOARD_TABLE"));
+   assert(!strcmp(hpProps.reason(),"BOARD_METADATA_READY"));
+   auto* positions=OSDynamicCast(OSArray,hpProps.get("cirrus,speaker-position"));
+   assert(positions&&positions->getCount()==2);
+   auto* pos0=OSDynamicCast(OSNumber,positions->getObject(0));
+   auto* pos1=OSDynamicCast(OSNumber,positions->getObject(1));
+   assert(pos0&&pos0->unsigned32BitValue()==1&&pos1&&pos1->unsigned32BitValue()==0);}
+  amp.dsdNullResult=false;amp.values.erase("_DSD");amp.dsdValidation=kIOReturnError;
  }
 }
 ''')

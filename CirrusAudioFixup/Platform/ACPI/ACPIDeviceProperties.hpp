@@ -81,7 +81,9 @@ public:
     OSObject* object() const { return mObject; }
     bool hasNativeProperties() const { return mProperties != nullptr; }
     bool missingNativeMetadata() const {
-        return !mObject && (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError);
+        return !mObject && (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
+                            (mReason && (!strcmp(mReason, "DSD_INTERPRETER_UNAVAILABLE") ||
+                                         !strcmp(mReason, "DSD_INTERPRETER_HANDLE_NOT_FOUND"))));
     }
     const char* source() const { return mSource; }
     IOReturn referenceReturn() const { return mReferenceReturn; }

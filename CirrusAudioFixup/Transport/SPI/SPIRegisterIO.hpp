@@ -8,8 +8,8 @@ class SPIRegisterIO : public core::RegisterIO {
 public:
     static constexpr size_t kHeaderBytes = 6;
     static constexpr size_t kMaxPayloadBytes = 256;
-    SPIRegisterIO(SPIController* controller, SPIEndpoint endpoint, const core::RegisterMapConfig& config,
-                  bool allowWrites, core::RegisterOperationLock* lock)
+    SPIRegisterIO(SPIController* controller, SPIEndpoint endpoint, const core::RegisterMapConfig& config, bool allowWrites,
+                  core::RegisterOperationLock* lock)
         : mBus(controller, endpoint), mMap(mBus, config, allowWrites, lock) {}
     IOReturn lastReturn() const { return mMap.lastReturn(); }
     int32_t lastError() const override { return mMap.lastError(); }

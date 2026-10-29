@@ -34,6 +34,5 @@ public:
         c.writable = writableRegister;
         return c;
     }
-
 };
 }

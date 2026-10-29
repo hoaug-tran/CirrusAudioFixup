@@ -382,7 +382,8 @@ const cirrus::platform::AmplifierDriverRegistration* CirrusAudioFixup::findI2CDr
     const auto* board = mPlatformProfile->boardConfiguration;
     return board && board->amplifiers && board->count
                ? mDriverRegistry.find(mPlatformProfile->acpiHid, board->amplifiers[0].siliconId, cirrus::core::BusTransportType::I2C)
-               : mDriverRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel, cirrus::core::BusTransportType::I2C);
+               : mDriverRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel,
+                                           cirrus::core::BusTransportType::I2C);
 }
 
 bool CirrusAudioFixup::prepareI2CController(const cirrus::platform::AmplifierDriverRegistration* definition) {

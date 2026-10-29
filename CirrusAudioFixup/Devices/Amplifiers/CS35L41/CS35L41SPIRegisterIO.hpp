@@ -16,6 +16,5 @@ public:
         c.readFlag = 0x80;
         return c;
     }
-
 };
 }

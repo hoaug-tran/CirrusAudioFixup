@@ -313,7 +313,8 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
                 invalidData = false;
                 bool hasTarget = false;
                 for (uint32_t i = 0; i < count; ++i) {
-                    const auto* entry = rawBytes + firmware::EFICalibration::kHeaderBytes + size_t(i) * firmware::EFICalibration::kRecordBytes;
+                    const auto* entry =
+                        rawBytes + firmware::EFICalibration::kHeaderBytes + size_t(i) * firmware::EFICalibration::kRecordBytes;
                     if (firmware::EFICalibration::occupied(entry) && firmware::EFICalibration::target(entry)) {
                         hasTarget = true;
                         break;
@@ -328,7 +329,7 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
                     siliconUid = (uint64_t(high) << 32) | low;
                 }
                 const auto selected = uidReadFailed ? firmware::EFICalibration::RecordSelection{}
-                                                   : firmware::EFICalibration::selectRecord(rawBytes, len, siliconUid, ampIdx);
+                                                    : firmware::EFICalibration::selectRecord(rawBytes, len, siliconUid, ampIdx);
                 const char* selectionReason = "NO_MATCHING_EFI_RECORD";
                 if (selected.record) {
                     selectionReason = "INDEX_FALLBACK_ZERO_UID_OR_TARGET";
@@ -339,7 +340,8 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
                 snprintf(selection, sizeof(selection), "reason=%s records=%u index=%u uid=0x%016llx target=0x%016llx uid_read_required=%u",
                          uidReadFailed ? "UID_READ_FAILED" : selectionReason, count, selected.index,
                          static_cast<unsigned long long>(siliconUid),
-                         static_cast<unsigned long long>(selected.record ? firmware::EFICalibration::target(selected.record) : 0), unsigned(hasTarget));
+                         static_cast<unsigned long long>(selected.record ? firmware::EFICalibration::target(selected.record) : 0),
+                         unsigned(hasTarget));
                 snprintf(selectionKey, sizeof(selectionKey), "Cirrus_Calibration_Selection_%s", amp.name);
                 if (auto* value = OSString::withCString(selection)) {
                     setProperty(selectionKey, value);

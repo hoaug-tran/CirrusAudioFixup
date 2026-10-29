@@ -9,7 +9,7 @@
 - Added authorized AMD GPIO reset preparation before I2C amplifier identity reads.
 - Added switched external-boost initialization, playback and shutdown sequences, including safe reset and topology-specific DSP supply-monitor routing.
 - Consolidated Linux-referenced board defaults while preserving native ACPI property validation and existing power topologies.
-- Fixed board metadata fallback when the ACPI property interpreter is unavailable, restoring HP ZBook Fury 16 G9 (`103C:89C6`) speaker initialization without a custom SSDT.
+- Fixed board metadata fallback when the ACPI property interpreter is unavailable from version 1.1.0
 
 Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11).
 

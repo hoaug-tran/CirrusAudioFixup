@@ -612,12 +612,13 @@ void CirrusAudioFixup::runBackgroundMonitor() {
             if (routePermitsPlayback && needsPreparation && mAudioPrepareRetries > 0) {
                 --mAudioPrepareRetries;
                 mProbeTimer->setTimeoutMS(5);
-            } else if (mAmplifierManager.stage() == cirrus::core::AmplifierStage::Playing && routePermitsPlayback)
+            } else if (mAmplifierManager.stage() == cirrus::core::AmplifierStage::Playing && routePermitsPlayback) {
                 mProbeTimer->setTimeoutMS(100);
-            else if (routePermitsPlayback)
+            } else if (routePermitsPlayback) {
                 // Observe format changes without an IOAudio event. A waiting
                 // stream cannot start AMP preparation until its format is valid.
                 mProbeTimer->setTimeoutMS(250);
+            }
             return;
         }
         mProbeTimer->setTimeoutMS(mHdaState.streamActive ? 100 : 50);

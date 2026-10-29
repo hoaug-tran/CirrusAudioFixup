@@ -150,7 +150,7 @@ jobs:
     name: Publish Release
     needs: [build, windows-collector]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
@@ -193,21 +193,17 @@ jobs:
           name: CirrusAudioFixup-DEBUG-${{ github.sha }}
           path: dist
 
-      - name: Download matching debug symbols
-        if: steps.release_check.outputs.skip != 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: CirrusAudioFixup-SYMBOLS-${{ github.sha }}
-          path: dist
-
       - name: Prepare versioned release assets
         if: steps.release_check.outputs.skip != 'true'
         run: |
           VERSION="${{ steps.changelog.outputs.version }}"
           cp dist/CirrusAudioFixup-RELEASE.zip "CirrusAudioFixup-${VERSION}-RELEASE.zip"
           cp dist/CirrusAudioFixup-DEBUG.zip "CirrusAudioFixup-${VERSION}-DEBUG.zip"
-          cp dist/CirrusAudioFixup-SYMBOLS.zip "CirrusAudioFixup-${VERSION}-SYMBOLS.zip"
-          shasum -a 256 CirrusAudioFixup-${VERSION}-RELEASE.zip CirrusAudioFixup-${VERSION}-DEBUG.zip CirrusAudioFixup-${VERSION}-SYMBOLS.zip > SHA256SUMS
+          echo "" >> dist/RELEASE_NOTES.md
+          echo "### Checksums (SHA-256)" >> dist/RELEASE_NOTES.md
+          echo '```' >> dist/RELEASE_NOTES.md
+          shasum -a 256 "CirrusAudioFixup-${VERSION}-RELEASE.zip" "CirrusAudioFixup-${VERSION}-DEBUG.zip" >> dist/RELEASE_NOTES.md
+          echo '```' >> dist/RELEASE_NOTES.md
           ls -la CirrusAudioFixup-*.zip
           cat dist/RELEASE_NOTES.md
 
@@ -222,13 +218,11 @@ jobs:
           if [ "$IS_DRAFT" = "true" ]; then
             gh release upload "$RELEASE_TAG" --clobber \
               "CirrusAudioFixup-${RELEASE_VERSION}-RELEASE.zip" \
-              "CirrusAudioFixup-${RELEASE_VERSION}-DEBUG.zip" \
-              "CirrusAudioFixup-${RELEASE_VERSION}-SYMBOLS.zip" SHA256SUMS dist/BUILD_METADATA.json
+              "CirrusAudioFixup-${RELEASE_VERSION}-DEBUG.zip"
             gh release edit "$RELEASE_TAG" --draft=false --latest --title "CirrusAudioFixup $RELEASE_TAG" --notes-file dist/RELEASE_NOTES.md
           else
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" \
               --title "CirrusAudioFixup $RELEASE_TAG" --notes-file dist/RELEASE_NOTES.md \
               "CirrusAudioFixup-${RELEASE_VERSION}-RELEASE.zip" \
-              "CirrusAudioFixup-${RELEASE_VERSION}-DEBUG.zip" \
-              "CirrusAudioFixup-${RELEASE_VERSION}-SYMBOLS.zip" SHA256SUMS dist/BUILD_METADATA.json
+              "CirrusAudioFixup-${RELEASE_VERSION}-DEBUG.zip"
           fi

@@ -80,6 +80,8 @@ public:
     unsigned failureIndex() const { return mFailureIndex; }
     OSObject* object() const { return mObject; }
     bool hasNativeProperties() const { return mProperties != nullptr; }
+    // Treat interpreter unavailability or missing handle as absent DSD metadata,
+    // allowing verified board profile fallback without forcing a custom SSDT.
     bool missingNativeMetadata() const {
         return !mObject && (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
                             (mReason && (!strcmp(mReason, "DSD_INTERPRETER_UNAVAILABLE") ||

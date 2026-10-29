@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.2.0]
 
 ### CS35L41
 
@@ -20,9 +20,7 @@ Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11)
 - Fixed firmware-boot ordering before device identification and IRQ mask readback validation that blocked DSP initialization.
 - Added SPI, firmware, captured-calibration, playback, power-management and failure-recovery regressions.
 
-Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10), already merged into `develop`.
-
-Initialization and physical speaker output were verified on GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8). Bass output requires ALC285 NID `0x17` routing; persistent routing needs a suitable AppleALC configuration. Hardware sleep/wake recovery remains unverified.
+Initialization and physical speaker output were verified on GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8). Bass output requires ALC285 NID `0x17` routing; persistent routing needs a suitable AppleALC configuration.
 
 ### Shared infrastructure
 

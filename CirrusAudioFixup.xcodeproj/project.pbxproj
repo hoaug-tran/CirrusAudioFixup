@@ -238,7 +238,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1.1.1;
+				MODULE_VERSION = 1.2.0;
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -286,7 +286,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1.1.1;
+				MODULE_VERSION = 1.2.0;
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",

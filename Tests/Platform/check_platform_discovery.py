@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="cirrus-platform-discovery-") as directory:
     tmp = Path(directory)
     install(tmp)
-    owner = method(service_source(), "CirrusAudioFixup", "discoverPlatformConfiguration")
+    owner = method(service_source(), "CirrusAudioFixup", "adoptDiscoveredBoard") + "\n" + method(service_source(), "CirrusAudioFixup", "discoverPlatformConfiguration")
     source = r'''
 #define KERNEL 1
 #include "Fixture.hpp"
@@ -45,6 +45,7 @@ public:
  platform::DiscoveredBoard* mDiscoveredBoard=nullptr;
  uint32_t mPlatformSubsystemId=0x103c89c6;bool mPlatformAuthorized=false;
  void discoverPlatformConfiguration(IOACPIPlatformDevice*,const platform::AmplifierDriverRegistration&);
+ bool adoptDiscoveredBoard(const platform::BoardIdentity&,const char*);
  ~CirrusAudioFixup(){delete mDiscoveredBoard;}
 };
 OSArray* pair(const char* name,std::initializer_list<uint32_t> values){
@@ -114,7 +115,7 @@ int main(){
  {CirrusAudioFixup service;service.discoverPlatformConfiguration(&amp,registration);
   assert(!service.mPlatformAuthorized&&service.strings["Cirrus_Platform_Discovery"]=="CS35L41_SPEAKER_TUNING_UNAVAILABLE");}
  entries->v.pop_back();requiredSpeaker=UINT32_MAX;
- struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
+ struct GPIO : platform::BoardDiscoveryContext::GPIOAccess {
   bool fail=false;uint32_t legacy=1;unsigned calls=0;
   bool read(const char* name,size_t,uint32_t& value)override{++calls;value=!strcmp(name,"spk-id-gpios")?1:legacy;return !fail;}
  } gpio;

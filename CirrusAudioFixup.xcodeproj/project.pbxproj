@@ -1210,6 +1210,12 @@
 			path = SPIRegisterBus.hpp;
 			sourceTree = "<group>";
 		};
+		1D2B7F6938B49C3B6381C785 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = SPIRegisterIO.hpp;
+			sourceTree = "<group>";
+		};
 		745FB34B9B32B03D05099FEC = {
 			isa = PBXGroup;
 			children = (
@@ -1223,6 +1229,7 @@
 				A5C200000000000000000002,
 				A5C200000000000000000001,
 				29F371FB87977DF261FF1260,
+				1D2B7F6938B49C3B6381C785,
 			);
 			sourceTree = "<group>";
 			path = SPI;

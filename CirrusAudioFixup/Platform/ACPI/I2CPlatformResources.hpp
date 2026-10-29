@@ -5,7 +5,7 @@
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
 #include "Platform/ACPI/ACPIGPIOAccess.hpp"
 namespace cirrus::transport {
-class I2CPlatformResources final : public platform::BoardDiscoveryContext::GPIOReader {
+class I2CPlatformResources final : public platform::BoardDiscoveryContext::GPIOAccess {
     IOACPIPlatformDevice* mACPI{nullptr};
     IOService* mOwner{nullptr};
     char mPath[256]{};

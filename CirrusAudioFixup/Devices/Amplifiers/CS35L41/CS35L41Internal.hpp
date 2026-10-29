@@ -60,19 +60,4 @@ inline uint32_t crc32Le(uint32_t crc, uint8_t const* buf, size_t len) {
     return ~crc;
 }
 
-struct cs35l41_amp_cal_data {
-    uint32_t calTarget[2];
-    uint32_t calTime[2];
-    int8_t calAmbient;
-    uint8_t calStatus;
-    uint16_t calR;
-} __attribute__((packed));
-
-struct cs35l41_amp_efi_data {
-    uint32_t size;
-    uint32_t count;
-    cs35l41_amp_cal_data data[];
-} __attribute__((packed));
-
-
 }

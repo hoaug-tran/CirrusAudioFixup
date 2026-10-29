@@ -14,6 +14,7 @@
 
 ### Changed
 
+- Shared board adoption, SPI register adapters and EFI calibration decoding across amplifier modules while preserving chip-specific power, reset, access and calibration policies.
 - Extended the WMFW uploader to handle larger firmware images and varying region counts, preserve transfer errors and keep upload sessions off the kernel stack.
 - Improved SPI initialization, deferred device binding and serialized register writes during reset operations.
 - Consolidated CS35L41 board configurations into a Linux-referenced subsystem ID table while preserving native ACPI property validation.

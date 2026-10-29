@@ -37,7 +37,7 @@ OSObject* number(uint32_t n){return make<OSNumber>(n);}
 bool resources(uint16_t vendor,uint16_t device,uint32_t speaker){
  return selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,vendor,device,speaker)!=nullptr;
 }
-struct Reader:platform::BoardDiscoveryContext::GPIOReader {
+struct Reader:platform::BoardDiscoveryContext::GPIOAccess {
  transport::intel::IntelSPIChipSelects& selects;IOACPIPlatformDevice& amp;
  Reader(transport::intel::IntelSPIChipSelects& s,IOACPIPlatformDevice& a):selects(s),amp(a){}
  bool read(const char* property,size_t index,uint32_t& value)override{return selects.readGPIO(&amp,property,index,value)==0;}

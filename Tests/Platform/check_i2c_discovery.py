@@ -105,7 +105,7 @@ int main(){
   const platform::BoardDiscoveryContext context{{VENDOR,DEVICE,"CSC3551"},resources.endpoints,resources.count,properties};
   assert(!resolveBoardConfiguration(context,assets,reason)&&!strcmp(reason,"CS35L41_SPEAKER_ID_REQUIRED"));
   platform::DiscoveredBoard* board=nullptr;
- struct GPIO final:platform::BoardDiscoveryContext::GPIOReader {
+ struct GPIO final:platform::BoardDiscoveryContext::GPIOAccess {
   unsigned calls=0;
   bool read(const char*,size_t,uint32_t&)override{return false;}
   bool readResource(uint32_t resource,uint32_t pin,bool low,uint32_t& value)override{

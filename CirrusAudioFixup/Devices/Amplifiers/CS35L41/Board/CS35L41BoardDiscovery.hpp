@@ -18,7 +18,7 @@ public:
     char hid[32]{};
     bool resetDeclared{false};
     int32_t resetResource{-1};
-    bool prepareHardware(platform::BoardDiscoveryContext::GPIOReader& gpio) const override {
+    bool prepareHardware(platform::BoardDiscoveryContext::GPIOAccess& gpio) const override {
         return (!resetDeclared && resetResource < 0) || gpio.reset(resetDeclared ? "reset-gpios" : nullptr, resetResource);
     }
 };

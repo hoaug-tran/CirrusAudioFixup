@@ -361,6 +361,44 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     OSSafeReleaseNULL(ownedHid);
 }
 
+bool CirrusAudioFixup::adoptDiscoveredBoard(const cirrus::platform::BoardIdentity& identity, const char* profileName) {
+    if (!mDiscoveredBoard || !mDiscoveredBoard->configuration.permits(identity)) {
+        delete mDiscoveredBoard;
+        mDiscoveredBoard = nullptr;
+        return false;
+    }
+    mDiscoveredProfile = *mPlatformProfile;
+    mDiscoveredProfile.name = profileName;
+    mDiscoveredProfile.boardConfiguration = &mDiscoveredBoard->configuration;
+    mDiscoveredProfile.endpointCount = mDiscoveredBoard->configuration.count;
+    mDiscoveredProfile.allowAutomaticInitialization = true;
+    mPlatformProfile = &mDiscoveredProfile;
+    mPlatformAuthorized = true;
+    setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
+    return true;
+}
+
+const cirrus::platform::AmplifierDriverRegistration* CirrusAudioFixup::findI2CDriver() const {
+    const auto* board = mPlatformProfile->boardConfiguration;
+    return board && board->amplifiers && board->count
+               ? mDriverRegistry.find(mPlatformProfile->acpiHid, board->amplifiers[0].siliconId, cirrus::core::BusTransportType::I2C)
+               : mDriverRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel, cirrus::core::BusTransportType::I2C);
+}
+
+bool CirrusAudioFixup::prepareI2CController(const cirrus::platform::AmplifierDriverRegistration* definition) {
+    mAttachment.amplifier = definition ? "REGISTERED_NOT_PROBED" : "UNSUPPORTED";
+    if (!mI2CController)
+        mI2CController = createI2CController();
+    if (!mI2CController)
+        return false;
+    if (!definition) {
+        mPlatformAuthorized = false;
+        setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
+        recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
+    }
+    return true;
+}
+
 void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
                                                      const cirrus::platform::AmplifierDriverRegistration& definition) {
     cirrus::transport::ACPIDeviceProperties properties;
@@ -379,10 +417,10 @@ void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
         cirrus::core::BusEndpoint endpoints[kMaxAmplifiers]{};
         for (size_t i = 0; i < mNativeSPI.count(); ++i)
             endpoints[i] = mNativeSPI.endpoint(i);
-        struct GPIOReader final : cirrus::platform::BoardDiscoveryContext::GPIOReader {
+        struct GPIOAccess final : cirrus::platform::BoardDiscoveryContext::GPIOAccess {
             cirrus::transport::NativeSPIHost& host;
             IOACPIPlatformDevice* device;
-            GPIOReader(cirrus::transport::NativeSPIHost& h, IOACPIPlatformDevice* d) : host(h), device(d) {}
+            GPIOAccess(cirrus::transport::NativeSPIHost& h, IOACPIPlatformDevice* d) : host(h), device(d) {}
             bool read(const char* property, size_t index, uint32_t& value) override {
                 return host.readGPIO(device, property, index, value) == kIOReturnSuccess;
             }
@@ -393,19 +431,7 @@ void CirrusAudioFixup::discoverPlatformConfiguration(IOACPIPlatformDevice* acpi,
             mNativeSPI.count(),
             source, &gpio};
         mDiscoveredBoard = definition.discoverBoard(context, reason);
-        if (mDiscoveredBoard && mDiscoveredBoard->configuration.permits(context.identity)) {
-            mDiscoveredProfile = *mPlatformProfile;
-            mDiscoveredProfile.name = "acpi-device-properties";
-            mDiscoveredProfile.boardConfiguration = &mDiscoveredBoard->configuration;
-            mDiscoveredProfile.endpointCount = mDiscoveredBoard->configuration.count;
-            mDiscoveredProfile.allowAutomaticInitialization = true;
-            mPlatformProfile = &mDiscoveredProfile;
-            mPlatformAuthorized = true;
-            setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
-        } else {
-            delete mDiscoveredBoard;
-            mDiscoveredBoard = nullptr;
-        }
+        adoptDiscoveredBoard(context.identity, "acpi-device-properties");
     }
     setProperty("Cirrus_Platform_Discovery", reason);
 }
@@ -423,23 +449,9 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
 #endif
     if (!acpi) {
         setProperty("Cirrus_Bus", "I2C");
-        const auto* expected =
-            mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->amplifiers &&
-                    mPlatformProfile->boardConfiguration->count
-                ? mDriverRegistry.find(mPlatformProfile->acpiHid, mPlatformProfile->boardConfiguration->amplifiers[0].siliconId,
-                                       cirrus::core::BusTransportType::I2C)
-                : mDriverRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel,
-                                            cirrus::core::BusTransportType::I2C);
-        mAttachment.amplifier = expected ? "REGISTERED_NOT_PROBED" : "UNSUPPORTED";
-        if (!mI2CController)
-            mI2CController = createI2CController();
-        if (!mI2CController)
+        const auto* expected = findI2CDriver();
+        if (!prepareI2CController(expected))
             return false;
-        if (!expected) {
-            mPlatformAuthorized = false;
-            setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
-            recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
-        }
         if (expected && expected->discoverBoard && !mPlatformProfile->boardConfiguration && !mDiscoveredBoard) {
             cirrus::transport::I2CPlatformResources resources;
             const char* resourceReason = nullptr;
@@ -464,20 +476,10 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
             setProperty("Cirrus_Platform_Discovery", reason ? reason : "DISCOVERY_NO_REASON");
             CIRRUS_LOG("I2C board discovery: ssid=0x%08X hid=%s reason=%s", mPlatformSubsystemId,
                        mPlatformProfile->acpiHid, reason ? reason : "DISCOVERY_NO_REASON");
-            if (mDiscoveredBoard && mDiscoveredBoard->configuration.permits(context.identity)) {
-                mDiscoveredProfile = *mPlatformProfile;
-                mDiscoveredProfile.name = "discovered-i2c-board";
-                mDiscoveredProfile.boardConfiguration = &mDiscoveredBoard->configuration;
-                mDiscoveredProfile.endpointCount = mDiscoveredBoard->configuration.count;
-                mDiscoveredProfile.allowAutomaticInitialization = true;
-                mPlatformProfile = &mDiscoveredProfile;
-                mPlatformAuthorized = true;
-                setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
+            if (adoptDiscoveredBoard(context.identity, "discovered-i2c-board")) {
                 setProperty("Cirrus_Platform_Authorized", kOSBooleanTrue);
                 setProperty("Cirrus_Board_Authorized", kOSBooleanTrue);
             } else {
-                delete mDiscoveredBoard;
-                mDiscoveredBoard = nullptr;
                 recordAttachmentFailure("PLATFORM", reason ? reason : "DISCOVERY_NO_REASON", kIOReturnUnsupported);
             }
         }
@@ -518,24 +520,11 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
     OSSafeReleaseNULL(resources);
     if (resourceKind == cirrus::transport::ACPISPIResult::NoSPI && hasI2C) {
         setProperty("Cirrus_Bus", "I2C");
-        const auto* expected =
-            mPlatformProfile->boardConfiguration && mPlatformProfile->boardConfiguration->amplifiers &&
-                    mPlatformProfile->boardConfiguration->count
-                ? mDriverRegistry.find(mPlatformProfile->acpiHid, mPlatformProfile->boardConfiguration->amplifiers[0].siliconId,
-                                       cirrus::core::BusTransportType::I2C)
-                : mDriverRegistry.findModel(mPlatformProfile->acpiHid, mPlatformProfile->amplifierModel,
-                                            cirrus::core::BusTransportType::I2C);
+        const auto* expected = findI2CDriver();
         mAttachment.amplifier = expected ? "REGISTERED_NOT_PROBED" : "UNSUPPORTED";
         if (mPlatformProfile->i2cControllerFactory) {
-            if (!mI2CController)
-                mI2CController = createI2CController();
-            if (!mI2CController)
+            if (!prepareI2CController(expected))
                 return false;
-            if (!expected) {
-                mPlatformAuthorized = false;
-                setProperty("Cirrus_Platform_Authorized", kOSBooleanFalse);
-                recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported);
-            }
             if (expected && !mDiscoveredBoard && !preflightI2CIdentity(expected))
                 return false;
             publishAttachmentStatus();

@@ -135,6 +135,13 @@ int main(){
         assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
     }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
+    for(uint32_t ssid:{0x17aa382bU,0x17aa3847U}){
+        IOService codec;OSNumber identity;identity.value=ssid;codec.properties["subsystem-id"]=&identity;
+        fixtureCodecs={&codec};Fixture f;f.host.bypass=false;
+        f.bind();(void)f.runtime.bringUp();
+        assert(f.host.properties.at("Cirrus_FW_Source_owned-driver")=="EmbeddedResource");
+        fixtureCodecs.clear();
+    }
     // Both verified Legion SSIDs and I2C channels retain external no-switch power.
     for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)})for(uint32_t channel:{0U,1U}){
         Fixture f;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
@@ -176,6 +183,31 @@ int main(){
             }
             broken.runtime.unbind();
         }
+    }
+    // Issue #3 HP and #5 G614JI plus both Lenovo profiles and the Zenbook branch.
+    // Real driver lifecycle with fixture transport/time and explicit DSP bypass.
+    struct Machine {uint16_t vendor,device;const char* hid;core::BusTransportType bus;BoostTopology boost;};
+    const Machine machines[]{
+        {0x17aa,0x382b,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
+        {0x17aa,0x3847,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
+        {0x103c,0x89c6,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
+        {0x1043,0x1c9f,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
+        {0x1043,0x1683,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch}};
+    for(const auto& machine:machines)for(uint32_t channel:{0U,1U}){
+        Fixture f;f.board.identity={machine.vendor,machine.device,machine.hid};f.board.useBoardFirmwareIdentity=true;
+        f.context.actualBoard=f.board.identity;f.context.actualDeviceHid=machine.hid;
+        f.endpoint.transport=machine.bus;f.endpoint.i2cAddress=uint16_t(0x40+channel);
+        f.endpoint.spiChipSelect=channel;f.endpoint.spiClockHz=4000000;
+        f.binding.endpoint=f.context.endpoint=f.endpoint;f.binding.channelIndex=channel;f.binding.acpiHid=machine.hid;
+        DeviceConfiguration config;
+        config.power={machine.boost,0,0,0};config.gpio1Function=machine.boost==BoostTopology::ExternalWithSwitch?1:0;
+        if(machine.boost==BoostTopology::Internal)config.power={machine.boost,1000,4500,24};
+        f.binding.driverConfiguration=&config;f.binding.driverConfigurationSize=sizeof(config);f.binding.driverConfigurationKind=kDeviceConfigurationKind;
+        f.assets.target.subsystemVendor=machine.vendor;f.assets.target.subsystemDevice=machine.device;f.assets.target.channelIndex=channel;
+        f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);
+        for(unsigned cycle=0;cycle<3;++cycle)assert(f.runtime.suspend()==0&&f.runtime.resume()==0);
+        assert(f.runtime.unbind()==0&&!f.runtime.bound());
+        f.bind();assert(f.runtime.bringUp()==0&&f.runtime.unbind()==0);
     }
     for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
         Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;

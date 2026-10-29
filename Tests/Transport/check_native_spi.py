@@ -2,18 +2,14 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from production_source_fixture import service_source
+from production_source_fixture import service_source, method
 from host_build import sanitizer_flags
 import subprocess,tempfile
 from service_runtime_fixture import PLATFORM_ADAPTER
 ROOT=Path(__file__).resolve().parents[2]
 SOURCE=service_source()
 def owner_function(name):
- if name=='createI2CController':
-  start=SOURCE.index('cirrus::transport::I2CController* CirrusAudioFixup::createI2CController(')
-  return SOURCE[start:SOURCE.index('\n}',start)+2]
- start=SOURCE.index(('size_t' if name.startswith('detect') else 'bool' if name in ('setupCommunication','preflightI2CIdentity','bindAmplifierDrivers') else 'void')+' CirrusAudioFixup::'+name+'(')
- return SOURCE[start:SOURCE.index('\n}',start)+2]
+ return method(SOURCE,'CirrusAudioFixup',name)
 
 HEADER=(ROOT/'CirrusAudioFixup/Service/CirrusAudioFixup.hpp').read_text()
 def power_wrapper(name):
@@ -161,7 +157,7 @@ struct ACPIPlatformProperties final:platform::PlatformProperties {
  bool array(const char*,uint32_t*,size_t)const override{return false;}
 };
 inline int fixtureSpeakerGPIO=1;
-struct I2CPlatformResources : platform::BoardDiscoveryContext::GPIOReader {
+struct I2CPlatformResources : platform::BoardDiscoveryContext::GPIOAccess {
  void setDiagnosticOwner(IOService*){}
  bool readResource(uint32_t resource,uint32_t pin,bool low,uint32_t& value)override{assert(resource==1&&pin==0&&!low);if(fixtureSpeakerGPIO<0)return false;value=unsigned(fixtureSpeakerGPIO);return true;}
  bool read(const char*,size_t,uint32_t&)override{return false;}
@@ -242,6 +238,9 @@ public:
  ~CirrusAudioFixup(){teardownCommunication();}
  bool mResumePending=false;
  bool setupCommunication(IOService*);
+ bool adoptDiscoveredBoard(const cirrus::platform::BoardIdentity&,const char*);
+ const cirrus::platform::AmplifierDriverRegistration* findI2CDriver() const;
+ bool prepareI2CController(const cirrus::platform::AmplifierDriverRegistration*);
  bool preflightI2CIdentity(const cirrus::platform::AmplifierDriverRegistration*);
  size_t detectNativeSPIAmplifiers();void teardownCommunication();
 };
@@ -260,7 +259,7 @@ public:
  bool pollBit(uint32_t r,uint32_t m,uint32_t v,uint32_t t)override{return amp.registerIO->pollBit(r,m,v,t);}
 };
 using cirrus::diagnostics::DIAG_DEVICE_ID;
-'''+owner_function('preflightI2CIdentity')+owner_function('recordAttachmentFailure')+owner_function('publishAttachmentStatus')+owner_function('createI2CController')+owner_function('bindAmplifierDrivers')+owner_function('releaseAmplifierDrivers')+owner_function('detectConfiguredI2CAmplifiers')+owner_function('setupCommunication')+owner_function('detectNativeSPIAmplifiers')+owner_function('teardownCommunication')+r'''
+'''+owner_function('adoptDiscoveredBoard')+owner_function('findI2CDriver')+owner_function('prepareI2CController')+owner_function('preflightI2CIdentity')+owner_function('recordAttachmentFailure')+owner_function('publishAttachmentStatus')+owner_function('createI2CController')+owner_function('bindAmplifierDrivers')+owner_function('releaseAmplifierDrivers')+owner_function('detectConfiguredI2CAmplifiers')+owner_function('setupCommunication')+owner_function('detectNativeSPIAmplifiers')+owner_function('teardownCommunication')+r'''
 using namespace cirrus::transport;
 std::vector<uint8_t> descriptor(const char* source,unsigned cs){
  size_t length=21+strlen(source)+1;std::vector<uint8_t> d(length);
@@ -549,6 +548,28 @@ int main(){
   FixtureNativeSPI::simulateHeldReset=false;
  }
 
+ // Both discovery paths adopt the same owned board without changing publication contracts.
+ {
+  struct OwnedBoard:DiscoveredBoard {int& destroyed;OwnedBoard(int& n):destroyed(n){}~OwnedBoard(){++destroyed;}};
+  int destroyed=0;auto profile=cirrus::platform::defaultPlatformProfile();
+  for(const char* name:{"acpi-device-properties","discovered-i2c-board"}){
+   CirrusAudioFixup service;service.mPlatformProfile=&profile;service.mPlatformAuthorized=false;
+   service.mDiscoveredBoard=new OwnedBoard(destroyed);service.mDiscoveredBoard->configuration=board;
+   assert(service.adoptDiscoveredBoard(board.identity,name));
+   assert(service.mPlatformAuthorized&&service.mPlatformProfile==&service.mDiscoveredProfile);
+   assert(service.mPlatformProfile->boardConfiguration==&service.mDiscoveredBoard->configuration);
+   assert(service.mPlatformProfile->endpointCount==board.count&&service.strings["Cirrus_Platform_Profile"]==name);
+   assert(!service.numbers.count("Cirrus_Board_Authorized"));
+   service.teardownCommunication();
+  }
+  assert(destroyed==2);
+  CirrusAudioFixup rejected;rejected.mPlatformProfile=&profile;rejected.mPlatformAuthorized=false;
+  rejected.mDiscoveredBoard=new OwnedBoard(destroyed);rejected.mDiscoveredBoard->configuration=board;
+  auto wrong=board.identity;wrong.subsystemDevice^=1;
+  assert(!rejected.adoptDiscoveredBoard(wrong,"rejected")&&!rejected.mDiscoveredBoard);
+  assert(destroyed==3&&!rejected.mPlatformAuthorized&&rejected.mPlatformProfile==&profile);
+  assert(!rejected.adoptDiscoveredBoard(board.identity,"absent")&&destroyed==3);
+ }
  // Registry-only AMP extension through the actual IOService: the two arbitrary
  // Each registration supplies its own framing. These fixture IDs do not
  // add production hardware support.

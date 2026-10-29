@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2.0]
+## [1.2.0] - 2026-10-29
 
 ### CS35L41
 
@@ -19,6 +19,8 @@ Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11)
 - Added firmware 3.11.16, separate amplifier coefficients, automatic speaker-ID selection and measured EFI calibration.
 - Fixed firmware-boot ordering before device identification and IRQ mask readback validation that blocked DSP initialization.
 - Added SPI, firmware, captured-calibration, playback, power-management and failure-recovery regressions.
+
+Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10).
 
 Initialization and physical speaker output were verified on GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8). Bass output requires ALC285 NID `0x17` routing; persistent routing needs a suitable AppleALC configuration.
 

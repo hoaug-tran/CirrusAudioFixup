@@ -16,6 +16,8 @@ body:
       options:
         - label: I searched existing issues and read the supported hardware and installation sections.
           required: true
+        - label: I checked the Troubleshooting guide and verified that Audio MIDI Setup is set to 48,000 Hz.
+          required: true
         - label: I describe what I actually tested and mark unavailable data instead of guessing values.
           required: true
         - label: I reviewed attachments for personal data and did not include an entire EFI folder.

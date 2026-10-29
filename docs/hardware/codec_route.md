@@ -1,77 +1,146 @@
-# Check the codec and speaker route
+# Codec and Speaker Route Verification
 
-AppleHDA and AppleALC configure the HDA codec and its audio outputs. CirrusAudioFixup controls the amplifiers attached to the speaker path. Both parts must work: amplifier initialization cannot replace a missing codec route, and a visible audio output does not prove that samples reach the speakers.
+Internal laptop speakers driven by Cirrus smart amplifiers depend on two distinct components working together:
 
-Use the codec connections from the same physical machine. Do not choose an audio configuration only because another laptop has the same codec model.
+1. **AppleHDA & AppleALC**: Route decoded PCM audio through the onboard HDA codec to its line/speaker output pins.
+2. **CirrusAudioFixup**: Configures the external amplifiers over I2C or SPI, uploads DSP firmware, and unmutes the physical speakers.
 
-## 1. Save the Linux codec dump
+If AppleALC routes audio to the wrong codec pins, the amplifiers will produce no sound even when initialized successfully (`READY_DSP`).
 
-Boot Linux with the machine's audio drivers loaded. These commands save the HDA codec descriptions without changing codec registers:
+---
+
+## 1. Check Your Current AppleALC layout-id
+
+In macOS Terminal, run:
 
 ```bash
-mkdir -p codec-dump
+# Check the active layout-id on the audio controller
+ioreg -lw0 -p IODeviceTree | grep -E 'layout-id|"alc-layout-id"'
+```
 
+The output displays a 4-byte little-endian hexadecimal value:
+
+| Hex Value in IORegistry | Decimal Layout ID (`alcid`) |
+| :--- | :--- |
+| `<01 00 00 00>` | `1` |
+| `<03 00 00 00>` | `3` |
+| `<0b 00 00 00>` | `11` |
+| `<0d 00 00 00>` | `13` |
+| `<0f 00 00 00>` | `15` |
+| `<15 00 00 00>` | `21` |
+| `<1c 00 00 00>` | `28` |
+| `<63 00 00 00>` | `99` |
+
+You can also check if an `alcid` boot argument is currently active:
+
+```bash
+nvram 7C436110-AB2A-4BBB-A880-FE41995C9F82:boot-args | grep -o 'alcid=[0-9]*'
+```
+
+---
+
+## 2. How to Know if Your layout-id is Correct
+
+Your AppleALC `layout-id` is **correct** for Cirrus smart amplifiers when:
+
+1. **Internal Speakers** appears in **System Settings → Sound → Output**.
+2. Audio plays through the laptop speakers (not just headphones).
+3. `ioreg -lw0 -p IOService -r -c CirrusAudioFixup` shows:
+   * `Cirrus_Driver_Verdict` = `READY_DSP`
+   * `Cirrus_Playback_Verdict_left` (or `_right`) = `ACTIVE_REGISTERS_VERIFIED_ROUTE_UNCONFIRMED`
+
+> [!WARNING]
+> **Headphones work but Internal Speakers is silent?**
+> This is a classic symptom of an incorrect `layout-id`. The current layout routes audio to the 3.5 mm headphone jack, but connects the speaker path to an unused pin.
+>
+> **Solution**: Test alternative layout IDs supported by your codec model by adding `alcid=<id>` to OpenCore boot-args (e.g., `alcid=11`, `alcid=13`, `alcid=21`). See the [AppleALC Supported Codecs list](https://github.com/acidanthera/AppleALC/wiki/Supported-codecs).
+
+---
+
+## 3. Extract the Linux Codec Dump
+
+If none of the existing AppleALC layout IDs route audio to the internal speakers, extract the physical codec connections from Linux to create or patch an AppleALC layout:
+
+Boot any live Linux USB distribution with working sound, then run:
+
+```bash
+mkdir -p ~/codec-dump
 for codec in /proc/asound/card*/codec\#*; do
     [ -f "$codec" ] || continue
     card=$(basename "$(dirname "$codec")")
-    sudo cat "$codec" > "codec-dump/${card}-$(basename "$codec").txt"
+    sudo cat "$codec" > ~/codec-dump/"${card}-$(basename "$codec").txt"
 done
 
-aplay -l > codec-dump/alsa-devices.txt
+# List ALSA audio playback devices
+aplay -l > ~/codec-dump/alsa-devices.txt
 ```
 
-Keep the individual files: a machine can expose several codecs, including GPU HDMI/DisplayPort codecs. Inspect their headers to identify the onboard codec:
+Find the onboard audio codec header:
 
 ```bash
-grep -HE '^(Codec:|Address:|Vendor Id:|Subsystem Id:|Revision Id:)' \
-    codec-dump/card*-codec\#*.txt
+grep -HE '^(Codec:|Vendor Id:|Subsystem Id:|Revision Id:)' ~/codec-dump/card*-codec\#*.txt
 ```
 
-If there are no matching files, stop and check the Linux audio-driver state. An empty dump is not a valid routing reference. `Tools/Collectors/collect_audio_amp_linux.sh` can collect a broader audio, ACPI and controller baseline.
+> [!TIP]
+> Keep two dumps if possible: one at idle and one while actively playing music through the internal speakers.
 
-For a playback problem, keep separate captures at idle and while playing through the internal speakers. The selected connection and stream assignments can change with driver state. The [Linux HD-Audio notes](https://www.kernel.org/doc/html/latest/sound/hd-audio/notes.html) describe the codec dump and diagnostic interfaces.
+---
 
-## 2. Open the matching AppleALC source
+## 4. Locate AppleALC Resources
 
-Use the source revision or fork corresponding to the installed AppleALC build. A different revision can contain different resources.
+In the [AppleALC repository](https://github.com/acidanthera/AppleALC/tree/master/Resources), open the directory corresponding to your codec model (e.g., `Resources/ALC285/` or `Resources/ALC287/`).
 
-Open [AppleALC Resources](https://github.com/acidanthera/AppleALC/tree/master/Resources), then the directory for the onboard codec, such as `Resources/ALCxxx/`. Inspect:
+Examine the following files:
 
-| File | What to check |
-| --- | --- |
-| `Info.plist` | Codec identity and the layout/platform resources selected by its file entries |
-| `layout*.xml` or `layout*.xml.zlib` | Output definitions and `PathMapRef` references, including the speaker output |
-| `Platforms*.xml` or `Platforms*.xml.zlib` | `PathMapID`, ordered path nodes, `NodeID` and channel/amp settings |
+| File | What to Inspect |
+| :--- | :--- |
+| `Info.plist` | Layout IDs mapped to your codec subsystem ID. |
+| `layout*.xml` | Output channel definitions and `PathMapRef` IDs. |
+| `Platforms*.xml` | Ordered signal path nodes (`NodeID`), connections, and amp settings. |
 
-Follow the filenames and IDs in `Info.plist`; do not assume layout and platform filenames have the same numeric suffix. If the checkout contains only compressed resources, use AppleALC's `Tools/zlib_unpack.command` on a working copy to inspect the XML. See [AppleALC's codec resource guide](https://github.com/acidanthera/AppleALC/wiki/Adding-codec-support) for the file structure.
+---
 
-## 3. Compare the output path
+## 5. Trace the Signal Path
 
-Start at the codec pin feeding the speaker amplifier and trace its connection list back through any selector or mixer to the audio output converter. Compare that chain with the speaker path in the selected AppleALC resources.
+Trace the signal chain backwards from the amplifier pin to the DAC converter:
 
-| Linux codec dump | AppleALC comparison |
-| --- | --- |
-| `Vendor Id`, codec name and revision | Confirm the resources belong to the actual onboard codec |
-| `Node 0x.. [Audio Output]` | Output converter used by the speaker path |
-| `Node 0x.. [Audio Selector]` / `[Audio Mixer]` | Intermediate nodes and available connections |
-| `Node 0x.. [Pin Complex]` | Output pin connected to the speaker/amp path |
-| `Connection:` list and selected `*` entry, where present | Valid connections and current selection; account for the capture's playback state |
-| Pin configuration, pin controls and amp capabilities | Output direction, pin setup and relevant mute/gain behavior |
+```mermaid
+flowchart LR
+    A[Audio Output Converter<br/>Node 0x..] --> B[Audio Selector / Mixer<br/>Node 0x..]
+    B --> C[Pin Complex<br/>Node 0x..]
+    C --> D[Cirrus Amplifiers<br/>I2S / ASP]
+```
 
-Linux usually prints node IDs in hexadecimal; AppleALC XML often stores them as decimal integers. Convert the numbers before comparing them. The node sequence and channel assignments must describe a valid path on this machine. Not every node in a codec dump belongs in the speaker path.
+Compare the nodes found in your Linux dump against AppleALC:
 
-The dump records the codec's capabilities and current state, including Linux driver fixups. It does not, by itself, prove the board's physical wiring, ASP/I2S clock delivery, amplifier tuning or the route active under macOS. Use board evidence and a working speaker-playback baseline to resolve those parts.
+| Component | Linux Codec Dump Marker | AppleALC XML Field |
+| :--- | :--- | :--- |
+| **Output Pin** | `Node 0x.. [Pin Complex]` | Pin node connected to amplifier input |
+| **Intermediate Controls** | `Node 0x.. [Audio Selector]` / `[Audio Mixer]` | Intermediate `NodeID` in path map |
+| **DAC Converter** | `Node 0x.. [Audio Output]` | Primary converter `NodeID` |
+| **Connection Selection** | `Connection: 2` with `*` marker | Active path selection |
 
-## 4. Verify the macOS output
+> [!NOTE]
+> Linux codec dumps report node IDs in **hexadecimal** (e.g., `0x17`), while AppleALC XML files use **decimal** integers (e.g., `23`). Make sure to convert between hex and decimal when verifying nodes.
+
+---
+
+## 6. Verify in macOS
+
+Once AppleALC and CirrusAudioFixup are installed:
 
 ```bash
+# Check detected audio devices
 system_profiler SPAudioDataType
+
+# Verify AppleHDA controller attachment
 ioreg -lw0 -p IOService -r -c AppleHDAController
+
+# Verify Cirrus amplifier status
 ioreg -lw0 -p IOService -r -c CirrusAudioFixup
 ```
 
-Confirm that the intended output exists and is selected, AppleALC has configured the matching codec route, and the hardware output stream meets CirrusAudioFixup's supported format. Then inspect both amplifier endpoints and test left/right speaker output at low volume.
+1. Select **Internal Speakers** in macOS Sound Settings.
+2. Test audio playback at low volume. Both left and right channels should produce clear sound without distortion.
 
-A loaded AppleALC kext, a running HDA stream, working headphones or a `READY_DSP` verdict each establishes only part of the chain. Successful internal speaker playback requires the codec route, audio clocks, amplifier configuration and channel tuning to agree.
-
-[Back to installation](../../README.md#installation)
+[Back to main guide](../../README.md#installation)

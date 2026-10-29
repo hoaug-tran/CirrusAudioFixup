@@ -1,263 +1,157 @@
-# Collect audio evidence on macOS
+# Audio Diagnostics & Troubleshooting on macOS
 
-Run commands on the affected installation, from the repository root where a relative `Tools/` path is used. These commands inspect state; they do not install kexts, patch AppleHDA or change logging persistence. Use a Debug build or boot Release with `-cirrusdbg` when routine driver messages are needed.
+This guide explains how to inspect the driver state, capture live logs, and diagnose issues on macOS.
 
-## Service, loaded extensions and audio devices
+> [!NOTE]
+> Routine driver messages require a **Debug** build or booting a **Release** build with the `-cirrusdbg` boot argument.
+
+---
+
+## 1. Quick Inspection Commands
+
+Run these commands in Terminal to check whether the kext is loaded and communicating:
 
 ```bash
-/usr/bin/sw_vers
-/usr/sbin/ioreg -lw0 -p IOService -r -c CirrusAudioFixup
-sudo /usr/bin/kmutil showloaded
-/usr/sbin/ioreg -lw0 -p IOService -r -c AppleHDAController
-/usr/sbin/system_profiler SPAudioDataType
+# Check macOS version build
+sw_vers
+
+# Check if CirrusAudioFixup is registered in IORegistry
+ioreg -lw0 -p IOService -r -c CirrusAudioFixup
+
+# Check loaded kernel extensions
+kmutil showloaded | grep -Ei 'Cirrus|AppleALC|Lilu|VoodooI2C'
+
+# Inspect the AppleHDA controller and audio output status
+ioreg -lw0 -p IOService -r -c AppleHDAController
+system_profiler SPAudioDataType
 ```
 
-`sw_vers` identifies the OS build. The driver query should contain the service and its `Cirrus_*` properties when attached. No matching output means attachment has not been demonstrated. `kmutil` checks loaded extensions, including AppleHDA, AppleALC, Lilu and the I2C provider; inspect the full output before filtering. AppleALC is not expected to register an IOService class named `AppleALC`. CS35L41 endpoints are tracked by CirrusAudioFixup, not separate services named `CS35L41`.
+### What to Look For
 
-The controller query and audio-device list establish different facts: finding the controller does not prove that the codec route is programmed or that PCM reaches the amplifier. On Tahoe, follow the [host-stack requirements](../../README.md#tahoe-restore-and-validate-the-host-audio-stack-first) before diagnosing amplifier playback.
+* **`CirrusAudioFixup` service present**: Confirms the kext matched your hardware and attached.
+* **`Cirrus_Driver_Verdict`**: Should show `READY_DSP` during normal operation (or `READ_ONLY` when `-cirrusro` is set).
+* **`Cirrus_Bus`**: Confirms the transport bus (`I2C` or `SPI`).
+* **`Cirrus_Detected_Amplifiers`**: Shows the count of active amplifiers (usually `2`).
 
-## Attachment layers and machine metadata
+---
 
-Read `Cirrus_Communication_Status`, `Cirrus_Amplifier_Status`,
-`Cirrus_Attach_First_*`, `Cirrus_Attach_Latest_*` and typed index fields before
-interpreting a missing speaker as an AMP problem. The first attach failure survives
-later cleanup/PM failures. `COMMUNICATION`, `RESOURCE`, `AMPLIFIER`, `POLICY`,
-`BINDING`, `DEBUG_POLICY` and `CONTROLLER_PM` identify the failed boundary.
+## 2. Retained Logs and Live Messages
 
-`Cirrus_CPU_*`, `Cirrus_Machine_Model`, `Cirrus_Provider_*`, platform profile and
-PCI subsystem identify the captured machine/provider. CPU vendor does not choose
-an AMP, GPIO plan or controller. The collector also captures CPU/model metadata
-for older loaded bundles that do not publish the new schema. Compare the loaded
-UUID with the intended build; missing new fields may simply mean an older binary.
+All messages from this driver are prefixed with `CirrusAudioFixup:`.
 
-`ATTACH` and `ATTACH_FAIL` are essential records. Verbose provider enumeration
-requires a Debug build or `-cirrusdbg`; phase acceptance is module-specific and
-published in `Cirrus_Debug_Phase`. A failed `start()` may leave no service node,
-so also inspect kernel failure records.
+### Save Driver Logs (dmesg)
 
-## Retained logs and live messages
-
-This project writes `IOLog` messages with the prefix `CirrusAudioFixup:`. Routine messages require a Debug build or `-cirrusdbg` in Release, enabled before rebooting. The `--debug` option to `log show` does not enable the driver's own logging.
-
-To watch a failure as it happens, start the stream first, reproduce the problem, then press Ctrl-C:
+The simplest and most reliable way to capture driver logs:
 
 ```bash
-sudo /usr/bin/log stream --level debug --style syslog \
+sudo dmesg > ~/Desktop/cirrus-dmesg.txt
+```
+
+> [!TIP]
+> If `dmesg` contains no driver logs (Apple suppresses routine kernel `IOLog` messages on modern macOS), install **[DebugEnhancer](https://github.com/acidanthera/DebugEnhancer)** and add the boot argument `-dbgenhdbg`.
+
+### Stream Live Logs
+
+To watch driver events and errors in real-time in Terminal:
+
+```bash
+sudo log stream --level debug --style syslog \
   --predicate 'process == "kernel" AND eventMessage CONTAINS[c] "CirrusAudioFixup"'
 ```
 
-To inspect messages retained from the last hour:
+### View Historical Logs
+
+To query messages recorded during the last hour:
 
 ```bash
-sudo /usr/bin/log show --last 1h --style syslog --info --debug \
+sudo log show --last 1h --style syslog --info --debug \
   --predicate 'process == "kernel" AND eventMessage CONTAINS[c] "CirrusAudioFixup"'
 ```
 
-Neither command guarantees a result. Live streaming does not retrieve earlier messages, and historical queries cannot recover messages that were not saved. Empty output does not prove the kext failed to load or that playback passed. If the narrow filter is empty, inspect unfiltered kernel messages and the driver's IORegistry properties before concluding that no diagnostics exist.
+---
 
-See Apple's [logging guide](https://developer.apple.com/documentation/os/viewing-log-messages) for log viewing.
+## 3. Automated Report Collection
 
-### Kernel-buffer fallbacks
-
-Run soon after the failure and before rebooting:
-
-```bash
-sudo /sbin/dmesg > "$HOME/Desktop/cirrus-dmesg.txt"
-sudo /usr/sbin/sysctl -n kern.msgbuf > "$HOME/Desktop/cirrus-msgbuf.txt"
-```
-
-Save the complete output before filtering. Permissions, availability and buffer retention vary; these commands can fail or contain only recent messages. They cannot reconstruct an overwritten boot log. The collector captures both sources and their exit statuses separately.
-
-The collector uses `kern.boottime` to calculate a start time for `log show --start`. If that query fails or the start time is unavailable, it keeps the error and tries the last hour in `kernel-log-fallback.txt`. An empty successful query does not trigger that retry; the independent IORegistry and kernel-buffer captures are still retained.
-
-### Lilu logging is separate
-
-Lilu documents `-liludbgall` and `liludump=N` for its own debug logging. CirrusAudioFixup currently calls `IOLog` directly, rather than Lilu's logging wrapper. Do not assume a Lilu dump contains all CirrusAudioFixup messages or that Lilu's flags replace `-cirrusdbg`. See [Lilu's logging options](https://github.com/acidanthera/Lilu#configuration).
-
-## Save a report before rebooting
+Use the automated collection script to gather all system evidence, IORegistry trees, unified logs, and crash reports into a single ZIP archive on your Desktop:
 
 ```bash
 sudo bash Tools/Collectors/collect_macos.sh
 ```
-Evidence is saved in a new `~/Desktop/cirrus-evidence.XXXXXX` directory for the
-user who invoked sudo, not root's home. On completion or interruption, the
-collector returns ownership to that user and grants owner read/write access
-(and directory traversal), including partial captures. Existing Desktop files
-are not modified. Direct root execution uses the logged-in console account.
 
-It prints the ZIP path after packaging and keeps the capture directory, including partial results. Read `status.txt` and the raw files: an exit status of zero from `ioreg` still permits no matching service. Some optional NVRAM properties, registry planes or developer tools may be absent. Review boot arguments, calibration data and hardware identifiers before sharing. The Desktop directory persists across reboot; retain it with the matching bundle identity and dSYM.
-
-To also identify the bundle being tested, pass its actual path as the sole argument. For a local Release build:
+When diagnosing a local build, pass the path to the `.kext` bundle to verify its binary metadata:
 
 ```bash
-sudo bash Tools/Collectors/collect_macos.sh "$PWD/build/Local-Release/CirrusAudioFixup.kext"
+sudo bash Tools/Collectors/collect_macos.sh build/Local-Release/CirrusAudioFixup.kext
 ```
 
-This inspects that file; it does not prove the loaded extension is the same binary. Compare its version/build metadata with the service and your OpenCore entry. `dwarfdump` and `nm` require developer tools and may fail on a machine without them. An unsigned OpenCore bundle may have no code signature; that observation alone is not a load failure.
+The output archive will be placed at `~/Desktop/cirrus-evidence.XXXXXX.zip`.
 
-## First microphone activation causes a speaker pop
+---
 
-The driver observes HDA output descriptors, not microphone widgets. If opening an input causes a pop, capture the output route, stream and amplifier state before and after the transition.
+## 4. Driver and Playback Verdicts
 
-Keep the OS, layout, firmware and volume unchanged during a comparison. On a known working board, with low speaker volume:
+### Driver Verdicts
 
-1. After idle, save a collector report before opening the input pane. Record whether playback is stopped or running.
-2. In another Terminal, start a short live capture:
+| Verdict | Status | Description |
+| :--- | :--- | :--- |
+| `READY_DSP` | **Working** | Amplifiers initialized successfully with validated firmware and active DSP protection. |
+| `READ_ONLY` | **Inspection** | Probing mode active (`-cirrusro`). Register writes and playback are disabled. |
+| `READY_BYPASS_EXPLICIT` | **Warning** | Running in direct DAC bypass mode (`-cirrusnodsp`). Speaker protection is inactive. |
+| `WAITING_FOR_CODEC_IDENTITY` | **Pending** | Waiting for AppleALC / AppleHDA to publish the codec subsystem ID. |
+| `INCOMPLETE_TOPOLOGY` | **Error** | One or more expected amplifier endpoints could not be discovered on the bus. |
+| `UNSUPPORTED_PLATFORM` | **Error** | The board subsystem ID does not match any authorized hardware profile. |
+| `DEBUG_PHASE_HALTED` | **Debug** | Initialization stopped early due to the `-cirrusphase` argument. |
+| `FAILED_INIT` | **Error** | General initialization failure during amplifier setup. |
+| `FAULT_LATCHED` | **Error** | A protection fault or bus communication failure occurred; driver halted to protect hardware. |
+| `SUSPENDED` | **Power** | Amplifiers are powered down in low-power sleep state. |
 
-   ```bash
-   sudo /usr/bin/log stream --level debug --style syslog \
-     --predicate 'process == "kernel"' > mic-transition.log 2>&1
-   ```
+### Playback Verdicts
 
-3. Record the time with `date '+%Y-%m-%d %H:%M:%S %z'`, then open Sound input settings (System Preferences on older macOS, System Settings on newer releases). Note the first pop and whether immediate reopening repeats it. Stop the stream with Ctrl-C and collect a second report.
-4. If the pop is quiet and testing is safe, compare after idle and after sleep/wake, then stopped versus quiet playback. Stop if the pop is loud or repeats unexpectedly.
+| Verdict | Status | Description |
+| :--- | :--- | :--- |
+| `SAFE_IDLE_VERIFIED` | **Idle** | Speakers are quiet; idle registers confirmed. |
+| `ACTIVE_REGISTERS_VERIFIED_ROUTE_UNCONFIRMED` | **Active** | Amplifiers unmuted and streaming; verify audible output with a listening test. |
+| `CLEANUP_UNVERIFIED` | **Warning** | Post-playback shutdown did not reach the expected idle state. |
+| `FAULT_LATCHED_OUTPUT_DISABLED` | **Error** | Playback disabled due to a recorded amplifier or power fault. |
 
-Compare `Cirrus_Audio_Event_Mode`, `Cirrus_HDA_Status`, stream metadata, both playback verdicts and first/latest failures. `IOAUDIO_FAMILY_EVENTS` identifies a recognized built-in output selector. Headphone and stopped-engine states do not schedule periodic amplifier monitoring in this mode. `HDA_TIMER_FALLBACK` and `IOAUDIO_HOOKS_WAITING_FOR_OUTPUT` still use stream observation and may miss short changes. A new output activation or PLL/power fault would justify investigating the driver transition. Do not change multiple layouts, gains and firmware images at once. Do not unload a running kernel driver to create an A/B test.
+---
 
-## Louder sound, EQ and DSP bypass
+## 5. Failure Codes
 
-When comparing sound, record the track, output device, OS volume, firmware/tuning identity and active effects. State whether DSP bypass or software EQ is enabled.
+When an attachment or runtime failure occurs, `Cirrus_Attach_First_Reason` or `Cirrus_Diag_FirstFailure` records the primary cause:
 
-Louder output does not establish better frequency response or correct protection. Firmware and channel coefficients can affect DSP behavior; Windows Lenovo/Nahimic processing is a separate part of the audio chain and is not reproduced merely by uploading amplifier firmware. This driver does not reproduce that user-space effects stack.
+| Code | Meaning | Recommended Action |
+| :--- | :--- | :--- |
+| `PROVIDER_MISSING` | Required SPI or I2C communication provider was not found. | Check ACPI tables, controller drivers, and VoodooI2C installation. |
+| `I2C_TRANSFER` / `SPI_TRANSFER` | Low-level bus read/write failed. | Check bus wiring, ACPI resources, clock rates, and pull-up configuration. |
+| `RESET_GPIO` / `RESET_WRITE` | Amplifier hardware reset pulse failed. | Check GPIO controller pin ownership and reset pin index in ACPI. |
+| `DEVICE_ID` | Readout ID did not match a supported Cirrus chip (`0x35A40` or `0x35A56`). | Verify chip model; unsupported revisions (e.g., CS35L41 A0) are rejected. |
+| `OTP_BOOT_ERROR` / `OTP_TIMEOUT` | OTP memory trim readout failed. | Inspect hardware supply voltages and power sequencing. |
+| `FIRMWARE_MISSING` | No matching WMFW or BIN tuning files found in kext. | Check subsystem ID and speaker ID; verify resources in `FirmwareData.inc`. |
+| `FIRMWARE_PARSE` / `COEFFICIENT_PARSE` | WMFW header, memory map, or BIN data corrupted. | File issue with original Linux/Windows firmware dump. |
+| `DSP_BOOT` / `DSP_MAILBOX` | DSP core did not boot or mailbox command timed out. | Check clock delivery (ASP bit clock) and boost power supply. |
+| `PLL_UNLOCKED` | Audio PLL lost lock on the incoming stream clock. | Verify AppleALC output format is set to **48 kHz stereo**. |
+| `AMP_PROTECTION` | Silicon protection triggered (overcurrent, overtemperature). | Stop playback immediately; check speaker impedance and tuning coefficients. |
+| `PLAYBACK_INVARIANT` | Register readback did not match active playback state. | Review unified logs for transfer errors during unmute. |
 
-Software EQ cannot substitute for verified boost settings, measured calibration or amplifier protection. `-cirrusnodsp` skips firmware and tuning and removes DSP acoustic protection. Do not use a long or high-volume bypass test to assess sound quality. Gain registers differ between the paths; their raw hexadecimal values are not comparable loudness measurements. Acoustic comparison requires matched output levels and suitable measurements, not just the same OS volume slider.
+---
 
-## Playback preparation timing
+## 6. Common Issues
 
-After each successful stereo commit, IORegistry publishes
-`Cirrus_Playback_PrepareMs_left` and `Cirrus_Playback_PrepareMs_right`. Query the
-service after each speaker start or headphone removal. Values include the
-endpoint's preparation and pair commit; they do not measure the entire audible
-jack-to-speaker delay. Keep volume/workload fixed and compare repeated cycles.
-Release without `-cirrusdbg` skips log-only I2C reads.
+### No Sound or Distorted Audio: Verify 48 kHz Format
 
-`-cirrusirq` is an experimental reference-board protection delivery option. It
-requires the captured GPIO84/type3 provider. `Cirrus_Amp_IRQ_Mode` reports setup,
-fallback or latched-fault state. Polling health remains enabled. Registration is
-not proof that interrupts were delivered; do not manufacture a speaker short or
-overtemperature to test it. IRQ is disabled by default pending target validation.
+Cirrus smart amplifiers require a **48 kHz** hardware clock on the serial audio bus. If macOS defaults to 44.1 kHz, audio will not play or will distort:
+1. Open **Audio MIDI Setup** (`/Applications/Utilities/Audio MIDI Setup.app`).
+2. Select **Internal Speakers** and set **Format** to **48,000 Hz** (2 ch 16-bit or 24-bit).
 
-## Diagnostic properties
+### Speaker Pop on Microphone Activation
 
-Debug defaults to verbose logging; Release enables it with `-cirrusdbg`.
-`-cirrusdumptrace` explicitly enables transfer history even without verbosity.
-Quiet Release does not allocate a trace lock, timestamp or lock each transfer,
-serialize transfer history, or perform failure-snapshot register reads. Essential
-failure reporting and all safety/protection/readback checks remain enabled.
-`Cirrus_Trace_Enabled` distinguishes disabled history from a zero-transfer capture.
-The console `TRACE BUFFER DUMP START/END` markers bracket publication; individual
-entries are stored in `Cirrus_Trace_First_<amp>` / `Cirrus_Trace_Latest_<amp>`
-and the collected IORegistry payload, rather than printed between the markers.
-Trace allocation failure reports `DIAGNOSTICS_UNAVAILABLE` and does not prevent
-otherwise safe startup. A history is bounded to the newest 1,023 transfers.
+The driver monitors HDA output selectors, not microphone inputs. If opening an input pane causes an audible click:
+1. Confirm whether `Cirrus_Audio_Event_Mode` reports `IOAUDIO_FAMILY_EVENTS` or `HDA_TIMER_FALLBACK`.
+2. Inspect the AppleALC layout to ensure microphone input nodes do not toggle speaker amplifier mutes or switch the output clock.
 
-| Boundary | Evidence to inspect | Interpretation / limit |
-| --- | --- | --- |
-| Loading / dependencies | Collector loaded bundle UUID, build metadata, kernel load errors | An absent service may mean the bundle never loaded; AMP diagnostics cannot explain a pre-load failure |
-| Attachment / board | `ATTACH`, CPU/provider/path, subsystem IDs, attachment first/latest stage/reason/return/index kind | CPU vendor is metadata; board authorization and communication availability are separate |
-| Resources / communication | Bus classification, controller/native return, identity register and raw ID, `TRACE_PROBE` | Distinguishes absent ABI, invalid resources, failed transfer and readable wrong silicon; cannot prove the electrical cause of a timeout |
-| AMP initialization / firmware | Runtime first failure stage/return/cleanup return, diagnostic first/latest, firmware identity and chip stage | Missing/late identity is bounded waiting; unsupported identity and parse/upload faults do not trigger guessed firmware |
-| Playback / host audio | Route/event mode, HDA stream observation, phase deadlines, PLL/protection/mailbox failure evidence | READY_DSP and HDA RUN alone do not prove audible output |
-| IRQ / fallback | IRQ mode and fallback reason; configuration native return | Missing/failed IRQ retains polling; no unverified wiring is enabled |
-| PM / teardown | `Cirrus_PM_Registration_Return`, controller PM attachment evidence, runtime cleanup status | Registration errors log the native return before service stop; controller resume failure preserves its first cause |
-| Diagnostics unavailable | `DIAGNOSTICS_UNAVAILABLE`, `Cirrus_Trace_Enabled` | Missing trace after allocation failure is not evidence of zero hardware traffic |
+### Sound Differences Compared to Windows
 
-For each AMP, immutable root evidence is published as
-`Cirrus_Diag_FirstStage_<name>`, `FirstReg`, `FirstExpected`, `FirstActual` and
-`FirstIOReturn` under the same `Cirrus_Diag_` prefix. Existing failure fields
-continue to describe the latest error. A cleanup failure cannot overwrite the
-root transfer return or register. The failure counter saturates rather than
-wrapping. Repeated identical failure publications remain rate limited.
+CirrusAudioFixup loads factory amplifier firmware and speaker protection coefficients. On Windows, OEMs often bundle userspace DSP processing (e.g., Waves MaxxAudio, Dolby Atmos, Nahimic) that applies EQ and multiband compression. These effects run on the CPU in Windows and are not part of the amplifier chip. Third-party macOS equalizer apps (such as SoundSource or eqMac) can help tune tonal balance.
 
-In verbose mode, first/latest trace text is frozen **before** failure-snapshot
-register reads. The latter must not displace the transfer that caused the fault.
-Trace entries use `AMP<endpoint index>` rather than guessing left/right from
-index or transport. Trace formatting, allocation and IORegistry publication
-occur outside the recorder lock, using a bounded copied history; text construction
-is linear in the number of captured bytes.
-
-This is software diagnostic readiness, not a guarantee that every physical root
-cause is observable. NACK/timeouts may still require controller logs, ACPI/resource
-captures, electrical measurements or a known-good comparison. Source fault tests
-cover native errors and cleanup; cold boot, output routing, IRQ delivery, repeated
-sleep/wake and performance under real logging load remain hardware checks. Debug
-logging can perturb timing, so compare with quiet Release after collecting evidence.
-
-`Cirrus_Offline_Return_Count` and `Cirrus_Timeout_Return_Count` count observed
-transfer returns. The legacy `Cirrus_NOACK_Count` remains an alias for Offline
-returns for existing collectors; it is not proof of an electrical NACK. Internal
-legacy `retries` counts Timeout returns, not measured controller retries.
-
-The first transfer failure freezes trace history. A later register snapshot can
-update the latest history without replacing the first trace.
-
-
-## Runtime properties
-
-Native I/O returns appear as raw 32-bit codes, such as `0xE00002BC`.
-
-`Cirrus_Runtime_Stage` and `Cirrus_Runtime_<index>_Stage` follow actual
-coordinator lifecycle transitions.
-`Cirrus_Runtime_Count` is the number of bound driver instances; each slot's
-`Bound` field distinguishes live state from retained historical evidence.
-Per-slot `FirstFailure`, `LatestFailure`, `FailureStage`, `CleanupReturn` and
-`FailureCount` update when their structured status changes. Common enum values
-are Detached=0, Ready=6, Playing=8, Suspended=11 and Faulted=12.
-
-Runtime properties update when the observed status changes.
-A transition refreshes the aggregate verdict/AMP status and, when tracing is
-actually enabled, the existing transfer statistics. Quiet Release does not enable
-transfer recording as a side effect of these updates.
-
-Unbind marks removed slots `Bound=0`. It retains the last live root evidence and
-publishes the driver's captured teardown status under
-`Cirrus_Runtime_<index>_Released_{Stage,FailureStage,FirstFailure,LatestFailure,CleanupReturn,FailureCount}`.
-A later rebind forces a fresh live snapshot while leaving the explicitly named
-release history available. IRQ failures publish native `IRQ_Return` per slot and
-refresh the aggregate fault verdict immediately. Chip/report faults and the
-coordinator's lifecycle stage are distinct observations; consult both rather than
-assuming a Ready coordinator means an unfaulted chip.
-
-## Driver and playback verdicts
-
-### Driver
-
-| Verdict | Meaning |
-| --- | --- |
-| `READY_DSP` | Configured amplifiers initialized with validated firmware and live DSP state |
-| `READY_BYPASS_EXPLICIT` | Explicit DSP bypass; acoustic protection firmware is not running |
-| `READ_ONLY` | Inspection mode; normal initialization and writes disabled |
-| `WAITING_FOR_CODEC_IDENTITY` | Firmware selection is waiting for codec identity publication |
-| `INCOMPLETE_TOPOLOGY` | A configured amplifier endpoint is missing |
-| `UNSUPPORTED_PLATFORM` | Board initialization is not authorized by the supported configuration |
-| `DEBUG_PHASE_HALTED` | Initialization intentionally stopped at a requested stage |
-| `FAILED_INIT` | Initialization did not complete |
-| `FAULT_LATCHED` | A runtime or initialization fault blocks normal operation |
-| `SUSPENDED` | The driver is in its low-power state |
-
-### Playback
-
-| Verdict | Meaning |
-| --- | --- |
-| `SAFE_IDLE_VERIFIED` | Idle power state verified |
-| `ACTIVE_REGISTERS_VERIFIED_ROUTE_UNCONFIRMED` | Active amplifier registers verified; physical output still needs a listening check |
-| `CLEANUP_UNVERIFIED` | Cleanup could not establish the expected idle state |
-| `FAULT_LATCHED_OUTPUT_DISABLED` | Playback disabled after a recorded failure |
-
-## Failure codes
-
-| Code | Meaning and next check |
-| --- | --- |
-| `PROVIDER_MISSING` | Required communication provider unavailable |
-| `I2C_TRANSFER` / `SPI_TRANSFER` | Bus operation failed; retain its native I/O result |
-| `RESET_GPIO` / `RESET_WRITE` | Authorized reset operation failed |
-| `DEVICE_ID` | Silicon identity did not match a supported amplifier |
-| `OTP_TIMEOUT` / `OTP_BOOT_ERROR` | OTP initialization failed |
-| `FIRMWARE_MISSING` | No matching program/coefficient resource available |
-| `FIRMWARE_PARSE` / `COEFFICIENT_PARSE` | Firmware structure or mapping rejected |
-| `FIRMWARE_UPLOAD` / `COEFFICIENT_UPLOAD` | Transfer failed while loading program or coefficients |
-| `DSP_BOOT` / `DSP_MAILBOX` | DSP boot or command acknowledgment failed |
-| `PLL_UNLOCKED` | Expected audio clock lock was not established |
-| `POWER_UP_TIMEOUT` / `POWER_DOWN_TIMEOUT` | Power transition did not finish within its deadline |
-| `AMP_PROTECTION` | Amplifier protection reported a fault |
-| `PLAYBACK_INVARIANT` / `IDLE_INVARIANT` | Readback did not match the expected active/idle configuration |
+[Back to main guide](../../README.md#installation)

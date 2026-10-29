@@ -1,25 +1,44 @@
-# I2C provider interface
+# Custom I2C Provider Interface
 
-I2C needs the custom [VoodooI2C main branch](https://github.com/hoaug-tran/VoodooI2C/tree/main). Its `VoodooI2CTransferToAddress` platform function lets CirrusAudioFixup access each amplifier address through the same provider. The fork's `master` branch does not provide this interface. A version number alone does not identify a compatible build.
+Cirrus smart amplifiers on I2C buses (such as Lenovo Legion and ASUS Zenbook laptops) require the custom [VoodooI2C `main` branch](https://github.com/hoaug-tran/VoodooI2C/tree/main).
 
-## Request layout
+The custom provider exposes the `VoodooI2CTransferToAddress` platform function, which allows CirrusAudioFixup to communicate with multiple amplifier addresses through a single controller nub.
 
-[`VoodooI2CProvider.hpp`](../../CirrusAudioFixup/Transport/I2C/VoodooI2CProvider.hpp) defines a 40-byte, 8-byte-aligned request on x86_64. Do not pack or reorder it.
+> [!IMPORTANT]
+> The upstream VoodooI2C `master` branch does not include this addressed-transfer interface. You must use the build from the `main` branch.
 
-| Offset | Size | Field |
-| --- | --- | --- |
-| 0 | 1 byte | Seven-bit device address |
-| 8 | 8 bytes | Write-buffer pointer |
-| 16 | 2 bytes | Write length |
-| 24 | 8 bytes | Read-buffer pointer |
-| 32 | 2 bytes | Read length |
+---
 
-Buffers remain valid until the synchronous call returns. A combined read submits the write prefix and read buffer to the same address in one controller request. Keep the native return before another operation replaces it. The controller owns repeated-START timing, arbitration and completion.
+## Request Memory Layout
 
-## Source and checks
+[`VoodooI2CProvider.hpp`](../../CirrusAudioFixup/Transport/I2C/VoodooI2CProvider.hpp) defines a 40-byte, 8-byte-aligned structure on `x86_64`:
 
-The interface is defined in the [nub header](https://github.com/hoaug-tran/VoodooI2C/blob/1a1ae9a26a74ec6b7e32a5d07f6a6ae9413bf298/VoodooI2C/VoodooI2C/VoodooI2CDevice/VoodooI2CDeviceNub.hpp#L30) and [handler](https://github.com/hoaug-tran/VoodooI2C/blob/1a1ae9a26a74ec6b7e32a5d07f6a6ae9413bf298/VoodooI2C/VoodooI2C/VoodooI2CDevice/VoodooI2CDeviceNub.cpp#L423) at commit `1a1ae9a26a74ec6b7e32a5d07f6a6ae9413bf298`. The provider has its own GPL-3.0 license.
+| Offset | Size | Field | Description |
+| :--- | :--- | :--- | :--- |
+| `0x00` | 1 byte | `address` | 7-bit target I2C device address |
+| `0x08` | 8 bytes | `writeBuffer` | Pointer to write data buffer |
+| `0x10` | 2 bytes | `writeLength` | Number of bytes to write |
+| `0x18` | 8 bytes | `readBuffer` | Pointer to read output buffer |
+| `0x20` | 2 bytes | `readLength` | Number of bytes to read |
 
-The adapter has compile-time layout assertions. `Tests/Transport/check_transport.py` checks addressed requests, register framing and error handling. Physical bus timing and compatibility of the installed provider still need testing on the target machine.
+Buffers must remain valid until the synchronous call completes. Combined read/write operations submit the register address prefix and receive readback data in a single repeated-START transaction.
 
-Use [macOS diagnostics](../diagnostics/diagnostics.md) to collect the loaded provider identity and first transfer failure. Do not replace a failed addressed request with a different provider ABI.
+---
+
+## Verifying Provider Status
+
+To check if the custom provider is active in macOS:
+
+```bash
+# Check loaded VoodooI2C extensions
+kmutil showloaded | grep -i voodooi2c
+
+# Verify I2C provider attachment in IORegistry
+ioreg -lw0 -p IOService -r -c VoodooI2CDeviceNub
+```
+
+If transfers fail, check `Cirrus_Communication_Status` in IORegistry. Ensure that:
+* `VoodooI2C.kext` and `VoodooI2CHID.kext` are loaded.
+* `CirrusAudioFixup.kext` is loaded **after** `VoodooI2C.kext` in OpenCore's `Kernel → Add`.
+
+[Back to main guide](../../README.md#requirements)

@@ -23,12 +23,12 @@ assert re.search(r"  push:\n    branches: \['\*\*'\]\n    tags: \['v\*'\]", trig
 assert re.search(r"  pull_request:\n  workflow_dispatch:", triggers)
 build_job, release_job = workflow.split("\n  release:\n", 1)
 assert 'needs: [build, windows-collector]' in release_job
-for name in ("Record build source identity", "Build Release kext", "Build Debug kext", "Verify build artifacts",
-             "Package kext bundles", "Upload Release artifact", "Upload Debug artifact", "Upload matching debug symbols"):
+for name in ("Package kext bundles", "Upload Release artifact", "Upload Debug artifact", "Upload matching debug symbols"):
     step = build_job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
     conditions = re.findall(r"^        if: (.+)$", step, re.M)
     assert conditions == ["github.event_name != 'pull_request'"], name + " must skip PRs and run on pushes/manual runs"
-for name in ("Run host regression test suite", "Test Windows PowerShell 5.1 collector helpers", "Test PowerShell 7 collector helpers"):
+for name in ("Record build source identity", "Build Release kext", "Build Debug kext", "Verify build artifacts",
+             "Run host regression test suite", "Test Windows PowerShell 5.1 collector helpers", "Test PowerShell 7 collector helpers"):
     step = build_job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
     assert not re.search(r"^        if:", step, re.M), name + " must also run on PRs"
 assert "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" in release_job
@@ -79,4 +79,4 @@ for text, plist, tag in [
 subprocess.run([sys.executable, str(ROOT / "Tools/Build/release_metadata.py")], check=True)
 print("PASS tag/version mismatch and pending release rejection")
 print("PASS CI lipo verification argument order")
-print("PASS PR tests only, push/manual build artifacts, main automated release and complete Xcode version output")
+print("PASS PR host/native builds, push/manual artifacts, main release gate and complete Xcode version output")

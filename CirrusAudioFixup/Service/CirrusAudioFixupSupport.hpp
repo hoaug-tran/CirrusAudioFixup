@@ -8,6 +8,7 @@
 #include "Diagnostics/FailureNames.hpp"
 #include "Support/CPUIdentity.hpp"
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
+#include "Platform/ACPI/I2CPlatformResources.hpp"
 
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/pci/IOPCIDevice.h>
@@ -105,6 +106,11 @@ using namespace cirrus::diagnostics;
         OSSafeReleaseNULL(iterator);
         OSSafeReleaseNULL(evidence);
         properties->release();
+    }
+    inline void clearFailedServiceEvidence() {
+        auto* root = IORegistryEntry::getRegistryRoot();
+        if (root)
+            root->removeProperty("Cirrus_Failed_Service_Evidence");
     }
 }
 #endif

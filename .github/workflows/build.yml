@@ -50,14 +50,12 @@ jobs:
           python3 --version
 
       - name: Run host regression test suite
-        run: python3 Tests/run.py
+        run: python3 Tests/run.py --audit
 
       - name: Record build source identity
-        if: github.event_name != 'pull_request'
         run: python3 Tools/Build/build_provenance.py snapshot --root "$GITHUB_WORKSPACE" --snapshot "$RUNNER_TEMP/cirrus-source.json"
 
       - name: Build Release kext
-        if: github.event_name != 'pull_request'
         run: |
           xcodebuild \
             -project CirrusAudioFixup.xcodeproj \
@@ -71,7 +69,6 @@ jobs:
             build
 
       - name: Build Debug kext
-        if: github.event_name != 'pull_request'
         run: |
           xcodebuild \
             -project CirrusAudioFixup.xcodeproj \
@@ -85,7 +82,6 @@ jobs:
             build
 
       - name: Verify build artifacts
-        if: github.event_name != 'pull_request'
         run: |
           python3 Tools/Build/release_metadata.py
           for MODE in Release Debug; do

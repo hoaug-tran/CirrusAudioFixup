@@ -8,20 +8,19 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = production_source()
-start = re.search(r'struct\s+cs35l41_amp_cal_data\s*\{', SOURCE).start()
-struct_end=SOURCE.index('} __attribute__((packed));',SOURCE.index('struct cs35l41_amp_efi_data',start))+len('} __attribute__((packed));')
 method_start=SOURCE.index('bool CirrusAudioFixup::applyCalibration(')
 method_end=SOURCE.index('\n}',method_start)+2
 crc_start=SOURCE.index('static uint32_t crc32Le(')
 crc_end=SOURCE.index('\n}',crc_start)+2
 efi_source=(ROOT / 'CirrusAudioFixup/Firmware/Calibration/EFICalibrationSource.hpp').read_text()
 efi_source=efi_source[efi_source.index('namespace cirrus::firmware {'):]+'\nnamespace firmware = cirrus::firmware;\n'
-calibration=SOURCE[crc_start:crc_end]+SOURCE[start:struct_end]+SOURCE[method_start:method_end]
+calibration=SOURCE[crc_start:crc_end]+SOURCE[method_start:method_end]
 gate_start = re.search(r'if\s*\(!applyCalibration\(amp,\s*image\)\)', SOURCE).start()
 m_boot = re.search(r'bool\s+booted\s*=\s*bringUpDSP\(amp\);', SOURCE[gate_start:])
 gate_end = gate_start + m_boot.end()
 gate = SOURCE[gate_start:gate_end]
 preamble = r'''
+#include "Firmware/Calibration/EFICalibration.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -71,6 +70,12 @@ bool PE_parse_boot_argn(const char* name,void* p,size_t n) {
     auto it=args.find(name); if(it==args.end()) return false;
     assert(n==4); memcpy(p,&it->second,4); return true;
 }
+// Independent producer layout; the driver reads bytes through the shared parser.
+struct cs35l41_amp_cal_data {
+ uint32_t calTarget[2],calTime[2];int8_t calAmbient;uint8_t calStatus;uint16_t calR;
+} __attribute__((packed));
+struct cs35l41_amp_efi_data {uint32_t size,count;cs35l41_amp_cal_data data[];} __attribute__((packed));
+static_assert(sizeof(cs35l41_amp_cal_data)==20 && sizeof(cs35l41_amp_efi_data)==8);
 struct FirmwareImage {};
 struct Algorithm { uint32_t id=0xCD; };
 struct Control { uint32_t type=5,len=4; };
@@ -135,6 +140,31 @@ OSData efi(unsigned count=2) {
     return d;
 }
 int main() {
+    using Calibration=cirrus::firmware::EFICalibration;
+    {
+        auto duplicate=efi();auto* table=(cs35l41_amp_efi_data*)duplicate.bytes.data();
+        table->data[0].calTarget[0]=table->data[1].calTarget[0]=7;
+        auto selected=Calibration::selectRecord(duplicate.bytes.data(),duplicate.bytes.size(),7,1);
+        check(selected.record&&selected.index==0&&selected.duplicateTarget,"shared selector reports duplicate UID without changing first match");
+        Calibration result{9,9,9};
+        check(!Calibration::select(duplicate.bytes.data(),duplicate.bytes.size(),7,1,result)&&!result.resistance,
+              "CS35L56 still rejects duplicate UID and clears output");
+        IORegistryEntry::data=&duplicate;CirrusAudioFixup legacy;CS35L41Amp channel;FirmwareImage firmware;
+        legacy.memory[0x17040]=7;
+        check(legacy.applyCalibration(channel,&firmware)&&legacy.memory[4]==5846,"CS35L41 keeps first duplicate UID compatibility");
+        std::vector<uint8_t> large(8+129*20);large[4]=129;large[16]=1;large[25]=1;large[26]=1;
+        selected=Calibration::selectRecord(large.data(),large.size(),0,0);
+        check(selected.record&&selected.index==0,"shared parser accepts bounded legacy tables above CS35L56 limit");
+        check(!Calibration::select(large.data(),large.size(),0,0,result),"CS35L56 keeps 128-record limit");
+        uint32_t count=99;
+        check(!Calibration::recordCount(nullptr,48,count)&&!count,"null data clears record count");
+        for(size_t length=0;length<48;++length)
+            check(!Calibration::selectRecord(duplicate.bytes.data(),length,7,0).record,"truncated records never selected");
+        std::vector<uint8_t> unaligned(49);memcpy(unaligned.data()+1,duplicate.bytes.data(),48);
+        selected=Calibration::selectRecord(unaligned.data()+1,48,7,0);
+        check(selected.record&&Calibration::decode(selected.record).resistance==5846,"unaligned EFI bytes decode safely");
+        IORegistryEntry::data=nullptr;
+    }
     IORegistryEntry::useProperties=true;
     OSData vendorData; OSObject invalidVendorData;
     const char* keys[]{"53559579-8753-4f5c-9130-e82acfb8d893:SmartAmpCalibrationData","SmartAmpCalibrationData",
@@ -302,10 +332,29 @@ int main() {
     return failures?1:0;
 }
 '''
+# Replay the supplied EFI bytes, including per-silicon UID selection and real L/R R0.
+import json
+captured = json.loads((ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text())
+raw = bytes.fromhex(captured["calibration_hex"])
+replay = r'''
+    OSData captured;captured.bytes={CAPTURED_BYTES};
+    IORegistryEntry::data=&captured;
+    const auto* records=(const cs35l41_amp_efi_data*)captured.bytes.data();
+    for(unsigned side=0;side<2;++side){
+        CirrusAudioFixup d; amp.address=side?0x41:0x40;
+        d.memory[0x17040]=records->data[side].calTarget[0];
+        d.memory[0x17044]=records->data[side].calTarget[1];
+        check(d.applyCalibration(amp,&image),"captured Zenbook EFI accepted");
+        check(d.memory[4]==(side?CAPTURED_R:CAPTURED_L),"captured R0 matches Linux by silicon UID");
+        check(d.properties["Cirrus_Calibration_Selection_L"].find("EXACT_SILICON_UID")!=std::string::npos,"captured UID used without machine-specific constants");
+    }
+    IORegistryEntry::data=&data;
+'''.replace("CAPTURED_BYTES", ",".join(map(str, raw))).replace("CAPTURED_L", str(captured["r0"][0])).replace("CAPTURED_R", str(captured["r0"][1]))
+checks = checks.replace("    amp.address=0x40;\n    auto targeted=data;", replay+"    amp.address=0x40;\n    auto targeted=data;")
 with tempfile.TemporaryDirectory(prefix='cirrus-calibration-') as directory:
     tmp = Path(directory)
     source = tmp / 'check.cpp'
     source.write_text(preamble + efi_source + calibration + '\nvoid CirrusAudioFixup::boot(CS35L41Amp& amp,FirmwareImage* image) {\n' + gate + '\n}\n' + checks, encoding='utf-8')
     exe = tmp / 'check.exe'
-    subprocess.run(['g++', '-std=c++17', '-O0', str(source), '-o', str(exe)], check=True)
+    subprocess.run(['g++', '-std=c++17', '-O0', '-I'+str(ROOT/'CirrusAudioFixup'), str(source), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

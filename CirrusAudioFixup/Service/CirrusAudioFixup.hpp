@@ -142,6 +142,9 @@ private:
     bool mStartupPending{false};
     bool mStartupFailed{false};
     void discoverPlatformConfiguration(IOACPIPlatformDevice* provider, const cirrus::platform::AmplifierDriverRegistration& definition);
+    bool adoptDiscoveredBoard(const cirrus::platform::BoardIdentity& identity, const char* profileName);
+    const cirrus::platform::AmplifierDriverRegistration* findI2CDriver() const;
+    bool prepareI2CController(const cirrus::platform::AmplifierDriverRegistration* definition);
     bool retryPlatformIdentity();
     bool mPlatformIdentityPending{false};
     uint64_t mPlatformIdentityDeadlineMs{0};

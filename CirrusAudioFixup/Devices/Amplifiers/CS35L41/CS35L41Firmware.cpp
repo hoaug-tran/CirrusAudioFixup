@@ -2,6 +2,7 @@
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareData.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 #include "Firmware/Calibration/EFICalibrationSource.hpp"
+#include "Firmware/Calibration/EFICalibration.hpp"
 #include "Firmware/WMFW/WMFWParser.hpp"
 #include "Firmware/WMFW/WMFWUploader.hpp"
 
@@ -307,75 +308,54 @@ bool CS35L41Driver::applyCalibration(AmplifierState& amp, const FirmwareImage* i
         if (calData) {
             uint32_t len = calData->getLength();
             const uint8_t* rawBytes = (const uint8_t*)calData->getBytesNoCopy();
-            if (rawBytes && len >= sizeof(cs35l41_amp_efi_data)) {
-                const cs35l41_amp_efi_data* efiData = (const cs35l41_amp_efi_data*)rawBytes;
-                uint32_t count = OSSwapLittleToHostInt32(efiData->count);
-                if (count <= (len - sizeof(cs35l41_amp_efi_data)) / sizeof(cs35l41_amp_cal_data)) {
-                    invalidData = false;
-                    const cs35l41_amp_cal_data* selected = nullptr;
-                    uint32_t selectedIndex = UINT32_MAX;
-                    const char* selectionReason = "NO_MATCHING_EFI_RECORD";
-                    auto targetOf = [](const cs35l41_amp_cal_data& entry) -> uint64_t {
-                        return ((uint64_t)OSSwapLittleToHostInt32(entry.calTarget[1]) << 32) | OSSwapLittleToHostInt32(entry.calTarget[0]);
-                    };
-                    bool hasTarget = false;
-                    for (uint32_t i = 0; i < count; ++i) {
-                        const auto& entry = efiData->data[i];
-                        if ((entry.calTime[0] || entry.calTime[1]) && targetOf(entry))
-                            hasTarget = true;
+            uint32_t count = 0;
+            if (firmware::EFICalibration::recordCount(rawBytes, len, count)) {
+                invalidData = false;
+                bool hasTarget = false;
+                for (uint32_t i = 0; i < count; ++i) {
+                    const auto* entry =
+                        rawBytes + firmware::EFICalibration::kHeaderBytes + size_t(i) * firmware::EFICalibration::kRecordBytes;
+                    if (firmware::EFICalibration::occupied(entry) && firmware::EFICalibration::target(entry)) {
+                        hasTarget = true;
+                        break;
                     }
-
-                    // Linux assembles the silicon UID from DIE_STS2 (high)
-                    // and DIE_STS1 (low). Only targeted EFI records need these
-                    // reads; a wildcard-only table can be selected by index.
-                    uint64_t siliconUid = 0;
-                    if (hasTarget) {
-                        uint32_t high = 0, low = 0;
-                        uidReadFailed =
-                            !readRegister(amp, 0x00017044, &high, TRACE_FIRMWARE) || !readRegister(amp, 0x00017040, &low, TRACE_FIRMWARE);
-                        siliconUid = ((uint64_t)high << 32) | low;
-                        if (!uidReadFailed && siliconUid) {
-                            for (uint32_t i = 0; i < count; ++i) {
-                                const auto& entry = efiData->data[i];
-                                if ((entry.calTime[0] || entry.calTime[1]) && targetOf(entry) == siliconUid) {
-                                    selected = &entry;
-                                    selectedIndex = i;
-                                    selectionReason = "EXACT_SILICON_UID";
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    // An unmatched nonzero target must not silently become
-                    // another speaker's calibration. Linux permits index
-                    // fallback only when the entry or silicon UID is zero.
-                    if (!uidReadFailed && !selected && ampIdx < count) {
-                        const auto& entry = efiData->data[ampIdx];
-                        if ((entry.calTime[0] || entry.calTime[1]) && (!targetOf(entry) || !siliconUid)) {
-                            selected = &entry;
-                            selectedIndex = ampIdx;
-                            selectionReason = "INDEX_FALLBACK_ZERO_UID_OR_TARGET";
-                        }
-                    }
-                    char selection[256]{}, selectionKey[80]{};
-                    snprintf(selection, sizeof(selection), "reason=%s records=%u index=%u uid=0x%016llx target=0x%016llx uid_read_required=%u",
-                             uidReadFailed ? "UID_READ_FAILED" : selectionReason, count, selectedIndex,
-                             static_cast<unsigned long long>(siliconUid),
-                             static_cast<unsigned long long>(selected ? targetOf(*selected) : 0), unsigned(hasTarget));
-                    snprintf(selectionKey, sizeof(selectionKey), "Cirrus_Calibration_Selection_%s", amp.name);
-                    if (auto* value = OSString::withCString(selection)) {
-                        setProperty(selectionKey, value);
-                        value->release();
-                    }
-                    if (selected) {
-                        ambientVal = selected->calAmbient;
-                        statusVal = selected->calStatus;
-                        r0Val = OSSwapLittleToHostInt16(selected->calR);
-                        checksumVal = r0Val + 1;
-                        foundData = true;
-                        sourceStr = "APPLIED_FROM_EFI_VARIABLE";
-                    }
+                }
+                // Wildcard-only CS35L41 tables need no silicon UID transfers.
+                uint64_t siliconUid = 0;
+                if (hasTarget) {
+                    uint32_t high = 0, low = 0;
+                    uidReadFailed =
+                        !readRegister(amp, 0x00017044, &high, TRACE_FIRMWARE) || !readRegister(amp, 0x00017040, &low, TRACE_FIRMWARE);
+                    siliconUid = (uint64_t(high) << 32) | low;
+                }
+                const auto selected = uidReadFailed ? firmware::EFICalibration::RecordSelection{}
+                                                    : firmware::EFICalibration::selectRecord(rawBytes, len, siliconUid, ampIdx);
+                const char* selectionReason = "NO_MATCHING_EFI_RECORD";
+                if (selected.record) {
+                    selectionReason = "INDEX_FALLBACK_ZERO_UID_OR_TARGET";
+                    if (siliconUid && firmware::EFICalibration::target(selected.record))
+                        selectionReason = "EXACT_SILICON_UID";
+                }
+                char selection[256]{}, selectionKey[80]{};
+                snprintf(selection, sizeof(selection), "reason=%s records=%u index=%u uid=0x%016llx target=0x%016llx uid_read_required=%u",
+                         uidReadFailed ? "UID_READ_FAILED" : selectionReason, count, selected.index,
+                         static_cast<unsigned long long>(siliconUid),
+                         static_cast<unsigned long long>(selected.record ? firmware::EFICalibration::target(selected.record) : 0),
+                         unsigned(hasTarget));
+                snprintf(selectionKey, sizeof(selectionKey), "Cirrus_Calibration_Selection_%s", amp.name);
+                if (auto* value = OSString::withCString(selection)) {
+                    setProperty(selectionKey, value);
+                    value->release();
+                }
+                // Retain CS35L41's first-match and control-value policy.
+                if (selected.record) {
+                    const auto calibration = firmware::EFICalibration::decode(selected.record);
+                    ambientVal = calibration.ambient;
+                    statusVal = calibration.status;
+                    r0Val = calibration.resistance;
+                    checksumVal = r0Val + 1;
+                    foundData = true;
+                    sourceStr = "APPLIED_FROM_EFI_VARIABLE";
                 }
             }
         }

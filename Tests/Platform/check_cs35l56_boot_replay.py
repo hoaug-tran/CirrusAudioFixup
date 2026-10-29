@@ -7,6 +7,7 @@ latency are scripted; GPIO reset and DSP lifecycle have separate suites.
 This is not a macOS VM or a hardware boot simulation.
 """
 import argparse
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,7 +34,9 @@ with tempfile.TemporaryDirectory(prefix="cirrus-boot-replay-") as directory:
     tmp = Path(directory)
     install(tmp)
     fixture = tmp / "Fixture.hpp"
-    text = fixture.read_text().replace("inline void IOSleep(unsigned){}", "void IOSleep(unsigned);")
+    text = fixture.read_text()
+    text = re.sub(r'inline void IOSleep\(unsigned[^)]*\)\{[^}]*\}', 'void IOSleep(unsigned);', text)
+    text = text.replace("inline std::function<void(unsigned)> fixtureSleep;\n", "")
     text = text.replace("struct IORegistryEntry:OSObject {std::string path;",
                         "struct IORegistryEntry:OSObject {std::string path;IORegistryEntry* parent=nullptr;")
     text = text.replace("getParentEntry(const void*){return nullptr;}", "getParentEntry(const void*){return parent;}")
@@ -44,7 +47,6 @@ class IOService:public IORegistryEntry {public:
  static OSDictionary* serviceMatching(const char*);
  static OSIterator* getMatchingServices(OSDictionary*);
  static IOService* waitForMatchingService(OSDictionary*,uint64_t);
- bool setProperty(const char* k,bool value){numbers[k]=value;return true;}
 """)
     text = text.replace("class IOPCIDevice:public IOService {};", """
 class IOPCIDevice:public IOService {public:

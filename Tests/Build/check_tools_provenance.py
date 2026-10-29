@@ -207,6 +207,7 @@ except Exception: sys.exit(1)
     if sys.platform != 'darwin':
         helpers = helpers.replace('/usr/bin/plutil', 'fixture_plutil')
         helpers = helpers.replace('/usr/bin/shasum', 'fixture_shasum')
+        helpers = helpers.replace('/usr/bin/grep -Fi', '/usr/bin/grep -F')
         preamble = '''fixture_plutil(){ "$TEST_PYTHON" "$TEST_PLUTIL" "$@"; }
 fixture_shasum(){ "$TEST_PYTHON" -c 'import sys,hashlib; print(hashlib.sha256(open(sys.argv[-1],"rb").read()).hexdigest()+"  binary")' "$@"; }
 '''

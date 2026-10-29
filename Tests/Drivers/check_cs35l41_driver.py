@@ -135,6 +135,13 @@ int main(){
         assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
     }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
+    for(uint32_t ssid:{0x17aa382bU,0x17aa3847U}){
+        IOService codec;OSNumber identity;identity.value=ssid;codec.properties["subsystem-id"]=&identity;
+        fixtureCodecs={&codec};Fixture f;f.host.bypass=false;
+        f.bind();(void)f.runtime.bringUp();
+        assert(f.host.properties.at("Cirrus_FW_Source_owned-driver")=="EmbeddedResource");
+        fixtureCodecs.clear();
+    }
     // Both verified Legion SSIDs and I2C channels retain external no-switch power.
     for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)})for(uint32_t channel:{0U,1U}){
         Fixture f;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
@@ -146,6 +153,69 @@ int main(){
         f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);
         assert(!f.port.values.count(0x3810)&&!f.port.values.count(0x3814)&&!f.port.values.count(0x3808));
         assert(f.runtime.unbind()==0);
+    }
+    for(uint32_t channel:{0U,1U}){
+        const DeviceConfiguration config{{BoostTopology::ExternalWithSwitch,0,0,0},1,2};
+        auto configure=[&](Fixture& f){
+            f.board.identity={0x1043,0x1683,"CSC3551"};f.board.useBoardFirmwareIdentity=true;
+            f.context.actualBoard=f.board.identity;f.context.actualDeviceHid="CSC3551";
+            f.endpoint.i2cAddress=uint16_t(0x40+channel);f.binding.endpoint=f.context.endpoint=f.endpoint;
+            f.binding.channelIndex=channel;f.binding.acpiHid="CSC3551";
+            f.binding.driverConfiguration=&config;f.binding.driverConfigurationSize=sizeof(config);
+            f.binding.driverConfigurationKind=kDeviceConfigurationKind;
+            f.assets.target.subsystemVendor=0x1043;f.assets.target.subsystemDevice=0x1683;
+            f.assets.target.channelIndex=channel;
+        };
+        Fixture zen;configure(zen);zen.bind();assert(zen.runtime.bringUp()==0);
+        assert(!(zen.port.values[0x11008]&0x80000000U));
+        assert((zen.port.values[0x242c]&0x30000)==0x10000);
+        assert(zen.port.values[0x7414]==0x08c82222&&zen.port.values[0x742c]==9);
+        assert(!zen.port.values.count(0x3810));
+        unsigned transfers=zen.port.calls;
+        assert(zen.runtime.suspend()==0&&zen.port.values[0x7414]==0x00c82222&&zen.port.values[0x742c]==0);
+        assert(zen.runtime.resume()==0&&zen.port.values[0x7414]==0x08c82222);
+        assert(zen.runtime.unbind()==0&&zen.port.values[0x11008]==1);
+        for(unsigned at=1;at<=transfers;++at){
+            Fixture broken;configure(broken);broken.port.failAt=at;broken.bind();
+            if(broken.runtime.bringUp()){
+                assert(broken.runtime.stage()==core::AmplifierStage::Faulted);
+                assert(!broken.runtime.report(0).initialized&&broken.runtime.status(0)->firstFailure!=0);
+            }
+            broken.runtime.unbind();
+        }
+        {
+            Fixture dirty;configure(dirty);dirty.bind();assert(dirty.runtime.bringUp()==0);
+            assert(dirty.port.values[0x7414]==0x08c82222);
+            dirty.port.values[0x2014]=1;
+            dirty.port.values[0x10010]=0;
+            assert(dirty.runtime.unbind()!=0);
+            assert(dirty.port.values[0x7414]==0x00c82222&&dirty.port.values[0x742c]==0);
+        }
+    }
+    // Issue #3 HP and #5 G614JI plus both Lenovo profiles and the Zenbook branch.
+    // Real driver lifecycle with fixture transport/time and explicit DSP bypass.
+    struct Machine {uint16_t vendor,device;const char* hid;core::BusTransportType bus;BoostTopology boost;};
+    const Machine machines[]{
+        {0x17aa,0x382b,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
+        {0x17aa,0x3847,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
+        {0x103c,0x89c6,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
+        {0x1043,0x1c9f,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
+        {0x1043,0x1683,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch}};
+    for(const auto& machine:machines)for(uint32_t channel:{0U,1U}){
+        Fixture f;f.board.identity={machine.vendor,machine.device,machine.hid};f.board.useBoardFirmwareIdentity=true;
+        f.context.actualBoard=f.board.identity;f.context.actualDeviceHid=machine.hid;
+        f.endpoint.transport=machine.bus;f.endpoint.i2cAddress=uint16_t(0x40+channel);
+        f.endpoint.spiChipSelect=channel;f.endpoint.spiClockHz=4000000;
+        f.binding.endpoint=f.context.endpoint=f.endpoint;f.binding.channelIndex=channel;f.binding.acpiHid=machine.hid;
+        DeviceConfiguration config;
+        config.power={machine.boost,0,0,0};config.gpio1Function=machine.boost==BoostTopology::ExternalWithSwitch?1:0;
+        if(machine.boost==BoostTopology::Internal)config.power={machine.boost,1000,4500,24};
+        f.binding.driverConfiguration=&config;f.binding.driverConfigurationSize=sizeof(config);f.binding.driverConfigurationKind=kDeviceConfigurationKind;
+        f.assets.target.subsystemVendor=machine.vendor;f.assets.target.subsystemDevice=machine.device;f.assets.target.channelIndex=channel;
+        f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);
+        for(unsigned cycle=0;cycle<3;++cycle)assert(f.runtime.suspend()==0&&f.runtime.resume()==0);
+        assert(f.runtime.unbind()==0&&!f.runtime.bound());
+        f.bind();assert(f.runtime.bringUp()==0&&f.runtime.unbind()==0);
     }
     for(auto bus:{core::BusTransportType::I2C,core::BusTransportType::SPI}){
         Fixture f;f.endpoint.transport=bus;if(bus==core::BusTransportType::SPI)f.endpoint.spiClockHz=1000000;
@@ -226,6 +296,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
     p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
+    compiler = "g++" if sys.platform == "win32" else "clang++"
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
+        subprocess.run([compiler,'-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
         subprocess.run([str(p/'driver')],check=True)

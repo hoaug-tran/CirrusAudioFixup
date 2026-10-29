@@ -35,6 +35,11 @@ bool CS35L41Driver::initializeCS35L41Device(AmplifierState& amp) {
 
     setDiagnosticStage(amp, STAGE_RESET);
 
+    if (amp.power.switched() &&
+        (!stopPlayback(amp) || !amp.power.safeReset(io, [](uint32_t ms) { IOSleep(ms); }))) {
+        recordDiagnosticFailure(amp, DIAG_RESET_WRITE, 0x393C);
+        return false;
+    }
     auto result = device.initialize(io);
     if (result == cirrus::core::AmplifierDevice::InitResult::ResetFailed) {
         CIRRUS_ERR("failed to send soft reset to %s", amp.name);
@@ -346,7 +351,7 @@ bool CS35L41Driver::applyASP(AmplifierState& amp) {
     auto device = amp.registerIO ? cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.endpoint)
                                  : cirrus::devices::amplifiers::cs35l41::CS35L41Device(amp.name, amp.address);
 
-    if (!device.setupASP(io, amp.channel == cirrus::core::AudioChannel::Right, amp.firmwareValidated)) {
+    if (!device.setupASP(io, amp.channel == cirrus::core::AudioChannel::Right, amp.firmwareValidated, amp.power)) {
         return false;
     }
 

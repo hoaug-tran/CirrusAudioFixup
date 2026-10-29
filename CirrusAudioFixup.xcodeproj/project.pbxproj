@@ -5,6 +5,12 @@
 	};
 	objectVersion = 56;
 	objects = {
+		CAFE00210000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = AMDGPIOOutput.hpp; sourceTree = "<group>"; };
+		CAFE00200000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ACPIGPIOAccess.hpp; sourceTree = "<group>"; };
+		CAFE00200000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = AMDGPIOInput.hpp; sourceTree = "<group>"; };
+		CAFE00200000000000000003 = {isa = PBXGroup; children = (CAFE00200000000000000002, CAFE00210000000000000001,); path = GPIO; sourceTree = "<group>"; };
+		CAFE00190000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = I2CPlatformResources.hpp; sourceTree = "<group>"; };
+		CAFE00190000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ACPII2CResources.hpp; sourceTree = "<group>"; };
 		A5C300000000000000000001 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.script.python;
@@ -232,7 +238,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1.1.1;
+				MODULE_VERSION = 1.2.0;
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -280,7 +286,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1.1.1;
+				MODULE_VERSION = 1.2.0;
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",
@@ -800,6 +806,9 @@
 		EEA1B1663A570631C0449F01 = {
 			isa = PBXGroup;
 			children = (
+				CAFE00200000000000000001,
+				CAFE00190000000000000002,
+				CAFE00190000000000000001,
 				1AB756B95D0CC47EF0DF1343,
 				DF960C1387D6951EB58D365F,
 				376EDE0A6A4513F67036BD90,
@@ -1201,6 +1210,12 @@
 			path = SPIRegisterBus.hpp;
 			sourceTree = "<group>";
 		};
+		1D2B7F6938B49C3B6381C785 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = SPIRegisterIO.hpp;
+			sourceTree = "<group>";
+		};
 		745FB34B9B32B03D05099FEC = {
 			isa = PBXGroup;
 			children = (
@@ -1214,6 +1229,7 @@
 				A5C200000000000000000002,
 				A5C200000000000000000001,
 				29F371FB87977DF261FF1260,
+				1D2B7F6938B49C3B6381C785,
 			);
 			sourceTree = "<group>";
 			path = SPI;
@@ -1221,6 +1237,7 @@
 		99F114594E356F02C77C711D = {
 			isa = PBXGroup;
 			children = (
+				CAFE00200000000000000003,
 				E54CB9798B60C60B78E26495,
 				745FB34B9B32B03D05099FEC,
 			);

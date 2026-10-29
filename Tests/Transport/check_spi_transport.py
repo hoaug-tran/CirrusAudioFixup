@@ -21,6 +21,7 @@ inline void IOSleep(unsigned) { ++sleeps; }
 #include <cassert>
 #include <vector>
 #include "Devices/Amplifiers/CS35L41/CS35L41SPIRegisterIO.hpp"
+#include "Devices/Amplifiers/CS35L56/CS35L56SPIRegisterIO.hpp"
 using namespace cirrus::transport;
 struct Controller : SPIController {
     size_t limit=262;
@@ -61,6 +62,11 @@ int main() {
         uint32_t registers[]={0x11020,0x11000},values[]={0x02000007,0x0a000000};
         assert(!map.writeSequence(registers,values,2,4700));
         assert(map.lastReturn()==-77&&controller.sequences==1&&controller.calls==0);
+        cirrus::devices::amplifiers::cs35l41::CS35L41SPIRegisterIO legacy(&controller,{1,1000000,0},true);
+        assert(!legacy.writeSequence(registers,values,2,4700)&&controller.sequences==1&&controller.calls==0);
+        cirrus::devices::amplifiers::cs35l56::CS35L56SPIRegisterIO current(&controller,{1,1000000,0},true);
+        assert(!current.writeSequence(registers,values,2,4700)&&current.lastReturn()==-77);
+        assert(controller.sequences==2&&controller.calls==0);
     }
     SPIEndpoint ep{1,1000000,0};
     Controller c;

@@ -54,12 +54,8 @@ struct AmplifierDriverRegistration {
     bool (*validDebugPhase)(const char*){nullptr};
     DiscoveredBoard* (*discoverBoard)(const BoardDiscoveryContext&, const char*& reason){nullptr};
     const FirmwareResetSequence* firmwareReset{nullptr};
-    // Optional module-owned missing-firmware facts. No hardware writes, AML
-    // injection or bus-specific board switches belong in the shared service.
     bool (*prepareBoardMetadata)(const BoardIdentity&, IOACPIPlatformDevice*, IOService*){nullptr};
-    // Diagnostic modules never authorize board writes or create a lifecycle.
     bool diagnosticOnly{false};
-    // Read-only readiness after reset, before generic silicon identity reads.
     IOReturn (*prepareIdentity)(core::RegisterIO&){nullptr};
     const core::RegisterMapConfig* format(core::BusTransportType bus) const {
         if (bus == core::BusTransportType::I2C && (transportMask & 1))

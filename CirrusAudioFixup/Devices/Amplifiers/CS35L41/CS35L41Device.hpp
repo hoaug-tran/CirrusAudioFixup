@@ -9,6 +9,7 @@
 #include "Devices/Amplifiers/CS35L41/Hardware/Errata.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/OTPMap.hpp"
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
+#include "Devices/Amplifiers/CS35L41/PowerConfiguration.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
 #if defined(__APPLE__) && (defined(KERNEL) || defined(_KERNEL) || defined(__KERNEL__))
@@ -119,26 +120,27 @@ public:
         return true;
     }
 
-    bool setupASP(core::RegisterIO& io, bool isRight, bool firmwareValidated) {
+    bool setupASP(core::RegisterIO& io, bool isRight, bool firmwareValidated,
+                  const PowerConfiguration& power = kLegacyPowerConfiguration) {
         bool ok = true;
         ok = io.write(registers::kRegSerialPortRateControl, 0x00000021) && ok;
         ok = io.write(registers::kRegSerialPortFormat, 0x20200200) && ok;
         ok = io.write(registers::kRegSerialPortTxWordLength, 0x00000018) && ok;
         ok = io.write(registers::kRegSerialPortRxWordLength, 0x00000018) && ok;
         ok = io.write(registers::kRegAmplifierGainControl, 0x00000000) && ok;
-        ok = io.write(registers::kRegDacPcm1Source, 0x00000008) && ok;
+        ok = io.write(registers::kRegDacPcm1Source, firmwareValidated ? 0x00000032 : 0x00000008) && ok;
         ok = io.write(registers::kRegAspTx1Source, 0x00000018) && ok;
         ok = io.write(registers::kRegAspTx2Source, 0x00000019) && ok;
-        ok = io.write(registers::kRegAspTx3Source, 0) && ok;
-        ok = io.write(registers::kRegAspTx4Source, 0) && ok;
+        ok = io.write(registers::kRegAspTx3Source, firmwareValidated ? 0x00000028 : 0x00000000) && ok;
+        ok = io.write(registers::kRegAspTx4Source, firmwareValidated ? 0x00000029 : 0x00000000) && ok;
         ok = io.write(registers::kRegDsp1Rx1Source, 0x00000008) && ok;
-        ok = io.write(registers::kRegDsp1Rx2Source, 0x00000009) && ok;
+        ok = io.write(registers::kRegDsp1Rx2Source, firmwareValidated ? 0x00000008 : 0x00000009) && ok;
         ok = io.write(registers::kRegDsp1Rx3Source, 0x00000018) && ok;
         ok = io.write(registers::kRegDsp1Rx4Source, 0x00000019) && ok;
-        ok = io.write(registers::kRegDsp1Rx5Source, 0x00000020) && ok;
-        ok = io.write(registers::kRegDsp1Rx6Source, 0x00000021) && ok;
-        ok = io.write(registers::kRegSerialPortHighImpedanceControl, 0x00000002) && ok;
-        ok = io.write(registers::kRegSerialPortEnables, 0x00010000) && ok;
+        ok = io.write(registers::kRegDsp1Rx5Source, firmwareValidated ? power.dspSupplyMonitorSource() : 0x00000020) && ok;
+        ok = io.write(registers::kRegDsp1Rx6Source, firmwareValidated ? 0x00000029 : 0x00000021) && ok;
+        ok = io.write(registers::kRegSerialPortHighImpedanceControl, firmwareValidated ? 0x00000003 : 0x00000002) && ok;
+        ok = io.write(registers::kRegSerialPortEnables, firmwareValidated ? 0x00010001 : 0x00010000) && ok;
 
         uint32_t rxSlotVal = 0;
         if (!io.read(registers::kRegSerialPortFrameRxSlot, &rxSlotVal))
@@ -147,8 +149,6 @@ public:
         rxSlotVal |= (isRight ? 1 : 0);
         ok = io.write(registers::kRegSerialPortFrameRxSlot, rxSlotVal) && ok;
 
-        uint32_t dacPcm1Src = firmwareValidated ? 0x32 : 0x08;
-        ok = io.write(registers::kRegDacPcm1Source, dacPcm1Src) && ok;
         return ok;
     }
 
@@ -262,10 +262,11 @@ public:
     }
 
     bool setupGPIO(core::RegisterIO& io, uint8_t gpio1Function = 0, uint8_t gpio2Function = 2, bool configureGPIO1 = false) {
-        if (gpio1Function != 0 || (gpio2Function != 0 && gpio2Function != 2))
+        if ((gpio1Function != 0 && gpio1Function != 1) || (gpio2Function != 0 && gpio2Function != 2))
             return false;
         bool ok = true;
-        ok = io.updateBits(registers::kRegGpio1Control1, 0x80001000, 0x80000000) && ok;
+        const bool vspk = configureGPIO1 && gpio1Function == 1;
+        ok = io.updateBits(registers::kRegGpio1Control1, 0x80001000, vspk ? 0 : 0x80000000) && ok;
         ok = io.updateBits(registers::kRegGpio2Control1, 0x80001000, 0x80000000) && ok;
         if (configureGPIO1)
             ok = io.updateBits(registers::kRegGpioPadControl, 0x00030000, uint32_t(gpio1Function) << 16) && ok;

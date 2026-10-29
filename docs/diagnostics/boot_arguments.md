@@ -27,7 +27,7 @@ Flags with a value of `0` are treated as disabled. Debug builds enable routine l
 | `-cirrusdumptrace` | Publish `Cirrus_Trace_Dump` during the read-only snapshot. Failure trace properties are captured separately |
 | `-cirrusnocal` | Skip measured calibration injection. Firmware and channel tuning still upload in DSP mode |
 | `-cirrusssid=<value>` | Override the detected subsystem ID for resource selection; does not verify speaker compatibility |
-| `-cirrusspkid=<value>` | Verified physical speaker ID (0–255); overrides the board binding. Unknown identity never defaults to speaker 1 |
+| `-cirrusspkid=<value>` | Diagnostic firmware speaker-ID override (0–255). Normal board discovery reads ACPI GPIO automatically; no speaker-ID boot argument is required |
 | `-cirrusspkidl=<value>` | Verified left speaker ID; takes precedence over the common speaker override |
 | `-cirrusspkidr=<value>` | Verified right speaker ID; takes precedence over the common speaker override |
 | `-cirruscalr0=<value>` | Fallback measured R0 value for either channel when no EFI calibration is available |

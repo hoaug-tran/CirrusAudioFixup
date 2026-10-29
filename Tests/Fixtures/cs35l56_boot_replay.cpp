@@ -127,6 +127,7 @@ struct CirrusAudioFixup:IOService {
 void publishBootCheckpoint(IOService*,const char*,IOReturn=kIOReturnSuccess){}
 void publishMatchingEvent(const char*,IOService*,IOReturn){}
 void retainFailedServiceEvidence(IOService*){}
+void clearFailedServiceEvidence(){}
 #include "Service.inc"
 
 struct Machine {

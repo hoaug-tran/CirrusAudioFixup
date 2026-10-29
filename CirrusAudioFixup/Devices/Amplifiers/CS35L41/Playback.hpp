@@ -278,17 +278,17 @@ public:
             }
             if (!io.write(0x10010, 0x01000000))
                 return fail(state, DIAG_PLAYBACK_INVARIANT, 0x10010);
+            bool ok = power.internal() ||
+                      (io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
+            bool locked = power.internal() || closeKeys(io);
+            if (!ok || !locked)
+                return fail(state, DIAG_PLAYBACK_INVARIANT);
             if (dsp && firmwareVersion > 0x001C00) {
                 if (!io.write(0x13020, registers::kCmdMailboxSpeakerOutputEnable))
                     return fail(state, DIAG_DSP_MAILBOX, 0x13020);
                 state.phase = PlaybackPhase::Output;
                 state.deadlineMs = sampleTime(now, clock) + 5;
             } else {
-                bool ok = power.internal() ||
-                          (io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
-                bool locked = power.internal() || closeKeys(io);
-                if (!ok || !locked)
-                    return fail(state, DIAG_PLAYBACK_INVARIANT);
                 state.phase = PlaybackPhase::Pll;
                 state.deadlineMs = sampleTime(now, clock) + 20;
             }

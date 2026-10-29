@@ -1,0 +1,49 @@
+{
+  "sources": {
+    "archive": "Zenbook-UM3402YAR.tgz",
+    "archive_sha256": "9bf5098fa5a6ea74d1480d69496e0e5a7d31048e28942965c7dfd50a9d8ad207",
+    "linux_log_sha256": "30b72aa4a3f504497b00095fa8db1165e0a9b935ca3c38d16eb879f4d7348a6e"
+  },
+  "identity": {
+    "vendor": 4163,
+    "device": 5763,
+    "hid": "CSC3551"
+  },
+  "provider": {
+    "name": "SPKR",
+    "address": 64,
+    "address_width": 7,
+    "clock_hz": 1000000,
+    "class": "VoodooI2CDeviceNub",
+    "io_name": "CSC3551"
+  },
+  "endpoints": [
+    64,
+    65
+  ],
+  "speaker_ids": [
+    1,
+    1
+  ],
+  "r0": [
+    10344,
+    10628
+  ],
+  "calibration_hex": "300000000200000049671701cbcc0a0030fba4f4755dd9011701682849681701cbcc0a00b0b25ef9755dd90117018429",
+  "limits": "I2C resource descriptor bytes in tests are reconstructed from the supplied SSDT contract, not a captured raw _CRS. Linux confirms the two AMP identities and speaker IDs. Analog output, bus timing and actual macOS firmware/GPIO state are not simulated.",
+  "followup": {
+    "archive": "cirrus-evidence.bAPCJU.tgz",
+    "sha256": "cee63eaf163d440f232ebb4cff5e87e38db87b440833005fd503f372407ef37c",
+    "commit": "05a17898a3443bd26e3343d5eb78115c8adfe135",
+    "speaker_gpio_pin": 142,
+    "speaker_id": 1,
+    "probe_returns": [
+      3758097084,
+      3758097084
+    ],
+    "detected_amplifiers": 0,
+    "reset_policy": "AUTHORIZED",
+    "verdict": "INCOMPLETE_TOPOLOGY",
+    "limitation": "No raw GPIO _CRS, reset-pin level or controller abort status in followup. Reset pin in tests remains synthetic."
+  }
+}

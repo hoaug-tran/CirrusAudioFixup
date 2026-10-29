@@ -443,6 +443,7 @@ void CirrusAudioFixup::publishDriverVerdict() {
                           : bootArgEnabled("-cirrusro") ? "READ_ONLY"
                           : !mPlatformAuthorized        ? "UNSUPPORTED_PLATFORM"
                           : anyFaulted                  ? "FAULT_LATCHED"
+                          : !topologyComplete && !strcmp(mAttachment.latest.stage, "COMMUNICATION") ? "COMMUNICATION_FAILED"
                           : !topologyComplete           ? "INCOMPLETE_TOPOLOGY"
                           : identityPending             ? waitingVerdict
                           : mDebugPhaseHalted           ? "DEBUG_PHASE_HALTED"

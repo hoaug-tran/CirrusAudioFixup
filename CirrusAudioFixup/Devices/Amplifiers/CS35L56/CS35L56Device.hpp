@@ -20,7 +20,6 @@ public:
             return io.lastError() == kIOReturnSuccess ? kIOReturnError : io.lastError();
         if ((revision & registers::kRevisionIdMask) != registers::kRevisionB0)
             return kIOReturnUnsupported;
-        // Linux reads REVID and waits for firmware boot before reading DEVID.
         if (DSPControl::waitForBoot(io, [](uint32_t us) { IOSleep((us + 999) / 1000); }))
             return kIOReturnSuccess;
         return io.lastError() == kIOReturnSuccess ? kIOReturnTimeout : io.lastError();

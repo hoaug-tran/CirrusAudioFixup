@@ -145,7 +145,7 @@ struct Properties : platform::PlatformProperties {
   if(!source)return false;out[0]=source[0];out[1]=source[1];return true;
  }
 };
-struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
+struct GPIO : platform::BoardDiscoveryContext::GPIOAccess {
  uint32_t speaker[2]{0,0};bool valid=true;
  bool read(const char* key,size_t index,uint32_t& out)override{assert(!strcmp(key,"spk-id-gpios")&&index<2);out=speaker[index];return valid;}
 };

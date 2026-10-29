@@ -49,7 +49,7 @@ struct Properties : platform::PlatformProperties {
  bool has=true; bool contains(const char* key)const override {return has&&!strcmp(key,"spk-id-gpios");}
  bool array(const char*,uint32_t*,size_t)const override {return false;}
 };
-struct GPIO : platform::BoardDiscoveryContext::GPIOReader {
+struct GPIO : platform::BoardDiscoveryContext::GPIOAccess {
  unsigned calls=0; bool ok=true;uint32_t values[2]{0,0};
  bool read(const char* property,size_t index,uint32_t& value)override {
   assert(!strcmp(property,"spk-id-gpios")&&index<2);++calls;value=values[index];return ok;

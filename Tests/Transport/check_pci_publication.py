@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
+from host_build import host_compiler
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]
@@ -96,6 +97,6 @@ with tempfile.TemporaryDirectory() as folder:
     cpp=p/'publication.cpp';cpp.write_text(fixture+method+checks)
     for flags in sanitizer_flags():
         binary=p/'publication'
-        subprocess.run(['clang++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I',folder,'-I',str(root/'CirrusAudioFixup'),str(cpp),'-o',str(binary)],check=True)
+        subprocess.run([host_compiler(),'-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I',folder,'-I',str(root/'CirrusAudioFixup'),str(cpp),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 print('PASS production PCI association: HP path, direct/path match, late publication, finite timeout, pre/post-wait ambiguity, wrong type, retain balance and AMD no-wait')

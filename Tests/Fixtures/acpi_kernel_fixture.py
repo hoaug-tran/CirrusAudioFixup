@@ -3,7 +3,7 @@
 def install(tmp):
     for name in ("IOKit", "IOKit/acpi", "IOKit/pci", "libkern/c++"):
         (tmp / name).mkdir(parents=True, exist_ok=True)
-    for name in ("IOKit/IOLib.h", "IOKit/IOService.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
+    for name in ("IOKit/IOMemoryDescriptor.h", "IOKit/IOLib.h", "IOKit/IOService.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
                  "IOKit/pci/IOPCIDevice.h", "libkern/c++/OSArray.h", "libkern/c++/OSData.h",
                  "libkern/c++/OSNumber.h", "libkern/c++/OSString.h"):
         (tmp / name).write_text('#pragma once\n#include "Fixture.hpp"\n')
@@ -17,6 +17,7 @@ def install(tmp):
 #include <memory>
 #include <string>
 #include <vector>
+#include <functional>
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnUnsupported=-3,kIOReturnNoDevice=-4,kIOReturnIOError=-5,kIOReturnNotPermitted=-6,
@@ -28,7 +29,8 @@ template<class T,class... A>T* make(A&&... a){auto p=std::make_unique<T>(std::fo
 #define OSDynamicCast(t,o) dynamic_cast<t*>(o)
 #define OSSafeReleaseNULL(o) do{if(o){o->release();o=nullptr;}}while(0)
 inline void OSSynchronizeIO(){}
-inline void IOSleep(unsigned){}
+inline std::function<void(unsigned)> fixtureSleep;
+inline void IOSleep(unsigned ms){if(fixtureSleep)fixtureSleep(ms);}
 struct OSString:OSObject {std::string s;explicit OSString(const char* v):s(v){}const char* getCStringNoCopy(){return s.c_str();}
  static OSString* withCString(const char* v){auto* object=make<OSString>(v);object->retain();return object;}
  bool isEqualTo(const char* v){return s==v;}bool isEqualTo(OSString* v){return v&&s==v->s;}};
@@ -46,16 +48,17 @@ class IOService:public IORegistryEntry {public:
  std::map<std::string,std::string> strings;std::map<std::string,uint64_t> numbers;
  std::map<std::string,OSObject*> objects;
  OSObject* getProperty(const char* name){auto i=objects.find(name);return i==objects.end()?nullptr:i->second;}
+ bool setProperty(const char* k,bool v){numbers[k]=v;return true;}
  bool setProperty(const char* k,const char* v){strings[k]=v;return true;}
  bool setProperty(const char* k,uint64_t v,unsigned){numbers[k]=v;return true;}
  bool setProperty(const char* name,OSObject* value){objects[name]=value;return true;}
- void removeProperty(const char* name){objects.erase(name);}
+ void removeProperty(const char* name){objects.erase(name);numbers.erase(name);strings.erase(name);}
 };
 inline std::vector<IORegistryEntry*> devices;
 constexpr unsigned kIORegistryIterateRecursively=1;
 struct IORegistryIterator {unsigned i=0;static IORegistryIterator* iterateOver(IORegistryEntry*,const void*,unsigned){return new IORegistryIterator;}
  IORegistryEntry* getNextObject(){return i<devices.size()?devices[i++]:nullptr;}void release(){delete this;}};
-struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t getLength(){return sizeof(r);}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
+struct IOMemoryMap:OSObject {uint32_t r[0x10000/4]{};size_t bytes=sizeof(r);size_t getLength(){return bytes;}uintptr_t getVirtualAddress(){return reinterpret_cast<uintptr_t>(r);}};
 class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObject*> values;IOMemoryMap* map=nullptr;std::map<unsigned,IOMemoryMap*> maps;bool opened=false;unsigned opens=0,closes=0,firmwareCalls=0;
  IOReturn dsdValidation=0,dsdEvaluation=0,absentValidation=kIOReturnNotFound;
  bool dsdNullResult=false;

@@ -73,26 +73,27 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 
 ### Supported laptops
 
-| Laptop                             | Subsystem ID | Bus | Support                                                  |
-| ---------------------------------- | ------------ | --- | -------------------------------------------------------- |
-| Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | I2C | Working                                                  |
-| Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | I2C | Working                                                  |
-| HP ZBook Fury 16 G9                | `103C:89C6`  | SPI | Working                                                  |
-| ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | SPI | Working with layout 21 at 48 kHz                         |
+| Laptop                             | Subsystem ID | Bus | Support |
+| ---------------------------------- | ------------ | --- | ------- |
+| Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | I2C | Working |
+| Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | I2C | Working |
+| HP ZBook Fury 16 G9                | `103C:89C6`  | SPI | Working |
+| ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | SPI | Working with layout 21 at 48 kHz |
+| ASUS Zenbook 14 UM3402Y            | `1043:1683`  | I2C | Working |
 | ASUS ROG Zephyrus G16 GU605MV      | `1043:1C63`  | SPI | Working (CS35L56; requires ALC285 bass NID 0x17 routing) |
 
 <details>
 <summary><strong>Other boards and controller support</strong></summary>
 
-| Configuration                                   | Status                                                                                                       |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Other `CSC3551` boards                          | ACPI discovery available for supported properties; matching embedded firmware and board validation required  |
-| `CLSA0101` or an unknown legacy Lenovo identity | Automatic initialization disabled                                                                            |
+| Configuration                                   | Status                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Other `CSC3551` boards                          | ACPI discovery available for supported properties; matching embedded firmware and board validation required                     |
+| `CLSA0101` or an unknown legacy Lenovo identity | Automatic initialization disabled                                                                                               |
 | Intel LPSS SPI                                  | Supported SPT, BXT, CNL, TGL and MTL (Meteor Lake) PCI profiles; controller identity selects the register family and root clock |
-| AMD SPI                                         | `AMDI0061` and `AMDI0062`, V1/V2 command controllers; mode 0                                                 |
-| SPI chip select                                 | Native or supported GPIO-backed chip select, selected from firmware resources                                |
-| SoundWire                                       | Not supported                                                                                                |
-| Apple silicon                                   | Not supported                                                                                                |
+| AMD SPI                                         | `AMDI0061` and `AMDI0062`, V1/V2 command controllers; mode 0                                                                    |
+| SPI chip select                                 | Native or supported GPIO-backed chip select, selected from firmware resources                                                   |
+| SoundWire                                       | Not supported                                                                                                                   |
+| Apple silicon                                   | Not supported                                                                                                                   |
 
 Native SPI uses the built-in controller drivers and does **not** require VoodooI2C. I2C requires the addressed-transfer interface in the custom provider. Controller support alone does not establish that a laptop's speaker wiring and tuning are supported.
 
@@ -114,16 +115,16 @@ AppleALC must configure the actual speaker output path for the machine. A matchi
 
 ## macOS compatibility
 
-| macOS          | Status                                                                    |
-| -------------- | ------------------------------------------------------------------------- |
-| Big Sur 11     | Minimum build deployment target                                           |
-| Monterey 12    | Within the deployment range; no confirmed test result listed here         |
-| **Ventura 13** | **Confirmed working**                                                     |
-| **Sonoma 14**  | Within the deployment range; no confirmed test result listed here         |
-| **Sequoia 15** | **Confirmed working**                                                     |
-| Tahoe 26       | Requires a working host audio stack; no confirmed test result listed here |
+| macOS       | Status                                                                    |
+| ----------- | ------------------------------------------------------------------------- |
+| Big Sur 11  | Minimum build deployment target                                           |
+| Monterey 12 | Within the deployment range; no confirmed test result listed here         |
+| Ventura 13  | Confirmed working                                                         |
+| Sonoma 14   | Within the deployment range; no confirmed test result listed here         |
+| Sequoia 15  | Confirmed working                                                         |
+| Tahoe 26    | Requires a working host audio stack; no confirmed test result listed here |
 
-Builds target **x86_64**. Confirmed OS support applies to the working hardware configurations, not every laptop containing a Cirrus amplifier.
+Builds target x86_64. Confirmed OS support applies to the working hardware configurations, not every laptop containing a Cirrus amplifier.
 
 ### Tahoe: restore and validate the host audio stack first
 
@@ -172,7 +173,7 @@ The first field identifies the bus of each bound Cirrus device. If nothing appea
 | Component                                                  | I2C                                   | SPI                                   |
 | ---------------------------------------------------------- | ------------------------------------- | ------------------------------------- |
 | OpenCore with a working macOS installation                 | Required                              | Required                              |
-| Lilu **1.7.2 or newer**                                    | Required                              | Required                              |
+| Lilu 1.7.2 or newer                                        | Required                              | Required                              |
 | Working AppleHDA + AppleALC with the correct speaker route | Required for the supported audio path | Required for the supported audio path |
 | Custom VoodooI2C addressed-transfer provider               | Required                              | Not required                          |
 | Supported serial-bus controller and ACPI resources         | Required                              | Required                              |

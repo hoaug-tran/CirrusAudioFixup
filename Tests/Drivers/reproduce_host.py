@@ -27,9 +27,10 @@ constexpr int kIOReturnError = -1;
 #define CIRRUS_LOG(...) ((void)0)
 #define CIRRUS_ERR(...) ((void)0)
 #define OSSwapLittleToHostInt32(x) (x)
-inline size_t strlcpy(char* d,const char* s,size_t n) {
+inline size_t fixtureStrlcpy(char* d,const char* s,size_t n) {
     size_t l=strlen(s); if(n) { size_t c=l<n-1?l:n-1; memcpy(d,s,c); d[c]=0; } return l;
 }
+#define strlcpy fixtureStrlcpy
 inline void* IOMalloc(size_t n) { return malloc(n); }
 inline void* IOMallocData(size_t n) { return malloc(n); }
 inline void IOFree(void* p,size_t) { free(p); }

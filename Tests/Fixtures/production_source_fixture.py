@@ -36,7 +36,7 @@ def chip_state():
 def method(text, class_name, name):
     """Extract a method body with nested braces, comments and literals intact."""
     import re
-    start=re.search(r'(?:bool|void|IOReturn|uint32_t|const char\*) '+re.escape(class_name)+r'::'+re.escape(name)+r'\(',text).start()
+    start=re.search(r'(?:bool|void|IOReturn|uint32_t|size_t|[\w:]+\*|const [\w:]+\*) '+re.escape(class_name)+r'::'+re.escape(name)+r'\(',text).start()
     opening=text.index('{',start)
     tokens=re.finditer(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*[\s\S]*?\*/|[{}]',text[opening:])
     depth=0

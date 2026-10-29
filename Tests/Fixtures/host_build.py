@@ -12,3 +12,7 @@ def sanitizer_flags():
         # ABI difference fail the production state-machine checks.
         return [["-Wno-error=format", "-D_CRT_SECURE_NO_WARNINGS"]]
     return [[], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]]
+
+
+def host_compiler():
+    return "g++" if sys.platform == "win32" else "clang++"

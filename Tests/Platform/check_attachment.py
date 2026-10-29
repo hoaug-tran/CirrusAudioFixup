@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from host_build import sanitizer_flags
+from host_build import host_compiler
 import subprocess,tempfile
 from driver_kernel_fixture import install
 ROOT=Path(__file__).resolve().parents[2]
@@ -48,7 +49,7 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-attachment-') as directory:
     p=Path(directory);install(p);(p/'attachment.cpp').write_text(CPP)
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'attachment.cpp'),'-o',str(p/'attachment')],check=True)
+        subprocess.run([host_compiler(),'-std=c++17',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'attachment.cpp'),'-o',str(p/'attachment')],check=True)
         subprocess.run([str(p/'attachment')],check=True)
 print('PASS attach first/latest native errors, rate limits/saturation, bounded CPU identity and null/unknown debug phase policy')
 
@@ -112,7 +113,7 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='cirrus-board-wait-') as directory:
     p=Path(directory);(p/'wait.cpp').write_text(cpp+retry+checks)
     for flags in sanitizer_flags():
-        subprocess.run(['clang++','-std=c++17',*flags,str(p/'wait.cpp'),'-o',str(p/'wait')],check=True)
+        subprocess.run([host_compiler(),'-std=c++17',*flags,str(p/'wait.cpp'),'-o',str(p/'wait')],check=True)
         subprocess.run([str(p/'wait')],check=True)
 assert 'Author: Tran Kinh Hoang (hoaugtr)' in service
 assert service.index('mPlatformIdentityPending = !mPlatformSubsystemId') < service.index('bool hardwareResetVerified = performPlatformHardwareReset()')

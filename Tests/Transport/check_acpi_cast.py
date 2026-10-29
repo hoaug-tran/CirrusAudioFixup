@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
+from host_build import host_compiler
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]
@@ -37,6 +38,6 @@ with tempfile.TemporaryDirectory() as folder:
     (Path(folder)/'IOKit/pci/IOPCIDevice.h').write_text('')
     (Path(folder)/'IOKit/IORegistryEntry.h').write_text('')
     (Path(folder)/'IOKit/acpi/IOACPIPlatformDevice.h').write_text('')
-    subprocess.run(['clang++','-std=c++17','-Wall','-Wextra','-Werror','-I',folder,'-I',str(root/'CirrusAudioFixup'),str(cpp),'-o',str(binary)],check=True)
+    subprocess.run([host_compiler(),'-std=c++17','-Wall','-Wextra','-Werror','-I',folder,'-I',str(root/'CirrusAudioFixup'),str(cpp),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
 print('PASS registered ACPI hierarchy cast: base, subclass, unrelated provider and null; no imported metaclass pointer')

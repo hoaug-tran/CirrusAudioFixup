@@ -74,7 +74,7 @@ declarations='\n'.join(function(n).split('{',1)[0].replace('CirrusAudioFixup::',
 with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
     tmp=Path(directory);source=tmp/'transport.cpp'
     source.write_text(preamble+declarations+'\n};\n'+'\n'.join(function(n) for n in names)+checks)
-    subprocess.run(['clang++','-std=c++17','-I'+str(ROOT/'CirrusAudioFixup'),str(source),'-o',str(tmp/'transport')],check=True)
+    subprocess.run(['g++','-std=c++17','-I'+str(ROOT/'CirrusAudioFixup'),str(source),'-o',str(tmp/'transport')],check=True)
     subprocess.run([str(tmp/'transport')],check=True)
     iokit = tmp / 'IOKit'
     iokit.mkdir()
@@ -154,7 +154,5 @@ int main() {
         str(direct),'-o',str(tmp/'direct_transport.exe')
     ],check=True)
     subprocess.run([str(tmp/'direct_transport.exe')],check=True)
-
-print("PASS production port PM/trace/diagnostic error preservation and VoodooI2C ABI/framing checks")
 
 print("PASS production port PM/trace/diagnostic error preservation and VoodooI2C ABI/framing checks")

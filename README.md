@@ -78,9 +78,9 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | I2C | Working |
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | I2C | Working |
 | HP ZBook Fury 16 G9                | `103C:89C6`  | SPI | Working |
-| ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | SPI | Working |
+| ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | SPI | Working with layout 21 at 48 kHz |
 | ASUS Zenbook 14 UM3402Y            | `1043:1683`  | I2C | Working |
-| ASUS ROG Zephyrus G16 GU605MV      | `1043:1C63`  | SPI | Working |
+| ASUS ROG Zephyrus G16 GU605MV      | `1043:1C63`  | SPI | Working (CS35L56; requires ALC285 bass NID 0x17 routing) |
 
 <details>
 <summary><strong>Other boards and controller support</strong></summary>

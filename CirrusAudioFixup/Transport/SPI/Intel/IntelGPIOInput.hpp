@@ -8,7 +8,7 @@ struct IntelGPIOInputEvidence {
     uint32_t revision{0}, padbar{0}, ownership{0}, config{0}, offset{0};
 };
 inline IOReturn readIntelGPIOInput(IntelGPIOWindow& window, size_t bytes, const IntelGPIOPad& pad, bool activeLow, uint32_t& value,
-                                  IntelGPIOInputEvidence& evidence) {
+                                   IntelGPIOInputEvidence& evidence) {
     value = 0;
     evidence = {};
     if (bytes < 0x200 || pad.bit >= 32 || uint32_t(pad.ownershipBase) + 4 + uint32_t(pad.ownershipWord) * 4 > bytes)
@@ -16,7 +16,7 @@ inline IOReturn readIntelGPIOInput(IntelGPIOWindow& window, size_t bytes, const 
     const uint32_t revision = window.read32(0), padbar = window.read32(0x0c);
     evidence.revision = revision;
     evidence.padbar = padbar;
-    if (revision == 0xffffffffU || revision >> 16 < 0x94 || revision >> 16 >= 0x110 || !padbar || (padbar & 3) || padbar > bytes ||
+    if (revision == 0xffffffffU || revision >> 16 < 0x92 || revision >> 16 >= 0x110 || !padbar || (padbar & 3) || padbar > bytes ||
         uint64_t(pad.pad) * 16 + 4 > bytes - padbar)
         return kIOReturnUnsupported;
     const uint32_t own = window.read32(pad.ownershipBase + uint32_t(pad.ownershipWord) * 4);

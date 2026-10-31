@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### CS35L41
+
+- Added Alienware x17 R2 / Dell Horizon 17 support (`CSC3551`, subsystem `1028:0B28`) over SPI, with embedded firmware and left/right speaker tuning for both speaker IDs.
+- Added Tiger Lake-LP GPIO controller support (`INTC1055`, `INT34C5`) for native and GPIO-driven SPI chip select lines with matching pad groups and ownership registers.
+- Fixed ACPI `_DSD` metadata evaluation to handle `kIOReturnLockedWrite` (`0xE00002C4`) and `kIOReturnUnsupported`, ensuring clean fallback to verified board metadata when ACPI `_DSD` is absent.
+- Synchronized GPIO debounce revision threshold to `0x92` to match Linux driver specifications.
+
+Implementation: [PR #13](https://github.com/hoaug-tran/CirrusAudioFixup/pull/13).
+
 ## [1.2.0] - 2026-10-29
 
 ### CS35L41

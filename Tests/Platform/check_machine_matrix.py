@@ -72,7 +72,9 @@ int main(){
   {"HP ZBook Fury 16 G9 / issue #3",0x103c,0x89c6,UINT32_MAX,1,core::BusTransportType::SPI},
   {"ASUS G614JI speaker 0 / issue #5",0x1043,0x1c9f,0,0,core::BusTransportType::SPI},
   {"ASUS G614JI speaker 1 / issue #5",0x1043,0x1c9f,1,0,core::BusTransportType::SPI},
-  {"ASUS Zenbook UM3402Y",0x1043,0x1683,1,0,core::BusTransportType::I2C}};
+  {"ASUS Zenbook UM3402Y",0x1043,0x1683,1,0,core::BusTransportType::I2C},
+  {"Alienware x17 R2 speaker 0 / issue #12",0x1028,0x0b28,0,0,core::BusTransportType::SPI},
+  {"Alienware x17 R2 speaker 1 / issue #12",0x1028,0x0b28,1,0,core::BusTransportType::SPI}};
  for(const auto& board:boards)for(bool reverse:{false,true}){
   Properties p;p.values={{"cirrus,dev-index",{0,1}},{"cirrus,speaker-position",{board.leftFirst,1-board.leftFirst}},
    {"cirrus,boost-type",{0,0}},{"cirrus,gpio1-func",{0,0}},{"cirrus,gpio2-func",{2,2}},

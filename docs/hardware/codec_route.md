@@ -29,6 +29,7 @@ The output displays a 4-byte little-endian hexadecimal value:
 | `<0f 00 00 00>` | `15` |
 | `<15 00 00 00>` | `21` |
 | `<1c 00 00 00>` | `28` |
+| `<57 00 00 00>` | `87` |
 | `<63 00 00 00>` | `99` |
 
 You can also check if an `alcid` boot argument is currently active:

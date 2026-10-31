@@ -84,15 +84,17 @@ public:
     unsigned failureIndex() const { return mFailureIndex; }
     OSObject* object() const { return mObject; }
     bool hasNativeProperties() const { return mProperties != nullptr; }
-    // Treat interpreter unavailability or missing handle as absent DSD metadata,
-    // allowing verified board profile fallback without forcing a custom SSDT.
+    // Treat absent, locked or unsupported DSD validation/evaluation and interpreter unavailability
+    // as absent native metadata, allowing verified board profile fallback without forcing a custom SSDT,
+    // while preserving fail-closed behavior on interpreter execution, allocation or syntax failures.
     bool missingNativeMetadata() const {
-        return !mObject && (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
-                            mValidationReturn == kIOReturnUnsupported || mValidationReturn == kIOReturnLockedWrite ||
-                            mEvaluationReturn == kIOReturnNotFound || mEvaluationReturn == kIOReturnError ||
-                            mEvaluationReturn == kIOReturnUnsupported || mEvaluationReturn == kIOReturnLockedWrite ||
-                            (mReason && (!strcmp(mReason, "DSD_INTERPRETER_UNAVAILABLE") ||
-                                         !strcmp(mReason, "DSD_INTERPRETER_HANDLE_NOT_FOUND"))));
+        const bool validationAbsent = mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
+                                      mValidationReturn == kIOReturnUnsupported || mValidationReturn == kIOReturnLockedWrite;
+        const bool evaluationAbsent = !strcmp(mReason ? mReason : "", "DSD_EVALUATION_FAILED") &&
+                                      (mEvaluationReturn == kIOReturnNotFound || mEvaluationReturn == kIOReturnLockedWrite);
+        const bool interpreterAbsent = mReason && (!strcmp(mReason, "DSD_INTERPRETER_UNAVAILABLE") ||
+                                                   !strcmp(mReason, "DSD_INTERPRETER_HANDLE_NOT_FOUND"));
+        return !mObject && (validationAbsent || evaluationAbsent || interpreterAbsent);
     }
     const char* source() const { return mSource; }
     IOReturn referenceReturn() const { return mReferenceReturn; }

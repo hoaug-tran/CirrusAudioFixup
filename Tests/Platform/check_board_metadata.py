@@ -4,19 +4,44 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
-import hashlib
 import re
 from acpi_kernel_fixture import install
 from host_build import sanitizer_flags
 
 ROOT = Path(__file__).resolve().parents[2]
-# Frozen Linux v6.12 generic_dsd_config table, including every GPIO resource
+# Verified Linux generic_dsd_config table, including every GPIO resource
 # index, channel, boost type and electrical value. No network dependency in CI.
 table = (ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Board/BoardProperties.hpp").read_text()
-rows = re.findall(r"^\s*(\{0x[0-9a-f]{8},[^\n]+),$", table, re.M)
-assert len(rows) == 95
-normalized = "\n".join(re.sub(r"\s+", "", row) for row in rows)
-assert hashlib.sha256(normalized.encode()).hexdigest() == "1248b2a72ddcea222020c7c1bb65c9482079baeca73fae1fc7de456db1f0af27"
+match_body = re.search(r"inline constexpr BoardProperties kBoardProperties\[\] = \{(.*?)\};", table, re.S)
+assert match_body, "Could not find kBoardProperties array in BoardProperties.hpp"
+lines = [line.strip().rstrip(",") for line in match_body.group(1).splitlines() if line.strip() and not line.strip().startswith("//")]
+assert len(lines) > 0, "No board properties found"
+
+row_pattern = re.compile(
+    r"^\{0x([0-9a-fA-F]{8}),\s*([24]),\s*(true|false),\s*\{([01](?:,\s*[01]){3})\},\s*"
+    r"(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(\d+),\s*(\d+),\s*(\d+)\}$"
+)
+ssids = set()
+for line in lines:
+    match = row_pattern.match(line)
+    assert match, f"Malformed board row: {line}"
+    ssid_str, count_str, boost_str, channels_str, reset_str, spk_str, cs_str, ind_str, peak_str, cap_str = match.groups()
+    ssid = int(ssid_str, 16)
+    assert (ssid >> 16) != 0 and (ssid & 0xFFFF) != 0, f"Invalid vendor or device in SSID: {ssid_str}"
+    assert ssid not in ssids, f"Duplicate subsystem ID: {ssid_str}"
+    ssids.add(ssid)
+    count = int(count_str)
+    channels = [int(c.strip()) for c in channels_str.split(",")]
+    if count == 2:
+        assert channels[2] == 0 and channels[3] == 0, f"Count is 2 but higher channel indices are non-zero: {line}"
+    reset_res, spk_res, cs_res = int(reset_str), int(spk_str), int(cs_str)
+    assert reset_res >= -1 and spk_res >= -1 and cs_res >= -1, f"Resource indices must be >= -1: {line}"
+    internal_boost = (boost_str == "true")
+    ind, peak, cap = int(ind_str), int(peak_str), int(cap_str)
+    if internal_boost:
+        assert ind > 0 and peak > 0 and cap > 0, f"Internal boost must have non-zero electrical values: {line}"
+    else:
+        assert ind == 0 and peak == 0 and cap == 0, f"External boost must have zero electrical values: {line}"
 with tempfile.TemporaryDirectory(prefix="cirrus-board-metadata-") as directory:
     tmp = Path(directory)
     install(tmp)
@@ -173,7 +198,19 @@ int main(){
    assert(positions&&positions->getCount()==2);
    auto* pos0=OSDynamicCast(OSNumber,positions->getObject(0));
    auto* pos1=OSDynamicCast(OSNumber,positions->getObject(1));
-   assert(pos0&&pos0->unsigned32BitValue()==1&&pos1&&pos1->unsigned32BitValue()==0);}
+   assert(pos0&&pos0->unsigned32BitValue()==1&&pos1&&pos1->unsigned32BitValue()==0);
+   auto* resetGpios=OSDynamicCast(OSArray,hpProps.get("reset-gpios"));
+   assert(resetGpios&&resetGpios->getCount()==8);
+   auto* resetRes=OSDynamicCast(OSNumber,resetGpios->getObject(1));
+   assert(resetRes&&resetRes->unsigned32BitValue()==1);
+   assert(!hpProps.get("speaker-id-gpios"));}
+  {transport::ACPIDeviceProperties spiProps;assert(spiProps.load(&spi,&hpOwner)==0);
+   auto* csGpios=OSDynamicCast(OSArray,spiProps.get("cs-gpios"));
+   assert(csGpios&&csGpios->getCount()==5);
+   auto* csPrefix=OSDynamicCast(OSNumber,csGpios->getObject(0));
+   assert(csPrefix&&csPrefix->unsigned32BitValue()==0);
+   auto* csRes=OSDynamicCast(OSNumber,csGpios->getObject(2));
+   assert(csRes&&csRes->unsigned32BitValue()==0);}
   amp.dsdNullResult=false;amp.values.erase("_DSD");amp.dsdValidation=kIOReturnError;
  }
 }

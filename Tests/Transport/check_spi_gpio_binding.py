@@ -13,6 +13,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-gpio-binding-") as directory:
     install(tmp)
     (tmp / "test.cpp").write_text(r'''
 #define KERNEL 1
+#include "Platform/ACPI/ACPIBoardMetadata.hpp"
 #include "Transport/SPI/Intel/IntelSPIChipSelects.hpp"
 using namespace cirrus::transport;
 using namespace cirrus::transport::intel;
@@ -58,7 +59,7 @@ int main(){
  // Issue #5: an unmodified, supported GPIO HID needs no synthetic _DSD.
  // Apple may report Error for an absent object; this optional GPIO metadata
  // must not change the mandatory CS wiring contract on the SPI controller.
- for(auto error:{kIOReturnError,kIOReturnNotFound}){
+ for(auto error:{kIOReturnError,kIOReturnNotFound,kIOReturnLockedWrite}){
   gpio.dsdValidation=error;
   {IntelSPIChipSelects selects;assert(selects.bind(&spi,&owner)==0&&selects.select(1));}
   assert(owner.strings["Cirrus_SPI_GPIO_Identity_Source"]=="ACPI_HID");
@@ -279,6 +280,49 @@ int main(){
    assert(std::vector<uint32_t>(otherMap->r,otherMap->r+0x10000/4)==before);
   }
   assert(!mtlGpio.opened&&mtlGpio.opens==1&&mtlGpio.closes==1&&csMap->refs==1&&otherMap->refs==1);
+ }
+ // Dell Horizon 17 / Alienware x17 R2 (Issue #12):
+ // INTC1055 GPIO controller, CS1 on pin 304 (Community 2), Reset on pin 103 (Community 1).
+ // Neither controller nor amplifier nor GPIO controller has native _DSD; all return
+ // kIOReturnLockedWrite (0xE00002C4). The stack resolves CS and reset via Cirrus_Board_Metadata.
+ {
+  IOACPIPlatformDevice tglSpi,tglAmp,tglGpio;IOService tglOwner;
+  tglSpi.path="IOACPIPlane:/_SB/PC00/SPI2";tglAmp.path=tglSpi.path+"/SPKR";tglGpio.path="IOACPIPlane:/_SB/GPI0";
+  devices={&tglSpi,&tglAmp,&tglGpio};
+  tglSpi.dsdValidation=kIOReturnLockedWrite;tglAmp.dsdValidation=kIOReturnLockedWrite;
+  tglGpio.values["_HID"]=make<OSString>("INTC1055");
+  tglGpio.dsdValidation=kIOReturnLockedWrite;
+  auto* comm1Map=make<IOMemoryMap>();auto* comm2Map=make<IOMemoryMap>();
+  tglGpio.maps={{1,comm1Map},{2,comm2Map}};
+  comm1Map->r[0]=comm2Map->r[0]=0x920000;comm1Map->r[3]=comm2Map->r[3]=0x700;
+  const unsigned csOffset=0x700+40*16;
+  const unsigned resetOffset=0x700+7*16;
+  comm2Map->r[csOffset/4]=0x84000201;
+  comm1Map->r[resetOffset/4]=0x44000200;
+  auto descriptor=[&](unsigned pin,bool input){
+   auto d=crs;d.resize(d.size()-2);d[23]=pin;d[24]=pin>>8;d[7]=input?1:2;return d;
+  };
+  auto resources=descriptor(304,false);
+  for(auto d:{descriptor(103,false)})resources.insert(resources.end(),d.begin(),d.end());
+  resources.insert(resources.end(),{0x79,0});tglAmp.values["_CRS"]=make<OSData>(resources);
+  cirrus::support::ACPIBoardMetadata metadata;
+  auto* spiNode=metadata.node(&tglSpi);auto* ampNode=metadata.node(&tglAmp);
+  assert(metadata.references(spiNode,"cs-gpios",&tglAmp,0,0,false,1,1));
+  assert(metadata.references(ampNode,"reset-gpios",&tglAmp,1,0,false,2));
+  assert(metadata.publish(&tglOwner));
+  {IntelSPIChipSelects selects;assert(selects.bind(&tglSpi,&tglOwner,nullptr,true)==0);
+   assert(tglOwner.strings["Cirrus_Intel_SPI_CS_DSD_Source"]=="BOARD_TABLE");
+   assert(tglOwner.numbers["Cirrus_Intel_SPI_CS_DSD_Validate_Return"]==static_cast<uint32_t>(kIOReturnLockedWrite));
+   assert(tglOwner.numbers["Cirrus_SPI_GPIO_DSD_Validate_Return"]==static_cast<uint32_t>(kIOReturnLockedWrite));
+   assert(selects.select(0)==nullptr&&selects.select(1));
+   assert(tglOwner.strings["Cirrus_SPI_Reset_0_Status"]=="OBSERVED_WITHOUT_WRITES");
+   assert(tglOwner.numbers["Cirrus_SPI_Reset_0_Memory_Index"]==1&&tglOwner.numbers["Cirrus_SPI_Reset_0_PhysicalLevel"]==0);
+   assert(selects.select(1)->setActive(true)==0&&selects.select(1)->setActive(false)==0);
+   assert(selects.prepareGPIOGroup(&tglAmp,"reset-gpios")==0&&tglOwner.numbers["Cirrus_SPI_GPIO_Group_Unique_Pins"]==1);
+   assert(selects.writeGPIOGroup(false)==0&&selects.writeGPIOGroup(true)==0);
+   assert(comm1Map->r[resetOffset/4]==0x44000201);
+  }
+  assert(!tglGpio.opened&&tglGpio.opens==1&&tglGpio.closes==1&&comm1Map->refs==1&&comm2Map->refs==1);
  }
 }
 ''')

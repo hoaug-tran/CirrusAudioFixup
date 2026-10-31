@@ -9,6 +9,10 @@
 #include <libkern/c++/OSNumber.h>
 #include <libkern/c++/OSString.h>
 
+#ifndef kIOReturnLockedWrite
+#define kIOReturnLockedWrite static_cast<IOReturn>(0xe00002c4U)
+#endif
+
 namespace cirrus::transport {
 inline IOACPIPlatformDevice* resolveACPIDevice(IOACPIPlatformDevice* device, const char* source) {
     const auto* plane = IORegistryEntry::getPlane("IOACPIPlane");
@@ -84,6 +88,9 @@ public:
     // allowing verified board profile fallback without forcing a custom SSDT.
     bool missingNativeMetadata() const {
         return !mObject && (mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
+                            mValidationReturn == kIOReturnUnsupported || mValidationReturn == kIOReturnLockedWrite ||
+                            mEvaluationReturn == kIOReturnNotFound || mEvaluationReturn == kIOReturnError ||
+                            mEvaluationReturn == kIOReturnUnsupported || mEvaluationReturn == kIOReturnLockedWrite ||
                             (mReason && (!strcmp(mReason, "DSD_INTERPRETER_UNAVAILABLE") ||
                                          !strcmp(mReason, "DSD_INTERPRETER_HANDLE_NOT_FOUND"))));
     }

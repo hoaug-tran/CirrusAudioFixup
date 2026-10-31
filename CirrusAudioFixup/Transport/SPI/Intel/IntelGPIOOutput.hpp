@@ -10,6 +10,7 @@ struct IntelGPIOPad {
     uint8_t memoryIndex, group, ownershipWord;
     uint16_t pad, bit;
     uint16_t ownershipBase{0xa0};
+    uint16_t lockTxBase{0x114};
 };
 inline bool lookupIntelGPIOPad(const char* hid, uint16_t gpio, IntelGPIOPad& output) {
     if (!hid)
@@ -19,6 +20,12 @@ inline bool lookupIntelGPIOPad(const char* hid, uint16_t gpio, IntelGPIOPad& out
     struct Group {
         uint16_t gpio, pin, count, communityBase;
         uint8_t memory, group, ownershipWord;
+    };
+    // Linux v6.12 pinctrl-tigerlake.c: tgllp_soc_data and tgllp_communities
+    static constexpr Group tigerLakeLP[] = {
+        {0, 0, 26, 0, 0, 0, 0},       {32, 26, 16, 0, 0, 1, 4},     {64, 42, 25, 0, 0, 2, 6},     {96, 67, 8, 67, 1, 0, 0},
+        {128, 75, 24, 67, 1, 1, 1},   {160, 99, 21, 67, 1, 2, 4},   {192, 120, 24, 67, 1, 3, 7},  {224, 144, 27, 67, 1, 4, 10},
+        {256, 171, 24, 171, 2, 0, 0}, {288, 195, 25, 171, 2, 1, 3}, {320, 226, 25, 171, 2, 3, 8}, {352, 260, 8, 260, 3, 0, 0},
     };
     static constexpr Group alderLake[] = {
         {0, 0, 25, 0, 0, 0, 0},       {32, 25, 23, 0, 0, 1, 4},     {64, 48, 12, 0, 0, 2, 7},     {96, 60, 27, 0, 0, 3, 9},
@@ -34,17 +41,21 @@ inline bool lookupIntelGPIOPad(const char* hid, uint16_t gpio, IntelGPIOPad& out
         {256, 170, 14, 103, 2, 3, 10}, {288, 184, 8, 184, 3, 0, 0},  {320, 192, 12, 184, 3, 1, 1}, {352, 204, 25, 204, 4, 0, 0},
         {384, 229, 25, 204, 4, 1, 4},  {416, 254, 32, 204, 4, 2, 8}, {448, 286, 3, 204, 4, 3, 12},
     };
+    const bool tiger = !strcmp(hid, "INTC1055") || !strcmp(hid, "INT34C5");
     const bool meteor = !strcmp(hid, "INTC1083") || !strcmp(hid, "INTC105E");
-    if (!meteor && strcmp(hid, "INTC1056") && strcmp(hid, "INTC1085"))
+    if (!tiger && !meteor && strcmp(hid, "INTC1056") && strcmp(hid, "INTC1085"))
         return false;
-    const auto* groups = meteor ? meteorLakeP : alderLake;
-    const size_t count = meteor ? sizeof(meteorLakeP) / sizeof(*meteorLakeP) : sizeof(alderLake) / sizeof(*alderLake);
+    const auto* groups = tiger ? tigerLakeLP : meteor ? meteorLakeP : alderLake;
+    const size_t count = tiger    ? sizeof(tigerLakeLP) / sizeof(*tigerLakeLP)
+                         : meteor ? sizeof(meteorLakeP) / sizeof(*meteorLakeP)
+                                  : sizeof(alderLake) / sizeof(*alderLake);
     for (size_t i = 0; i < count; ++i) {
         const auto& g = groups[i];
         if (gpio >= g.gpio && gpio - g.gpio < g.count) {
             const uint16_t bit = gpio - g.gpio;
             output = {g.memory, g.group, uint8_t(g.ownershipWord + bit / 8), uint16_t(g.pin + bit - g.communityBase), bit};
-            output.ownershipBase = meteor ? 0xb0 : 0xa0;
+            output.ownershipBase = tiger ? 0x20 : meteor ? 0xb0 : 0xa0;
+            output.lockTxBase = tiger ? 0x84 : 0x114;
             return true;
         }
     }
@@ -65,7 +76,7 @@ public:
     };
     const Evidence& evidence() const { return mEvidence; }
     IOReturn bind(IntelGPIOWindow& window, size_t bytes, const IntelGPIOPad& pad, bool activeLow) {
-        if (mWindow || bytes < 0x200 || pad.bit >= 32 || 0x118U + uint32_t(pad.group) * 8 > bytes ||
+        if (mWindow || bytes < 0x200 || pad.bit >= 32 || uint32_t(pad.lockTxBase) + 4 + uint32_t(pad.group) * 8 > bytes ||
             uint32_t(pad.ownershipBase) + 4 + uint32_t(pad.ownershipWord) * 4 > bytes)
             return kIOReturnBadArgument;
         const uint32_t revision = window.read32(0);
@@ -73,8 +84,8 @@ public:
         mEvidence.revision = revision;
         mEvidence.padbar = padbar;
         mEvidence.reason = "LAYOUT_OR_MAP_REJECTED";
-        // Alder Lake's debounce-capable layout has four DWORDs per pad.
-        if (revision == 0xffffffffU || revision >> 16 < 0x94 || revision >> 16 >= 0x110 || !padbar || (padbar & 3) || padbar > bytes ||
+        // Alder Lake's and Tiger Lake's debounce-capable layout has four DWORDs per pad.
+        if (revision == 0xffffffffU || revision >> 16 < 0x92 || revision >> 16 >= 0x110 || !padbar || (padbar & 3) || padbar > bytes ||
             uint64_t(pad.pad) * 16 + 4 > bytes - padbar)
             return kIOReturnUnsupported;
         mWindow = &window;
@@ -91,7 +102,7 @@ public:
         if (!mWindow)
             return kIOReturnNotReady;
         const uint32_t own = mWindow->read32(mPad.ownershipBase + uint32_t(mPad.ownershipWord) * 4);
-        const uint32_t lockTx = mWindow->read32(0x114 + uint32_t(mPad.group) * 8);
+        const uint32_t lockTx = mWindow->read32(uint32_t(mPad.lockTxBase) + uint32_t(mPad.group) * 8);
         const uint32_t config = mWindow->read32(mOffset);
         mEvidence.ownership = own;
         mEvidence.lockTx = lockTx;

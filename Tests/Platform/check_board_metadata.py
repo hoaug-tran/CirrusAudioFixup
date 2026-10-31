@@ -212,6 +212,35 @@ int main(){
    auto* csRes=OSDynamicCast(OSNumber,csGpios->getObject(2));
    assert(csRes&&csRes->unsigned32BitValue()==0);}
   amp.dsdNullResult=false;amp.values.erase("_DSD");amp.dsdValidation=kIOReturnError;
+  // Dell Horizon 17 / Alienware x17 R2 (1028:0b28) with absent native _DSD (kIOReturnLockedWrite 0xE00002C4).
+  amp.dsdValidation=kIOReturnLockedWrite;spi.dsdValidation=kIOReturnLockedWrite;
+  IOService dellOwner;const platform::BoardIdentity dellIdentity{0x1028,0x0b28,"CSC3551"};
+  assert(prepareBoardMetadata(dellIdentity,&amp,&dellOwner));
+  assert(dellOwner.strings["Cirrus_Board_Metadata_Source"]=="CS35L41_VERIFIED_BOARD_TABLE");
+  {transport::ACPIDeviceProperties dellProps;assert(dellProps.load(&amp,&dellOwner)==0);
+   assert(!strcmp(dellProps.source(),"BOARD_TABLE"));
+   assert(!strcmp(dellProps.reason(),"BOARD_METADATA_READY"));
+   auto* positions=OSDynamicCast(OSArray,dellProps.get("cirrus,speaker-position"));
+   assert(positions&&positions->getCount()==2);
+   auto* pos0=OSDynamicCast(OSNumber,positions->getObject(0));
+   auto* pos1=OSDynamicCast(OSNumber,positions->getObject(1));
+   assert(pos0&&pos0->unsigned32BitValue()==0&&pos1&&pos1->unsigned32BitValue()==1);
+   auto* resetGpios=OSDynamicCast(OSArray,dellProps.get("reset-gpios"));
+   assert(resetGpios&&resetGpios->getCount()==8);
+   auto* resetRes=OSDynamicCast(OSNumber,resetGpios->getObject(1));
+   assert(resetRes&&resetRes->unsigned32BitValue()==1);
+   auto* spkGpios=OSDynamicCast(OSArray,dellProps.get("speaker-id-gpios"));
+   assert(spkGpios&&spkGpios->getCount()==8);
+   auto* spkRes=OSDynamicCast(OSNumber,spkGpios->getObject(1));
+   assert(spkRes&&spkRes->unsigned32BitValue()==2);}
+  {transport::ACPIDeviceProperties dellSpiProps;assert(dellSpiProps.load(&spi,&dellOwner)==0);
+   auto* csGpios=OSDynamicCast(OSArray,dellSpiProps.get("cs-gpios"));
+   assert(csGpios&&csGpios->getCount()==5);
+   auto* csPrefix=OSDynamicCast(OSNumber,csGpios->getObject(0));
+   assert(csPrefix&&csPrefix->unsigned32BitValue()==0);
+   auto* csRes=OSDynamicCast(OSNumber,csGpios->getObject(2));
+   assert(csRes&&csRes->unsigned32BitValue()==0);}
+  amp.dsdValidation=kIOReturnError;spi.dsdValidation=kIOReturnError;
  }
 }
 ''')

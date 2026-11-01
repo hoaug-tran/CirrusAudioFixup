@@ -5,7 +5,7 @@
 ### CS35L41
 
 - Added HP ENVY x360 15-ey0xxx support (`CSC3551`, subsystem `103C:8A31`) over I2C with dual CS35L41 amplifiers and internal boost.
-- Documented Realtek ALC245 speaker routing (Node 0x17 without internal EAPD, driven by CS35L41) with AppleALC Layout 7.
+- Documented Realtek ALC245 speaker routing (Node 0x17 without internal EAPD, driven by CS35L41) with AppleALC Layout 13 (`alcid=13`).
 - Added boot-args documentation and fallback calibration values (`-cirruscalr0l=10965 -cirruscalr0r=11205 -cirruscalambient=0`).
 
 ## [1.2.0] - 2026-10-29

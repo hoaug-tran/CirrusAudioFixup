@@ -142,12 +142,19 @@ int main(){
   assert(!l41::resolveBoardConfiguration({identity, endpoints, 2, p}, available, reason));
   assert(!strcmp(reason, "CS35L41_SPEAKER_ID_REQUIRED"));
 
-  // 2. With GPIO access, discovery succeeds via BoardProperties fallback
-  auto hpAvailable = [](uint16_t v, uint16_t d, uint32_t) { return v == 0x103c && d == 0x8a31; };
+  // 2. With GPIO access, discovery succeeds via production available check and BoardProperties
   std::unique_ptr<platform::DiscoveredBoard> found(
-   l41::resolveBoardConfiguration({identity, endpoints, 2, p, &gpio}, hpAvailable, reason));
+   l41::resolveBoardConfiguration({identity, endpoints, 2, p, &gpio}, available, reason));
   assert(found && found->configuration.permits(identity) && found->configuration.count == 2);
   assert(gpio.lastResource == 1); // speakerResource index 1 verified
+
+  // Verify production firmware resources for both speaker ID 0 and 1
+  const auto* res0 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x103c, 0x8a31, 0);
+  assert(res0 && res0->wmfw && res0->wmfwSize);
+  checkFirmware(*res0);
+  const auto* res1 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x103c, 0x8a31, 1);
+  assert(res1 && res1->wmfw && res1->wmfwSize);
+  checkFirmware(*res1);
 
   // 3. Hardware preparation triggers reset on resetResource index 0
   assert(found->prepareHardware(gpio));

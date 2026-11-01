@@ -148,7 +148,7 @@ ioreg -lw0 -p IOService -r -c CirrusAudioFixup
 
 ## 7. Model Notes: Realtek ALC245 (HP ENVY x360 15-ey0xxx, `103C:8A31`)
 
-- **AppleALC Layout**: Layout 7 (`alcid=7`).
+- **AppleALC Layout**: Layout 13 (`alcid=13`).
 - **Codec Routing**:
   - Internal Speakers: DAC Node `0x03` → Pin Complex Node `0x17` (`0x90170110`).
   - Headphone Jack: DAC Node `0x02` → Pin Complex Node `0x21` (`0x03211020`).

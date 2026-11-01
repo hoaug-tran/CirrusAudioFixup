@@ -71,6 +71,7 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | I2C | Working |
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | I2C | Working |
 | HP ZBook Fury 16 G9                | `103C:89C6`  | SPI | Working |
+| HP ENVY x360 15-ey0xxx             | `103C:8A31`  | I2C | Working |
 | ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | SPI | Working |
 | ASUS Zenbook 14 UM3402Y            | `1043:1683`  | I2C | Working |
 | ASUS ROG Zephyrus G16 GU605MV      | `1043:1C63`  | SPI | Working |
@@ -135,7 +136,7 @@ Compare sound at matched output levels using the same track.
 
 ## Identify I2C or SPI
 
-The supported Lenovo Legion 2021 configurations and ASUS Zenbook 14 UM3402Y use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI and ASUS ROG Zephyrus G16 GU605MV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
+The supported Lenovo Legion 2021 configurations, ASUS Zenbook 14 UM3402Y and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI and ASUS ROG Zephyrus G16 GU605MV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 
@@ -254,7 +255,7 @@ Open `cirrus-fixup-ioreg.txt` or inspect the output. For supported two-amplifier
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
 | Laptop and board identity                                                                              | Match a row in [supported laptops](#supported-laptops)                   |
 | `Cirrus_Driver_Verdict`                                                                                | `READY_DSP` (normal) or `READ_ONLY` (with `-cirrusro`)                   |
-| `Cirrus_Bus`                                                                                           | `I2C` for Lenovo and ASUS UM3402Y; `SPI` for HP, ASUS G614JI and GU605MV |
+| `Cirrus_Bus`                                                                                           | `I2C` for Lenovo, ASUS UM3402Y and HP ENVY 15-ey0xxx; `SPI` for HP ZBook Fury, ASUS G614JI and GU605MV |
 | `Cirrus_Detected_Amplifiers`                                                                           | `2`                                                                      |
 | `Cirrus_I2C_0_DeviceID` / `Cirrus_I2C_1_DeviceID`, or the corresponding `Cirrus_SPI_*_DeviceID` fields | Both `0x35A40` (CS35L41) or `0x35A56` (CS35L56)                          |
 | The corresponding `_0_Probe_Return` and `_1_Probe_Return` fields                                       | Both `0` (successful reads)                                              |

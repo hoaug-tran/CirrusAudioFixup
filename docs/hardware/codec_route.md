@@ -24,6 +24,7 @@ The output displays a 4-byte little-endian hexadecimal value:
 | :--- | :--- |
 | `<01 00 00 00>` | `1` |
 | `<03 00 00 00>` | `3` |
+| `<07 00 00 00>` | `7` |
 | `<0b 00 00 00>` | `11` |
 | `<0d 00 00 00>` | `13` |
 | `<0f 00 00 00>` | `15` |
@@ -142,5 +143,22 @@ ioreg -lw0 -p IOService -r -c CirrusAudioFixup
 
 1. Select **Internal Speakers** in macOS Sound Settings.
 2. Test audio playback at low volume. Both left and right channels should produce clear sound without distortion.
+
+---
+
+## 7. Model Notes: Realtek ALC245 (HP ENVY x360 15-ey0xxx, `103C:8A31`)
+
+- **AppleALC Layout**: Layout 7 (`alcid=7`).
+- **Codec Routing**:
+  - Internal Speakers: DAC Node `0x03` → Pin Complex Node `0x17` (`0x90170110`).
+  - Headphone Jack: DAC Node `0x02` → Pin Complex Node `0x21` (`0x03211020`).
+  - Microphone Jack: Pin Complex Node `0x19` (`0x03A110C0`) → ADC Node `0x08`.
+- **Speaker Pin Complex (Node 0x17) Behavior**:
+  - Node 0x17 pincap is `0x0000001c`, which lacks an internal EAPD power widget (bit 16 is 0).
+  - Codec EAPD verbs (such as `01770c02`) sent to Node 0x17 have no hardware effect.
+  - Internal speaker output depends entirely on the external Cirrus CS35L41 amplifiers (`CSC3551`) receiving power and unmute commands over I2C.
+- **Headphone Pin Complex (Node 0x21) Behavior**:
+  - Node 0x21 pincap is `0x0001001c` (includes EAPD). EAPD verb `02170c02` enables the headphone amplifier.
+  - Headphone playback operates normally through AppleALC even when CS35L41 amplifiers are held in reset or read-only mode.
 
 [Back to main guide](../../README.md#installation)

@@ -66,6 +66,18 @@ When using `-cirrusphase=<name>`, execution stops after the specified phase:
 > [!WARNING]
 > Calibration values must match the physical speaker impedance in firmware units. Never copy calibration values from an unrelated laptop model.
 
+### HP ENVY x360 15-ey0xxx (`103C:8A31`) Configuration Notes
+
+1. **Remove `-cirrusro`**: If present in `boot-args`, remove `-cirrusro`. This flag enforces read-only inspection and blocks all amplifier register writes and GPIO reset assertions, leaving speakers unpowered.
+2. **Calibration Fallback**: If OpenCore cannot access the EFI variable `CirrusSmartAmpCalibrationData` (`02f9af02-7734-4233-b43d-93fe5aa35db3`), supply factory measured DC resistance via boot arguments:
+   ```text
+   -cirruscalr0l=10965 -cirruscalr0r=11205 -cirruscalambient=0
+   ```
+   - `-cirruscalr0l=10965`: Left speaker nominal DC resistance (~5.35 Ω).
+   - `-cirruscalr0r=11205`: Right speaker nominal DC resistance (~5.47 Ω).
+   - `-cirruscalambient=0`: Ambient temperature in °C measured at factory calibration (mandatory when supplying manual R0; omitting this argument causes calibration to fail with `INVALID_BOOT_ARG_DATA`).
+   - Optional calibration metadata: `-cirruscalstatus=1` (defaults to `1` when omitted).
+
 ---
 
 ## Removed Arguments

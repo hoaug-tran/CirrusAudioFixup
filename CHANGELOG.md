@@ -1,17 +1,11 @@
 # Changelog
 
-## [Unreleased]
-
-### CS35L41
-
-- Added HP ENVY x360 15-ey0xxx support (`CSC3551`, subsystem `103C:8A31`) over I2C with dual CS35L41 amplifiers and internal boost.
-- Documented Realtek ALC245 speaker routing (Node 0x17 without internal EAPD, driven by CS35L41) with AppleALC Layout 13 (`alcid=13`).
-- Documented AppleALC Layout 13 (`alcid=13`), boot arguments, and unit-specific calibration options.
-
 ## [1.2.0] - 2026-10-29
 
 ### CS35L41
 
+- Added HP ENVY x360 15-ey0xxx support (`CSC3551`, subsystem `103C:8A31`) over I2C with dual CS35L41 amplifiers, internal boost, and board-specific DSP firmware.
+- Added Alienware x17 R2 / Dell Horizon 17 support (`CSC3551`, subsystem `1028:0B28`) over SPI, with embedded firmware and left/right speaker tuning for both speaker IDs.
 - Added ASUS Zenbook 14 UM3402Y support (`CSC3551`, subsystem `1043:1683`) over I2C, with board-specific firmware and left/right speaker tuning.
 - Added ACPI-backed I2C endpoint discovery and GPIO speaker-ID sampling, with strict provider, board and tuning validation.
 - Added authorized AMD GPIO reset preparation before I2C amplifier identity reads.

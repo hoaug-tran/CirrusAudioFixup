@@ -467,6 +467,13 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
         return true;
     }
     mPlatformIdentityPending = false;
+    if (mPlatformAuthorized) {
+        teardownCommunication();
+    }
+    if (!setupCommunication(mProvider)) {
+        publishDriverVerdict();
+        return true;
+    }
     setProperty("Cirrus_Board_Identity_Status", mPlatformAuthorized ? "VERIFIED" : "REJECTED");
     CIRRUS_LOG("BOARD_IDENTITY_RESOLVED board=0x%08X authorized=%u", mPlatformSubsystemId, unsigned(mPlatformAuthorized));
     if (!mPlatformAuthorized) {
@@ -475,20 +482,11 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
         publishDriverVerdict();
         return true;
     }
-    teardownCommunication();
-    if (!setupCommunication(mProvider)) {
-        publishDriverVerdict();
-        return true;
-    }
     if (mNativeSPI.powerPending()) {
         mStartupPending = true;
         setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_RESOURCES");
         if (mProbeTimer)
             mProbeTimer->setTimeoutMS(10);
-        return true;
-    }
-    if (!mPlatformAuthorized) {
-        publishDriverVerdict();
         return true;
     }
     if (!performPlatformHardwareReset() && mNativeSPI.bound()) {

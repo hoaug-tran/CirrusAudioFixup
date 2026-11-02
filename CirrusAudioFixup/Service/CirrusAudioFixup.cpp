@@ -196,7 +196,12 @@ void CirrusAudioFixup::continueStartup() {
 
 bool CirrusAudioFixup::finishStartup() {
     auto* provider = mProvider;
-    mPlatformIdentityPending = !mPlatformSubsystemId && mPlatformProfile->allowAutomaticInitialization && !bootArgEnabled("-cirrusro");
+    const bool isDynamicDiscoveryProfile = mPlatformProfile && mPlatformProfile->acpiHid &&
+                                           (strcmp(mPlatformProfile->acpiHid, "CSC3551") == 0 ||
+                                            strcmp(mPlatformProfile->acpiHid, "CSC3556") == 0);
+    mPlatformIdentityPending = !mPlatformSubsystemId &&
+                               ((mPlatformProfile && mPlatformProfile->allowAutomaticInitialization) || isDynamicDiscoveryProfile) &&
+                               !bootArgEnabled("-cirrusro");
     if (mPlatformIdentityPending) {
         mPlatformIdentityDeadlineMs = playbackTimeMilliseconds() + 30000;
         mAttachment.amplifier = "WAITING_BOARD_IDENTITY";

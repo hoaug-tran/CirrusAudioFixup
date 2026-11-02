@@ -6,6 +6,12 @@
 #include "Devices/Amplifiers/CS35L41/Hardware/Registers.hpp"
 #include "Devices/Amplifiers/CS35L41/Board/BoardProperties.hpp"
 #include "Platform/Board/BoardDiscovery.hpp"
+#if defined(KERNEL) && defined(__has_include)
+#if __has_include(<pexpert/pexpert.h>)
+#include <pexpert/pexpert.h>
+#define CIRRUS_HAVE_BOOT_ARGS 1
+#endif
+#endif
 namespace cirrus::devices::amplifiers::cs35l41 {
 using ResourceAvailable = bool (*)(uint16_t, uint16_t, uint32_t);
 class CS35L41BoardDiscovery final : public platform::DiscoveredBoard {
@@ -90,8 +96,16 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
                 continue;
             uint32_t observed = 0;
             if (!context.gpio || !context.gpio->read(property, i, observed)) {
-                reason = "CS35L41_SPEAKER_ID_UNREADABLE";
-                return nullptr;
+#if defined(CIRRUS_HAVE_BOOT_ARGS)
+                uint32_t bootSpeaker = 0;
+                if (PE_parse_boot_argn("-cirrusspkid", &bootSpeaker, sizeof(bootSpeaker))) {
+                    observed = bootSpeaker;
+                } else
+#endif
+                {
+                    reason = "CS35L41_SPEAKER_ID_UNREADABLE";
+                    return nullptr;
+                }
             }
             if (speakerKnown && speakers[i] != observed) {
                 reason = "CS35L41_SPEAKER_ID_MISMATCH";
@@ -102,11 +116,30 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         }
         if (!speakerKnown && facts && facts->speakerResource >= 0) {
             if (!context.gpio || !context.gpio->readResource(uint32_t(facts->speakerResource), 0, false, speakers[i])) {
-                reason = context.gpio ? "CS35L41_SPEAKER_ID_UNREADABLE" : "CS35L41_SPEAKER_ID_REQUIRED";
-                return nullptr;
+#if defined(CIRRUS_HAVE_BOOT_ARGS)
+                uint32_t bootSpeaker = 0;
+                if (PE_parse_boot_argn("-cirrusspkid", &bootSpeaker, sizeof(bootSpeaker))) {
+                    speakers[i] = bootSpeaker;
+                    speakerKnown = true;
+                } else
+#endif
+                {
+                    reason = context.gpio ? "CS35L41_SPEAKER_ID_UNREADABLE" : "CS35L41_SPEAKER_ID_REQUIRED";
+                    return nullptr;
+                }
+            } else {
+                speakerKnown = true;
             }
-            speakerKnown = true;
         }
+#if defined(CIRRUS_HAVE_BOOT_ARGS)
+        if (!speakerKnown) {
+            uint32_t bootSpeaker = 0;
+            if (PE_parse_boot_argn("-cirrusspkid", &bootSpeaker, sizeof(bootSpeaker))) {
+                speakers[i] = bootSpeaker;
+                speakerKnown = true;
+            }
+        }
+#endif
         if (!speakerKnown)
             speakers[i] = UINT32_MAX;
         if (speakerKnown && speakers[i] > UINT8_MAX) {

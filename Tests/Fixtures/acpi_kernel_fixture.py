@@ -66,7 +66,7 @@ class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObjec
  IOReturn validateObject(const char* n){++firmwareCalls;if(!strcmp(n,"_DSD")&&dsdValidation)return dsdValidation;return values.count(n)?0:absentValidation;}
  IOReturn evaluateObject(const char* n,OSObject** out){if(!strcmp(n,"_DSD")){if(dsdEvaluation)return dsdEvaluation;if(dsdNullResult){*out=nullptr;return 0;}}auto i=values.find(n);if(i==values.end())return kIOReturnNotFound;*out=i->second;(*out)->retain();return 0;}
  IOReturn evaluateInteger(const char* n,uint32_t* out){++firmwareCalls;auto v=OSDynamicCast(OSNumber,values[n]);if(!v)return kIOReturnIOError;*out=v->v;return 0;}
- unsigned getDeviceStatus(){++firmwareCalls;return 15;}bool isOpen(){return opened;}bool open(IOService*){opened=true;++opens;return true;}
+ unsigned getDeviceStatus(){++firmwareCalls;return 15;}bool isOpen(){return opened;}bool open(IOService*){if(opened)return false;opened=true;++opens;return true;}
  void close(IOService*){assert(opened);opened=false;++closes;}
  IOMemoryMap* mapDeviceMemoryWithIndex(unsigned n){auto i=maps.find(n);auto* selected=i!=maps.end()?i->second:n==0?map:nullptr;if(selected)selected->retain();return selected;}
 };

@@ -307,17 +307,22 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     }
 
     uint32_t pciSubsystemId = 0;
-    IOService* controller = getAudioController();
-    if (auto* pci =
 #if defined(KERNEL)
-            controller ? static_cast<IOPCIDevice*>(controller->metaCast("IOPCIDevice")) : nullptr
-#else
-            OSDynamicCast(IOPCIDevice, controller)
+    PE_parse_boot_argn("-cirrusssid", &pciSubsystemId, sizeof(pciSubsystemId));
 #endif
-    )
-        pciSubsystemId = (uint32_t(pci->configRead16(kIOPCIConfigSubSystemVendorID)) << 16) | pci->configRead16(kIOPCIConfigSubSystemID);
-    if (controller)
-        controller->release();
+    if (!pciSubsystemId) {
+        IOService* controller = getAudioController();
+        if (auto* pci =
+#if defined(KERNEL)
+                controller ? static_cast<IOPCIDevice*>(controller->metaCast("IOPCIDevice")) : nullptr
+#else
+                OSDynamicCast(IOPCIDevice, controller)
+#endif
+        )
+            pciSubsystemId = (uint32_t(pci->configRead16(kIOPCIConfigSubSystemVendorID)) << 16) | pci->configRead16(kIOPCIConfigSubSystemID);
+        if (controller)
+            controller->release();
+    }
     if (const auto* exact = cirrus::platform::findPlatformProfile(acpiHid, pciSubsystemId))
         if (exact->identitySource == cirrus::platform::BoardIdentitySource::AudioPCI)
             mPlatformProfile = exact;

@@ -219,4 +219,17 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **Root cause**: Node `0x17` pincap (`0x0000001c`) lacks an internal EAPD widget. Output depends entirely on CS35L41 receiving power over I2C.
 - **Solution**: Layout 13 connects Node `0x17` to DAC `0x03`, allowing CS35L41 amplifiers to receive the PCM stream.
 
+## 8. Model Notes: Realtek ALC285 (ASUS ROG Zephyrus G14 GA403UV, `1043:1B13`)
+
+- **AppleALC Layout**: Layout 33 (`alcid=33`).
+- **Codec Routing**:
+  - Tweeters (High Frequencies): DAC Node `0x02` → Pin Complex Node `0x14` (`0x90170110`).
+  - Woofers (Bass Speakers): DAC Node `0x03` → Pin Complex Node `0x17` (`0x90170120`) → CS35L56 smart amplifiers over I2S/ASP.
+  - Headphone Jack: DAC Node `0x03` → Pin Complex Node `0x21` (`0x03211020`).
+- **Speaker Behavior**:
+  - AppleALC `layout-id = 33` defines paths for both Node `0x14` (tweeters) and Node `0x17` (woofers / Cirrus amplifiers).
+  - Without CirrusAudioFixup, only the tweeters on Node `0x14` produce audio (thin, earpiece-like sound).
+  - Once CirrusAudioFixup initializes and unmutes both CS35L56 amplifiers over I2C (`0x31` Left, `0x30` Right), woofers operate in tandem with the tweeters.
+  - If woofers remain silent on non-33 layouts, switch to `alcid=33` or ensure Node `0x17` pin widget control is asserted (`alc-verbs 0x17 0x70c 0x02`).
+
 [Back to main guide](../../README.md#installation)

@@ -45,12 +45,16 @@ struct MemoryIO : cirrus::core::RegisterIO {
     }
 };
 int main() {
-    assert(cs35l56FirmwareCount==2);
+    assert(cs35l56FirmwareCount==3);
     auto* resource=selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0x1c63,0);
     assert(resource&&resource->wmfwSize==31996&&resource->binSize==8192&&resource->binRightSize==8192);
     assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0x1c63,1));
     assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0xffff,0));
     assert(memcmp(resource->bin,resource->binRight,8192));
+    auto* asusI2CResource=selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0x1b13,0);
+    assert(asusI2CResource&&asusI2CResource->wmfwSize==31996&&asusI2CResource->binSize==8196&&asusI2CResource->binRightSize==8196);
+    assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0x1b13,1));
+    assert(memcmp(asusI2CResource->bin,asusI2CResource->binRight,8196));
     auto* lenovoResource=selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x17aa,0x391e,0);
     assert(lenovoResource&&lenovoResource->wmfwSize==33364&&lenovoResource->binSize==7216&&lenovoResource->binRightSize==7216);
     assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x17aa,0xffff,0));
@@ -160,32 +164,34 @@ int main() {
         assert(image->algorithmCount == 0 && badCount.reads == 1 && !badCount.writes);
     }
     assert(DSPControl::readAlgorithms(live, *image, 0x1a00d6, 0x030b10));
-    for (bool right : {false, true}) {
-        assert(WMFWParser::parseBIN(right ? resource->binRight : resource->bin,
-                                  right ? resource->binRightSize : resource->binSize, image.get()));
-        auto coefficients = std::make_unique<MappedImage>();
-        assert(WMFWMemoryMapper::mapCoefficients(*image, *coefficients));
-        assert(coefficients->regionCount == 39);
-        for (uint32_t i = 0; i < coefficients->regionCount; ++i) {
-            const auto& region = coefficients->regions[i];
-            uint32_t base = 0, limit = 0;
-            switch (region.regionType) {
-            case RegionType::XM_PACKED: base = 0x02000000; limit = 0x02006000; break;
-            case RegionType::XM_UNPACKED: base = 0x02800000; limit = 0x02808000; break;
-            case RegionType::YM_PACKED: base = 0x02c00000; limit = 0x02c047f4; break;
-            case RegionType::YM_UNPACKED: base = 0x03400000; limit = 0x03405ff8; break;
-            default: assert(false);
+    for (const auto* r : {resource, asusI2CResource}) {
+        for (bool right : {false, true}) {
+            assert(WMFWParser::parseBIN(right ? r->binRight : r->bin,
+                                      right ? r->binRightSize : r->binSize, image.get()));
+            auto coefficients = std::make_unique<MappedImage>();
+            assert(WMFWMemoryMapper::mapCoefficients(*image, *coefficients));
+            assert(coefficients->regionCount == 39);
+            for (uint32_t i = 0; i < coefficients->regionCount; ++i) {
+                const auto& region = coefficients->regions[i];
+                uint32_t base = 0, limit = 0;
+                switch (region.regionType) {
+                case RegionType::XM_PACKED: base = 0x02000000; limit = 0x02006000; break;
+                case RegionType::XM_UNPACKED: base = 0x02800000; limit = 0x02808000; break;
+                case RegionType::YM_PACKED: base = 0x02c00000; limit = 0x02c047f4; break;
+                case RegionType::YM_UNPACKED: base = 0x03400000; limit = 0x03405ff8; break;
+                default: assert(false);
+                }
+                assert(region.dspRegister >= base && uint64_t(region.dspRegister) + region.size <= limit);
             }
-            assert(region.dspRegister >= base && uint64_t(region.dspRegister) + region.size <= limit);
-        }
-        MemoryIO tuningMemory;
-        assert(WMFWUploadScheduler::run("cs35l56-tuning", tuningMemory, *coefficients, *session));
-        assert(session->complete && session->passCount == coefficients->regionCount);
-        for (unsigned failure = 1; failure <= tuningMemory.writes; ++failure) {
-            MemoryIO failing;
-            failing.failWrite = failure;
-            assert(!WMFWUploadScheduler::run("cs35l56-tuning-fault", failing, *coefficients, *session));
-            assert(!session->complete && session->passCount < coefficients->regionCount);
+            MemoryIO tuningMemory;
+            assert(WMFWUploadScheduler::run("cs35l56-tuning", tuningMemory, *coefficients, *session));
+            assert(session->complete && session->passCount == coefficients->regionCount);
+            for (unsigned failure = 1; failure <= tuningMemory.writes; ++failure) {
+                MemoryIO failing;
+                failing.failWrite = failure;
+                assert(!WMFWUploadScheduler::run("cs35l56-tuning-fault", failing, *coefficients, *session));
+                assert(!session->complete && session->passCount < coefficients->regionCount);
+            }
         }
     }
     for (const char* name : {"CAL_CHECKSUM", "CAL_STATUS", "CAL_R", "CAL_AMBIENT"}) {

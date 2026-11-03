@@ -1,6 +1,6 @@
 # Custom I2C Provider Interface
 
-Cirrus smart amplifiers on I2C buses (such as Lenovo Legion and ASUS Zenbook laptops) require the custom [VoodooI2C `main` branch](https://github.com/hoaug-tran/VoodooI2C/tree/main).
+Cirrus smart amplifiers on I2C buses (such as Lenovo Legion, ASUS Zenbook, and HP ENVY x360 15-ey0xxx laptops) require the custom [VoodooI2C `main` branch](https://github.com/hoaug-tran/VoodooI2C/tree/main).
 
 The custom provider exposes the `VoodooI2CTransferToAddress` platform function, which allows CirrusAudioFixup to communicate with multiple amplifier addresses through a single controller nub.
 

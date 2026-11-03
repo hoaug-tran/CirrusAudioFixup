@@ -73,7 +73,7 @@ inline bool pulseACPIGPIOReset(IOACPIPlatformDevice* source, uint32_t resource, 
     if (provider) {
         if (amdGPIOControllerReady(provider, reason)) {
             reason = "RESET_PROVIDER_BUSY";
-            if (owner && !provider->isOpen() && provider->open(owner)) {
+            if (owner && provider->open(owner)) {
                 auto* map = provider->mapDeviceMemoryWithIndex(0);
                 reason = "RESET_MEMORY_UNAVAILABLE";
                 if (map && map->getVirtualAddress() && !(map->getVirtualAddress() & 3) &&

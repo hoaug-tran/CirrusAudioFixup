@@ -1,8 +1,8 @@
 """Replay supported board/resource contracts; no physical audio or bus simulation.
 
-HP: issue #3 (103C89C6, R/L); G614JI: issue #5 (10431C9F, L/R).
-GU605MV: issue #8 and gu605mv-asp-readback.json; Zenbook: captured fixture.
-G614JV issues #2/#4 lack verified SSID/tuning: test rejection, not guessed support.
+HP: issue #3 (103C89C6, R/L); HP ENVY x360 15-ey0xxx: issue #14 (103C8A31, L/R).
+G614JI: issue #5 (10431C9F, L/R); GU605MV: issue #8 and gu605mv-asp-readback.json.
+Zenbook: captured fixture; G614JV issues #2/#4 lack verified SSID/tuning: test rejection.
 Legacy Lenovo endpoints remain covered by the complete driver lifecycle suite.
 """
 import sys
@@ -100,6 +100,87 @@ int main(){
   }
   auto wrong=identity;wrong.subsystemDevice^=1;assert(!found->configuration.permits(wrong));
   printf("PASS board/resource replay: %s order=%u\n",board.name,unsigned(reverse));
+ }
+ // HP ENVY x360 15-ey0xxx / issue #14 (Realtek ALC245 / CS35L41 dual-amp on I2C 0x40/0x41)
+ {
+  const auto* facts = l41::boardProperties(0x103c, 0x8a31);
+  assert(facts && facts->count == 2 && facts->internalBoost);
+  assert(facts->channels[0] == 0 && facts->channels[1] == 1);
+  assert(facts->resetResource == 0 && facts->speakerResource == 1 && facts->csResource == -1);
+  assert(facts->inductor == 1000 && facts->peak == 4100 && facts->capacitor == 24);
+
+  const auto* profile = platform::findPlatformProfile("CSC3551");
+  assert(profile && profile->amplifierModel == core::AmplifierModel::CS35L41);
+
+  core::BusEndpoint endpoints[] = {
+   {core::BusTransportType::I2C, "\\_SB.I2CB.SPKR", 0x40, false, 0, 400000, 0},
+   {core::BusTransportType::I2C, "\\_SB.I2CB.SPKR", 0x41, false, 0, 400000, 0}
+  };
+  struct HP_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+   unsigned resets = 0;
+   int32_t lastReset = -1;
+   uint32_t lastResource = UINT32_MAX;
+   bool read(const char*, size_t, uint32_t& value) override { value = 0; return true; }
+   bool readResource(uint32_t resource, uint32_t pin, bool low, uint32_t& value) override {
+    (void)pin; (void)low;
+    lastResource = resource;
+    value = 0;
+    return true;
+   }
+   bool reset(const char*, int32_t resource) override {
+    ++resets;
+    lastReset = resource;
+    return true;
+   }
+  } gpio;
+
+  const platform::BoardIdentity identity{0x103c, 0x8a31, "CSC3551"};
+  const char* reason = nullptr;
+  Properties p;
+
+  // 1. Without GPIO access, speakerResource >= 0 fails closed
+  assert(!l41::resolveBoardConfiguration({identity, endpoints, 2, p}, available, reason));
+  assert(!strcmp(reason, "CS35L41_SPEAKER_ID_REQUIRED"));
+
+  // 2. With GPIO access, discovery succeeds via production available check and BoardProperties
+  std::unique_ptr<platform::DiscoveredBoard> found(
+   l41::resolveBoardConfiguration({identity, endpoints, 2, p, &gpio}, available, reason));
+  assert(found && found->configuration.permits(identity) && found->configuration.count == 2);
+  assert(gpio.lastResource == 1); // speakerResource index 1 verified
+
+  // Verify production firmware resources for both speaker ID 0 and 1
+  const auto* res0 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x103c, 0x8a31, 0);
+  assert(res0 && res0->wmfw && res0->wmfwSize);
+  checkFirmware(*res0);
+  const auto* res1 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x103c, 0x8a31, 1);
+  assert(res1 && res1->wmfw && res1->wmfwSize);
+  checkFirmware(*res1);
+
+  // 3. Hardware preparation triggers reset on resetResource index 0
+  assert(found->prepareHardware(gpio));
+  assert(gpio.resets == 1 && gpio.lastReset == 0);
+
+  // 4. Validate amplifier endpoints, channels, and electrical power config
+  for (size_t i = 0; i < 2; ++i) {
+   const auto& binding = found->configuration.amplifiers[i];
+   assert(binding.endpoint.transport == core::BusTransportType::I2C);
+   assert(binding.endpoint.i2cAddress == 0x40 + i);
+   assert(binding.channelIndex == i);
+   l41::DeviceConfiguration config;
+   assert(l41::decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize,
+                                         binding.driverConfigurationKind, config));
+   assert(config.power.internal() && !config.power.switched());
+   assert(config.power.inductorNanohenry == 1000);
+   assert(config.power.peakMilliamp == 4100);
+   assert(config.power.capacitorMicrofarad == 24);
+   assert(config.gpio1Function == 0 && config.gpio2Function == 2);
+  }
+
+  // 5. Permitting and mismatch rejection
+  auto wrong = identity;
+  wrong.subsystemDevice ^= 1;
+  assert(!found->configuration.permits(wrong));
+  printf("PASS HP ENVY x360 15-ey0xxx issue #14: I2C dual-amp (0x40/0x41), internal boost (1000nH/4100mA/24uF), GPIO reset(0)/speaker(1)\n");
  }
  // Reported G614JV identity/tuning gaps must remain unauthorized.
  Properties empty;core::BusEndpoint unknown[]={{core::BusTransportType::SPI,"controller",0,false,0,4000000,0},

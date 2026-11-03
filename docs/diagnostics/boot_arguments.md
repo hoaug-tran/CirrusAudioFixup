@@ -66,6 +66,22 @@ When using `-cirrusphase=<name>`, execution stops after the specified phase:
 > [!WARNING]
 > Calibration values must match the physical speaker impedance in firmware units. Never copy calibration values from an unrelated laptop model.
 
+### HP ENVY x360 15-ey0xxx (`103C:8A31`) Configuration Notes
+
+1. **Remove `-cirrusro`**: If present in `boot-args`, remove `-cirrusro`. This flag enforces read-only inspection and blocks all amplifier register writes and GPIO reset assertions, leaving speakers unpowered.
+2. **AppleALC Layout**: Use `alcid=13` to select the HP ALC245 profile for speaker routing (Pin Complex Node `0x17`).
+3. **Speaker Calibration**:
+   - By default, CirrusAudioFixup operates without calibration overrides if no EFI calibration variable exists (`Cirrus_Calibration_Status = NOT_AVAILABLE`).
+   - Smart-amplifier calibration is specific to each physical speaker unit. Never copy measured resistance values from another machine.
+   - If you have extracted unit-specific factory calibration values from your own machine (e.g., via OEM diagnostic dumps or Windows driver registry), provide them via:
+     ```text
+     -cirruscalr0l=<left_r0> -cirruscalr0r=<right_r0> -cirruscalambient=<ambient_temp>
+     ```
+     - `-cirruscalr0l=<value>`: Unit-specific left speaker DC resistance ($R_0$) in firmware units.
+     - `-cirruscalr0r=<value>`: Unit-specific right speaker DC resistance ($R_0$) in firmware units.
+     - `-cirruscalambient=<value>`: Ambient temperature in °C recorded during calibration (mandatory when supplying manual $R_0$).
+     - Optional status byte: `-cirruscalstatus=1` (defaults to `1`).
+
 ---
 
 ## Removed Arguments

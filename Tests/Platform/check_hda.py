@@ -149,6 +149,27 @@ int main() {
     for(unsigned tick=0;tick<100;++tick)check(!unsupported.synchronizeHdaStream(),"unsupported format remains blocked");
     check(unsupported.diagFailures==2,"unchanged unsupported format diagnosed once per amplifier");
     check(unsupported.properties["Cirrus_HDA_Last_Stream"].find("rate_hz=44100")!=std::string::npos,"dump explains rejected HDA rate");
+    CirrusAudioFixup quad;
+    quad.stream(0,1,true,0x33);
+    check(quad.synchronizeHdaStream() && quad.mHdaLastFormat==0x33 && quad.mHdaConverterPrepared,
+          "4-channel 48 kHz 24-bit output stream accepted");
+    check(quad.properties["Cirrus_HDA_Last_Stream"].find("channels=4")!=std::string::npos &&
+          quad.properties["Cirrus_HDA_Last_Stream"].find("compatible=1")!=std::string::npos,
+          "dump records 4 channels and compatibility");
+    quad.stream(0,1,true,0x31);
+    check(quad.synchronizeHdaStream() && quad.mHdaLastFormat==0x31 && quad.mHdaConverterPrepared,
+          "dynamic switch from 4-channel to stereo accepted");
+    check(quad.properties["Cirrus_HDA_Last_Stream"].find("channels=2")!=std::string::npos,
+          "dump reflects dynamic transition to 2 channels");
+    quad.stream(0,1,true,0x33);
+    check(quad.synchronizeHdaStream() && quad.mHdaLastFormat==0x33 && quad.mHdaConverterPrepared,
+          "dynamic switch back to 4-channel accepted");
+    for(uint16_t badFmt : {0x30U,0x32U,0x34U,0x35U,0x37U}) {
+        CirrusAudioFixup unsupportedChannels;
+        unsupportedChannels.stream(0,1,true,badFmt);
+        check(!unsupportedChannels.synchronizeHdaStream(),"unsupported channel stream blocked");
+        check(unsupportedChannels.diagFailures==2,"unsupported channel format diagnosed once per amplifier");
+    }
     CirrusAudioFixup ambiguous;
     check(ambiguous.synchronizeHdaStream(),"initial unique stream before ambiguity");
     ambiguous.write16(0,0x2000); ambiguous.stream(1,2);

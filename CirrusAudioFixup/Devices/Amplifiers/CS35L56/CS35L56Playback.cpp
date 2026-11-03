@@ -12,7 +12,7 @@ IOReturn CS35L56Driver::checkProtectionStatus() {
 }
 bool CS35L56Driver::validatePlayback(const core::PlaybackContext& context) {
     const auto stream = mHost.streamObservation();
-    // The HDA configuration is the Linux 48 kHz, stereo, 24-bit I2S contract.
+    // The HDA configuration is the Linux 48 kHz, stereo or 4-channel, 24-bit I2S contract.
     return writable() && mAmplifier.initialized && mAmplifier.firmwareValidated && mAmplifier.calibrated && !mAmplifier.faulted &&
            context.hasAudio && context.eventRoute && context.routePermitsPlayback && context.streamActive && context.streamTag &&
            platform::hda::HDAStreamWatcher::isFormatSupported(context.streamFormat) && stream.observed && stream.streamActive &&

@@ -1007,6 +1007,18 @@ int main() {
         for(int tick = 0; tick < 25; ++tick) headphoneCycle.runBackgroundMonitor();
         checkNew(headphoneCycle.mAmplifiers[0].playbackActive, "fallback survives repeated clock returns");
     }
+    CirrusAudioFixup coldStartNoClock;
+    coldStartNoClock.pll = false;
+    coldStartNoClock.pup = false;
+    for(int tick = 0; tick < 150; ++tick) coldStartNoClock.runBackgroundMonitor();
+    checkNew(coldStartNoClock.unmute == 0 && !coldStartNoClock.mAmplifiers[0].playbackActive &&
+             coldStartNoClock.mAmplifiers[0].pllRecoveryPending && coldStartNoClock.mAmplifiers[0].pllRecoveryAttempts == 0,
+             "cold start clock absence stays muted without exhausting recovery");
+    coldStartNoClock.pup = true;
+    coldStartNoClock.pll = true;
+    for(int tick = 0; tick < 30; ++tick) coldStartNoClock.runBackgroundMonitor();
+    checkNew(!coldStartNoClock.mAmplifiers[0].playbackFaulted && coldStartNoClock.mAmplifiers[0].playbackActive,
+             "clock arrival after cold start recovers and starts playback");
     CirrusAudioFixup recoveryPowerFault;
     // Run the actual monitor body with completed output/engine observations.
     // Headphone selection must quiesce immediately even if its HDA stream and

@@ -30,7 +30,6 @@ The output displays a 4-byte little-endian hexadecimal value:
 | `<0f 00 00 00>` | `15` |
 | `<15 00 00 00>` | `21` |
 | `<1c 00 00 00>` | `28` |
-| `<57 00 00 00>` | `87` |
 | `<63 00 00 00>` | `99` |
 
 You can also check if an `alcid` boot argument is currently active:
@@ -199,12 +198,27 @@ The following table summarizes real-world hardware where this diagnostic methodo
 
 | Laptop model | Codec | Amplifier | Tweeter pin | Woofer pin | Active DAC | Verified verb sequence | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Alienware x17 R2 / Dell Horizon 17** (`1028:0B28`) | ALC289 | 2x CS35L41 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` / `0x03` | `01770100 01770500 0173b000 01770c02 01770740` (or `alcid=13`) | Verified |
 | **ASUS ROG Zephyrus G16 GU605MV** (`1043:1C63`) | ALC285 | 2x CS35L56 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770c02 01770740` | Verified (#8) |
 | **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`) | ALC287 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770740` | Verified (#16) |
 | **HP ENVY x360 15-ey0xxx** (`103C:8A31`) | ALC245 | 2x CS35L41 (I2C) | N/A (dual) | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD) | Verified (#14) |
 
 ### Machine notes
 
+#### Alienware x17 R2 / Dell Horizon 17 (`1028:0B28`, Realtek ALC289)
+- **Problem**: Tweeters play normally on Node `0x14`, but woofers on 2x CS35L41 over SPI are completely silent. Driver logs `Cirrus_Diag_LatestFailure_spi0 = POWER_UP_TIMEOUT` with `0x10010` actual `0x400000` (`CLK_ERR`), expected `0x1000000` (`PUP_DONE`).
+- **Root cause**: AppleALC Layout 11 (`alcid=11`) configures Node `0x17` Pin Default as `0x400000F0` (disabled / no physical connection) and omits Node `0x17` from `Platforms11.xml`. With Node `0x17` left in D3 and pin OUT disabled, Realtek ALC289 outputs no BCLK to the CS35L41 amplifiers. Upon `GLOBAL_EN`, the missing BCLK raises `CLK_ERR` (`0x00400000`), halting the power sequencer. In earlier builds, `CS35L41Playback.cpp` erroneously gated clock recovery behind `pllRecoveryAttempts > 0`, causing the driver to permanently latch `playbackFaulted` on the very first start without retrying.
+- **Solution**:
+  1. Driver recovery fix: Enable `clockWait` on initial start (`pllRecoveryAttempts < 3`), allowing the driver to back off into cooldown and retry without exhausting recovery attempts when BCLK is delayed.
+  2. Codec route activation: Send the 5-verb activation sequence to Realtek ALC289 Node `0x17`:
+     ```bash
+     alc-verb 0x17 0x701 0x00   # Connect Node 0x17 to DAC 0x02 (or 0x01 for DAC 0x03)
+     alc-verb 0x17 0x705 0x00   # Wake Pin Complex to D0
+     alc-verb 0x17 0x3b0 0x00   # Unmute amp at 0 dB gain
+     alc-verb 0x17 0x70c 0x02   # Enable EAPD external amplifier gate
+     alc-verb 0x17 0x707 0x40   # Pin widget control: enable OUT to start BCLK/I2S
+     ```
+     Alternatively, use AppleALC Layout 13 (`alcid=13`), which natively defines Node `0x17` as `0x90170111` (internal fixed speaker) and routes it to DAC `0x03` alongside Node `0x14`.
 #### Lenovo ThinkBook 16p G6 IAX (`17AA:391E`, Realtek ALC287)
 - **Problem**: With AppleALC Layout 21 (`alcid=21`), tweeters played on Node `0x14` but woofers on 2x CS35L56 were silent.
 - **Root cause**: Node `0x17` defaults to connection index 1 (DAC `0x03`), which carries no audio stream.

@@ -454,7 +454,7 @@ void CS35L41Driver::monitorCS35L41(AmplifierState& amp, const cirrus::core::Play
             const auto failure = transition.failure;
             recordDiagnosticFailure(amp, failure, transition.failureRegister, transition.expected, transition.actual, mLastTransferReturn);
             uint32_t retryPllStatus = 0;
-            bool clockWait = failure == DIAG_POWER_UP_TIMEOUT && amp.pllRecoveryAttempts > 0 &&
+            bool clockWait = failure == DIAG_POWER_UP_TIMEOUT && amp.pllRecoveryAttempts < 3 &&
                              readRegister(amp, registers::kRegIrq1RawStatus3, &retryPllStatus, TRACE_PLAYBACK) && !(retryPllStatus & 2) &&
                              checkProtectionStatus(amp);
             amp.playbackFaulted = true;

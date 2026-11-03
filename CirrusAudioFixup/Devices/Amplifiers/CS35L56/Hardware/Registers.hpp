@@ -52,6 +52,10 @@ constexpr uint32_t kRegSoundWireInput3 = 0x00004C78;
 constexpr uint32_t kRegSoundWireInput4 = 0x00004C7C;
 constexpr uint32_t kFirmwareId = 0x001A00D6;
 constexpr uint32_t kFirmwareVersion = 0x00030B10;
+constexpr uint32_t kFirmwareVersionRev3_11_21 = 0x00030B15;
+constexpr bool isSupportedFirmwareVersion(uint32_t version) {
+    return version == kFirmwareVersion || version == kFirmwareVersionRev3_11_21;
+}
 constexpr uint32_t kFirmwareMissingMask = 1;
 constexpr uint32_t kAspReceiveMask = 0x00030000;
 constexpr uint32_t kCommandPreventHibernate = 0x02000003;

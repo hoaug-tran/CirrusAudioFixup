@@ -17,14 +17,15 @@ public:
         uid = (uint64_t(lot) << 32) | die;
         return true;
     }
-    static bool readAlgorithms(core::RegisterIO& io, FirmwareImage& image, uint32_t firmwareId, uint32_t firmwareVersion) {
+    static bool readAlgorithms(core::RegisterIO& io, FirmwareImage& image, uint32_t firmwareId, uint32_t firmwareVersion = 0) {
         image.algorithmCount = image.algorithmTotal = image.firmwareId = image.haloFirmwareVersion = 0;
         uint8_t table[40 + 63 * 24]{};
         if (!io.bulkRead(registers::kRegDspXMemory, table, 40))
             return false;
         const uint32_t count = WMFWParser::readUnpacked32BE(table, 9);
+        const uint32_t version = WMFWParser::readUnpacked32BE(table, 4);
         if (!count || count > 63 || WMFWParser::readUnpacked32BE(table, 3) != firmwareId ||
-            WMFWParser::readUnpacked32BE(table, 4) != firmwareVersion)
+            (firmwareVersion ? (version != firmwareVersion) : !registers::isSupportedFirmwareVersion(version)))
             return false;
         const size_t bytes = 40 + size_t(count) * 24;
         for (size_t offset = 40; offset < bytes;) {

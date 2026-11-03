@@ -34,5 +34,14 @@ public:
         c.writable = writableRegister;
         return c;
     }
+    static constexpr core::RegisterMapConfig i2cConfig() {
+        core::RegisterMapConfig c{};
+        c.paddingBytes = 0;
+        c.maxRegister = registers::kLastRegister;
+        c.readFlag = 0;
+        c.readable = readableRegister;
+        c.writable = writableRegister;
+        return c;
+    }
 };
 }

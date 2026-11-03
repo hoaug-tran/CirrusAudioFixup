@@ -137,14 +137,16 @@ bool CirrusAudioFixup::bindAmplifierDrivers() {
         if (ret != kIOReturnSuccess)
             recordAttachmentFailure("BINDING", failure.reason, ret, uint32_t(failure.index), "AMP_SLOT");
         if (ret != kIOReturnSuccess)
-            CIRRUS_ERR("driver binding rejected: index=%lu reason=%s ret=0x%08X", failure.index, failure.reason, ret);
+            CIRRUS_ERR("driver binding rejected: index=%lu reason=%s ret=0x%08X",
+                       static_cast<unsigned long>(failure.index), failure.reason, ret);
     } else
         setProperty("Cirrus_Runtime_Bind_Reason", "PORT_OR_PROFILE_PREPARATION_FAILED");
     for (auto* context : contexts)
         delete context;
     setProperty("Cirrus_Runtime_Bind_Return", uint64_t(uint32_t(ret)), 32);
     if (ret != kIOReturnSuccess) {
-        CIRRUS_ERR("amplifier runtime bind rejected: profile=%s endpoints=%lu ret=0x%08X", mPlatformProfile->name, mAmplifierCount, ret);
+        CIRRUS_ERR("amplifier runtime bind rejected: profile=%s endpoints=%lu ret=0x%08X", mPlatformProfile->name,
+                   static_cast<unsigned long>(mAmplifierCount), ret);
         releaseAmplifierDrivers();
         return false;
     }
@@ -286,7 +288,10 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     const uint32_t previousSubsystemId = mPlatformSubsystemId;
     const char* acpiHid = nullptr;
     OSObject* ownedHid = nullptr;
-    if (auto* acpi = cirrus::support::acpiDeviceCast(mProvider)) {
+    IOACPIPlatformDevice* acpi = cirrus::support::acpiDeviceCast(mProvider);
+    if (!acpi && mProvider)
+        acpi = cirrus::support::acpiDeviceCast(mProvider->getProperty("acpi-device"));
+    if (acpi) {
         if (acpi->evaluateObject("_HID", &ownedHid) == kIOReturnSuccess)
             if (auto* hid = OSDynamicCast(OSString, ownedHid))
                 acpiHid = hid->getCStringNoCopy();
@@ -327,7 +332,7 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         if (exact->identitySource == cirrus::platform::BoardIdentitySource::AudioPCI)
             mPlatformProfile = exact;
     uint32_t acpiSubsystemId = 0;
-    if (auto* acpi = cirrus::support::acpiDeviceCast(mProvider)) {
+    if (acpi) {
         OSObject* object = nullptr;
         if (acpi->evaluateObject("_SUB", &object) == kIOReturnSuccess)
             if (auto* sub = OSDynamicCast(OSString, object))
@@ -339,19 +344,19 @@ void CirrusAudioFixup::resolvePlatformProfile() {
             if (exact->identitySource == cirrus::platform::BoardIdentitySource::ACPI)
                 mPlatformProfile = exact;
     if (mDiscoveredBoard && acpiHid) {
-        const uint32_t subsystemId = cirrus::support::acpiDeviceCast(mProvider) ? acpiSubsystemId : pciSubsystemId;
+        const uint32_t subsystemId = acpi ? acpiSubsystemId : pciSubsystemId;
         const cirrus::platform::BoardIdentity identity{uint16_t(subsystemId >> 16), uint16_t(subsystemId), acpiHid};
         if (mDiscoveredBoard->configuration.permits(identity))
             mPlatformProfile = &mDiscoveredProfile;
     }
     mPlatformSubsystemId =
-        (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && cirrus::support::acpiDeviceCast(mProvider))
+        (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && acpi)
             ? acpiSubsystemId
             : pciSubsystemId;
     mPlatformAuthorized = cirrus::platform::permitsHardwareInitialization(*mPlatformProfile, mPlatformSubsystemId);
     setProperty("Cirrus_Platform_ACPI_SSID", uint64_t(acpiSubsystemId), 32);
     setProperty("Cirrus_Platform_Identity_Source",
-                (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && cirrus::support::acpiDeviceCast(mProvider))
+                (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && acpi)
                     ? "ACPI_SUB"
                     : "AUDIO_PCI");
     if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != mPlatformSubsystemId) {
@@ -361,7 +366,7 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         setProperty("Cirrus_Platform_Profile", mPlatformProfile->name);
         setProperty("Cirrus_Platform_ACPI_HID", acpiHid ? acpiHid : "unknown");
         CIRRUS_LOG("platform profile selected: %s (hid=%s, endpoints=%lu)", mPlatformProfile->name, acpiHid ? acpiHid : "unknown",
-                   mPlatformProfile->endpointCount);
+                   static_cast<unsigned long>(mPlatformProfile->endpointCount));
     }
     OSSafeReleaseNULL(ownedHid);
 }
@@ -621,11 +626,11 @@ bool CirrusAudioFixup::setupCommunication(IOService* provider) {
         recordAttachmentFailure(controllerReturn == kIOReturnSuccess ? "POLICY" : "COMMUNICATION", failure.reason, ret,
                                 uint32_t(failure.index));
     if (ret != kIOReturnSuccess)
-        CIRRUS_ERR("SPI bind rejected: reason=%s index=%lu source=%s detail=0x%08X ret=0x%08X", failure.reason, failure.index,
-                   failure.source, failure.detail, ret);
+        CIRRUS_ERR("SPI bind rejected: reason=%s index=%lu source=%s detail=0x%08X ret=0x%08X", failure.reason,
+                   static_cast<unsigned long>(failure.index), failure.source, failure.detail, ret);
     else
-        CIRRUS_LOG("SPI bound: endpoints=%lu board=%s access=%s", mNativeSPI.count(), mPlatformProfile->name,
-                   writable ? "AUTHORIZED_WRITES" : "READ_ONLY");
+        CIRRUS_LOG("SPI bound: endpoints=%lu board=%s access=%s", static_cast<unsigned long>(mNativeSPI.count()),
+                   mPlatformProfile->name, writable ? "AUTHORIZED_WRITES" : "READ_ONLY");
     return ret == kIOReturnSuccess;
 }
 
@@ -637,13 +642,13 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
     for (size_t i = 0; i < mNativeSPI.count() && i < kMaxAmplifiers; ++i) {
         const auto endpoint = mNativeSPI.endpoint(i);
         char key[64]{};
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ChipSelect", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ChipSelect", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(endpoint.spiChipSelect)), 32);
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Controller", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Controller", static_cast<unsigned long>(i));
         setProperty(key, endpoint.controllerPath);
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ClockHz", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_ClockHz", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(endpoint.spiClockHz)), 32);
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Mode", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Mode", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(endpoint.spiMode)), 32);
         auto* io = mNativeSPI.registers(i);
         uint32_t identityRegister = 0, identityMask = 0xffffffffU;
@@ -662,8 +667,8 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
             if (!definition) {
                 mAttachment.amplifier = "UNSUPPORTED";
                 recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported, uint32_t(i));
-                CIRRUS_ERR("SPI endpoint has no matching registered driver: endpoint=%lu controller=%s CS=%u; no probe", i,
-                           endpoint.controllerPath, endpoint.spiChipSelect);
+                CIRRUS_ERR("SPI endpoint has no matching registered driver: endpoint=%lu controller=%s CS=%u; no probe",
+                           static_cast<unsigned long>(i), endpoint.controllerPath, endpoint.spiChipSelect);
                 continue;
             }
         } else
@@ -675,7 +680,7 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         identityMask = definition->identityMask;
         if (io && definition->prepareIdentity && !bootArgEnabled("-cirrusro") && !bootArgStrEquals("-cirrusphase", "probe")) {
             const auto ready = definition->prepareIdentity(*io);
-            snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Prepare_Return", i);
+            snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Prepare_Return", static_cast<unsigned long>(i));
             setProperty(key, uint64_t(uint32_t(ready)), 32);
             if (ready != kIOReturnSuccess) {
                 mAttachment.communication = "FAILED";
@@ -688,18 +693,19 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
         const uint32_t rawId = id;
         recordTrace(TRACE_PROBE, uint8_t(i), false, false, identityRegister, readable ? rawId : 0,
                     io ? io->lastError() : kIOReturnNotReady);
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_RawDeviceID", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_RawDeviceID", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(rawId)), 32);
         id &= identityMask;
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Probe_Return", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Probe_Return", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(io ? io->lastError() : kIOReturnNotReady)), 32);
-        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_DeviceID", i);
+        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_DeviceID", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(id)), 32);
         if (!readable) {
             mAttachment.communication = "FAILED";
             recordAttachmentFailure("COMMUNICATION", "SPI_IDENTITY_TRANSFER_FAILED", io ? io->lastError() : kIOReturnNotReady, uint32_t(i));
-            CIRRUS_ERR("SPI identity read failed: endpoint=%lu controller=%s CS=%u reg=0x%08X ret=0x%08X", i, endpoint.controllerPath,
-                       endpoint.spiChipSelect, identityRegister, io ? io->lastError() : kIOReturnNotReady);
+            CIRRUS_ERR("SPI identity read failed: endpoint=%lu controller=%s CS=%u reg=0x%08X ret=0x%08X",
+                       static_cast<unsigned long>(i), endpoint.controllerPath, endpoint.spiChipSelect, identityRegister,
+                       io ? io->lastError() : kIOReturnNotReady);
             continue;
         }
         // Both manifest and legacy discovery use module-owned identity policy.
@@ -707,8 +713,8 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
             mAttachment.communication = "READY";
             mAttachment.amplifier = "IDENTITY_MISMATCH";
             recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound, uint32_t(i));
-            CIRRUS_ERR("SPI silicon unsupported/mismatched: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization", i,
-                       endpoint.controllerPath, endpoint.spiChipSelect, id);
+            CIRRUS_ERR("SPI silicon unsupported/mismatched: endpoint=%lu controller=%s CS=%u DEVID=0x%08X; no initialization",
+                       static_cast<unsigned long>(i), endpoint.controllerPath, endpoint.spiChipSelect, id);
             if (bootArgEnabled("-cirrusdbg")) {
                 const uint32_t divisors[]{1, 4, 16};
                 unsigned sample = 0, errors = 0;
@@ -722,18 +728,18 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                         char detail[128]{};
                         snprintf(detail, sizeof(detail), "hz=%u reg=0x%08x value=0x%08x ret=0x%08x", hz, identityRegister, observed,
                                  uint32_t(result));
-                        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Sample_%u", i, sample++);
+                        snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Sample_%u", static_cast<unsigned long>(i), sample++);
                         setProperty(key, detail);
                         if (result != kIOReturnSuccess)
                             ++errors;
                         if (result == kIOReturnSuccess &&
                             (observed & identityMask) == (configuredBinding ? configuredBinding->siliconId : definition->siliconId)) {
-                            snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Diagnostic_Match_Hz", i);
+                            snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Diagnostic_Match_Hz", static_cast<unsigned long>(i));
                             setProperty(key, uint64_t(hz), 32);
                         }
                     }
                 }
-                snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Samples_Status", i);
+                snprintf(key, sizeof(key), "Cirrus_SPI_%lu_Identity_Samples_Status", static_cast<unsigned long>(i));
                 setProperty(key, errors >= 3 ? "STOPPED_AFTER_ERRORS" : sample == 9 ? "COMPLETE" : "PARTIAL_LIMIT");
             }
             continue;
@@ -759,7 +765,8 @@ size_t CirrusAudioFixup::detectNativeSPIAmplifiers() {
                     amp.channel = static_cast<cirrus::core::AudioChannel>(binding.channelIndex);
             }
         }
-        CIRRUS_LOG("SPI endpoint=%lu controller=%s CS=%u clock=%u mode=%u DEVID=0x%08X", i, endpoint.controllerPath, endpoint.spiChipSelect,
+        CIRRUS_LOG("SPI endpoint=%lu controller=%s CS=%u clock=%u mode=%u DEVID=0x%08X",
+                   static_cast<unsigned long>(i), endpoint.controllerPath, endpoint.spiChipSelect,
                    endpoint.spiClockHz, endpoint.spiMode, id);
     }
     mProbingAmplifiers = false;
@@ -797,7 +804,8 @@ void CirrusAudioFixup::bringUpAmplifiers() {
 #endif
         setProperty("Cirrus_Runtime_Block_Reason", !mPlatformAuthorized ? "BOARD_NOT_AUTHORIZED" : "INCOMPLETE_TOPOLOGY");
         CIRRUS_ERR("initialization blocked: authorized=%u detected=%lu expected=%lu; no amplifier initialization",
-                   unsigned(mPlatformAuthorized), mAmplifierCount, expectedAmplifierCount());
+                   unsigned(mPlatformAuthorized), static_cast<unsigned long>(mAmplifierCount),
+                   static_cast<unsigned long>(expectedAmplifierCount()));
         publishDriverVerdict();
         return;
     }
@@ -842,7 +850,8 @@ void CirrusAudioFixup::bringUpAmplifiers() {
             if (status->stage == cirrus::core::AmplifierStage::Faulted)
                 mAmplifiers[i].playbackFaulted = true;
             if (status->firstFailure != kIOReturnSuccess)
-                CIRRUS_ERR("AMP driver failure: index=%lu stage=%u first=0x%08X cleanup=0x%08X", i, unsigned(status->firstFailureStage),
+                CIRRUS_ERR("AMP driver failure: index=%lu stage=%u first=0x%08X cleanup=0x%08X",
+                           static_cast<unsigned long>(i), unsigned(status->firstFailureStage),
                            status->firstFailure, status->cleanupResult);
         }
     }
@@ -895,9 +904,9 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         if (!endpoint.valid() || endpoint.transport != cirrus::core::BusTransportType::I2C || endpoint.tenBitAddress ||
             strcmp(endpoint.controllerPath, mRuntimeControllerPath)) {
             recordAttachmentFailure("RESOURCE", "I2C_ENDPOINT_UNMATCHED", kIOReturnUnsupported, uint32_t(i));
-            CIRRUS_ERR("I2C endpoint unsupported/unmatched: index=%lu controller=%s address=0x%X tenBit=%u bus=%u", i,
-                       endpoint.controllerPath, unsigned(endpoint.i2cAddress), unsigned(endpoint.tenBitAddress),
-                       unsigned(endpoint.transport));
+            CIRRUS_ERR("I2C endpoint unsupported/unmatched: index=%lu controller=%s address=0x%X tenBit=%u bus=%u",
+                       static_cast<unsigned long>(i), endpoint.controllerPath, unsigned(endpoint.i2cAddress),
+                       unsigned(endpoint.tenBitAddress), unsigned(endpoint.transport));
             continue;
         }
         const char* hid = binding.acpiHid ? binding.acpiHid : mPlatformProfile->acpiHid;
@@ -905,7 +914,8 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         if (!hid || !mPlatformProfile->acpiHid || !driver || strcmp(hid, mPlatformProfile->acpiHid)) {
             mAttachment.amplifier = "UNSUPPORTED";
             recordAttachmentFailure("AMPLIFIER", "NO_REGISTERED_DRIVER", kIOReturnUnsupported, uint32_t(i));
-            CIRRUS_ERR("I2C driver unsupported: endpoint=%lu hid=%s silicon=0x%08X", i, hid, binding.siliconId);
+            CIRRUS_ERR("I2C driver unsupported: endpoint=%lu hid=%s silicon=0x%08X",
+                       static_cast<unsigned long>(i), hid, binding.siliconId);
             continue;
         }
         cirrus::transport::I2CRegisterBus bus(mI2CController, {endpoint.i2cAddress, endpoint.tenBitAddress});
@@ -914,9 +924,9 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
         bool readable = map.read(driver->identityRegister, &id);
         recordTrace(TRACE_PROBE, uint8_t(i), false, false, driver->identityRegister, readable ? id : 0, map.lastError());
         char key[64]{};
-        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_Probe_Return", i);
+        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_Probe_Return", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(map.lastError())), 32);
-        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_DeviceID", i);
+        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_DeviceID", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(id)), 32);
         if (!readable) {
             mAttachment.communication = map.lastError() == kIOReturnUnsupported ? "UNSUPPORTED" : "FAILED";
@@ -929,8 +939,9 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
                 recordAttachmentFailure("AMPLIFIER", "AMP_IDENTITY_MISMATCH", kIOReturnNotFound, uint32_t(i));
             }
             CIRRUS_ERR(
-                "I2C identity rejected: endpoint=%lu controller=%s address=0x%X actual=0x%08X expected=0x%08X mask=0x%08X ret=0x%08X", i,
-                endpoint.controllerPath, unsigned(endpoint.i2cAddress), id, binding.siliconId, driver->identityMask, map.lastError());
+                "I2C identity rejected: endpoint=%lu controller=%s address=0x%X actual=0x%08X expected=0x%08X mask=0x%08X ret=0x%08X",
+                static_cast<unsigned long>(i), endpoint.controllerPath, unsigned(endpoint.i2cAddress), id, binding.siliconId,
+                driver->identityMask, map.lastError());
             continue;
         }
         auto& amp = mAmplifiers[mAmplifierCount];
@@ -1021,9 +1032,9 @@ size_t CirrusAudioFixup::detectAmplifiers() {
         const bool readable = map->read(definition->identityRegister, &id);
         recordTrace(TRACE_PROBE, uint8_t(i), false, false, definition->identityRegister, readable ? id : 0, map->lastError());
         char key[64]{};
-        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_Probe_Return", i);
+        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_Probe_Return", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(map->lastError())), 32);
-        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_DeviceID", i);
+        snprintf(key, sizeof(key), "Cirrus_I2C_%lu_DeviceID", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(uint32_t(id)), 32);
         if (!readable || (id & definition->identityMask) != definition->siliconId) {
             if (!readable) {

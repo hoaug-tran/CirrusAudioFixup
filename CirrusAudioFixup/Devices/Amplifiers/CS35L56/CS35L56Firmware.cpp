@@ -98,8 +98,9 @@ IOReturn CS35L56Driver::loadFirmware() {
         if (!WMFWUploadScheduler::run(mHost.name(), mContext.io, mapped, *work.session))
             return fail(work.session->nativeError, diagnostics::DIAG_DSP_BOOT);
     }
-    if (!DSPControl::readAlgorithms(mContext.io, image, kFirmwareId, kFirmwareVersion))
+    if (!DSPControl::readAlgorithms(mContext.io, image, kFirmwareId, 0))
         return transferFailure(diagnostics::DIAG_DSP_BOOT, kRegDspXMemory);
+    mAmplifier.firmwareVersion = image.haloFirmwareVersion;
     size_t bytes = 0;
     const auto* coefficients =
         selectChannelCoefficients(*mResource, mContext.board.amplifiers[mContext.bindingIndex].channelIndex == 1, bytes);

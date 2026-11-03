@@ -45,12 +45,19 @@ struct MemoryIO : cirrus::core::RegisterIO {
     }
 };
 int main() {
-    assert(cs35l56FirmwareCount==1);
+    assert(cs35l56FirmwareCount==2);
     auto* resource=selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0x1c63,0);
     assert(resource&&resource->wmfwSize==31996&&resource->binSize==8192&&resource->binRightSize==8192);
     assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0x1c63,1));
     assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x1043,0xffff,0));
     assert(memcmp(resource->bin,resource->binRight,8192));
+    auto* lenovoResource=selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x17aa,0x391e,0);
+    assert(lenovoResource&&lenovoResource->wmfwSize==33364&&lenovoResource->binSize==7216&&lenovoResource->binRightSize==7216);
+    assert(!selectFirmwareResource(cs35l56Firmware,cs35l56FirmwareCount,0x17aa,0xffff,0));
+    assert(memcmp(lenovoResource->bin,lenovoResource->binRight,7216));
+    auto lenovoImage=std::make_unique<FirmwareImage>();
+    assert(WMFWParser::parseWMFW(lenovoResource->wmfw,lenovoResource->wmfwSize,lenovoImage.get()));
+    assert(lenovoImage->regionCount==73&&lenovoImage->wmfwAlgorithmCount==42&&lenovoImage->wmfwControlCount==204);
     auto image=std::make_unique<FirmwareImage>();
     assert(WMFWParser::parseWMFW(resource->wmfw,resource->wmfwSize,image.get()));
     assert(image->regionCount==70&&image->wmfwAlgorithmCount==42&&image->wmfwControlCount==189);

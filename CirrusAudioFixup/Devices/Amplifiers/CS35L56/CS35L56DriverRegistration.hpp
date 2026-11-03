@@ -6,13 +6,14 @@
 
 namespace cirrus::devices::amplifiers::cs35l56 {
 constexpr core::RegisterMapConfig cs35l56RegisterFormat() { return CS35L56SPIRegisterIO::config(); }
+constexpr core::RegisterMapConfig cs35l56I2CFormat() { return CS35L56SPIRegisterIO::i2cConfig(); }
 inline constexpr platform::FirmwareResetSequence kFirmwareReset{"reset-gpios", false, 2, 3};
 inline constexpr platform::AmplifierDriverRegistration kDriverRegistrations[] = {
     {"cs35l56-csc3556",
      "CSC3556",
      registers::kValDeviceId,
-     2,
-     {},
+     3,
+     cs35l56I2CFormat(),
      cs35l56RegisterFormat(),
      createDriver,
      destroyDriver,

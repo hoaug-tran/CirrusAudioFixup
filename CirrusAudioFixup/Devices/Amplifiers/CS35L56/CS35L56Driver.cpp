@@ -64,10 +64,18 @@ IOReturn CS35L56Driver::authorizeBoard() {
                                             binding.channelIndex,
                                             binding.tuningResource};
     if (binding.siliconId != registers::kValDeviceId || binding.channelIndex > 1 || !mContext.endpoint.sameDevice(binding.endpoint) ||
-        mContext.endpoint.transport != core::BusTransportType::SPI || mContext.endpoint.spiChipSelect > 1 ||
-        mContext.endpoint.spiMode != binding.endpoint.spiMode || mContext.endpoint.spiClockHz > binding.endpoint.spiClockHz ||
         !mContext.firmware.matches(expected) || mContext.firmware.format != firmware::FirmwareFormat::Deferred)
         return fail(kIOReturnNotPermitted, diagnostics::DIAG_PLATFORM_CONFIG);
+    if (mContext.endpoint.transport == core::BusTransportType::SPI) {
+        if (mContext.endpoint.spiChipSelect > 1 || mContext.endpoint.spiMode != binding.endpoint.spiMode ||
+            mContext.endpoint.spiClockHz > binding.endpoint.spiClockHz)
+            return fail(kIOReturnNotPermitted, diagnostics::DIAG_PLATFORM_CONFIG);
+    } else if (mContext.endpoint.transport == core::BusTransportType::I2C) {
+        if (mContext.endpoint.tenBitAddress || mContext.endpoint.i2cAddress != binding.endpoint.i2cAddress)
+            return fail(kIOReturnNotPermitted, diagnostics::DIAG_PLATFORM_CONFIG);
+    } else {
+        return fail(kIOReturnNotPermitted, diagnostics::DIAG_PLATFORM_CONFIG);
+    }
     mResource = selectFirmwareResource(cs35l56Firmware, cs35l56FirmwareCount, expected.subsystemVendor, expected.subsystemDevice,
                                        expected.speakerId);
     size_t size = 0;

@@ -10,6 +10,7 @@ namespace cirrus::devices::amplifiers::cs35l56 {
 class CS35L56Driver final : public core::AmplifierLifecycleHooks {
 public:
     explicit CS35L56Driver(const platform::AmplifierDriverContext& context) : mContext(context), mHost(*context.host) {}
+    ~CS35L56Driver() override = default;
     void inspect();
     IOReturn identify() override;
     IOReturn authorizeBoard() override;

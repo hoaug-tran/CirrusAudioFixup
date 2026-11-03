@@ -639,7 +639,7 @@ IOReturn IntelLPSSSPIController::exchange(const SPIEndpoint& endpoint, const uin
 #if defined(KERNEL)
         CIRRUS_LOG("BOOT_FLOW Intel_SPI owner=%llu endpoint cs=%u mode=%u hz=%u bytes=%lu",
                    static_cast<unsigned long long>(mOwner ? mOwner->getRegistryEntryID() : 0), endpoint.chipSelect, endpoint.mode,
-                   endpoint.clockHz, length);
+                   endpoint.clockHz, static_cast<unsigned long>(length));
 #endif
     }
 #if defined(KERNEL)

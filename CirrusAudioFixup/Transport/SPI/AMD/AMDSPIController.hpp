@@ -21,6 +21,7 @@ public:
 private:
     class MMIOWindow final : public RegisterWindow {
     public:
+        ~MMIOWindow() override = default;
         volatile uint8_t* base{nullptr};
         uint8_t read8(uint32_t) override;
         void write8(uint32_t, uint8_t) override;

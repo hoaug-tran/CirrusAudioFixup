@@ -260,7 +260,8 @@ bool CS35L41Driver::applyErrataPatch(AmplifierState& amp) {
         return false;
     }
 
-    CIRRUS_LOG("applying %lu errata patches for revision 0x%02X on %s", tableToApply->numPatches, revOnly, amp.name);
+    CIRRUS_LOG("applying %lu errata patches for revision 0x%02X on %s", static_cast<unsigned long>(tableToApply->numPatches),
+               revOnly, amp.name);
 
     for (size_t i = 0; i < tableToApply->numPatches; i++) {
         if (!writeRegister(amp, tableToApply->patches[i].reg, tableToApply->patches[i].value)) {

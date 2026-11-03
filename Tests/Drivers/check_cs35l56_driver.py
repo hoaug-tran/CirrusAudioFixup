@@ -26,6 +26,7 @@ using namespace cirrus::devices::amplifiers::cs35l56;
 struct Bus : core::RegisterBus {
  unsigned calls=0,failAt=0; uint32_t id=0xab035a56,rev=0xb0;
  std::vector<std::vector<uint8_t>> frames;
+ ~Bus() override = default;
  size_t maxPayloadBytes(size_t,bool) const override {return 256;}
  IOReturn command(const uint8_t* tx,size_t nt,uint8_t* rx,size_t nr) override {
   assert(nt==6&&nr==4&&rx&&tx[0]==0x80&&tx[1]==0&&tx[2]==0&&tx[4]==0&&tx[5]==0);
@@ -37,6 +38,7 @@ struct Bus : core::RegisterBus {
 };
 struct Host : platform::AmplifierHost {
  uint8_t index=0;std::map<std::string,std::string> strings;std::map<std::string,uint64_t> numbers;
+ ~Host() override = default;
  bool authorized() const override {return false;}const char* name() const override {return "probe";}
  uint8_t endpointIndex() const override {return index;}
  void setDiagnosticStage(diagnostics::DriverStage) override {}
@@ -46,17 +48,21 @@ struct Host : platform::AmplifierHost {
  void publish(const char* k,uint64_t v,unsigned) override {numbers[k]=v;}
 };
 struct Properties : platform::PlatformProperties {
- bool has=true; bool contains(const char* key)const override {return has&&!strcmp(key,"spk-id-gpios");}
+ bool has=true;
+ ~Properties() override = default;
+ bool contains(const char* key)const override {return has&&!strcmp(key,"spk-id-gpios");}
  bool array(const char*,uint32_t*,size_t)const override {return false;}
 };
 struct GPIO : platform::BoardDiscoveryContext::GPIOAccess {
  unsigned calls=0; bool ok=true;uint32_t values[2]{0,0};
+ ~GPIO() override = default;
  bool read(const char* property,size_t index,uint32_t& value)override {
   assert(!strcmp(property,"spk-id-gpios")&&index<2);++calls;value=values[index];return ok;
  }
 };
 struct DSPIO : core::RegisterIO {
  unsigned reads=0,writes=0,sequences=0,failRead=0,readDelayMs=0; bool sequenceOK=true,writeOK=true,failAllReads=false;
+ ~DSPIO() override = default;
  uint32_t mailbox2=1,halo=2,power=1,mailbox1=0,revision=0xb0;
  std::vector<uint32_t> addresses;
  int32_t lastError()const override{return -77;}
@@ -154,7 +160,8 @@ int main(){
  auto unverified=probe(unknownIO);assert(unverified.identified&&!unverified.revisionSupported);
  platform::AmplifierDriverRegistry registry;assert(registerDrivers(registry));
  assert(registry.find("CSC3556",0x35a56,core::BusTransportType::SPI)==&kDriverRegistrations[0]);
- assert(!registry.find("CSC3556",0x35a56,core::BusTransportType::I2C));
+ assert(registry.find("CSC3556",0x35a56,core::BusTransportType::I2C)==&kDriverRegistrations[0]);
+ assert(!registry.find("CSC3556",0x35a56,core::BusTransportType::SoundWire));
  assert(!kDriverRegistrations[0].diagnosticOnly&&kDriverRegistrations[0].firmwareReset&&kDriverRegistrations[0].supportsDeferredFirmware);
  assert(registry.acceptsDebugPhase("CSC3556","probe")&&registry.acceptsDebugPhase("CSC3556","dsp"));
  core::BusEndpoint endpoint{core::BusTransportType::SPI,"\\_SB.PC00.SPI0",0,false,0,4000000,0};

@@ -40,7 +40,7 @@ IOReturn CirrusAudioFixup::lifecycleAction(OSObject* owner, void* operation, voi
 IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device) {
     if (device != this || state > 1)
         return IOPMAckImplied;
-    CIRRUS_LOG("BOOT_FLOW PM_CHANGE_BEGIN state=%lu", state);
+    CIRRUS_LOG("BOOT_FLOW PM_CHANGE_BEGIN state=%lu", static_cast<unsigned long>(state));
     if (mCommandGate) {
         IOReturn result = mCommandGate->runAction(lifecycleAction, reinterpret_cast<void*>(state));
         if (result == kIOReturnNotReady) {
@@ -50,7 +50,7 @@ IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device)
         if (result != kIOReturnSuccess)
             CIRRUS_ERR("PM gate failed: 0x%08X", result);
     }
-    CIRRUS_LOG("BOOT_FLOW PM_CHANGE_END state=%lu", state);
+    CIRRUS_LOG("BOOT_FLOW PM_CHANGE_END state=%lu", static_cast<unsigned long>(state));
     return IOPMAckImplied;
 }
 

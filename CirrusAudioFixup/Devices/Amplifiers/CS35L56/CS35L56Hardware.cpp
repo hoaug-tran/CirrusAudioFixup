@@ -24,7 +24,7 @@ IOReturn CS35L56Driver::initialize() {
     if (restricted & kRestrictedMask)
         return fail(kIOReturnUnsupported, diagnostics::DIAG_DSP_BOOT, kRegRestricted);
     mAmplifier.firmwareMissing = (protection & kFirmwareMissingMask) != 0;
-    if (!mAmplifier.firmwareMissing && mAmplifier.firmwareVersion != kFirmwareVersion)
+    if (!mAmplifier.firmwareMissing && !isSupportedFirmwareVersion(mAmplifier.firmwareVersion))
         return fail(kIOReturnUnsupported, diagnostics::DIAG_DSP_BOOT, kRegFirmwareVersion);
     // From here cleanup must be attempted even if the first write fails.
     mAmplifier.hardwareTouched = true;
@@ -38,7 +38,7 @@ IOReturn CS35L56Driver::initialize() {
         !mContext.io.read(kRegFirmwareVersion, &mAmplifier.firmwareVersion))
         return transferFailure(diagnostics::DIAG_DSP_BOOT);
     mAmplifier.firmwareMissing = (protection & kFirmwareMissingMask) != 0;
-    if (!mAmplifier.firmwareMissing && mAmplifier.firmwareVersion != kFirmwareVersion)
+    if (!mAmplifier.firmwareMissing && !isSupportedFirmwareVersion(mAmplifier.firmwareVersion))
         return fail(kIOReturnUnsupported, diagnostics::DIAG_DSP_BOOT, kRegFirmwareVersion);
     if (!mContext.io.write(kRegAspEnables, 0) || !mContext.io.write(kRegUserMute, 1) || !mContext.io.write(kRegIrqMask20, 0xFFFFFFFF))
         return transferFailure(diagnostics::DIAG_PLATFORM_CONFIG);
@@ -55,7 +55,8 @@ IOReturn CS35L56Driver::verifyReady() {
         !mContext.io.read(kRegUserMute, &mute) || !mContext.io.read(kRegFirmwareVersion, &version) ||
         !mContext.io.read(kRegProtectionStatus, &protection))
         return transferFailure(diagnostics::DIAG_IDLE_ROLLBACK);
-    if (enables || mute != 1 || version != kFirmwareVersion || (protection & kFirmwareMissingMask))
+    const uint32_t expectedVersion = mAmplifier.firmwareVersion ? mAmplifier.firmwareVersion : kFirmwareVersion;
+    if (enables || mute != 1 || version != expectedVersion || (protection & kFirmwareMissingMask))
         return fail(kIOReturnNotReady, diagnostics::DIAG_IDLE_ROLLBACK);
     mAmplifier.firmwareVersion = version;
     char key[80]{};

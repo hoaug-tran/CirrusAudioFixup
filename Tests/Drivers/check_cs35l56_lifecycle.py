@@ -138,6 +138,7 @@ struct Fixture {
 };
 struct Properties : platform::PlatformProperties {
  bool valid=true;uint32_t indices[2]{0,1},boost[2]{0,0};
+ ~Properties() override = default;
  bool contains(const char* key)const override{return !strcmp(key,"spk-id-gpios");}
  bool array(const char* key,uint32_t* out,size_t count)const override{
   if(!valid||count!=2)return false;
@@ -147,6 +148,7 @@ struct Properties : platform::PlatformProperties {
 };
 struct GPIO : platform::BoardDiscoveryContext::GPIOAccess {
  uint32_t speaker[2]{0,0};bool valid=true;
+ ~GPIO() override = default;
  bool read(const char* key,size_t index,uint32_t& out)override{assert(!strcmp(key,"spk-id-gpios")&&index<2);out=speaker[index];return valid;}
 };
 const uint8_t capturedCalibration[]{CAPTURED_CALIBRATION};

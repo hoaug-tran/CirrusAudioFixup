@@ -89,6 +89,10 @@
                     <key>IOName</key>
                     <string>CSC3551</string>
                 </dict>
+                <dict>
+                    <key>IOName</key>
+                    <string>CSC3556</string>
+                </dict>
             </array>
             <key>IOProbeScore</key>
             <integer>10000</integer>

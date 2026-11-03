@@ -2,6 +2,7 @@
 
 HP: issue #3 (103C89C6, R/L); HP ENVY x360 15-ey0xxx: issue #14 (103C8A31, L/R).
 G614JI: issue #5 (10431C9F, L/R); GU605MV: issue #8 and gu605mv-asp-readback.json.
+Lenovo ThinkBook 16p G6 IAX: issue #16 (17AA391E, L/R on I2C 0x31/0x30, broadcast 0x3C).
 Zenbook: captured fixture; G614JV issues #2/#4 lack verified SSID/tuning: test rejection.
 Legacy Lenovo endpoints remain covered by the complete driver lifecycle suite.
 """
@@ -32,6 +33,7 @@ namespace l41=devices::amplifiers::cs35l41;
 namespace l56=devices::amplifiers::cs35l56;
 struct Properties:platform::PlatformProperties {
  std::map<std::string,std::vector<uint32_t>> values;
+ ~Properties() override = default;
  bool contains(const char* key)const override{return values.count(key);}
  bool array(const char* key,uint32_t* out,size_t count)const override{
   auto i=values.find(key);if(i==values.end()||i->second.size()!=count)return false;
@@ -40,6 +42,7 @@ struct Properties:platform::PlatformProperties {
 };
 struct GPIO:platform::BoardDiscoveryContext::GPIOAccess {
  uint32_t speaker=0;bool readable=true;unsigned resets=0;
+ ~GPIO() override = default;
  bool read(const char*,size_t,uint32_t& value)override{value=speaker;return readable;}
  bool reset(const char*,int32_t)override{++resets;return true;}
 };
@@ -202,6 +205,90 @@ int main(){
   gpio.readable=false;assert(!l56::resolveBoardConfiguration({identity,unknown,2,p,&gpio},reason));
  }
  printf("PASS GU605MV issue #8: SPI order, distinct coefficients, speaker gates; hardware untested\n");
+ // Lenovo ThinkBook 16p G6 IAX / issue #16 (Realtek ALC287 / 2x CS35L56 on I2C 0x31/0x30, broadcast 0x3C)
+ {
+  const auto* facts = l56::boardProperties(0x17aa, 0x391e);
+  assert(facts && facts->count == 2);
+  assert(facts->transport == core::BusTransportType::I2C);
+  assert(facts->addresses[0] == 0x31 && facts->addresses[1] == 0x30);
+  assert(facts->channels[0] == 0 && facts->channels[1] == 1);
+  assert(facts->speakerId == 0 && facts->resetResource == -1);
+
+  const auto* profile = platform::findPlatformProfile("CSC3556");
+  assert(profile && profile->amplifierModel == core::AmplifierModel::CS35L56);
+
+  core::BusEndpoint endpoints[] = {
+   {core::BusTransportType::I2C, "\\_SB.PC02.I2C0.SPKR", 0x31, false, 0, 1000000, 0},
+   {core::BusTransportType::I2C, "\\_SB.PC02.I2C0.SPKR", 0x30, false, 0, 1000000, 0},
+   {core::BusTransportType::I2C, "\\_SB.PC02.I2C0.SPKR", 0x3c, false, 0, 1000000, 0}
+  };
+
+  struct Lenovo_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+   unsigned resets = 0;
+   int32_t lastReset = -1;
+   ~Lenovo_GPIO() override = default;
+   bool read(const char*, size_t, uint32_t& value) override { value = 0; return true; }
+   bool reset(const char*, int32_t resource) override {
+    ++resets;
+    lastReset = resource;
+    return true;
+   }
+  } gpio;
+
+  const platform::BoardIdentity identity{0x17aa, 0x391e, "CSC3556"};
+  const char* reason = nullptr;
+  Properties p;
+
+  // 1. Discovery succeeds with 3 endpoints in _CRS (0x31, 0x30, and ignored broadcast 0x3c)
+  std::unique_ptr<platform::DiscoveredBoard> found(
+   l56::resolveBoardConfiguration({identity, endpoints, 3, p, &gpio}, reason));
+  assert(found && found->configuration.permits(identity) && found->configuration.count == 2);
+
+  // 2. Hardware preparation succeeds without external GPIO reset (CS35L56 uses software reset via register bus)
+  assert(found->prepareHardware(gpio));
+  assert(gpio.resets == 0 && gpio.lastReset == -1);
+
+  // 3. Verify production firmware resource and validate WMFW + channel coefficient BINs
+  const auto* resource = l56::selectFirmwareResource(l56::cs35l56Firmware, l56::cs35l56FirmwareCount, 0x17aa, 0x391e, 0);
+  assert(resource && resource->wmfw && resource->wmfwSize);
+  checkFirmware(*resource);
+
+  // 4. Validate amplifier endpoints and channel bindings: 0x31 is Left (channel 0), 0x30 is Right (channel 1)
+  for (size_t i = 0; i < 2; ++i) {
+   const auto& binding = found->configuration.amplifiers[i];
+   assert(binding.endpoint.transport == core::BusTransportType::I2C);
+   assert(binding.endpoint.i2cAddress == facts->addresses[i]);
+   assert(binding.channelIndex == facts->channels[i]);
+   assert(binding.speakerId == 0);
+   assert(!strcmp(binding.endpoint.controllerPath, "\\_SB.PC02.I2C0.SPKR"));
+  }
+
+  // 5. Test order-independence: endpoints with 0x30 preceding 0x31
+  core::BusEndpoint swappedEndpoints[] = {
+   {core::BusTransportType::I2C, "\\_SB.PC02.I2C0.SPKR", 0x30, false, 0, 1000000, 0},
+   {core::BusTransportType::I2C, "\\_SB.PC02.I2C0.SPKR", 0x3c, false, 0, 1000000, 0},
+   {core::BusTransportType::I2C, "\\_SB.PC02.I2C0.SPKR", 0x31, false, 0, 1000000, 0}
+  };
+  std::unique_ptr<platform::DiscoveredBoard> foundSwapped(
+   l56::resolveBoardConfiguration({identity, swappedEndpoints, 3, p, &gpio}, reason));
+  assert(foundSwapped && foundSwapped->configuration.permits(identity) && foundSwapped->configuration.count == 2);
+  assert(foundSwapped->configuration.amplifiers[0].endpoint.i2cAddress == 0x31 &&
+         foundSwapped->configuration.amplifiers[0].channelIndex == 0);
+  assert(foundSwapped->configuration.amplifiers[1].endpoint.i2cAddress == 0x30 &&
+         foundSwapped->configuration.amplifiers[1].channelIndex == 1);
+
+  // 6. Permitting and mismatch rejection
+  auto wrong = identity;
+  wrong.subsystemDevice ^= 1;
+  assert(!found->configuration.permits(wrong));
+
+  // 7. Unsupported/unverified board (Yoga 9 17AA:390B) fails closed without tuning
+  const platform::BoardIdentity yoga9Identity{0x17aa, 0x390b, "CSC3556"};
+  assert(!l56::resolveBoardConfiguration({yoga9Identity, endpoints, 3, p, &gpio}, reason));
+  assert(!strcmp(reason, "CS35L56_SPEAKER_TUNING_UNAVAILABLE"));
+
+  printf("PASS Lenovo ThinkBook 16p G6 IAX issue #16: I2C dual-amp (0x31/0x30, 0x3C ignored), DSP software reset, firmware 17AA:391E\n");
+ }
 }
 '''
 with tempfile.TemporaryDirectory(prefix="cirrus-machine-matrix-") as directory:

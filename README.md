@@ -61,7 +61,7 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | **CS35L41**             | **Working** | Revision B2; I2C and SPI; verified board profiles and matching firmware |
 | CS35L45                 | Unsupported | Requires a dedicated amplifier driver                                   |
 | CS35L51                 | Unsupported | Requires a dedicated amplifier driver                                   |
-| **CS35L56**             | **Working** | Revision B0; SPI; verified board profiles, DSP firmware and calibration |
+| **CS35L56**             | **Working** | Revision B0; I2C and SPI; verified board profiles, DSP firmware and calibration |
 | Other Cirrus amplifiers | Unsupported | Additional families can use the shared framework                        |
 
 ### Supported laptops
@@ -70,6 +70,7 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | ---------------------------------- | ------------ | --- | ------- |
 | Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | I2C | Working |
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | I2C | Working |
+| Lenovo ThinkBook 16p G6 IAX        | `17AA:391E`  | I2C | Working |
 | HP ZBook Fury 16 G9                | `103C:89C6`  | SPI | Working |
 | HP ENVY x360 15-ey0xxx             | `103C:8A31`  | I2C | Working |
 | ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | SPI | Working |
@@ -136,7 +137,7 @@ Compare sound at matched output levels using the same track.
 
 ## Identify I2C or SPI
 
-The supported Lenovo Legion 2021 configurations, ASUS Zenbook 14 UM3402Y and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI and ASUS ROG Zephyrus G16 GU605MV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
+The supported Lenovo configurations (Legion and ThinkBook 16p G6), ASUS Zenbook 14 UM3402Y and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI and ASUS ROG Zephyrus G16 GU605MV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 

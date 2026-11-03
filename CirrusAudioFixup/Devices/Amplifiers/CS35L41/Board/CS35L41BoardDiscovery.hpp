@@ -18,6 +18,7 @@ public:
     char hid[32]{};
     bool resetDeclared{false};
     int32_t resetResource{-1};
+    ~CS35L41BoardDiscovery() override = default;
     bool prepareHardware(platform::BoardDiscoveryContext::GPIOAccess& gpio) const override {
         return (!resetDeclared && resetResource < 0) || gpio.reset(resetDeclared ? "reset-gpios" : nullptr, resetResource);
     }

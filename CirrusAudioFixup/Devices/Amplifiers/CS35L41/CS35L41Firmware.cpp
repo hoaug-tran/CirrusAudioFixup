@@ -901,11 +901,12 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     amp.firmwareValidated = false;
 
     CIRRUS_LOG("firmware matches found: %s (size: %lu, version: %08X, crc: %08X), tuning: %s (size: %lu, version: %08X, crc: %08X)",
-               foundRes->fwName, amp.wmfwSize, fwVersion, fwCrc, foundRes->binName, amp.binSize, binVersion, binCrc);
+               foundRes->fwName, static_cast<unsigned long>(amp.wmfwSize), fwVersion, fwCrc, foundRes->binName,
+               static_cast<unsigned long>(amp.binSize), binVersion, binCrc);
 
     CIRRUS_LOG("tuning selection on %s: channel=%s spkid=%d bin=%s crc=0x%08X size=%lu (l0_crc=0x%08X r0_crc=0x%08X r0_present=%d)",
-               amp.name, isRight ? "RIGHT(r0)" : "LEFT(l0)", spkid, (isRight && foundRes->binRight) ? "r0" : "l0", binCrc, chanBinSize,
-               calculateCrc32(foundRes->bin, foundRes->binSize),
+               amp.name, isRight ? "RIGHT(r0)" : "LEFT(l0)", spkid, (isRight && foundRes->binRight) ? "r0" : "l0", binCrc,
+               static_cast<unsigned long>(chanBinSize), calculateCrc32(foundRes->bin, foundRes->binSize),
                foundRes->binRight ? calculateCrc32(foundRes->binRight, foundRes->binRightSize) : 0, foundRes->binRight ? 1 : 0);
     OSString* statusStr = OSString::withCString("READY");
     if (statusStr) {

@@ -14,7 +14,7 @@ import plistlib
 personality = plistlib.loads((ROOT / "CirrusAudioFixup/Info.plist").read_bytes())["IOKitPersonalities"]["CirrusAudioFixupI2C"]
 assert personality["IOProviderClass"] == "VoodooI2CDeviceNub"
 assert "IONameMatch" not in personality
-assert personality["IOPropertyMatch"] == [{"IOName": "CLSA0100"}, {"IOName": "CSC3551"}]
+assert personality["IOPropertyMatch"] == [{"IOName": "CLSA0100"}, {"IOName": "CSC3551"}, {"IOName": "CSC3556"}]
 # XNU IOService::passiveMatch accepts a dictionary or ORs a collection of dictionaries.
 # IOName is a property here; the nub registry name in the capture is SPKR.
 import json
@@ -30,7 +30,8 @@ assert property_match(personality, provider["class"], {"IOName": provider["io_na
 assert provider["name"] != provider["io_name"]
 assert not property_match(personality, provider["class"], {"IOName": provider["name"]})
 assert not property_match(personality, "IOACPIPlatformDevice", {"IOName": provider["io_name"]})
-assert not property_match(personality, provider["class"], {"IOName": "CSC3556"})
+assert property_match(personality, provider["class"], {"IOName": "CSC3556"})
+assert not property_match(personality, provider["class"], {"IOName": "CSC3557"})
 assert not property_match(personality, provider["class"], {})
 for predicate in personality["IOPropertyMatch"]:
     split = dict(personality, IOPropertyMatch=predicate)

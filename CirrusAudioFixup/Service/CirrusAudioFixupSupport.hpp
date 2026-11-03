@@ -127,6 +127,7 @@ public:
     ServiceRegisterIO(CirrusAudioFixup* fixup, AmplifierState& amp,
                       cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_PROBE)
         : mService(fixup), mAmplifier(amp), mSource(source) {}
+    ~ServiceRegisterIO() override = default;
 
     int32_t lastError() const override { return mService->mLastTransferReturn; }
 

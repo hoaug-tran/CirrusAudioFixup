@@ -38,7 +38,8 @@ IOReturn CS35L56Driver::runtimeTick(const core::PlaybackContext& context) {
         stopPlayback();
         return result;
     }
-    if (version != registers::kFirmwareVersion || halo < 2 || halo >= 0xFFFF) {
+    const uint32_t expectedVersion = mAmplifier.firmwareVersion ? mAmplifier.firmwareVersion : registers::kFirmwareVersion;
+    if (version != expectedVersion || halo < 2 || halo >= 0xFFFF) {
         const auto result = fail(kIOReturnNotReady, diagnostics::DIAG_DSP_BOOT);
         stopPlayback();
         return result;
@@ -89,7 +90,14 @@ IOReturn CS35L56Driver::startPlayback() {
         stopPlayback();
         return kIOReturnNotReady;
     }
-    const uint32_t aspMask = kAspReceiveMask | (1U << mContext.endpoint.spiChipSelect);
+    const uint32_t channel = (mContext.bindingIndex < mContext.board.count)
+                                 ? mContext.board.amplifiers[mContext.bindingIndex].channelIndex
+                                 : mContext.endpoint.spiChipSelect;
+    if (channel > 31) {
+        stopPlayback();
+        return fail(kIOReturnUnsupported, diagnostics::DIAG_PLAYBACK_INVARIANT);
+    }
+    const uint32_t aspMask = kAspReceiveMask | (1U << channel);
     uint32_t enables = 0, mute = 1;
     if (!mContext.io.write(kRegAspEnables, aspMask) || !mContext.io.read(kRegAspEnables, &enables))
         return transferFailure(diagnostics::DIAG_PLAYBACK_INVARIANT);

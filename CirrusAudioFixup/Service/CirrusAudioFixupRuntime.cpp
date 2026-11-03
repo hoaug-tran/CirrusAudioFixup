@@ -65,7 +65,8 @@ bool CirrusAudioFixup::configureAmplifierInterrupt() {
     for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
         IOReturn ret = mAmplifierManager.configureInterrupt(i, true);
         if (ret != kIOReturnSuccess)
-            CIRRUS_ERR("AMP IRQ configuration unavailable/failed: index=%lu ret=0x%08X; using polling", i, ret);
+            CIRRUS_ERR("AMP IRQ configuration unavailable/failed: index=%lu ret=0x%08X; using polling",
+                       static_cast<unsigned long>(i), ret);
         ok = (ret == kIOReturnSuccess) && ok;
     }
     if (!ok) {
@@ -90,9 +91,10 @@ void CirrusAudioFixup::amplifierInterruptReceived(OSObject* owner, IOInterruptEv
         const IOReturn result = self->mAmplifierManager.handleInterrupt(i);
         if (result != kIOReturnSuccess) {
             char key[64]{};
-            snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_IRQ_Return", i);
+            snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_IRQ_Return", static_cast<unsigned long>(i));
             self->setProperty(key, uint64_t(uint32_t(result)), 32);
-            CIRRUS_ERR("AMP IRQ handling failed: index=%lu return=0x%08X; delivery disabled", i, result);
+            CIRRUS_ERR("AMP IRQ handling failed: index=%lu return=0x%08X; delivery disabled",
+                       static_cast<unsigned long>(i), result);
         }
         healthy = (result == kIOReturnSuccess) && healthy;
     }
@@ -195,12 +197,12 @@ void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* send
 }
 
 void CirrusAudioFixup::runReadOnlyProbe() {
-    CIRRUS_LOG("BOOT_FLOW READ_ONLY_PROBE_BEGIN count=%lu", mAmplifierCount);
+    CIRRUS_LOG("BOOT_FLOW READ_ONLY_PROBE_BEGIN count=%lu", static_cast<unsigned long>(mAmplifierCount));
 
     for (size_t i = 0; i < mAmplifierCount; ++i) {
-        CIRRUS_LOG("BOOT_FLOW AMP_INSPECT_BEGIN index=%lu", i);
+        CIRRUS_LOG("BOOT_FLOW AMP_INSPECT_BEGIN index=%lu", static_cast<unsigned long>(i));
         probeAmplifier(mAmplifiers[i]);
-        CIRRUS_LOG("BOOT_FLOW AMP_INSPECT_END index=%lu", i);
+        CIRRUS_LOG("BOOT_FLOW AMP_INSPECT_END index=%lu", static_cast<unsigned long>(i));
     }
 
     publishStatistics();
@@ -560,8 +562,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         if (ret != kIOReturnSuccess) {
             setProperty("Cirrus_Runtime_Tick_Return", uint64_t(uint32_t(ret)), 32);
             setProperty("Cirrus_Runtime_Tick_Index", uint64_t(uint32_t(i)), 32);
-            CIRRUS_ERR("AMP runtime failure: index=%lu ret=0x%08X stage=%u; group playback blocked", i, ret,
-                       unsigned(mAmplifierManager.stage()));
+            CIRRUS_ERR("AMP runtime failure: index=%lu ret=0x%08X stage=%u; group playback blocked",
+                       static_cast<unsigned long>(i), ret, unsigned(mAmplifierManager.stage()));
             break;
         }
     }

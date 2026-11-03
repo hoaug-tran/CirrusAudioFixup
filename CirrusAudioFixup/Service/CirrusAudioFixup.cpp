@@ -240,7 +240,7 @@ bool CirrusAudioFixup::finishStartup() {
             detectNativeSPIAmplifiers();
         else
             detectAmplifiers();
-        CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_END count=%lu", mAmplifierCount);
+        CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_END count=%lu", static_cast<unsigned long>(mAmplifierCount));
 #if defined(KERNEL)
         publishBootCheckpoint(this, "AMP_DISCOVERY_END", mAmplifierCount == expectedAmplifierCount() ? kIOReturnSuccess : kIOReturnNotFound);
 #endif

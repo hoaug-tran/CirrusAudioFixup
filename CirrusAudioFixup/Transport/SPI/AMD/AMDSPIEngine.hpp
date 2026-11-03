@@ -18,6 +18,7 @@ enum class AMDSPIRevision { V1, V2 };
 class AMDSPIEngine final : public SPIController {
 public:
     explicit AMDSPIEngine(RegisterWindow& window) : mWindow(window) {}
+    ~AMDSPIEngine() override = default;
     static constexpr uint32_t kMinimumWindowBytes = 0xc8;
     IOReturn initialize(AMDSPIRevision revision) {
         if (mInitialized)

@@ -186,7 +186,7 @@ private:
                 recordAttachmentFailure("CONTROLLER_PM", failure.reason, ret, uint32_t(failure.index), "CONTROLLER_SLOT");
             if (ret != kIOReturnSuccess)
                 CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",
-                           failure.reason, failure.index, failure.detail, ret);
+                           failure.reason, static_cast<unsigned long>(failure.index), failure.detail, ret);
         }
         return ret == kIOReturnSuccess;
     }

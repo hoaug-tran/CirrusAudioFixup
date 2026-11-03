@@ -7,6 +7,7 @@ namespace cirrus::transport {
 class VoodooI2CController final : public I2CController {
 public:
     explicit VoodooI2CController(IOService* provider) : mProvider(provider) {}
+    ~VoodooI2CController() override = default;
     size_t maxWriteBytes() const override { return 252; }
     size_t maxReadBytes() const override { return 252; }
     IOReturn transfer(const I2CEndpoint& ep, const uint8_t* tx, size_t nt, uint8_t* rx, size_t nr) override {

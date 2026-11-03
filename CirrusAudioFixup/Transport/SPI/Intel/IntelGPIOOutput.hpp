@@ -58,6 +58,7 @@ public:
 };
 class IntelGPIOOutput final : public SPIChipSelect {
 public:
+    ~IntelGPIOOutput() override = default;
     struct Evidence {
         const char* reason{"UNBOUND"};
         uint32_t revision{0}, padbar{0}, ownership{0}, lockTx{0}, config{0}, offset{0}, written{0}, readback{0};

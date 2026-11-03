@@ -6,6 +6,7 @@ namespace cirrus::transport {
 class SPIRegisterBus final : public core::RegisterBus {
 public:
     SPIRegisterBus(SPIController* controller, SPIEndpoint endpoint) : mController(controller), mEndpoint(endpoint) {}
+    ~SPIRegisterBus() override = default;
     size_t maxPayloadBytes(size_t header, bool) const override {
         if (!mController || !mEndpoint.clockHz || mEndpoint.mode > 3)
             return 0;

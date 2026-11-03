@@ -60,7 +60,8 @@ OSDefineMetaClassAndStructors(CirrusAudioBootstrap, IOService)
     const char* acpiPaths[] = {"/System/Library/Extensions/AppleACPIPlatform.kext/Contents/MacOS/AppleACPIPlatform"};
     KernelPatcher::KextInfo acpiInfo[] = {{"com.apple.driver.AppleACPIPlatform", acpiPaths, 1, {true}, {}, 0}};
     void acpiLoaded(void*, KernelPatcher& patcher, size_t index, mach_vm_address_t address, size_t size) {
-        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_CALLBACK index=%lu expected=%lu\n", index, acpiInfo[0].loadIndex);
+        IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_CALLBACK index=%lu expected=%lu\n", static_cast<unsigned long>(index),
+              static_cast<unsigned long>(acpiInfo[0].loadIndex));
         if (index == acpiInfo[0].loadIndex) {
             cirrus::transport::configureACPIEvaluation(patcher, index, address, size);
             IOLog("CirrusAudioFixup: BOOT_FLOW ACPI_SETUP state=%s\n",

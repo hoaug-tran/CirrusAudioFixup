@@ -355,15 +355,15 @@ bool CirrusAudioFixup::publishRuntimeStatus() {
         const char* names[] = {"Stage", "FailureStage", "FirstFailure", "LatestFailure", "CleanupReturn", "FailureCount"};
         const uint32_t values[] = {next.stage, next.failureStage, next.firstFailure, next.latestFailure, next.cleanup, next.failures};
         for (size_t field = 0; field < 6; ++field) {
-            snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_%s", i, names[field]);
+            snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_%s", static_cast<unsigned long>(i), names[field]);
             setProperty(key, uint64_t(values[field]), 32);
         }
-        snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_Bound", i);
+        snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_Bound", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(1), 32);
     }
     for (size_t i = count; i < previousCount; ++i) {
         char key[64]{};
-        snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_Bound", i);
+        snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_Bound", static_cast<unsigned long>(i));
         setProperty(key, uint64_t(0), 32);
         if (const auto* released = mAmplifierManager.releasedStatus(i)) {
             const char* names[] = {"Stage", "FailureStage", "FirstFailure", "LatestFailure", "CleanupReturn", "FailureCount"};
@@ -371,7 +371,7 @@ bool CirrusAudioFixup::publishRuntimeStatus() {
                                        uint32_t(released->firstFailure),  uint32_t(released->latestFailure),
                                        uint32_t(released->cleanupResult), released->failures};
             for (size_t field = 0; field < 6; ++field) {
-                snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_Released_%s", i, names[field]);
+                snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_Released_%s", static_cast<unsigned long>(i), names[field]);
                 setProperty(key, uint64_t(values[field]), 32);
             }
         }
@@ -521,10 +521,12 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
         const char* ampStr = nativeLabel;
 
         if (e.isBulk) {
-            snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X\n", e.timestamp, srcStr, ampStr,
+            snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X\n",
+                     static_cast<unsigned long long>(e.timestamp), srcStr, ampStr,
                      e.isWrite ? "WRITE" : "READ", e.reg, e.value, e.ret);
         } else {
-            snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] %s 0x%05X %s 0x%08X ret=0x%X\n", e.timestamp, srcStr, ampStr,
+            snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] %s 0x%05X %s 0x%08X ret=0x%X\n",
+                     static_cast<unsigned long long>(e.timestamp), srcStr, ampStr,
                      e.isWrite ? "WRITE" : "READ", e.reg, e.isWrite ? "<-" : "->", e.value, e.ret);
         }
 

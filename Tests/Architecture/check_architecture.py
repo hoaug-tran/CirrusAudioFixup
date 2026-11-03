@@ -70,7 +70,9 @@ fixture = r'''
 #include "Diagnostics/TraceTypes.hpp"
 using namespace cirrus::diagnostics;
 #include "Transport/I2C/I2CRegisterBus.hpp"
+#undef CIRRUS_LOG
 #define CIRRUS_LOG(...) ((void)0)
+#undef CIRRUS_ERR
 #define CIRRUS_ERR(...) ((void)0)
 constexpr bool kOSBooleanTrue=true,kOSBooleanFalse=false;
 struct Provider {bool getPath(char* out,int*,const void*){strcpy(out,"fixture-controller");return true;}};

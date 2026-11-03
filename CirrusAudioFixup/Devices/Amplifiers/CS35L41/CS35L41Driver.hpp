@@ -14,6 +14,7 @@ namespace cirrus::devices::amplifiers::cs35l41 {
 class CS35L41Driver final : public core::AmplifierLifecycleHooks {
 public:
     explicit CS35L41Driver(const platform::AmplifierDriverContext&);
+    ~CS35L41Driver() override = default;
     core::BringUpDisposition disposition() const override { return mAmplifier.bringUpDisposition; }
     IOReturn identify() override;
     IOReturn authorizeBoard() override;

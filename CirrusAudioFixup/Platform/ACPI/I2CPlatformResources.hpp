@@ -10,7 +10,7 @@ class I2CPlatformResources final : public platform::BoardDiscoveryContext::GPIOA
     IOService* mOwner{nullptr};
     char mPath[256]{};
 public:
-    ~I2CPlatformResources() { OSSafeReleaseNULL(mACPI); }
+    ~I2CPlatformResources() override { OSSafeReleaseNULL(mACPI); }
     void setDiagnosticOwner(IOService* owner) { mOwner = owner; }
     bool readResource(uint32_t resource, uint32_t pin, bool low, uint32_t& value) override {
         return readACPIGPIOInput(mACPI, resource, pin, low, mOwner, value);

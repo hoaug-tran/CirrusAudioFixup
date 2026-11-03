@@ -137,7 +137,7 @@ Compare sound at matched output levels using the same track.
 
 ## Identify I2C or SPI
 
-The supported Lenovo Legion 2021 configurations, ASUS Zenbook 14 UM3402Y and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI and ASUS ROG Zephyrus G16 GU605MV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
+The supported Lenovo configurations (Legion and ThinkBook 16p G6), ASUS Zenbook 14 UM3402Y and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI and ASUS ROG Zephyrus G16 GU605MV use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 

@@ -21,12 +21,12 @@ Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11)
 - Added CS35L56 B0 support over SPI for ASUS ROG Zephyrus G16 GU605MV (`CSC3556`, subsystem `1043:1C63`).
 - Added dual-amplifier discovery, reset, DSP initialization, mailbox control, playback and power-state handling.
 - Added firmware 3.11.16, separate amplifier coefficients, automatic speaker-ID selection and measured EFI calibration.
+- Added I2C multi-frame sequence write support for firmware chunks.
 - Fixed firmware-boot ordering before device identification and IRQ mask readback validation that blocked DSP initialization.
 - Added SPI, firmware, captured-calibration, playback, power-management and failure-recovery regressions.
+- Note: ThinkBook 16p G6 woofer output requires ALC287 NID `0x17` routing; persistent routing requires a matching AppleALC layout or initialization verbs.
 
 Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10), [PR #17](https://github.com/hoaug-tran/CirrusAudioFixup/pull/17).
-
-Initialization and physical speaker output were verified on GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8) and on ThinkBook 16p G6 IAX by @DejaVuDarren in [#16](https://github.com/hoaug-tran/CirrusAudioFixup/issues/16). Bass output requires ALC287 NID `0x17` routing; persistent routing needs a suitable AppleALC configuration.
 
 ### Shared infrastructure
 
@@ -35,6 +35,7 @@ Initialization and physical speaker output were verified on GU605MV by @trinhflo
 - Added Meteor Lake-P GPIO support for `INTC1083`/`INTC105E`, including ownership checks and cross-community GPIO access.
 - Extended bounded WMFW uploads for larger images and region counts, preserving transfer errors and keeping upload workspaces off the kernel stack.
 - Improved deferred SPI/PCI attachment and serialized register writes during reset.
+- Added virtual destructors and `override` specifiers across polymorphic driver, bus, and test classes.
 - Shared board adoption, SPI register forwarding and EFI calibration decoding while retaining amplifier-specific access, power, reset and calibration policies.
 - Expanded initialization, firmware, calibration and playback diagnostics.
 - Added portable host fixtures and native Debug/Release build verification for pull requests.

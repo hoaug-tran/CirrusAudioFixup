@@ -1,4 +1,4 @@
-# Codec and Speaker Route Verification
+# Codec and speaker route verification
 
 Internal laptop speakers driven by Cirrus smart amplifiers depend on two distinct components working together:
 
@@ -9,7 +9,7 @@ If AppleALC routes audio to the wrong codec pins, the amplifiers will produce no
 
 ---
 
-## 1. Check Your Current AppleALC layout-id
+## 1. Check your current AppleALC layout-id
 
 In macOS Terminal, run:
 
@@ -40,7 +40,7 @@ nvram 7C436110-AB2A-4BBB-A880-FE41995C9F82:boot-args | grep -o 'alcid=[0-9]*'
 
 ---
 
-## 2. How to Know if Your layout-id is Correct
+## 2. Verify your layout-id
 
 Your AppleALC `layout-id` is **correct** for Cirrus smart amplifiers when:
 
@@ -58,7 +58,7 @@ Your AppleALC `layout-id` is **correct** for Cirrus smart amplifiers when:
 
 ---
 
-## 3. Extract the Linux Codec Dump
+## 3. Extract the Linux codec dump
 
 If none of the existing AppleALC layout IDs route audio to the internal speakers, extract the physical codec connections from Linux to create or patch an AppleALC layout:
 
@@ -87,7 +87,7 @@ grep -HE '^(Codec:|Vendor Id:|Subsystem Id:|Revision Id:)' ~/codec-dump/card*-co
 
 ---
 
-## 4. Locate AppleALC Resources
+## 4. Locate AppleALC resources
 
 In the [AppleALC repository](https://github.com/acidanthera/AppleALC/tree/master/Resources), open the directory corresponding to your codec model (e.g., `Resources/ALC285/` or `Resources/ALC287/`).
 
@@ -101,7 +101,7 @@ Examine the following files:
 
 ---
 
-## 5. Trace the Signal Path
+## 5. Trace the signal path
 
 Trace the signal chain backwards from the amplifier pin to the DAC converter:
 
@@ -146,77 +146,77 @@ ioreg -lw0 -p IOService -r -c CirrusAudioFixup
 
 ---
 
-## 7. Diagnosing Multi-Speaker & Missing Bass Topologies (General Methodology)
+## 7. Diagnosing multi-speaker and missing bass topologies
 
-Many modern laptops (ASUS ROG, Lenovo Legion/ThinkBook, Dell XPS) feature **quad-speaker setups** composed of:
-1. **Tweeters (High/Mid frequencies)**: Driven directly by the onboard HDA codec via an analog Pin Complex (typically Node `0x14`).
-2. **Woofers (Bass frequencies)**: Driven by external Cirrus smart amplifiers (CS35L41 or CS35L56) receiving digital audio over I2S/ASP from a secondary Pin Complex (typically Node `0x17`).
+Many modern laptops (ASUS ROG, Lenovo Legion/ThinkBook, Dell XPS) feature quad-speaker setups composed of:
+1. **Tweeters (high/mid frequencies)**: Driven directly by the onboard HDA codec via an analog Pin Complex (typically Node `0x14`).
+2. **Woofers (bass frequencies)**: Driven by external Cirrus smart amplifiers (CS35L41 or CS35L56) receiving digital audio over I2S/ASP from a secondary Pin Complex (typically Node `0x17`).
 
-### The Missing Bass Problem
+### The missing bass problem
 
 When using generic AppleALC layouts, `Platforms.xml` often only routes a single Pin Complex (the tweeters) to the active DAC converter. While `CirrusAudioFixup` initializes the external amplifiers into `READY_DSP` and enters `PLAYING` state:
 - The secondary woofer Pin Complex remains in low-power state (`D3`), disconnected from the active DAC, or muted by the codec.
 - Consequently, the laptop produces thin, treble-only sound without bass, as the smart amplifiers receive a silent digital stream.
 
-### 4-Step Diagnostic Procedure
+### Diagnostic procedure
 
 To resolve missing bass or silent amplifiers on any laptop:
 
-1. **Identify the Active DAC in macOS**:
+1. **Identify the active DAC in macOS**:
    From your current working layout (e.g. `Platforms21.xml` or `Platforms88.xml`), identify which DAC Node (typically Node `0x02` or `0x03`) receives the primary audio output stream.
-2. **Inspect the Linux Codec Dump for All Speaker Pins**:
+2. **Inspect the Linux codec dump for all speaker pins**:
    Search for all widgets marked `[Pin Complex]` with `Pin Default` set to `[Fixed] Speaker`:
    - Note the Node IDs (e.g. Node `0x14` and Node `0x17`).
    - Check the `Connection:` list for each pin to see which DAC converters it can select.
    - Note the index (0, 1, 2...) corresponding to the active DAC identified in step 1.
-3. **Check Pincap Capabilities (EAPD)**:
+3. **Check pincap capabilities (EAPD)**:
    Inspect `Pincap` for each speaker pin:
    - If `EAPD` is present (e.g. `0x00010014`), EAPD verb `0x70C 0x02` is required.
    - If `EAPD` is absent (e.g. `0x0000001c`), EAPD verbs have no hardware effect and should be omitted.
-4. **Construct the Universal HDA Activation Sequence**:
+4. **Construct the universal HDA activation sequence**:
    To test and activate an unrouted speaker pin at runtime using `alc-verb`, construct the standard 4-to-5 verb sequence:
 
-   | Step | HDA Verb | Parameter | Purpose |
+   | Step | HDA verb | Parameter | Purpose |
    | :--- | :--- | :--- | :--- |
-   | **1. Connection Select** | `0x701` | `<DAC Index>` | Connect the pin complex to the active DAC output stream |
-   | **2. Power State** | `0x705` | `0x00` | Wake the pin complex to power state **D0 (Full Power)** |
-   | **3. Amplifier Unmute** | `0x3B0` | `0x00` | Unmute both Left and Right output amp channels at 0 dB gain |
-   | **4. EAPD Enable** | `0x70C` | `0x02` | Assert external amplifier power gate (*only if pincap has EAPD*) |
-   | **5. Pin Widget Control**| `0x707` | `0x40` | Assert **OUT Enable** to start audio output |
+   | **1. Connection select** | `0x701` | `<DAC Index>` | Connect the pin complex to the active DAC output stream |
+   | **2. Power state** | `0x705` | `0x00` | Wake the pin complex to power state D0 (full power) |
+   | **3. Amplifier unmute** | `0x3B0` | `0x00` | Unmute both left and right output amp channels at 0 dB gain |
+   | **4. EAPD enable** | `0x70C` | `0x02` | Assert external amplifier power gate (*only if pincap has EAPD*) |
+   | **5. Pin widget control** | `0x707` | `0x40` | Assert OUT enable to start audio output |
 
-### Making the Route Persistent
+### Making the route persistent
 
 Because `alc-verb` commands are runtime-only and reset across reboots or sleep/wake cycles, persist the sequence using one of two methods:
-- **Method A (Native AppleALC Layout)**: In `Platforms.xml`, add both speaker Pin Complexes into the same PathMap connected to the active DAC. Include any required initialization verbs in `ConfigData` and `WakeConfigData`.
-- **Method B (Automated Daemon)**: Install `ALCPlugFix-Swift` or a launchd script to dispatch the verified `alc-verb` sequence on boot and system wake events.
+- **Method A (Native AppleALC layout)**: In `Platforms.xml`, add both speaker Pin Complexes into the same PathMap connected to the active DAC. Include any required initialization verbs in `ConfigData` and `WakeConfigData`.
+- **Method B (Automated daemon)**: Install `ALCPlugFix-Swift` or a launchd script to dispatch the verified `alc-verb` sequence on boot and system wake events.
 
 ---
 
-## 8. Verified Hardware Case Studies & Verb Values
+## 8. Verified hardware case studies and verb values
 
 The following table summarizes real-world hardware where this diagnostic methodology successfully verified speaker and woofer playback:
 
-| Laptop Model | Codec | Amplifier | Tweeter Pin | Woofer Pin | Active DAC | Verified Verb Sequence | Status |
+| Laptop model | Codec | Amplifier | Tweeter pin | Woofer pin | Active DAC | Verified verb sequence | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **ASUS ROG Zephyrus G16 GU605MV** (`1043:1C63`) | ALC285 | 2x CS35L56 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770c02 01770740` | Verified (#8) |
 | **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`) | ALC287 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770740` | Verified (#16) |
-| **HP ENVY x360 15-ey0xxx** (`103C:8A31`) | ALC245 | 2x CS35L41 (I2C) | N/A (Dual) | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD) | Verified (#14) |
+| **HP ENVY x360 15-ey0xxx** (`103C:8A31`) | ALC245 | 2x CS35L41 (I2C) | N/A (dual) | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD) | Verified (#14) |
 
-### Detailed Machine Notes
+### Machine notes
 
 #### Lenovo ThinkBook 16p G6 IAX (`17AA:391E`, Realtek ALC287)
 - **Problem**: With AppleALC Layout 21 (`alcid=21`), tweeters played on Node `0x14` but woofers on 2x CS35L56 were silent.
-- **Root Cause**: Node `0x17` defaults to connection index 1 (DAC `0x03`), which carries no audio stream.
+- **Root cause**: Node `0x17` defaults to connection index 1 (DAC `0x03`), which carries no audio stream.
 - **Solution**: Executed `01770100` (select DAC `0x02`), `01770500` (power D0), `0173b000` (unmute), and `01770740` (pin OUT). Node `0x17` pincap (`0x0000001c`) lacks EAPD, so `01770c02` was omitted. Both woofers produced clean, balanced bass immediately upon applying `01770740`.
 
 #### ASUS ROG Zephyrus G16 GU605MV (`1043:1C63`, Realtek ALC285)
 - **Problem**: With AppleALC Layout 88, only codec-driven tweeters produced audio.
-- **Root Cause**: Node `0x17` leading to CS35L56 SPI amplifiers was left unconfigured in layout 88.
+- **Root cause**: Node `0x17` leading to CS35L56 SPI amplifiers was left unconfigured in layout 88.
 - **Solution**: Applied 5-verb sequence `01770100 01770500 0173b000 01770c02 01770740`. Restored full-frequency bass playback matching Windows.
 
 #### HP ENVY x360 15-ey0xxx (`103C:8A31`, Realtek ALC245)
 - **Problem**: Internal speakers silent on generic layouts despite "Built-in Output" appearing in Sound Settings.
-- **Root Cause**: Node `0x17` pincap (`0x0000001c`) lacks an internal EAPD widget. Output depends entirely on CS35L41 receiving power over I2C.
+- **Root cause**: Node `0x17` pincap (`0x0000001c`) lacks an internal EAPD widget. Output depends entirely on CS35L41 receiving power over I2C.
 - **Solution**: Layout 13 connects Node `0x17` to DAC `0x03`, allowing CS35L41 amplifiers to receive the PCM stream.
 
 [Back to main guide](../../README.md#installation)

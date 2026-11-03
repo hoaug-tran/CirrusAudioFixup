@@ -161,4 +161,23 @@ ioreg -lw0 -p IOService -r -c CirrusAudioFixup
   - Node 0x21 pincap is `0x0001001c` (includes EAPD). EAPD verb `02170c02` enables the headphone amplifier.
   - Headphone playback operates normally through AppleALC even when CS35L41 amplifiers are held in reset or read-only mode.
 
+## 8. Model Notes: Realtek ALC287 (Lenovo ThinkBook 16p G6 IAX, `17AA:391E`)
+
+- **AppleALC Layout**: Layout 21 (`alcid=21`) borrowed from Lenovo Yoga Slim 7-14IIL05 (provisional).
+- **Quad-Speaker Codec Routing**:
+  - Tweeters (High Frequencies): DAC Node `0x02` → Pin Complex Node `0x14` (`0x90170120`, pincap `0x00010014` with EAPD).
+  - Woofers (Bass Speakers): DAC Node `0x02` → Pin Complex Node `0x17` (`0x90170120`, pincap `0x0000001c` without EAPD) → CS35L56 smart amplifiers over I2S/ASP (`0x31` Left, `0x30` Right).
+  - Headphone Jack: DAC Node `0x03` → Pin Complex Node `0x21` (`0x03211010`).
+  - Microphone Jack: Pin Complex Node `0x19` (`0x03a11030`).
+  - Internal Microphone: Digital Microphones (Intel SOF DMIC) via ACPI NHLT, completely independent of Realtek ALC287. Node `0x1A` is disabled in hardware (`0x411111f0`).
+- **Speaker Behavior & Codec Route**:
+  - AppleALC Layout 21 only routes Pin Complex Node `0x14` to DAC Node `0x02`. Node `0x17` is omitted from `Platforms21.xml`.
+  - While CirrusAudioFixup initializes both CS35L56 smart amplifiers to `READY_DSP` / `PLAYING`, woofers receive no digital audio signal from ALC287 until Node `0x17` is switched to DAC `0x02` and unmuted.
+  - Applying the 4-verb sequence enables woofer output in tandem with tweeters:
+    ```text
+    01770100 01770500 0173b000 01770740
+    ```
+  - Note: Node `0x17` lacks internal EAPD capability (pincap `0x0000001c`), so EAPD verb `01770c02` has no hardware effect and is omitted.
+  - For persistent routing across boot and sleep/wake cycles, add the 4 verbs into `WakeConfigData` or automate execution via `ALCPlugFix-Swift`.
+
 [Back to main guide](../../README.md#installation)

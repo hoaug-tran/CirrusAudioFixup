@@ -17,15 +17,16 @@ Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11)
 
 ### CS35L56
 
+- Added CS35L56 B0 support over I2C for Lenovo ThinkBook 16p G6 IAX (`CSC3556`, subsystem `17AA:391E`) with dual amplifiers (`0x31`/`0x30`), Rev 3.11.21 DSP firmware, and speaker tuning.
 - Added CS35L56 B0 support over SPI for ASUS ROG Zephyrus G16 GU605MV (`CSC3556`, subsystem `1043:1C63`).
 - Added dual-amplifier discovery, reset, DSP initialization, mailbox control, playback and power-state handling.
 - Added firmware 3.11.16, separate amplifier coefficients, automatic speaker-ID selection and measured EFI calibration.
 - Fixed firmware-boot ordering before device identification and IRQ mask readback validation that blocked DSP initialization.
 - Added SPI, firmware, captured-calibration, playback, power-management and failure-recovery regressions.
 
-Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10).
+Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10), [PR #17](https://github.com/hoaug-tran/CirrusAudioFixup/pull/17).
 
-Initialization and physical speaker output were verified on GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8). Bass output requires ALC285 NID `0x17` routing; persistent routing needs a suitable AppleALC configuration.
+Initialization and physical speaker output were verified on GU605MV by @trinhflorentino in [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8) and on ThinkBook 16p G6 IAX by @DejaVuDarren in [#16](https://github.com/hoaug-tran/CirrusAudioFixup/issues/16). Bass output requires ALC287 NID `0x17` routing; persistent routing needs a suitable AppleALC configuration.
 
 ### Shared infrastructure
 

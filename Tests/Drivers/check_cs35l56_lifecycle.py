@@ -112,8 +112,9 @@ struct Host : platform::AmplifierHost {
  bool hasRouteEvents()const override{return route;}
  bool routeUnchanged(uint32_t generation)const override{return route&&generation==7;}
  platform::hda::HDAStreamState streamObservation()const override{
-  platform::hda::HDAStreamState s{};s.observed=s.streamActive=s.converterPrepared=route;s.lastStreamTag=1;s.lastFormat=0x31;return s;
+  platform::hda::HDAStreamState s{};s.observed=s.streamActive=s.converterPrepared=route;s.lastStreamTag=1;s.lastFormat=format;return s;
  }
+ uint16_t format{0x31};
 };
 struct Fixture {
  IO io;Host host;
@@ -133,7 +134,7 @@ struct Fixture {
   }else fixtureOptions=nullptr;
  }
  ~Fixture(){fixtureOptions=nullptr;assert(fixtureLiveAllocations==0);}
- core::PlaybackContext playback(){return {true,true,true,true,7,1,0x31,0};}
+ core::PlaybackContext playback(uint16_t fmt=0x31){return {true,true,true,true,7,1,fmt,0};}
  void idle(){assert(io.regs[kRegAspEnables]==0&&io.regs[kRegUserMute]==1);}
 };
 struct Properties : platform::PlatformProperties {
@@ -240,6 +241,16 @@ int main(){
  {Fixture f;assert(f.lifecycle.bringUp()==0);auto c=f.playback();assert(f.driver.runtimeTick(c)==0);
   auto before=f.io.scalar;assert(f.driver.startPlayback()==0);startTransfers=f.io.scalar-before;
   before=f.io.scalar;assert(f.driver.stopPlayback()==0);stopTransfers=f.io.scalar-before;assert(f.driver.safeShutdown()==0);}
+ for(uint16_t validFmt : {0x11U,0x21U,0x31U,0x13U,0x23U,0x33U}) {
+  Fixture f;assert(f.lifecycle.bringUp()==0);f.host.format=validFmt;auto c=f.playback(validFmt);
+  assert(f.driver.runtimeTick(c)==0);assert(f.driver.startPlayback()==0);assert(f.driver.stopPlayback()==0);assert(f.driver.safeShutdown()==0);
+ }
+ for(uint16_t badFmt : {0x30U,0x32U,0x34U,0x35U,0x37U}) {
+  Fixture f;assert(f.lifecycle.bringUp()==0);f.host.format=badFmt;auto c=f.playback(badFmt);
+  assert(f.driver.runtimeTick(c)==0);assert(f.driver.startPlayback()!=0);assert(f.driver.safeShutdown()==0);
+ }
+ {Fixture f;assert(f.lifecycle.bringUp()==0);f.host.format=0x33;auto c=f.playback(0x31);
+  assert(f.driver.runtimeTick(c)==0);assert(f.driver.startPlayback()!=0);assert(f.driver.safeShutdown()==0);}
  for(unsigned failure=1;failure<=startTransfers;++failure){Fixture f;assert(f.lifecycle.bringUp()==0);
   assert(f.driver.runtimeTick(f.playback())==0);f.io.failAt=f.io.scalar+failure;
   const auto result=f.driver.startPlayback();

@@ -19,6 +19,7 @@ Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11)
 
 - Added CS35L56 B0 support over I2C for Lenovo ThinkBook 16p G6 IAX (`CSC3556`, subsystem `17AA:391E`) with dual amplifiers (`0x31`/`0x30`), Rev 3.11.21 DSP firmware, and speaker tuning.
 - Added CS35L56 B0 support over SPI for ASUS ROG Zephyrus G16 GU605MV (`CSC3556`, subsystem `1043:1C63`).
+- Added CS35L56 B0 support over I2C for ASUS ROG Zephyrus G14 GA403UV (`CSC3556`, subsystem `1043:1B13`) with dedicated left/right speaker tuning and Rev 3.11.16 DSP firmware.
 - Added dual-amplifier discovery, reset, DSP initialization, mailbox control, playback and power-state handling.
 - Added firmware 3.11.16, separate amplifier coefficients, automatic speaker-ID selection and measured EFI calibration.
 - Added I2C multi-frame sequence write support for firmware chunks.

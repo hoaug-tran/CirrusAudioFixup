@@ -19,6 +19,7 @@ struct BoardProperties {
 inline constexpr BoardProperties kBoardProperties[] = {
     {0x17aa391e, core::BusTransportType::I2C, 2, {0x31, 0x30}, {0, 1}, 0, -1},
     {0x17aa390b, core::BusTransportType::I2C, 2, {0x31, 0x30}, {0, 1}, 0, -1},
+    {0x10431b13, core::BusTransportType::I2C, 2, {0x31, 0x30}, {0, 1}, 0, -1},
 };
 
 inline const BoardProperties* boardProperties(uint16_t vendor, uint16_t device) {

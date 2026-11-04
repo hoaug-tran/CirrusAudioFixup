@@ -496,6 +496,11 @@ int main() {
       d.runBackgroundMonitor();assert(timer.scheduled && timer.lastDelay==250 && d.unmute==0);
       d.mHdaStreamActive=true;d.mHdaLastFormat=0x31;d.runBackgroundMonitor();
       assert(d.mAmplifiers[0].playbackActive && !d.mAmplifiers[0].playbackFaulted); }
+    { CirrusAudioFixup d;Timer timer;d.mProbeTimer=&timer;
+      d.mHdaStreamActive=false;d.mHdaLastFormat=0x4031;d.mAudioPrepareRetries=0;
+      d.runBackgroundMonitor();assert(timer.scheduled && timer.lastDelay==250 && d.unmute==0);
+      d.mHdaStreamActive=true;d.mHdaLastFormat=0x33;d.runBackgroundMonitor();
+      assert(d.mAmplifiers[0].playbackActive && !d.mAmplifiers[0].playbackFaulted); }
 
     { CirrusAudioFixup d;d.runBackgroundMonitor();
       for(unsigned i=0;i<100;++i) {
@@ -765,8 +770,8 @@ int main() {
         assert(failedEndpoint.diagnostic.latestFailure == DIAG_DSP_MAILBOX);
         assert(unreadable.ops == 2 && hostSleepCount == 0);
     }
-    for(unsigned fmt : {0x11U,0x21U,0x31U,0x931U}) assert(CirrusAudioFixup().supportedHdaFormat(fmt));
-    for(unsigned fmt : {0U,0x30U,0x4031U,0x831U,0x8031U,0x41U,0xB1U,0x2031U}) assert(!CirrusAudioFixup().supportedHdaFormat(fmt));
+    for(unsigned fmt : {0x11U,0x21U,0x31U,0x13U,0x23U,0x33U,0x931U,0x933U}) assert(CirrusAudioFixup().supportedHdaFormat(fmt));
+    for(unsigned fmt : {0U,0x30U,0x32U,0x34U,0x35U,0x37U,0x4031U,0x831U,0x8031U,0x41U,0xB1U,0x2031U}) assert(!CirrusAudioFixup().supportedHdaFormat(fmt));
     for(unsigned version : {0x1500U,0x1D00U}) {
         CirrusAudioFixup baseline;
         baseline.mAmplifiers[0].firmwareIdVersion=version;

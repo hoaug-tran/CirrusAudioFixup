@@ -6,20 +6,37 @@ body:
   - type: markdown
     attributes:
       value: |
-        A model name alone is not enough to add hardware support. Include data from the actual machine.
-        Check [supported hardware](https://github.com/hoaug-tran/CirrusAudioFixup#supported-hardware) first. For a failure on an already supported configuration, use **Bug report**.
-        Linux: `sudo bash Tools/Collectors/collect_audio_amp_linux.sh`
-        Windows PowerShell as Administrator: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collectors\Collect-AudioAMP-Windows.ps1`
-        macOS, if bootable: `sudo bash Tools/Collectors/collect_macos.sh`
-        See [collector instructions](https://github.com/hoaug-tran/CirrusAudioFixup/blob/main/docs/guides/audio_collectors.md). Do not force a different board identity or copy another speaker's tuning to test compatibility.
+        A model name or screenshot alone is not enough to add hardware support. Adding support requires concrete evidence collected directly from the machine across operating systems.
+
+        **Required collections before submitting:**
+        1. **Linux Collector**: Boot any Live USB Linux (e.g. Ubuntu) with working audio and run:
+           ```bash
+           sudo bash Tools/Collectors/collect_audio_amp_linux.sh --include-firmware
+           ```
+           *Extracts ALSA codec dumps, pin complex paths, ACPI tables, and kernel driver binding.*
+        2. **Windows Collector**: Run Windows PowerShell as Administrator with OEM audio drivers installed:
+           ```powershell
+           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collectors\Collect-AudioAMP-Windows.ps1 -IncludeDriverFiles
+           ```
+           *Extracts OEM driver INF files, WMFW firmware, per-channel tuning binaries, and EFI calibration variables.*
+        3. **macOS Collector** (if macOS is already bootable):
+           ```bash
+           sudo bash Tools/Collectors/collect_macos.sh
+           ```
+
+        Check [supported hardware](https://github.com/hoaug-tran/CirrusAudioFixup#supported-hardware), [Troubleshooting](https://github.com/hoaug-tran/CirrusAudioFixup#troubleshooting), and [codec routing checks](https://github.com/hoaug-tran/CirrusAudioFixup/blob/develop/docs/hardware/codec_route.md) first. For a failure on an already supported configuration, use **Bug report**.
   - type: checkboxes
     id: checks
     attributes:
       label: Before submitting
       options:
-        - label: I searched existing hardware requests and checked the current support list.
+        - label: I searched existing open and closed hardware requests and verified my laptop is not already supported.
           required: true
-        - label: The attached data comes from this machine; unknown identities and untested results are marked clearly.
+        - label: I read the README Troubleshooting section and the Codec Route guide (docs/hardware/codec_route.md) to confirm this is not a known AppleALC pin routing issue.
+          required: true
+        - label: I provided dumps from BOTH Linux and Windows (and macOS if bootable). I understand requests lacking these dumps cannot be processed.
+          required: true
+        - label: The attached data comes from this exact machine; unknown identities and untested results are marked clearly.
           required: true
         - label: I reviewed attachments for personal data and can identify the source of any supplied firmware.
           required: true
@@ -61,7 +78,8 @@ body:
     id: reports
     attributes:
       label: Machine reports
-      description: Attach at least one Linux or Windows collector archive from this machine; Linux codec/ACPI data is preferred for routing and bus resources. Include macOS data if available. Identify which OS produced each archive. If collection failed, supply its exact error and any partial output; a product-spec screenshot alone is insufficient.
+      description: Attach BOTH Linux and Windows collector archives from this machine (and macOS if bootable). Linux is required for ALSA codec routing, pin complexes, and ACPI bus resources; Windows is required for OEM driver INFs, firmware binaries, per-channel tuning, and calibration. Submissions with only a single OS dump, screenshots, or missing data will be marked needs-logs and cannot be processed.
+      placeholder: "Drop your Linux (.tar.gz) and Windows (.zip) archives here. If you also have a macOS dump, attach it as well."
     validations:
       required: true
   - type: textarea

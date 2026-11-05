@@ -1,57 +1,45 @@
 # Changelog
 
-## [Unreleased]
+## [1.2.0] - 2026-11-06
 
 ### CS35L41
 
-- Added Alienware x17 R2 / Dell Horizon 17 support (`CSC3551`, subsystem `1028:0B28`) over SPI, with embedded firmware and left/right speaker tuning for both speaker IDs.
-- Added Tiger Lake-LP GPIO controller support (`INTC1055`, `INT34C5`) for native and GPIO-driven SPI chip select lines with matching pad groups and ownership registers.
-- Fixed ACPI `_DSD` metadata evaluation to handle `kIOReturnLockedWrite` (`0xE00002C4`) and `kIOReturnUnsupported`, ensuring clean fallback to verified board metadata when ACPI `_DSD` is absent.
-- Synchronized GPIO debounce revision threshold to `0x92` to match Linux driver specifications.
-- Documented Realtek ALC289 codec routing and verified AppleALC Layout 93 (`alcid=93`) for 4-speaker simultaneous playback (tweeters on Node 0x14, woofers on Node 0x17).
-
-Implementation: [PR #13](https://github.com/hoaug-tran/CirrusAudioFixup/pull/13).
-
-## [1.2.0] - 2026-10-29
-
-### CS35L41
-
-- Added HP ENVY x360 15-ey0xxx support (`CSC3551`, subsystem `103C:8A31`) over I2C with dual CS35L41 amplifiers, internal boost, and board-specific DSP firmware.
-- Added Alienware x17 R2 / Dell Horizon 17 support (`CSC3551`, subsystem `1028:0B28`) over SPI, with embedded firmware and left/right speaker tuning for both speaker IDs.
-- Added ASUS Zenbook 14 UM3402Y support (`CSC3551`, subsystem `1043:1683`) over I2C, with board-specific firmware and left/right speaker tuning.
-- Added ACPI-backed I2C endpoint discovery and GPIO speaker-ID sampling, with strict provider, board and tuning validation.
+- Added HP ENVY x360 15-ey0xxx support (`CSC3551`, subsystem `103C:8A31`) over I2C with internal boost topology.
+- Added Alienware x17 R2 / Dell Horizon 17 support (`CSC3551`, subsystem `1028:0B28`) over SPI with Tiger Lake-LP GPIO chip select.
+- Added ASUS Zenbook 14 UM3402Y support (`CSC3551`, subsystem `1043:1683`) over I2C with switched external boost.
+- Added Tiger Lake-LP GPIO controller support (`INTC1055`, `INT34C5`) for native and GPIO-driven SPI chip select lines.
+- Fixed ACPI `_DSD` metadata evaluation to handle `kIOReturnLockedWrite` (`0xE00002C4`) and `kIOReturnUnsupported`, ensuring clean fallback to verified board metadata.
+- Corrected HP ZBook Fury 16 G9 GPIO resources in board tests.
+- Added clock wait recovery on cold start power-up timeout.
 - Added authorized AMD GPIO reset preparation before I2C amplifier identity reads.
-- Added switched external-boost initialization, playback and shutdown sequences, including safe reset and topology-specific DSP supply-monitor routing.
-- Consolidated Linux-referenced board defaults while preserving native ACPI property validation and existing power topologies.
-- Fixed board metadata fallback when the ACPI property interpreter is unavailable from version 1.1.0
+- Synchronized GPIO debounce revision threshold to `0x92` to match Linux driver specifications.
 
-Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11).
+Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11), [PR #13](https://github.com/hoaug-tran/CirrusAudioFixup/pull/13) (closes [#12](https://github.com/hoaug-tran/CirrusAudioFixup/issues/12)), [PR #15](https://github.com/hoaug-tran/CirrusAudioFixup/pull/15) (closes [#14](https://github.com/hoaug-tran/CirrusAudioFixup/issues/14)).
 
 ### CS35L56
 
-- Added CS35L56 B0 support over I2C for Lenovo ThinkBook 16p G6 IAX (`CSC3556`, subsystem `17AA:391E`) with dual amplifiers (`0x31`/`0x30`), Rev 3.11.21 DSP firmware, and speaker tuning.
-- Added CS35L56 B0 support over SPI for ASUS ROG Zephyrus G16 GU605MV (`CSC3556`, subsystem `1043:1C63`).
-- Added CS35L56 B0 support over I2C for ASUS ROG Zephyrus G14 GA403UV (`CSC3556`, subsystem `1043:1B13`) with dedicated left/right speaker tuning and Rev 3.11.16 DSP firmware.
-- Added dual-amplifier discovery, reset, DSP initialization, mailbox control, playback and power-state handling.
-- Added firmware 3.11.16, separate amplifier coefficients, automatic speaker-ID selection and measured EFI calibration.
-- Added I2C multi-frame sequence write support for firmware chunks.
-- Fixed firmware-boot ordering before device identification and IRQ mask readback validation that blocked DSP initialization.
-- Added SPI, firmware, captured-calibration, playback, power-management and failure-recovery regressions.
-- Note: ThinkBook 16p G6 woofer output requires ALC287 NID `0x17` routing; persistent routing requires a matching AppleALC layout or initialization verbs.
+- Added initial CS35L56 B0 smart amplifier family driver for both SPI and I2C buses.
+- Added ASUS ROG Zephyrus G16 GU605MV (2024) support (`CSC3556`, subsystem `1043:1C63`) over SPI.
+- Added Lenovo ThinkBook 16p G6 IAX support (`CSC3556`, subsystem `17AA:391E`) over I2C (`0x31` Left, `0x30` Right) with software register reset.
+- Added ASUS ROG Zephyrus G14 GA403UV support (`CSC3556`, subsystem `1043:1B13`) over I2C with 4-channel HDA stream support.
+- Added multi-frame sequence write (`writeSequence`) on `I2CRegisterBus` for chunked WMFW uploads over I2C.
+- Filtered broadcast I2C addresses (`0x3A`, `0x3C`) from endpoint discovery.
+- Added dynamic ASP RX channel routing based on amplifier binding index.
+- Added per-amplifier EFI calibration decoding (`CirrusSmartAmpCalibrationData`) and runtime verification.
+- Fixed firmware-boot ordering before device identification and IRQ mask readback validation.
 
-Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10), [PR #17](https://github.com/hoaug-tran/CirrusAudioFixup/pull/17).
+Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10) (closes [#8](https://github.com/hoaug-tran/CirrusAudioFixup/issues/8)), [PR #17](https://github.com/hoaug-tran/CirrusAudioFixup/pull/17) (closes [#16](https://github.com/hoaug-tran/CirrusAudioFixup/issues/16)), [PR #19](https://github.com/hoaug-tran/CirrusAudioFixup/pull/19) (closes [#18](https://github.com/hoaug-tran/CirrusAudioFixup/issues/18)).
 
-### Shared infrastructure
+### Platform & Infrastructure
 
 - Added native ACPI `_DSD` reference evaluation and `_CRS` serial-bus/GPIO resource discovery.
-- Treated unavailable ACPI evaluation and missing handle states as absent metadata in `ACPIDeviceProperties` to allow verified table fallbacks.
-- Added Meteor Lake-P GPIO support for `INTC1083`/`INTC105E`, including ownership checks and cross-community GPIO access.
-- Extended bounded WMFW uploads for larger images and region counts, preserving transfer errors and keeping upload workspaces off the kernel stack.
-- Improved deferred SPI/PCI attachment and serialized register writes during reset.
-- Added virtual destructors and `override` specifiers across polymorphic driver, bus, and test classes.
-- Shared board adoption, SPI register forwarding and EFI calibration decoding while retaining amplifier-specific access, power, reset and calibration policies.
-- Expanded initialization, firmware, calibration and playback diagnostics.
-- Added portable host fixtures and native Debug/Release build verification for pull requests.
+- Supported 4-channel HDA stream formats (`0x0033`: 48 kHz, 24-bit, 4 channels) in `HDAStreamWatcher` and playback validation.
+- Deferred startup for dynamic ACPI profiles (`CSC3551`, `CSC3556`) when PCI subsystem ID publication is pending.
+- Added Meteor Lake-P GPIO controller support (`INTC1083`, `INTC105E`).
+- Extended bounded WMFW uploads for larger images and region counts, keeping workspaces off the kernel stack.
+- Automated release publishing and draft management in CI workflows.
+- Added native macOS Debug and Release builds to pull request verification.
+- Documented quad-speaker codec routing and HDA verb sequences in `docs/hardware/codec_route.md`.
 
 ## [1.1.1] - 2026-10-21
 
@@ -59,7 +47,7 @@ Implementation: [PR #10](https://github.com/hoaug-tran/CirrusAudioFixup/pull/10)
 
 ### Added
 
-- Added CS35L41 support for ASUS subsystem `1043:1C9F`, including firmware and left/right speaker tuning.
+- Added CS35L41 support for ASUS ROG Strix G16 G614JI (`1043:1C9F`) over SPI.
 - Added automatic board configuration using ACPI resources and built-in metadata, without requiring a custom SSDT.
 - Added GPIO-based speaker ID detection and validation.
 - Improved diagnostic logs for amplifier initialization, firmware loading and SPI errors.
@@ -85,7 +73,7 @@ Released in [#7](https://github.com/hoaug-tran/CirrusAudioFixup/pull/7), includi
 
 - Native SPI support for profiled Intel LPSS SPT/BXT/CNL/TGL controllers and AMD AMDI0061/AMDI0062 controllers.
 - ACPI I2C/SPI detection, SPI endpoint parsing, native/GPIO chip select and supported reset-GPIO handling.
-- HP CSC3551 internal-boost configuration, including 103C89C6 firmware and separate left/right speaker tuning.
+- Added HP ZBook Fury 16 G9 (`103C:89C6`) support over SPI with internal boost topology.
 - Shared amplifier registration and runtime for I2C and SPI, with separate silicon, board and controller modules.
 - Per-channel speaker ID overrides and an explicit distinction between generic tuning and physical speaker ID 0.
 - Linux and Windows audio collectors for device identity, ACPI, controller and OEM firmware data, including the general `collect_audio_amp_linux.sh` and `Collect-AudioAMP-Windows.ps1` tools.

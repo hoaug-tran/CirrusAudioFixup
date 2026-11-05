@@ -6,21 +6,26 @@ body:
   - type: markdown
     attributes:
       value: |
-        Report one problem per issue. For a new board or amplifier, use **Hardware support** instead.
-        Read the [README](https://github.com/hoaug-tran/CirrusAudioFixup#readme). First-boot checks use `-cirrusro -cirrusdbg`; do not enable DSP bypass, force another board's SSID or raise gain just to complete this form.
-        On the affected macOS installation, run `sudo bash Tools/Collectors/collect_macos.sh` from the repository folder and keep the Desktop ZIP with `status.txt`. Unified logs can be empty; the report's IORegistry and kernel-buffer captures also matter.
+        Report one reproducible problem per issue. For a new board or unsupported laptop model, use **Hardware support** instead.
+        Before reporting a bug:
+        1. Check the [Troubleshooting section](https://github.com/hoaug-tran/CirrusAudioFixup#troubleshooting) and [Diagnostics guide](https://github.com/hoaug-tran/CirrusAudioFixup/blob/develop/docs/diagnostics/diagnostics.md).
+        2. If internal speakers are silent but headphones work, or if bass is missing in a multi-speaker laptop, check the [Codec Route guide](https://github.com/hoaug-tran/CirrusAudioFixup/blob/develop/docs/hardware/codec_route.md) — AppleALC pin routing issues belong to the codec layout, not amplifier driver faults.
+        3. First-boot checks use `-cirrusro -cirrusdbg`; do not enable DSP bypass, force an unrelated board SSID, or raise digital gain.
+        4. Run `sudo bash Tools/Collectors/collect_macos.sh` while audio is actively playing (or attempting to play), and attach the resulting Desktop ZIP.
   - type: checkboxes
     id: checks
     attributes:
       label: Before submitting
       options:
-        - label: I searched existing issues and read the supported hardware and installation sections.
+        - label: I searched existing open and closed issues and pull requests to confirm this problem is not already resolved or documented.
           required: true
-        - label: I checked the Troubleshooting guide and verified that Audio MIDI Setup is set to 48,000 Hz.
+        - label: I checked the README Troubleshooting section, Diagnostics guide, and confirmed Audio MIDI Setup format is set to 48,000 Hz.
           required: true
-        - label: I describe what I actually tested and mark unavailable data instead of guessing values.
+        - label: If experiencing silent speakers or missing bass, I verified the AppleALC pin routing against the Codec Route guide (docs/hardware/codec_route.md).
           required: true
-        - label: I reviewed attachments for personal data and did not include an entire EFI folder.
+        - label: I collected fresh diagnostics using sudo bash Tools/Collectors/collect_macos.sh while audio is playing (or attempted) and attached the ZIP.
+          required: true
+        - label: I describe what I actually tested on real hardware, and did not include personal data or an entire EFI folder.
           required: true
   - type: dropdown
     id: problem_type

@@ -8,6 +8,7 @@
 - Added Tiger Lake-LP GPIO controller support (`INTC1055`, `INT34C5`) for native and GPIO-driven SPI chip select lines with matching pad groups and ownership registers.
 - Fixed ACPI `_DSD` metadata evaluation to handle `kIOReturnLockedWrite` (`0xE00002C4`) and `kIOReturnUnsupported`, ensuring clean fallback to verified board metadata when ACPI `_DSD` is absent.
 - Synchronized GPIO debounce revision threshold to `0x92` to match Linux driver specifications.
+- Documented Realtek ALC289 codec routing and verified AppleALC Layout 93 (`alcid=93`) for 4-speaker simultaneous playback (tweeters on Node 0x14, woofers on Node 0x17).
 
 Implementation: [PR #13](https://github.com/hoaug-tran/CirrusAudioFixup/pull/13).
 

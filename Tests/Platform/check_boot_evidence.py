@@ -1,6 +1,8 @@
 """Exercise the production retained boot journal, including first-error limits."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 import subprocess
@@ -10,23 +12,34 @@ from acpi_kernel_fixture import install
 ROOT = Path(__file__).resolve().parents[2]
 source = service_source()
 start = source.index("    inline void publishBootCheckpoint(")
-checkpoint = source[start:source.index("    inline void retainFailedServiceEvidence(", start)]
+checkpoint = source[
+    start : source.index("    inline void retainFailedServiceEvidence(", start)
+]
 with tempfile.TemporaryDirectory(prefix="cirrus-boot-evidence-") as directory:
     tmp = Path(directory)
     install(tmp)
     fixture = tmp / "Fixture.hpp"
     text = fixture.read_text()
-    text = text.replace('strings[k]=v;return true;', 'strings[k]=v;objects[k]=make<OSString>(v);return true;')
-    text = text.replace('numbers[k]=v;return true;', 'numbers[k]=v;objects[k]=make<OSNumber>(v);return true;')
+    text = text.replace(
+        "strings[k]=v;return true;",
+        "strings[k]=v;objects[k]=make<OSString>(v);return true;",
+    )
+    text = text.replace(
+        "numbers[k]=v;return true;",
+        "numbers[k]=v;objects[k]=make<OSNumber>(v);return true;",
+    )
     fixture.write_text(text)
     cpp = tmp / "test.cpp"
-    cpp.write_text(r'''
+    cpp.write_text(
+        r"""
 #include "Fixture.hpp"
 bool gCirrusDebug=true;
 uint64_t clockNs=1000;
 uint64_t mach_absolute_time(){return clockNs+=1000;}
 void absolutetime_to_nanoseconds(uint64_t t,uint64_t* value){*value=t;}
-''' + checkpoint + r'''
+"""
+        + checkpoint
+        + r"""
 int main(){
  IOService owner;
  publishBootCheckpoint(nullptr,"NULL",kIOReturnError);
@@ -46,17 +59,44 @@ int main(){
  assert(owner.strings["Cirrus_Boot_First_Error"]=="DOMAIN_TIMEOUT");
  assert(owner.strings["Cirrus_Boot_Checkpoint_Last"]=="POLL");
 }
-''')
+"""
+    )
     exe = tmp / "test.exe"
-    subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-I", str(tmp), str(cpp), "-o", str(exe)], check=True)
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(tmp),
+            str(cpp),
+            "-o",
+            str(exe),
+        ],
+        check=True,
+    )
     subprocess.run([str(exe)], check=True)
-print("PASS retained boot evidence: first failure survives cleanup, bounded journal and disabled logging")
+print(
+    "PASS retained boot evidence: first failure survives cleanup, bounded journal and disabled logging"
+)
 
 # Exercise deferred startup, PM acknowledgement and stop ordering.
 from production_source_fixture import method
-lifecycle = "\n".join(method(source, "CirrusAudioFixup", name) for name in
-                      ["continueStartup", "probeTimerFired", "lifecycleAction", "setPowerState", "stop"])
-cpp = r'''
+
+lifecycle = "\n".join(
+    method(source, "CirrusAudioFixup", name)
+    for name in [
+        "continueStartup",
+        "probeTimerFired",
+        "lifecycleAction",
+        "setPowerState",
+        "stop",
+    ]
+)
+cpp = (
+    r"""
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -111,7 +151,9 @@ struct CirrusAudioFixup:IOService {
  static int lifecycleAction(OSObject*,void*,void*,void*,void*);
  int setPowerState(unsigned long,IOService*);
 };
-''' + lifecycle + r'''
+"""
+    + lifecycle
+    + r"""
 int main(){
  CirrusAudioFixup start;
  for(unsigned i=0;i<80;++i)start.probeTimerFired(&start,&start.timer);
@@ -142,10 +184,24 @@ int main(){
  cancel.probeTimerFired(&cancel,&cancel.timer);
  assert(cancel.mStopping&&!cancel.mResumePending&&cancel.acks==1&&!cancel.monitors);
 }
-'''
+"""
+)
 with tempfile.TemporaryDirectory(prefix="cirrus-deferred-start-") as directory:
-    tmp=Path(directory);test=tmp/"test.cpp";test.write_text(cpp);exe=tmp/"test.exe"
-    subprocess.run(["g++","-std=c++17","-Wall","-Wextra","-Werror",str(test),"-o",str(exe)],check=True)
-    subprocess.run([str(exe)],check=True)
-assert 'getProperty("IOPowerManagement")' not in (ROOT/"CirrusAudioFixup/Transport/SPI/Intel/IntelLPSSSPIController.cpp").read_text()
-print("PASS deferred startup, pending wake acknowledgement, timeout and stop cancellation without premature hardware initialization")
+    tmp = Path(directory)
+    test = tmp / "test.cpp"
+    test.write_text(cpp)
+    exe = tmp / "test.exe"
+    subprocess.run(
+        ["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", str(test), "-o", str(exe)],
+        check=True,
+    )
+    subprocess.run([str(exe)], check=True)
+assert (
+    'getProperty("IOPowerManagement")'
+    not in (
+        ROOT / "CirrusAudioFixup/Transport/SPI/Intel/IntelLPSSSPIController.cpp"
+    ).read_text()
+)
+print(
+    "PASS deferred startup, pending wake acknowledgement, timeout and stop cancellation without premature hardware initialization"
+)

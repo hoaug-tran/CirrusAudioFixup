@@ -1,38 +1,54 @@
 """Production native SPI discovery, namespace lookup, ownership and PM failures."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source, method
 from host_build import sanitizer_flags
-import subprocess,tempfile
+import subprocess, tempfile
 from service_runtime_fixture import PLATFORM_ADAPTER
-ROOT=Path(__file__).resolve().parents[2]
-SOURCE=service_source()
-def owner_function(name):
- return method(SOURCE,'CirrusAudioFixup',name)
 
-HEADER=(ROOT/'CirrusAudioFixup/Service/CirrusAudioFixup.hpp').read_text()
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = service_source()
+
+
+def owner_function(name):
+    return method(SOURCE, "CirrusAudioFixup", name)
+
+
+HEADER = (ROOT / "CirrusAudioFixup/Service/CirrusAudioFixup.hpp").read_text()
+
+
 def power_wrapper(name):
- import re
- start=re.search(r'(?:void|bool) '+name+r'\(',HEADER).start();opening=HEADER.index('{',start);depth=0
- for token in re.finditer(r'"(?:\\.|[^"\\])*"|//[^\n]*|[{}]',HEADER[opening:]):
-  if token.group()=='{':depth+=1
-  elif token.group()=='}':
-   depth-=1
-   if not depth:return HEADER[start:opening+token.end()]
- raise ValueError(name)
-with tempfile.TemporaryDirectory(prefix='cirrus-native-spi-') as directory:
- p=Path(directory)
- for name in ('IOKit','Transport/I2C','Transport/SPI/Intel','Transport/SPI/AMD'):(p/name).mkdir(parents=True,exist_ok=True)
- (p/'IOKit/IOLib.h').write_text('''#pragma once
+    import re
+
+    start = re.search(r"(?:void|bool) " + name + r"\(", HEADER).start()
+    opening = HEADER.index("{", start)
+    depth = 0
+    for token in re.finditer(r'"(?:\\.|[^"\\])*"|//[^\n]*|[{}]', HEADER[opening:]):
+        if token.group() == "{":
+            depth += 1
+        elif token.group() == "}":
+            depth -= 1
+            if not depth:
+                return HEADER[start : opening + token.end()]
+    raise ValueError(name)
+
+
+with tempfile.TemporaryDirectory(prefix="cirrus-native-spi-") as directory:
+    p = Path(directory)
+    for name in ("IOKit", "Transport/I2C", "Transport/SPI/Intel", "Transport/SPI/AMD"):
+        (p / name).mkdir(parents=True, exist_ok=True)
+    (p / "IOKit/IOLib.h").write_text("""#pragma once
 #include <cstdint>
 #include <cstddef>
 #include "Diagnostics/DiagnosticTypes.hpp"
 constexpr int kIOReturnBadArgument=-1,kIOReturnNotReady=-2,kIOReturnNotFound=-3,kIOReturnUnsupported=-4,kIOReturnNoMemory=-5,kIOReturnNotPermitted=-6,kIOReturnTimeout=-7;
 inline unsigned fixtureSleptMs=0;
 inline void IOSleep(unsigned ms){fixtureSleptMs+=ms;}
-''')
- (p/'IOKit/IORegistryEntry.h').write_text(r'''
+""")
+    (p / "IOKit/IORegistryEntry.h").write_text(r"""
 #pragma once
 #include "IOKit/IOLib.h"
 #include <vector>
@@ -74,12 +90,15 @@ inline unsigned liveControllers=0,suspends=0,resumes=0;
 inline bool resumeFailure=false;
 inline uint32_t probeIDs[4]{};
 inline unsigned writeTransfers=0;inline std::vector<std::vector<uint8_t>> writes;
-''')
- for name,kind in (('Intel/IntelLPSSSPIController.hpp','intel'),('AMD/AMDSPIController.hpp','amd')):
-  cls='IntelLPSSSPIController' if kind=='intel' else 'AMDSPIController'
-  typ='IOPCIDevice' if kind=='intel' else 'IOACPIPlatformDevice'
-  valid='p->supported' if kind=='intel' else 'p->amd'
-  (p/'Transport/SPI'/name).write_text(f'''#pragma once
+""")
+    for name, kind in (
+        ("Intel/IntelLPSSSPIController.hpp", "intel"),
+        ("AMD/AMDSPIController.hpp", "amd"),
+    ):
+        cls = "IntelLPSSSPIController" if kind == "intel" else "AMDSPIController"
+        typ = "IOPCIDevice" if kind == "intel" else "IOACPIPlatformDevice"
+        valid = "p->supported" if kind == "intel" else "p->amd"
+        (p / "Transport/SPI" / name).write_text(f"""#pragma once
 #include "IOKit/IORegistryEntry.h"
 #include "Transport/SPI/SPIController.hpp"
 namespace cirrus::transport::{kind} {{
@@ -104,8 +123,8 @@ public:
  IOReturn resume(){{++resumes;active=!resumeFailure;return active?0:kIOReturnNotReady;}}
 }};
 }}
-''')
- (p/'Transport/I2C/VoodooI2CController.hpp').write_text(r'''
+""")
+    (p / "Transport/I2C/VoodooI2CController.hpp").write_text(r"""
 #pragma once
 #include "Transport/I2C/I2CController.hpp"
 #include "Transport/I2C/I2CRegisterBus.hpp"
@@ -126,8 +145,9 @@ public:
  }
 };
 }
-''')
- (p/'test.cpp').write_text(r'''
+""")
+    (p / "test.cpp").write_text(
+        r"""
 #include <cstring>
 #include <cassert>
 #include "Transport/SPI/NativeSPIHost.hpp"
@@ -204,7 +224,11 @@ public:
  cirrus::transport::I2CController* mI2CController=nullptr;
  cirrus::transport::I2CRegisterBus* mI2CBuses[4]{};
  cirrus::core::RegisterMap* mI2CMaps[4]{};
-'''+PLATFORM_ADAPTER+power_wrapper('suspendCommunication')+power_wrapper('resumeCommunication')+r'''
+"""
+        + PLATFORM_ADAPTER
+        + power_wrapper("suspendCommunication")
+        + power_wrapper("resumeCommunication")
+        + r"""
  AmplifierHostAdapter mHostAdapters[4]{};
  cirrus::platform::AmplifierBinding mRuntimeBindings[4]{};
  cirrus::firmware::FirmwareBundle mRuntimeFirmware[4]{};
@@ -244,7 +268,8 @@ public:
  bool preflightI2CIdentity(const cirrus::platform::AmplifierDriverRegistration*);
  size_t detectNativeSPIAmplifiers();void teardownCommunication();
 };
-'''+r'''
+"""
+        + r"""
 // Register dispatch itself is tested against the production owner separately.
 class ServiceRegisterIO:public cirrus::core::RegisterIO {
  Amp& amp;
@@ -259,7 +284,21 @@ public:
  bool pollBit(uint32_t r,uint32_t m,uint32_t v,uint32_t t)override{return amp.registerIO->pollBit(r,m,v,t);}
 };
 using cirrus::diagnostics::DIAG_DEVICE_ID;
-'''+owner_function('adoptDiscoveredBoard')+owner_function('findI2CDriver')+owner_function('prepareI2CController')+owner_function('preflightI2CIdentity')+owner_function('recordAttachmentFailure')+owner_function('publishAttachmentStatus')+owner_function('createI2CController')+owner_function('bindAmplifierDrivers')+owner_function('releaseAmplifierDrivers')+owner_function('detectConfiguredI2CAmplifiers')+owner_function('setupCommunication')+owner_function('detectNativeSPIAmplifiers')+owner_function('teardownCommunication')+r'''
+"""
+        + owner_function("adoptDiscoveredBoard")
+        + owner_function("findI2CDriver")
+        + owner_function("prepareI2CController")
+        + owner_function("preflightI2CIdentity")
+        + owner_function("recordAttachmentFailure")
+        + owner_function("publishAttachmentStatus")
+        + owner_function("createI2CController")
+        + owner_function("bindAmplifierDrivers")
+        + owner_function("releaseAmplifierDrivers")
+        + owner_function("detectConfiguredI2CAmplifiers")
+        + owner_function("setupCommunication")
+        + owner_function("detectNativeSPIAmplifiers")
+        + owner_function("teardownCommunication")
+        + r"""
 using namespace cirrus::transport;
 std::vector<uint8_t> descriptor(const char* source,unsigned cs){
  size_t length=21+strlen(source)+1;std::vector<uint8_t> d(length);
@@ -823,8 +862,26 @@ int main(){
  assert(pciMatchingDictionary.refs==1);
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;
 }
-''')
- for flags in sanitizer_flags():
-  subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
-  subprocess.run([str(p/'test')],check=True)
-print('PASS native SPI host: ACPI lookup, multi-controller ownership, authorized per-driver SPI formats, firmware/playback lifecycle, rollback and PM faults; hardware untested')
+"""
+    )
+    for flags in sanitizer_flags():
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "test.cpp"),
+                "-o",
+                str(p / "test"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "test")], check=True)
+print(
+    "PASS native SPI host: ACPI lookup, multi-controller ownership, authorized per-driver SPI formats, firmware/playback lifecycle, rollback and PM faults; hardware untested"
+)

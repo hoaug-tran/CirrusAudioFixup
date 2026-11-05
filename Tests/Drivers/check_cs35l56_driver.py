@@ -1,4 +1,5 @@
 """Exercise CS35L56 wire frames, bounded probe, error evidence and write rejection."""
+
 import subprocess
 import os
 import shutil
@@ -12,7 +13,7 @@ from driver_kernel_fixture import install
 from host_build import sanitizer_flags
 from production_source_fixture import cs35l56_sources
 
-CPP = r'''
+CPP = r"""
 #include <cassert>
 #include <map>
 #include <string>
@@ -180,16 +181,30 @@ int main(){
  assert(!discoverBoard(discovery,reason)&&std::string(reason)=="CS35L56_PROPERTIES_INCOMPLETE"&&gpio.calls==0);
 
 }
-'''
+"""
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-") as directory:
     tmp = Path(directory)
     install(tmp)
     (tmp / "test.cpp").write_text(CPP)
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),
-                        str(tmp / "test.cpp"), *map(str, cs35l56_sources()), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                *map(str, cs35l56_sources()),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
 # Compile real kernel headers at O0 as well: aggregate zero-initialization can
 # consume kernel stack even when the destination itself was heap-allocated.
@@ -199,14 +214,47 @@ if shutil.which("clang++") and (ROOT / "MacKernelSDK/Headers/IOKit/IOLib.h").is_
     with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-kernel-") as directory:
         for optimization in ("-O0", "-O2"):
             for source in cs35l56_sources():
-                subprocess.run(["clang++", "-std=c++17", optimization, "-Wall", "-Wextra", "-Werror",
-                    "-Wframe-larger-than=2048", "-target", "x86_64-apple-darwin", "-mmacosx-version-min=11.0",
-                    "-fapple-kext", "-fno-exceptions", "-fno-rtti", "-DKERNEL", "-DKERNEL_PRIVATE", "-DDRIVER_PRIVATE",
-                    "-DAPPLE", "-D__APPLE__", "-nostdinc", "-isystem", str(ROOT / "MacKernelSDK/Headers"),
-                    "-isystem", str(ROOT / "MacKernelSDK/Headers/i386"), "-I"+str(ROOT / "CirrusAudioFixup"),
-                    "-Wno-ignored-attributes", "-Wno-unused-parameter", "-c", str(source),
-                    "-o", str(Path(directory) / (source.stem+".o"))], env=environment, check=True)
-    print("PASS Darwin kernel CS35L56 Debug/Release object compilation and 2048-byte frame limit")
+                subprocess.run(
+                    [
+                        "clang++",
+                        "-std=c++17",
+                        optimization,
+                        "-Wall",
+                        "-Wextra",
+                        "-Werror",
+                        "-Wframe-larger-than=2048",
+                        "-target",
+                        "x86_64-apple-darwin",
+                        "-mmacosx-version-min=11.0",
+                        "-fapple-kext",
+                        "-fno-exceptions",
+                        "-fno-rtti",
+                        "-DKERNEL",
+                        "-DKERNEL_PRIVATE",
+                        "-DDRIVER_PRIVATE",
+                        "-DAPPLE",
+                        "-D__APPLE__",
+                        "-nostdinc",
+                        "-isystem",
+                        str(ROOT / "MacKernelSDK/Headers"),
+                        "-isystem",
+                        str(ROOT / "MacKernelSDK/Headers/i386"),
+                        "-I" + str(ROOT / "CirrusAudioFixup"),
+                        "-Wno-ignored-attributes",
+                        "-Wno-unused-parameter",
+                        "-c",
+                        str(source),
+                        "-o",
+                        str(Path(directory) / (source.stem + ".o")),
+                    ],
+                    env=environment,
+                    check=True,
+                )
+    print(
+        "PASS Darwin kernel CS35L56 Debug/Release object compilation and 2048-byte frame limit"
+    )
 else:
     print("SKIP Darwin kernel frame check: pinned SDK or clang++ unavailable")
-print("PASS CS35L56 SPI frames, bounded identity reads, native errors, per-endpoint evidence and lifecycle/write rejection")
+print(
+    "PASS CS35L56 SPI frames, bounded identity reads, native errors, per-endpoint evidence and lifecycle/write rejection"
+)

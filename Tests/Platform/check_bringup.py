@@ -1,24 +1,36 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import method
 from production_source_fixture import source as production_source, chip_state
 import re
 import subprocess
 import tempfile
-from service_runtime_fixture import PRODUCTION_DRIVER,FIELDS,BIND,IOLIB
+from service_runtime_fixture import PRODUCTION_DRIVER, FIELDS, BIND, IOLIB
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = production_source()
-HEADER = (ROOT / 'CirrusAudioFixup/Service/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
+HEADER = (ROOT / "CirrusAudioFixup/Service/CirrusAudioFixup.hpp").read_text(
+    encoding="utf-8"
+)
+
 
 def function(name):
-    return method(SOURCE,'CirrusAudioFixup',name)
+    return method(SOURCE, "CirrusAudioFixup", name)
 
-names = ['bringUpAmplifiers', 'initializeCS35L41Device', 'handlePowerChange', 'publishDriverVerdict', 'publishRuntimeStatus', 'stopAfterDebugStage']
+
+names = [
+    "bringUpAmplifiers",
+    "initializeCS35L41Device",
+    "handlePowerChange",
+    "publishDriverVerdict",
+    "publishRuntimeStatus",
+    "stopAfterDebugStage",
+]
 amp = chip_state()
 
-preamble = r'''
+preamble = r"""
 #include "Runtime/AmplifierManager.hpp"
 #include "Runtime/AmplifierHost.hpp"
 #include "Devices/Amplifiers/CS35L41/RuntimeState.hpp"
@@ -46,11 +58,16 @@ struct OSString {
 using namespace cirrus::diagnostics;
 using namespace cirrus::devices::amplifiers::cs35l41;
 bool gCirrusDebug = false;
-'''
+"""
 
-preamble += '#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += (
+    '#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"\n'
+    + amp
+    + "\nusing CS35L41Amp = AmplifierState;\n"
+)
 
-mock = r'''
+mock = (
+    r"""
 class CirrusAudioFixup {
 public:
     void suspendCommunication() {}
@@ -191,7 +208,9 @@ public:
     bool configureCS35L41Interrupt(AmplifierState&,bool){return true;}
     bool checkProtectionStatus(AmplifierState&){return true;}
     bool stopRuntimePlayback(AmplifierState& amp){return stopPlayback(amp);}
-''' + FIELDS + r'''
+"""
+    + FIELDS
+    + r"""
 };
 
 class ServiceRegisterIO : public cirrus::core::RegisterIO {
@@ -206,9 +225,10 @@ public:
     bool bulkRead(uint32_t, uint8_t*, size_t) override { return true; }
     bool bulkWrite(uint32_t, const uint8_t*, size_t) override { return true; }
 };
-'''
+"""
+)
 
-checks = r'''
+checks = r"""
 unsigned failures=0;
 void check(bool ok,const std::string& label) { if(!ok) { ++failures; printf("FAIL %s\n",label.c_str()); } }
 int main() {
@@ -322,13 +342,33 @@ int main() {
     printf("PASS codec init single-I/O fault sweep (%u positions)\n",codec.io);
     puts("PASS OTP error/read failure, stale identity, 11 boot-stage faults, explicit bypass, cleanup faults and actual boot/wake orchestration");
 }
-'''
+"""
 
-with tempfile.TemporaryDirectory(prefix='cirrus-bringup-check-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-bringup-check-") as directory:
     tmp = Path(directory)
-    (tmp / 'IOKit').mkdir()
-    (tmp / 'IOKit/IOLib.h').write_text(IOLIB)
-    source = tmp / 'bringup.cpp'
-    source.write_text(preamble + mock + PRODUCTION_DRIVER + BIND + '\n'.join(function(name) for name in names) + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'bringup.exe')], check=True)
-    subprocess.run([str(tmp / 'bringup.exe')], check=True)
+    (tmp / "IOKit").mkdir()
+    (tmp / "IOKit/IOLib.h").write_text(IOLIB)
+    source = tmp / "bringup.cpp"
+    source.write_text(
+        preamble
+        + mock
+        + PRODUCTION_DRIVER
+        + BIND
+        + "\n".join(function(name) for name in names)
+        + checks,
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-O0",
+            "-I" + str(tmp),
+            "-I" + str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(tmp / "bringup.exe"),
+        ],
+        check=True,
+    )
+    subprocess.run([str(tmp / "bringup.exe")], check=True)

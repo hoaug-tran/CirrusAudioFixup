@@ -1,6 +1,8 @@
 """ACPI GPIO decoding and Intel output safety using the HP capture's pad states."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import subprocess
@@ -15,7 +17,7 @@ using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnUnsupported=-3,kIOReturnNoDevice=-5,kIOReturnIOError=-6,kIOReturnNotPermitted=-8;
 """)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #include <cassert>
 #include <cstring>
 #include <vector>
@@ -135,11 +137,26 @@ int main(){
  Window newLayout;newLayout.r[0]=0x01100000;
  assert(IntelGPIOOutput{}.bind(newLayout,sizeof(newLayout.r),pad,true)==kIOReturnUnsupported);
 }
-''')
+""")
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),
-                        str(tmp / "test.cpp"), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
-print("PASS ACPI GPIO resource bounds, Intel pad mapping, locked-config TX, ownership and failure readback")
+print(
+    "PASS ACPI GPIO resource bounds, Intel pad mapping, locked-config TX, ownership and failure readback"
+)

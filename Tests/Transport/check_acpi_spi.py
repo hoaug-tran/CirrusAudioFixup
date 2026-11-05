@@ -1,14 +1,20 @@
 """Exercise bounded production _CRS SPI decoding and malformed firmware data."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import tempfile, subprocess
-ROOT=Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-acpi-spi-') as directory:
-    p=Path(directory); (p/'IOKit').mkdir()
-    (p/'IOKit/IOLib.h').write_text('#pragma once\nusing IOReturn=int; constexpr int kIOReturnBadArgument=-1,kIOReturnSuccess=0,kIOReturnUnsupported=-2;\n')
-    (p/'test.cpp').write_text(r'''
+
+ROOT = Path(__file__).resolve().parents[2]
+with tempfile.TemporaryDirectory(prefix="cirrus-acpi-spi-") as directory:
+    p = Path(directory)
+    (p / "IOKit").mkdir()
+    (p / "IOKit/IOLib.h").write_text(
+        "#pragma once\nusing IOReturn=int; constexpr int kIOReturnBadArgument=-1,kIOReturnSuccess=0,kIOReturnUnsupported=-2;\n"
+    )
+    (p / "test.cpp").write_text(r"""
 #include <cassert>
 #include <vector>
 #include <cstring>
@@ -95,8 +101,23 @@ int main() {
         parseACPISPIResources(random.data(),random.size(),out);
     }
 }
-''')
+""")
     for flags in sanitizer_flags():
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
-        subprocess.run([str(p/'test')],check=True)
-print('PASS ACPI SPI resource decoding and bounded failures')
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "test.cpp"),
+                "-o",
+                str(p / "test"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "test")], check=True)
+print("PASS ACPI SPI resource decoding and bounded failures")

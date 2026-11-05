@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reject IOKit metaclass symbols that OpenCore cannot pair with vtables."""
+
 import argparse
 from pathlib import Path
 import re
@@ -21,12 +22,16 @@ def verify_symbols(symbols: set[str]) -> int:
                     "declare the concrete IOKit class in the global namespace"
                 )
     if not count:
-        raise ValueError("No IOKit superclass symbols found; use an unstripped kext binary")
+        raise ValueError(
+            "No IOKit superclass symbols found; use an unstripped kext binary"
+        )
     return count
 
 
 def verify(binary: Path) -> None:
-    symbols = set(subprocess.check_output(["nm", "-j", str(binary)], text=True).splitlines())
+    symbols = set(
+        subprocess.check_output(["nm", "-j", str(binary)], text=True).splitlines()
+    )
     count = verify_symbols(symbols)
     print(f"PASS OpenCore vtable symbol pairs: {count} IOKit classes ({binary})")
 

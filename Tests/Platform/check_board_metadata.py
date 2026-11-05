@@ -1,6 +1,8 @@
 """Replay stock issue #5 resources with no injected _DSD/CSDP/SSDT."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
@@ -11,10 +13,18 @@ from host_build import sanitizer_flags
 ROOT = Path(__file__).resolve().parents[2]
 # Verified Linux generic_dsd_config table, including every GPIO resource
 # index, channel, boost type and electrical value. No network dependency in CI.
-table = (ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Board/BoardProperties.hpp").read_text()
-match_body = re.search(r"inline constexpr BoardProperties kBoardProperties\[\] = \{(.*?)\};", table, re.S)
+table = (
+    ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Board/BoardProperties.hpp"
+).read_text()
+match_body = re.search(
+    r"inline constexpr BoardProperties kBoardProperties\[\] = \{(.*?)\};", table, re.S
+)
 assert match_body, "Could not find kBoardProperties array in BoardProperties.hpp"
-lines = [line.strip().rstrip(",") for line in match_body.group(1).splitlines() if line.strip() and not line.strip().startswith("//")]
+lines = [
+    line.strip().rstrip(",")
+    for line in match_body.group(1).splitlines()
+    if line.strip() and not line.strip().startswith("//")
+]
 assert len(lines) > 0, "No board properties found"
 
 row_pattern = re.compile(
@@ -25,27 +35,48 @@ ssids = set()
 for line in lines:
     match = row_pattern.match(line)
     assert match, f"Malformed board row: {line}"
-    ssid_str, count_str, boost_str, channels_str, reset_str, spk_str, cs_str, ind_str, peak_str, cap_str = match.groups()
+    (
+        ssid_str,
+        count_str,
+        boost_str,
+        channels_str,
+        reset_str,
+        spk_str,
+        cs_str,
+        ind_str,
+        peak_str,
+        cap_str,
+    ) = match.groups()
     ssid = int(ssid_str, 16)
-    assert (ssid >> 16) != 0 and (ssid & 0xFFFF) != 0, f"Invalid vendor or device in SSID: {ssid_str}"
+    assert (ssid >> 16) != 0 and (ssid & 0xFFFF) != 0, (
+        f"Invalid vendor or device in SSID: {ssid_str}"
+    )
     assert ssid not in ssids, f"Duplicate subsystem ID: {ssid_str}"
     ssids.add(ssid)
     count = int(count_str)
     channels = [int(c.strip()) for c in channels_str.split(",")]
     if count == 2:
-        assert channels[2] == 0 and channels[3] == 0, f"Count is 2 but higher channel indices are non-zero: {line}"
+        assert channels[2] == 0 and channels[3] == 0, (
+            f"Count is 2 but higher channel indices are non-zero: {line}"
+        )
     reset_res, spk_res, cs_res = int(reset_str), int(spk_str), int(cs_str)
-    assert reset_res >= -1 and spk_res >= -1 and cs_res >= -1, f"Resource indices must be >= -1: {line}"
-    internal_boost = (boost_str == "true")
+    assert reset_res >= -1 and spk_res >= -1 and cs_res >= -1, (
+        f"Resource indices must be >= -1: {line}"
+    )
+    internal_boost = boost_str == "true"
     ind, peak, cap = int(ind_str), int(peak_str), int(cap_str)
     if internal_boost:
-        assert ind > 0 and peak > 0 and cap > 0, f"Internal boost must have non-zero electrical values: {line}"
+        assert ind > 0 and peak > 0 and cap > 0, (
+            f"Internal boost must have non-zero electrical values: {line}"
+        )
     else:
-        assert ind == 0 and peak == 0 and cap == 0, f"External boost must have zero electrical values: {line}"
+        assert ind == 0 and peak == 0 and cap == 0, (
+            f"External boost must have zero electrical values: {line}"
+        )
 with tempfile.TemporaryDirectory(prefix="cirrus-board-metadata-") as directory:
     tmp = Path(directory)
     install(tmp)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #define KERNEL 1
 #include <algorithm>
 #include "Fixture.hpp"
@@ -243,11 +274,30 @@ int main(){
   amp.dsdValidation=kIOReturnError;spi.dsdValidation=kIOReturnError;
  }
 }
-''')
+""")
     for flags in sanitizer_flags():
         executable = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),
-                        str(tmp / "test.cpp"), str(ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/FirmwareData.cpp"), "-o", str(executable)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                str(
+                    ROOT
+                    / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/FirmwareData.cpp"
+                ),
+                "-o",
+                str(executable),
+            ],
+            check=True,
+        )
         subprocess.run([str(executable)], check=True)
-print("PASS stock ACPI without SSDT: module metadata, dynamic paths, cross-community CS/reset/input, both physical speaker IDs and fail-closed")
+print(
+    "PASS stock ACPI without SSDT: module metadata, dynamic paths, cross-community CS/reset/input, both physical speaker IDs and fail-closed"
+)

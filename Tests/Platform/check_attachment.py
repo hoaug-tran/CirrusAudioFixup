@@ -1,14 +1,17 @@
 """Attachment evidence, CPU metadata and registered debug policy boundaries."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from host_build import sanitizer_flags
 from host_build import host_compiler
-import subprocess,tempfile
+import subprocess, tempfile
 from driver_kernel_fixture import install
-ROOT=Path(__file__).resolve().parents[2]
-CPP=r'''
+
+ROOT = Path(__file__).resolve().parents[2]
+CPP = r"""
 #include "Diagnostics/AttachmentState.hpp"
 #include "Support/CPUIdentity.hpp"
 #include "Runtime/AmplifierDriverRegistry.hpp"
@@ -45,19 +48,36 @@ int main(){
     assert(registry.acceptsDebugPhase("AMPFIXTURE","probe") && registry.acceptsDebugPhase("AMPFIXTURE","firmware"));
     assert(!registry.acceptsDebugPhase("AMPFIXTURE","probe-extra"));
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-attachment-') as directory:
-    p=Path(directory);install(p);(p/'attachment.cpp').write_text(CPP)
+"""
+with tempfile.TemporaryDirectory(prefix="cirrus-attachment-") as directory:
+    p = Path(directory)
+    install(p)
+    (p / "attachment.cpp").write_text(CPP)
     for flags in sanitizer_flags():
-        subprocess.run([host_compiler(),'-std=c++17',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'attachment.cpp'),'-o',str(p/'attachment')],check=True)
-        subprocess.run([str(p/'attachment')],check=True)
-print('PASS attach first/latest native errors, rate limits/saturation, bounded CPU identity and null/unknown debug phase policy')
+        subprocess.run(
+            [
+                host_compiler(),
+                "-std=c++17",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "attachment.cpp"),
+                "-o",
+                str(p / "attachment"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "attachment")], check=True)
+print(
+    "PASS attach first/latest native errors, rate limits/saturation, bounded CPU identity and null/unknown debug phase policy"
+)
 
 # Execute the production dependency retry, including complete startup ordering.
 from production_source_fixture import method
-service=service_source()
-retry=method(service,'CirrusAudioFixup','retryPlatformIdentity')
-cpp=r'''
+
+service = service_source()
+retry = method(service, "CirrusAudioFixup", "retryPlatformIdentity")
+cpp = r"""
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -91,8 +111,8 @@ public:
  void setupAmplifierInterrupt(){++irq;}
  bool retryPlatformIdentity();
 };
-'''
-checks=r'''
+"""
+checks = r"""
 int main(){
  CirrusAudioFixup late;
  for(now=0;now<21000;now+=100){assert(late.retryPlatformIdentity());assert(!late.resets&&!late.initialized&&!late.failures);}
@@ -109,12 +129,27 @@ int main(){
  assert(wrong.retryPlatformIdentity()&&!wrong.resets&&!wrong.initialized);
  CirrusAudioFixup spi;spi.nextIdentity=0x17aa382b;spi.mNativeSPI.active=true;assert(spi.retryPlatformIdentity()&&spi.detected==1&&spi.initialized==1);
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-board-wait-') as directory:
-    p=Path(directory);(p/'wait.cpp').write_text(cpp+retry+checks)
+"""
+with tempfile.TemporaryDirectory(prefix="cirrus-board-wait-") as directory:
+    p = Path(directory)
+    (p / "wait.cpp").write_text(cpp + retry + checks)
     for flags in sanitizer_flags():
-        subprocess.run([host_compiler(),'-std=c++17',*flags,str(p/'wait.cpp'),'-o',str(p/'wait')],check=True)
-        subprocess.run([str(p/'wait')],check=True)
-assert 'Author: Tran Kinh Hoang (hoaugtr)' in service
-assert service.index('mPlatformIdentityPending = !mPlatformSubsystemId') < service.index('bool hardwareResetVerified = performPlatformHardwareReset()')
-print('PASS late board identity at 21s, bounded timeout, unknown board, preflight failure and no reset/init before verified authorization')
+        subprocess.run(
+            [
+                host_compiler(),
+                "-std=c++17",
+                *flags,
+                str(p / "wait.cpp"),
+                "-o",
+                str(p / "wait"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "wait")], check=True)
+assert "Author: Tran Kinh Hoang (hoaugtr)" in service
+assert service.index(
+    "mPlatformIdentityPending = !mPlatformSubsystemId"
+) < service.index("bool hardwareResetVerified = performPlatformHardwareReset()")
+print(
+    "PASS late board identity at 21s, bounded timeout, unknown board, preflight failure and no reset/init before verified authorization"
+)

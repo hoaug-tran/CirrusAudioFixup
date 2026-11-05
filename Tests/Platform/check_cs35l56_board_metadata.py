@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
@@ -9,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-metadata-") as directory:
     tmp = Path(directory)
     install(tmp)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #define KERNEL 1
 #include "Fixture.hpp"
 #include "Platform/ACPI/ACPIDeviceProperties.hpp"
@@ -77,9 +78,24 @@ int main() {
     assert(missing.load(&amp)!=kIOReturnSuccess);
 
 }
-''')
+""")
     executable = tmp / "test.exe"
-    subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-I"+str(tmp),
-                    "-I"+str(ROOT/"CirrusAudioFixup"), str(tmp/"test.cpp"), "-o", str(executable)], check=True)
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I" + str(tmp),
+            "-I" + str(ROOT / "CirrusAudioFixup"),
+            str(tmp / "test.cpp"),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+    )
     subprocess.run([str(executable)], check=True)
-print("PASS CS35L56 interpreter references, native/GPIO CS, unchanged pad state and missing/invalid metadata rejection")
+print(
+    "PASS CS35L56 interpreter references, native/GPIO CS, unchanged pad state and missing/invalid metadata rejection"
+)

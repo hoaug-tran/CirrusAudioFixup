@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-test_code = r'''
+test_code = r"""
 #define KERNEL 1
 #include "Fixture.hpp"
 #include "Platform/ACPI/ACPISPIResources.hpp"
@@ -107,21 +107,39 @@ int main() {
 
     return 0;
 }
-'''
+"""
 
 with tempfile.TemporaryDirectory(prefix="cirrus-probe-filter-") as directory:
     tmp = Path(directory)
     fixture_path = ROOT / "Tests/Fixtures"
     import sys
+
     sys.path.insert(0, str(fixture_path))
     from acpi_kernel_fixture import install
+
     install(tmp)
 
     src = tmp / "test.cpp"
     src.write_text(test_code)
     exe = tmp / "test.exe"
 
-    subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-I", str(tmp), "-I", str(ROOT / "CirrusAudioFixup"), str(src), "-o", str(exe)], check=True)
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(tmp),
+            "-I",
+            str(ROOT / "CirrusAudioFixup"),
+            str(src),
+            "-o",
+            str(exe),
+        ],
+        check=True,
+    )
     subprocess.run([str(exe)], check=True)
 
 print("PASS acpi probe filtering for i2c devices and evidence cleanup")

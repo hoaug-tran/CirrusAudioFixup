@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-firmware-") as directory:
     tmp = Path(directory)
     install(tmp)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #include <cassert>
 #include <memory>
 #include <map>
@@ -244,12 +245,30 @@ int main() {
     assert(!WMFWParser::parseAlgorithmTable(table.data(), table.size(), *image));
     assert(image->algorithmCount == 0);
 }
-''')
-    executable=tmp/"test.exe"
+""")
+    executable = tmp / "test.exe"
     for flags in sanitizer_flags():
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"),
-                        str(ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L56/Resources/FirmwareData.cpp"),
-                        "-o", str(executable)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                str(
+                    ROOT
+                    / "CirrusAudioFixup/Devices/Amplifiers/CS35L56/Resources/FirmwareData.cpp"
+                ),
+                "-o",
+                str(executable),
+            ],
+            check=True,
+        )
         subprocess.run([str(executable)], check=True)
-print("PASS exact CS35L56 resources, distinct AMP coefficients, BIN parsing and complete WMFW metadata")
+print(
+    "PASS exact CS35L56 resources, distinct AMP coefficients, BIN parsing and complete WMFW metadata"
+)

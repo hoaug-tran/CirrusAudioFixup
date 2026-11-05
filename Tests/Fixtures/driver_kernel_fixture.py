@@ -2,9 +2,11 @@
 
 No silicon helpers are mocked; only OS allocation, registry, time and resources.
 """
+
+
 def install(root):
-    files={
-'IOKit/IOLib.h':r'''
+    files = {
+        "IOKit/IOLib.h": r"""
 #pragma once
 #include <cstdint>
 #include <cstddef>
@@ -35,8 +37,8 @@ inline size_t fixtureStrlcat(char* d,const char* s,size_t n){size_t used=0;while
 // Keep fixture fallbacks distinct from newer host libc declarations.
 #define strlcpy fixtureStrlcpy
 #define strlcat fixtureStrlcat
-''',
-'IOKit/IOService.h':r'''
+""",
+        "IOKit/IOService.h": r"""
 #pragma once
 #include "IOKit/IOLib.h"
 #include <map>
@@ -69,21 +71,26 @@ public:
     static OSDictionary* serviceMatching(const char*){return new OSDictionary;}
     static OSIterator* getMatchingServices(OSDictionary*){auto* i=new OSIterator;i->objects=fixtureCodecs;return i;}
 };
-''',
-'IOKit/pci/IOPCIDevice.h':r'''
+""",
+        "IOKit/pci/IOPCIDevice.h": r"""
 #pragma once
 #include "IOKit/IOService.h"
 constexpr unsigned kIOPCIConfigVendorID=0,kIOPCIConfigDeviceID=2,kIOPCIConfigSubSystemVendorID=4,kIOPCIConfigSubSystemID=6,kIOPCIConfigRevisionID=8;
 class IOPCIDevice:public IOService {public:uint16_t configRead16(unsigned){return 0;}uint8_t configRead8(unsigned){return 0;}};
-''',
-'libkern/OSByteOrder.h':r'''
+""",
+        "libkern/OSByteOrder.h": r"""
 #pragma once
 #define OSSwapLittleToHostInt16(x) (x)
 #define OSSwapLittleToHostInt32(x) (x)
 #define OSSwapHostToBigInt32(x) __builtin_bswap32(x)
 #define OSSwapBigToHostInt32(x) __builtin_bswap32(x)
-'''}
-    for name in ['OSData','OSString','OSNumber']:
-        files['libkern/c++/'+name+'.h']='#pragma once\n#include "IOKit/IOService.h"\n'
-    for name,text in files.items():
-        p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
+""",
+    }
+    for name in ["OSData", "OSString", "OSNumber"]:
+        files["libkern/c++/" + name + ".h"] = (
+            '#pragma once\n#include "IOKit/IOService.h"\n'
+        )
+    for name, text in files.items():
+        p = root / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)

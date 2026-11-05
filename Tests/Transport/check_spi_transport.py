@@ -1,23 +1,25 @@
 """Exercise production CS35L41 SPI frames, chunking and failures without hardware."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-spi-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-spi-") as directory:
     tmp = Path(directory)
-    (tmp/'IOKit').mkdir()
-    (tmp/'IOKit/IOLib.h').write_text('''#pragma once
+    (tmp / "IOKit").mkdir()
+    (tmp / "IOKit/IOLib.h").write_text("""#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
               kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnUnsupported=-5;
 inline unsigned sleeps=0;
 inline void IOSleep(unsigned) { ++sleeps; }
-''')
-    (tmp/'test.cpp').write_text(r'''
+""")
+    (tmp / "test.cpp").write_text(r"""
 #include <cassert>
 #include <vector>
 #include "Devices/Amplifiers/CS35L41/CS35L41SPIRegisterIO.hpp"
@@ -128,11 +130,28 @@ int main() {
     cirrus::devices::amplifiers::cs35l41::CS35L41SPIRegisterIO badMode(&c,{1,1000000,4});
     assert(!badClock.read(0,&value) && !badMode.read(0,&value) && c.calls==before);
 }
-''')
+""")
     for flags in sanitizer_flags():
-        exe = tmp/'spi-test'
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
-                        '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
-                        str(tmp/'test.cpp'),'-o',str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
-print('PASS CS35L41 SPI framing, endian, limits, read-only policy, RMW, timeout and failure propagation; physical controller untested')
+        exe = tmp / "spi-test"
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I",
+                str(tmp),
+                "-I",
+                str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
+        subprocess.run([str(exe)], check=True)
+print(
+    "PASS CS35L41 SPI framing, endian, limits, read-only policy, RMW, timeout and failure propagation; physical controller untested"
+)

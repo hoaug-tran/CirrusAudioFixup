@@ -1,16 +1,23 @@
 """Verify production service port tracing/PM and provider/map framing boundaries."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from production_source_fixture import method
-import re,subprocess,tempfile
-ROOT=Path(__file__).resolve().parents[2]
-SOURCE=service_source()
+import re, subprocess, tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = service_source()
+
+
 def function(name):
-    return method(SOURCE,'CirrusAudioFixup',name)
-names=['bulkRead','bulkWrite','readRegister','writeRegister','updateRegisterBits']
-preamble=r'''
+    return method(SOURCE, "CirrusAudioFixup", name)
+
+
+names = ["bulkRead", "bulkWrite", "readRegister", "writeRegister", "updateRegisterBits"]
+preamble = r"""
 
 #include "Core/RegisterIO.hpp"
 #include "Core/BusEndpoint.hpp"
@@ -33,8 +40,8 @@ public:
     bool communicationReady()const{return powered && !stopping;}
     void recordTrace(TraceSource s,uint8_t i,bool,bool,uint32_t,uint32_t,IOReturn result){source=s;tracedEndpoint=i;traceReturn=result;}
     void recordDiagnosticFailure(AmplifierState& a,unsigned,uint32_t,uint32_t,uint32_t,IOReturn result){diagnosticReturn=result;if(nested){nested=false;mCapturingFailureSnapshot=true;uint32_t v=0;readRegister(a,0,&v,TRACE_DUMP);mCapturingFailureSnapshot=false;}}
-'''
-checks=r'''
+"""
+checks = r"""
 
 struct Port:cirrus::core::RegisterIO {
     unsigned calls=0,diagnosticCalls=0;int error=0;
@@ -69,16 +76,36 @@ int main(){
         amp.registerIO=nullptr;s.stopping=false;assert(!s.readRegister(amp,0,&v,TRACE_OTHER) && p.calls==count);
     }
 }
-'''
-declarations='\n'.join(function(n).split('{',1)[0].replace('CirrusAudioFixup::','')+';' for n in names)
-with tempfile.TemporaryDirectory(prefix='cirrus-transport-check-') as directory:
-    tmp=Path(directory);source=tmp/'transport.cpp'
-    source.write_text(preamble+declarations+'\n};\n'+'\n'.join(function(n) for n in names)+checks)
-    subprocess.run(['g++','-std=c++17','-I'+str(ROOT/'CirrusAudioFixup'),str(source),'-o',str(tmp/'transport')],check=True)
-    subprocess.run([str(tmp/'transport')],check=True)
-    iokit = tmp / 'IOKit'
+"""
+declarations = "\n".join(
+    function(n).split("{", 1)[0].replace("CirrusAudioFixup::", "") + ";" for n in names
+)
+with tempfile.TemporaryDirectory(prefix="cirrus-transport-check-") as directory:
+    tmp = Path(directory)
+    source = tmp / "transport.cpp"
+    source.write_text(
+        preamble
+        + declarations
+        + "\n};\n"
+        + "\n".join(function(n) for n in names)
+        + checks
+    )
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-I" + str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(tmp / "transport"),
+        ],
+        check=True,
+    )
+    subprocess.run([str(tmp / "transport")], check=True)
+    iokit = tmp / "IOKit"
     iokit.mkdir()
-    (iokit / 'IOLib.h').write_text(r'''
+    (iokit / "IOLib.h").write_text(
+        r"""
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -86,8 +113,11 @@ using UInt8=uint8_t; using UInt16=uint16_t; using UInt32=uint32_t; using IORetur
 constexpr IOReturn kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-2,kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnUnsupported=-5;
 inline void IODelay(unsigned) {}
 inline void IOSleep(unsigned) {}
-''', encoding='utf-8')
-    (iokit / 'IOService.h').write_text(r'''
+""",
+        encoding="utf-8",
+    )
+    (iokit / "IOService.h").write_text(
+        r"""
 #pragma once
 #include "IOLib.h"
 class IOService {
@@ -95,9 +125,12 @@ public:
     virtual ~IOService()=default;
     virtual IOReturn callPlatformFunction(const char*,bool,void*,void*,void*,void*)=0;
 };
-''', encoding='utf-8')
-    direct = tmp / 'direct_transport.cpp'
-    direct.write_text(r'''
+""",
+        encoding="utf-8",
+    )
+    direct = tmp / "direct_transport.cpp"
+    direct.write_text(
+        r"""
 #include <cassert>
 #include <cstring>
 #include <vector>
@@ -148,11 +181,26 @@ int main() {
     cirrus::transport::VoodooI2CProvider invalid(&provider,0x80);
     assert(!invalid.transfer(prefix,4,nullptr,0) && invalid.lastReturn()==kIOReturnBadArgument);
 }
-''', encoding='utf-8')
-    subprocess.run([
-        'g++','-std=c++17','-O0','-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
-        str(direct),'-o',str(tmp/'direct_transport.exe')
-    ],check=True)
-    subprocess.run([str(tmp/'direct_transport.exe')],check=True)
+""",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-O0",
+            "-I",
+            str(tmp),
+            "-I",
+            str(ROOT / "CirrusAudioFixup"),
+            str(direct),
+            "-o",
+            str(tmp / "direct_transport.exe"),
+        ],
+        check=True,
+    )
+    subprocess.run([str(tmp / "direct_transport.exe")], check=True)
 
-print("PASS production port PM/trace/diagnostic error preservation and VoodooI2C ABI/framing checks")
+print(
+    "PASS production port PM/trace/diagnostic error preservation and VoodooI2C ABI/framing checks"
+)

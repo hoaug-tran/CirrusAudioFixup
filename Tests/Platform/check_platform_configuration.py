@@ -1,6 +1,8 @@
 """Driver-owned ACPI configuration, legacy identity isolation and asset provenance."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 import hashlib
@@ -11,55 +13,126 @@ from production_source_fixture import method
 
 ROOT = Path(__file__).resolve().parents[2]
 import plistlib
-personality = plistlib.loads((ROOT / "CirrusAudioFixup/Info.plist").read_bytes())["IOKitPersonalities"]["CirrusAudioFixupI2C"]
+
+personality = plistlib.loads((ROOT / "CirrusAudioFixup/Info.plist").read_bytes())[
+    "IOKitPersonalities"
+]["CirrusAudioFixupI2C"]
 assert personality["IOProviderClass"] == "VoodooI2CDeviceNub"
 assert "IONameMatch" not in personality
-assert personality["IOPropertyMatch"] == [{"IOName": "CLSA0100"}, {"IOName": "CSC3551"}, {"IOName": "CSC3556"}]
+assert personality["IOPropertyMatch"] == [
+    {"IOName": "CLSA0100"},
+    {"IOName": "CSC3551"},
+    {"IOName": "CSC3556"},
+]
 # XNU IOService::passiveMatch accepts a dictionary or ORs a collection of dictionaries.
 # IOName is a property here; the nub registry name in the capture is SPKR.
 import json
-capture = json.loads((ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text())
+
+capture = json.loads(
+    (ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text()
+)
+
+
 def property_match(personality, provider_class, properties):
     predicates = personality["IOPropertyMatch"]
     if isinstance(predicates, dict):
         predicates = [predicates]
     return personality["IOProviderClass"] == provider_class and any(
-        all(properties.get(key) == value for key, value in predicate.items()) for predicate in predicates)
+        all(properties.get(key) == value for key, value in predicate.items())
+        for predicate in predicates
+    )
+
+
 provider = capture["provider"]
 assert property_match(personality, provider["class"], {"IOName": provider["io_name"]})
 assert provider["name"] != provider["io_name"]
 assert not property_match(personality, provider["class"], {"IOName": provider["name"]})
-assert not property_match(personality, "IOACPIPlatformDevice", {"IOName": provider["io_name"]})
+assert not property_match(
+    personality, "IOACPIPlatformDevice", {"IOName": provider["io_name"]}
+)
 assert property_match(personality, provider["class"], {"IOName": "CSC3556"})
 assert not property_match(personality, provider["class"], {"IOName": "CSC3557"})
 assert not property_match(personality, provider["class"], {})
 for predicate in personality["IOPropertyMatch"]:
     split = dict(personality, IOPropertyMatch=predicate)
     assert property_match(split, provider["class"], predicate)
-print("PASS captured SPKR nub matches IOName property; split and OR-array predicates agree; unrelated providers rejected")
+print(
+    "PASS captured SPKR nub matches IOName property; split and OR-array predicates agree; unrelated providers rejected"
+)
 
-header = (ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Generated/FirmwareData.inc").read_text()
+header = (
+    ROOT
+    / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Generated/FirmwareData.inc"
+).read_text()
 for symbol, size, digest in (
-    ("cs35l41_dsp1_spk_prot_103c89c6_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
-    ("cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin", 4000, "7b6a432787c14a9ba1ec419672c9ff87d0101669ecda37dc14c8e902ed363c42"),
-    ("cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin", 4000, "2f7e769606a77ef433e5c1ca35bb4e5679b2d01326aefd9fdc11cdfcb151d81d"),
-    ("cs35l41_dsp1_spk_prot_10431c9f_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
-    ("cs35l41_dsp1_spk_prot_10431c9f_spkid0_l0_bin", 4660, "e7bc9975b5165ab9772ec1e1477b383fb5857198feb35d6d41d0497ce860ae6a"),
-    ("cs35l41_dsp1_spk_prot_10431c9f_spkid0_r0_bin", 4656, "1ef25251ff164dfd74ddb41e5f9214e81c464592d60432687de7c21a08abf834"),
-    ("cs35l41_dsp1_spk_prot_10431c9f_spkid1_l0_bin", 4648, "f71b292f33ef49e20308eb3d59523988f55c7acf50902bed97f4b07519d9a5cc"),
-    ("cs35l41_dsp1_spk_prot_10431c9f_spkid1_r0_bin", 4660, "8c235171e36bd27a0bd31a4d8f30887cbe682e485eeb95b0678bf5381111828e"),
-    ("cs35l41_dsp1_spk_prot_10431683_wmfw", 34068, "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4"),
-    ("cs35l41_dsp1_spk_prot_10431683_spkid1_l0_bin", 5532, "0c6dbcfef3d0e8f7a068dadf68b10e185c2c06b35633e82ce415742814c76668"),
-    ("cs35l41_dsp1_spk_prot_10431683_spkid1_r0_bin", 5532, "724fd7c9a88fb641ea3d2e4920c3bfd156126959af11982c3179ee2d474fe7e5"),
+    (
+        "cs35l41_dsp1_spk_prot_103c89c6_wmfw",
+        34068,
+        "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_103c89c6_spkid0_l0_bin",
+        4000,
+        "7b6a432787c14a9ba1ec419672c9ff87d0101669ecda37dc14c8e902ed363c42",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_103c89c6_spkid0_r0_bin",
+        4000,
+        "2f7e769606a77ef433e5c1ca35bb4e5679b2d01326aefd9fdc11cdfcb151d81d",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431c9f_wmfw",
+        34068,
+        "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431c9f_spkid0_l0_bin",
+        4660,
+        "e7bc9975b5165ab9772ec1e1477b383fb5857198feb35d6d41d0497ce860ae6a",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431c9f_spkid0_r0_bin",
+        4656,
+        "1ef25251ff164dfd74ddb41e5f9214e81c464592d60432687de7c21a08abf834",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431c9f_spkid1_l0_bin",
+        4648,
+        "f71b292f33ef49e20308eb3d59523988f55c7acf50902bed97f4b07519d9a5cc",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431c9f_spkid1_r0_bin",
+        4660,
+        "8c235171e36bd27a0bd31a4d8f30887cbe682e485eeb95b0678bf5381111828e",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431683_wmfw",
+        34068,
+        "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431683_spkid1_l0_bin",
+        5532,
+        "0c6dbcfef3d0e8f7a068dadf68b10e185c2c06b35633e82ce415742814c76668",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_10431683_spkid1_r0_bin",
+        5532,
+        "724fd7c9a88fb641ea3d2e4920c3bfd156126959af11982c3179ee2d474fe7e5",
+    ),
 ):
     found = re.findall(r"const uint8_t " + symbol + r"\[\] = \{(.*?)\};", header, re.S)
     assert len(found) == 1, symbol
-    payload = bytes(int(value, 16) for value in re.findall(r"0x([0-9a-fA-F]{2})", found[0]))
-    assert len(payload) == size and hashlib.sha256(payload).hexdigest() == digest, symbol
+    payload = bytes(
+        int(value, 16) for value in re.findall(r"0x([0-9a-fA-F]{2})", found[0])
+    )
+    assert len(payload) == size and hashlib.sha256(payload).hexdigest() == digest, (
+        symbol
+    )
 
 with tempfile.TemporaryDirectory(prefix="cirrus-hp-profile-") as directory:
     tmp = Path(directory)
-    fixture = r'''
+    fixture = r"""
 #include <cassert>
 #include <cstring>
 #include <initializer_list>
@@ -196,8 +269,8 @@ void profileChecks(){
  assert(!resolve(properties,{0,0x89c6,"CSC3551"}));
  assert(platform::findPlatformProfile("CLSA0100")->resetQuirk);
 }
-'''
-    mocks = r'''
+"""
+    mocks = r"""
 struct OSObject {unsigned refs=1;virtual ~OSObject()=default;void retain(){++refs;}void release(){assert(refs>1);--refs;}};
 struct OSString:OSObject {std::string value;explicit OSString(const char* s):value(s){}const char* getCStringNoCopy(){return value.c_str();}};
 #define OSDynamicCast(t,o) dynamic_cast<t*>(o)
@@ -225,9 +298,9 @@ public:
  void setProperty(const char*,bool){}
  void resolvePlatformProfile();
 };
-'''
-    actual = method(service_source(), 'CirrusAudioFixup', 'resolvePlatformProfile')
-    checks = r'''
+"""
+    actual = method(service_source(), "CirrusAudioFixup", "resolvePlatformProfile")
+    checks = r"""
 int main(){
  profileChecks();IOACPIPlatformDevice amp;IOPCIDevice audio;CirrusAudioFixup service;
  service.mProvider=&amp;service.audio=&audio;service.resolvePlatformProfile();
@@ -274,13 +347,34 @@ int main(){
  audio.ssid=0x12345678;service.resolvePlatformProfile();assert(!service.mPlatformAuthorized);
  delete service.mDiscoveredBoard;
 }
-'''
-    (tmp/'IOKit').mkdir()
-    (tmp/'IOKit/IORegistryEntry.h').write_text('#pragma once\n')
-    (tmp/'IOKit/IOLib.h').write_text('#pragma once\n')
-    (tmp/'test.cpp').write_text('#include <string>\n'+fixture+mocks+actual+checks)
+"""
+    (tmp / "IOKit").mkdir()
+    (tmp / "IOKit/IORegistryEntry.h").write_text("#pragma once\n")
+    (tmp / "IOKit/IOLib.h").write_text("#pragma once\n")
+    (tmp / "test.cpp").write_text(
+        "#include <string>\n" + fixture + mocks + actual + checks
+    )
     exe = tmp / "test"
-    subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
-                    "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), str(ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/FirmwareData.cpp"), "-o", str(exe)], check=True)
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I" + str(tmp),
+            "-I" + str(ROOT / "CirrusAudioFixup"),
+            str(tmp / "test.cpp"),
+            str(
+                ROOT
+                / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/FirmwareData.cpp"
+            ),
+            "-o",
+            str(exe),
+        ],
+        check=True,
+    )
     subprocess.run([str(exe)], check=True)
-print("PASS OEM-independent ACPI configuration, topology validation, resource gates, Lenovo isolation and captured asset SHA-256")
+print(
+    "PASS OEM-independent ACPI configuration, topology validation, resource gates, Lenovo isolation and captured asset SHA-256"
+)

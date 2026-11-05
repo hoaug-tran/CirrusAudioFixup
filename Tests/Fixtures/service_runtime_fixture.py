@@ -4,16 +4,18 @@ This fixture intentionally borrows mock chip state to inspect isolated stage
 faults. It is not the production ownership contract. check_cs35l41_driver links
 and exercises the complete independent production driver.
 """
+
 from production_source_fixture import driver_source
 from pathlib import Path
 from production_source_fixture import method
-ROOT=Path(__file__).resolve().parents[2]
-HEADER=(ROOT/'CirrusAudioFixup/Service/CirrusAudioFixup.hpp').read_text()
-a=HEADER.index('    struct AmplifierHostAdapter final')
-b=HEADER.index('    char mRuntimeControllerPath',a)
-PLATFORM_ADAPTER=HEADER[a:b]
-PRODUCTION_DRIVER=""
-FIXTURE_SHIM=r'''
+
+ROOT = Path(__file__).resolve().parents[2]
+HEADER = (ROOT / "CirrusAudioFixup/Service/CirrusAudioFixup.hpp").read_text()
+a = HEADER.index("    struct AmplifierHostAdapter final")
+b = HEADER.index("    char mRuntimeControllerPath", a)
+PLATFORM_ADAPTER = HEADER[a:b]
+PRODUCTION_DRIVER = ""
+FIXTURE_SHIM = r"""
 
     struct FixtureHost final : cirrus::platform::AmplifierHost {
         CirrusAudioFixup* owner=nullptr; AmplifierState* amp=nullptr;
@@ -74,17 +76,27 @@ FIXTURE_SHIM=r'''
         void discoverFirmware(AmplifierState& a){owner.discoverFirmware(a);}
         void logASPSnapshot(AmplifierState& a){owner.logASPSnapshot(a);}
         void initializeFirmware(AmplifierState& a,const char* p){owner.initializeFirmware(a,p);}
-'''
-DRIVER=driver_source()
-for flow in ('initializeHardware','loadFirmwareFlow','verifyReadyFlow','shutdownFlow'):
-    body=method(DRIVER,'CS35L41Driver',flow).replace('CS35L41Driver::','').replace('mHost.debugHalted()','owner.mDebugPhaseHalted').replace('DriverRegisterIO io(this, amp);', 'auto& io = mContext.io;')
-    FIXTURE_SHIM+=body+'\n'
-FIXTURE_SHIM+=r'''
+"""
+DRIVER = driver_source()
+for flow in (
+    "initializeHardware",
+    "loadFirmwareFlow",
+    "verifyReadyFlow",
+    "shutdownFlow",
+):
+    body = (
+        method(DRIVER, "CS35L41Driver", flow)
+        .replace("CS35L41Driver::", "")
+        .replace("mHost.debugHalted()", "owner.mDebugPhaseHalted")
+        .replace("DriverRegisterIO io(this, amp);", "auto& io = mContext.io;")
+    )
+    FIXTURE_SHIM += body + "\n"
+FIXTURE_SHIM += r"""
     };
     static cirrus::core::AmplifierLifecycleHooks* createFixtureDriver(const cirrus::platform::AmplifierDriverContext& c){auto* h=static_cast<FixtureHost*>(c.platformContext);if(h->amp->model!=cirrus::core::AmplifierModel::CS35L41)return nullptr;return new FixtureHooks(c,*h);}
     static void destroyFixtureDriver(cirrus::core::AmplifierLifecycleHooks* p){delete p;}
-'''
-FIELDS=r'''
+"""
+FIELDS = r"""
     cirrus::diagnostics::AttachmentState mAttachment{};
     void publishAttachmentStatus(){}
     cirrus::platform::AmplifierManager mAmplifierManager{false};
@@ -99,9 +111,9 @@ FIELDS=r'''
     void releaseAmplifierDrivers();
     size_t expectedAmplifierCount() const {return mPlatformProfile->endpointCount;}
     ~CirrusAudioFixup(){releaseAmplifierDrivers();}
-'''
-FIELDS=FIXTURE_SHIM+FIELDS
-BIND=r'''
+"""
+FIELDS = FIXTURE_SHIM + FIELDS
+BIND = r"""
 bool CirrusAudioFixup::bindAmplifierDrivers() {
     if(mAmplifierManager.bound())return true;
     cirrus::core::RegisterMapConfig f;f.readable=[](uint32_t){return true;};f.writable=f.readable;
@@ -125,5 +137,5 @@ bool CirrusAudioFixup::bindAmplifierDrivers() {
     return true;
 }
 void CirrusAudioFixup::releaseAmplifierDrivers(){mAmplifierManager.unbind();for(auto& platform:fixtureOwners)platform.clear();for(auto*& port:fixturePorts){delete port;port=nullptr;}}
-'''
-IOLIB='#pragma once\n#include "Diagnostics/DiagnosticTypes.hpp"\nconstexpr int kIOReturnNotReady=-2,kIOReturnBadArgument=-3,kIOReturnNotPermitted=-4,kIOReturnNotFound=-5,kIOReturnNoMemory=-6,kIOReturnUnsupported=-7,kIOReturnTimeout=-8;\ninline void IOSleep(unsigned){}\n'
+"""
+IOLIB = '#pragma once\n#include "Diagnostics/DiagnosticTypes.hpp"\nconstexpr int kIOReturnNotReady=-2,kIOReturnBadArgument=-3,kIOReturnNotPermitted=-4,kIOReturnNotFound=-5,kIOReturnNoMemory=-6,kIOReturnUnsupported=-7,kIOReturnTimeout=-8;\ninline void IOSleep(unsigned){}\n'

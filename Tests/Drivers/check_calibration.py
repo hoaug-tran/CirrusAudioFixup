@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import source as production_source, chip_state
 import re
@@ -8,18 +9,23 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = production_source()
-method_start=SOURCE.index('bool CirrusAudioFixup::applyCalibration(')
-method_end=SOURCE.index('\n}',method_start)+2
-crc_start=SOURCE.index('static uint32_t crc32Le(')
-crc_end=SOURCE.index('\n}',crc_start)+2
-efi_source=(ROOT / 'CirrusAudioFixup/Firmware/Calibration/EFICalibrationSource.hpp').read_text()
-efi_source=efi_source[efi_source.index('namespace cirrus::firmware {'):]+'\nnamespace firmware = cirrus::firmware;\n'
-calibration=SOURCE[crc_start:crc_end]+SOURCE[method_start:method_end]
-gate_start = re.search(r'if\s*\(!applyCalibration\(amp,\s*image\)\)', SOURCE).start()
-m_boot = re.search(r'bool\s+booted\s*=\s*bringUpDSP\(amp\);', SOURCE[gate_start:])
+method_start = SOURCE.index("bool CirrusAudioFixup::applyCalibration(")
+method_end = SOURCE.index("\n}", method_start) + 2
+crc_start = SOURCE.index("static uint32_t crc32Le(")
+crc_end = SOURCE.index("\n}", crc_start) + 2
+efi_source = (
+    ROOT / "CirrusAudioFixup/Firmware/Calibration/EFICalibrationSource.hpp"
+).read_text()
+efi_source = (
+    efi_source[efi_source.index("namespace cirrus::firmware {") :]
+    + "\nnamespace firmware = cirrus::firmware;\n"
+)
+calibration = SOURCE[crc_start:crc_end] + SOURCE[method_start:method_end]
+gate_start = re.search(r"if\s*\(!applyCalibration\(amp,\s*image\)\)", SOURCE).start()
+m_boot = re.search(r"bool\s+booted\s*=\s*bringUpDSP\(amp\);", SOURCE[gate_start:])
 gate_end = gate_start + m_boot.end()
 gate = SOURCE[gate_start:gate_end]
-preamble = r'''
+preamble = r"""
 #include "Firmware/Calibration/EFICalibration.hpp"
 #include <cassert>
 #include <cstdint>
@@ -126,8 +132,8 @@ public:
     bool applyCalibration(AmplifierState&,const FirmwareImage*);
     void boot(AmplifierState& amp,FirmwareImage* image);
 };
-'''
-checks = r'''
+"""
+checks = r"""
 unsigned failures=0;
 void check(bool condition,const char* name) { if(!condition) { ++failures; printf("FAIL %s\n",name); } }
 OSData efi(unsigned count=2) {
@@ -331,12 +337,16 @@ int main() {
     printf("%s calibration: EFI bounds, UID priority/wildcards/mismatch, UID read faults, ownership, L/R values, 12 I/O faults, boot gate, repeated state transitions\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }
-'''
+"""
 # Replay the supplied EFI bytes, including per-silicon UID selection and real L/R R0.
 import json
-captured = json.loads((ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text())
+
+captured = json.loads(
+    (ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text()
+)
 raw = bytes.fromhex(captured["calibration_hex"])
-replay = r'''
+replay = (
+    r"""
     OSData captured;captured.bytes={CAPTURED_BYTES};
     IORegistryEntry::data=&captured;
     const auto* records=(const cs35l41_amp_efi_data*)captured.bytes.data();
@@ -349,12 +359,38 @@ replay = r'''
         check(d.properties["Cirrus_Calibration_Selection_L"].find("EXACT_SILICON_UID")!=std::string::npos,"captured UID used without machine-specific constants");
     }
     IORegistryEntry::data=&data;
-'''.replace("CAPTURED_BYTES", ",".join(map(str, raw))).replace("CAPTURED_L", str(captured["r0"][0])).replace("CAPTURED_R", str(captured["r0"][1]))
-checks = checks.replace("    amp.address=0x40;\n    auto targeted=data;", replay+"    amp.address=0x40;\n    auto targeted=data;")
-with tempfile.TemporaryDirectory(prefix='cirrus-calibration-') as directory:
+""".replace("CAPTURED_BYTES", ",".join(map(str, raw)))
+    .replace("CAPTURED_L", str(captured["r0"][0]))
+    .replace("CAPTURED_R", str(captured["r0"][1]))
+)
+checks = checks.replace(
+    "    amp.address=0x40;\n    auto targeted=data;",
+    replay + "    amp.address=0x40;\n    auto targeted=data;",
+)
+with tempfile.TemporaryDirectory(prefix="cirrus-calibration-") as directory:
     tmp = Path(directory)
-    source = tmp / 'check.cpp'
-    source.write_text(preamble + efi_source + calibration + '\nvoid CirrusAudioFixup::boot(CS35L41Amp& amp,FirmwareImage* image) {\n' + gate + '\n}\n' + checks, encoding='utf-8')
-    exe = tmp / 'check.exe'
-    subprocess.run(['g++', '-std=c++17', '-O0', '-I'+str(ROOT/'CirrusAudioFixup'), str(source), '-o', str(exe)], check=True)
+    source = tmp / "check.cpp"
+    source.write_text(
+        preamble
+        + efi_source
+        + calibration
+        + "\nvoid CirrusAudioFixup::boot(CS35L41Amp& amp,FirmwareImage* image) {\n"
+        + gate
+        + "\n}\n"
+        + checks,
+        encoding="utf-8",
+    )
+    exe = tmp / "check.exe"
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-O0",
+            "-I" + str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(exe),
+        ],
+        check=True,
+    )
     subprocess.run([str(exe)], check=True)

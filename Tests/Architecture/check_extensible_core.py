@@ -1,19 +1,23 @@
 """Production generic register maps, board identity, assets and lifecycle failures."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-import tempfile,subprocess
-ROOT=Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-core-') as directory:
-    p=Path(directory);(p/'IOKit').mkdir()
-    (p/'IOKit/IOLib.h').write_text('''#pragma once
+import tempfile, subprocess
+
+ROOT = Path(__file__).resolve().parents[2]
+with tempfile.TemporaryDirectory(prefix="cirrus-core-") as directory:
+    p = Path(directory)
+    (p / "IOKit").mkdir()
+    (p / "IOKit/IOLib.h").write_text("""#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnNoMemory=-5,kIOReturnUnsupported=-6;
 inline unsigned sleeps=0;inline void IOSleep(unsigned){++sleeps;}
-''')
-    (p/'test.cpp').write_text(r'''
+""")
+    (p / "test.cpp").write_text(r"""
 #include <cassert>
 #include <cstring>
 #include <vector>
@@ -328,8 +332,25 @@ int main(){
  Hooks broken;AmplifierLifecycle fault(broken);assert(fault.bringUp()==0);broken.cleanupFailure=-200;
  assert(fault.suspend()==-200&&broken.cleanups==1&&fault.status().cleanupResult==-200);
 }
-''')
+""")
     for flags in sanitizer_flags():
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
-        subprocess.run([str(p/'test')],check=True)
-print('PASS configurable register formats, policy, lock/RMW, endpoint/firmware identity and lifecycle rollback')
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "test.cpp"),
+                "-o",
+                str(p / "test"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "test")], check=True)
+print(
+    "PASS configurable register formats, policy, lock/RMW, endpoint/firmware identity and lifecycle rollback"
+)

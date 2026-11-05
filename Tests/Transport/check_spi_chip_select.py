@@ -1,6 +1,8 @@
 """Replay mixed native/GPIO CS through the production LPSS FIFO engine."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import subprocess
@@ -16,7 +18,7 @@ constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnUnsupported=-3,kIOReturnBusy=-4,kIOReturnNoDevice=-5,
 kIOReturnIOError=-6,kIOReturnTimeout=-7,kIOReturnNotPermitted=-8;
 """)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #include <cassert>
 #include <deque>
 #include <vector>
@@ -80,11 +82,26 @@ int main(){
  auto n=s.calls.size();assert(e.exchange({1,0,0},tx,rx,10,&s)==kIOReturnBadArgument);
  e.suspend();assert(e.exchange({1,4000000,0},tx,rx,10,&s)==kIOReturnNotReady&&s.calls.size()==n);
 }
-''')
+""")
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),
-                        str(tmp / "test.cpp"), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
-print("PASS mixed native/GPIO CS: no native assertion on GPIO frames, bounded FIFO, cleanup and PM")
+print(
+    "PASS mixed native/GPIO CS: no native assertion on GPIO frames, bounded FIFO, cleanup and PM"
+)

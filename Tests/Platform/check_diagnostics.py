@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from host_build import sanitizer_flags
@@ -9,12 +10,16 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 source = service_source()
-header = (ROOT / 'CirrusAudioFixup/Diagnostics/DiagnosticTypes.hpp').read_text(encoding='utf-8')
-start = source.index('void CirrusAudioFixup::recordDiagnosticFailure(')
-function = source[start:source.index('\n}', start) + 2]
-states = header[header.index('enum class DriverStage'):header.index('struct TraceEntry')]
+header = (ROOT / "CirrusAudioFixup/Diagnostics/DiagnosticTypes.hpp").read_text(
+    encoding="utf-8"
+)
+start = source.index("void CirrusAudioFixup::recordDiagnosticFailure(")
+function = source[start : source.index("\n}", start) + 2]
+states = header[
+    header.index("enum class DriverStage") : header.index("struct TraceEntry")
+]
 
-preamble = r'''
+preamble = r"""
 #include <cstdint>
 #include <cstdio>
 #include <map>
@@ -30,9 +35,9 @@ struct OSString {
     void release() { delete this; }
 };
 namespace cirrus { namespace diagnostics {
-'''
+"""
 
-mock = r'''
+mock = r"""
 }}
 using namespace cirrus::diagnostics;
 struct CS35L41Amp { const char* name="left"; DiagnosticState diagnostic; };
@@ -53,9 +58,9 @@ public:
     void dumpTraceBuffer(const char*,const char*) { ++dumps;captureOrder+="T"; }
     void recordDiagnosticFailure(AmplifierState&,DiagnosticFailure,UInt32,UInt32,UInt32,IOReturn,bool);
 };
-'''
+"""
 
-checks = r'''
+checks = r"""
 int main() {
     unsigned failures=0;
     auto check=[&](bool ok,const char* label) { if(!ok) { ++failures; printf("FAIL %s\n",label); } };
@@ -100,21 +105,26 @@ int main() {
     printf("%s diagnostic change publication, rate limiting and snapshot deduplication\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }
-'''
+"""
 
-with tempfile.TemporaryDirectory(prefix='cirrus-diagnostics-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-diagnostics-") as directory:
     tmp = Path(directory)
-    cpp = tmp / 'check.cpp'
-    cpp.write_text(preamble + states + mock + function + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', str(cpp), '-o', str(tmp / 'check.exe')], check=True)
-    subprocess.run([str(tmp / 'check.exe')], check=True)
+    cpp = tmp / "check.cpp"
+    cpp.write_text(preamble + states + mock + function + checks, encoding="utf-8")
+    subprocess.run(
+        ["g++", "-std=c++17", "-O0", str(cpp), "-o", str(tmp / "check.exe")], check=True
+    )
+    subprocess.run([str(tmp / "check.exe")], check=True)
+
 
 # Execute the production circular recorder/dumper. Allocations and publication
 # assert that no recorder lock is held, including allocation failure paths.
 def extract(signature):
-    start=source.index(signature)
-    return source[start:source.index('\n}',start)+2]
-trace_mock=r'''
+    start = source.index(signature)
+    return source[start : source.index("\n}", start) + 2]
+
+
+trace_mock = r"""
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include <cassert>
 #include <cstdlib>
@@ -147,8 +157,8 @@ public:
  void dumpTraceBuffer(const char* propertyName=nullptr,const char* mirrorPropertyName=nullptr);
  void publishStatistics();
 };
-'''
-trace_checks=r'''
+"""
+trace_checks = r"""
 int main(){
  CirrusAudioFixup d;
  d.recordTrace(TRACE_PROBE,0,false,false,1,2,0);d.dumpTraceBuffer();assert(clockCalls==0 && allocation==0);
@@ -162,16 +172,37 @@ int main(){
  for(int offset:{1,2}){failAllocation=allocation+offset;d.dumpTraceBuffer();assert(!live&&!locked);}
  failAllocation=0;failString=true;d.dumpTraceBuffer();assert(!live&&!locked);
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-trace-') as directory:
-    tmp=Path(directory);cpp=tmp/'trace.cpp'
-    cpp.write_text(trace_mock+extract('void CirrusAudioFixup::recordTrace(')+extract('void CirrusAudioFixup::dumpTraceBuffer(')+extract('void CirrusAudioFixup::publishStatistics()')+trace_checks)
+"""
+with tempfile.TemporaryDirectory(prefix="cirrus-trace-") as directory:
+    tmp = Path(directory)
+    cpp = tmp / "trace.cpp"
+    cpp.write_text(
+        trace_mock
+        + extract("void CirrusAudioFixup::recordTrace(")
+        + extract("void CirrusAudioFixup::dumpTraceBuffer(")
+        + extract("void CirrusAudioFixup::publishStatistics()")
+        + trace_checks
+    )
     for flags in sanitizer_flags():
-        subprocess.run([host_compiler(),'-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(cpp),'-o',str(tmp/'trace')],check=True)
-        subprocess.run([str(tmp/'trace')],check=True)
-print('PASS production trace: quiet no clock/allocation, bounded chronological wrap, first/latest mirror, unlocked publication and allocation fault cleanup')
+        subprocess.run(
+            [
+                host_compiler(),
+                "-std=c++17",
+                *flags,
+                "-I",
+                str(ROOT / "CirrusAudioFixup"),
+                str(cpp),
+                "-o",
+                str(tmp / "trace"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(tmp / "trace")], check=True)
+print(
+    "PASS production trace: quiet no clock/allocation, bounded chronological wrap, first/latest mirror, unlocked publication and allocation fault cleanup"
+)
 
-publication_mock=r'''
+publication_mock = r"""
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include <cassert>
 #include <cstdio>
@@ -189,8 +220,8 @@ public:
  void publishStatistics(){++stats;}
  bool publishRuntimeStatus();
 };
-'''
-publication_checks=r'''
+"""
+publication_checks = r"""
 int main(){
  CirrusAudioFixup d;assert(d.publishRuntimeStatus());auto writes=d.writes,stats=d.stats;
  for(unsigned i=0;i<1000;++i)assert(!d.publishRuntimeStatus());assert(d.writes==writes&&d.stats==stats);
@@ -207,10 +238,29 @@ int main(){
  assert(!d.publishRuntimeStatus());
  d.mAmplifierManager.n=1;d.mAmplifierManager.items[0]=Status{};d.mAmplifierManager.s=6;assert(d.publishRuntimeStatus()&&d.numbers["Cirrus_Runtime_0_Bound"]==1);
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-runtime-publication-') as directory:
-    p=Path(directory);(p/'publication.cpp').write_text(publication_mock+extract('bool CirrusAudioFixup::publishRuntimeStatus()')+publication_checks)
+"""
+with tempfile.TemporaryDirectory(prefix="cirrus-runtime-publication-") as directory:
+    p = Path(directory)
+    (p / "publication.cpp").write_text(
+        publication_mock
+        + extract("bool CirrusAudioFixup::publishRuntimeStatus()")
+        + publication_checks
+    )
     for flags in sanitizer_flags():
-        subprocess.run([host_compiler(),'-std=c++17',*flags,'-I',str(ROOT/'CirrusAudioFixup'),str(p/'publication.cpp'),'-o',str(p/'publication')],check=True)
-        subprocess.run([str(p/'publication')],check=True)
-print('PASS runtime transition publication: no steady-state writes, partial/group playback, native 32-bit failures, PM, detach/rebind and preserved root evidence')
+        subprocess.run(
+            [
+                host_compiler(),
+                "-std=c++17",
+                *flags,
+                "-I",
+                str(ROOT / "CirrusAudioFixup"),
+                str(p / "publication.cpp"),
+                "-o",
+                str(p / "publication"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "publication")], check=True)
+print(
+    "PASS runtime transition publication: no steady-state writes, partial/group playback, native 32-bit failures, PM, detach/rebind and preserved root evidence"
+)

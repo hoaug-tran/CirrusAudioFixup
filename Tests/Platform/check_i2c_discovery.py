@@ -3,21 +3,25 @@
 Descriptors are reconstructed from the supplied SSDT, not claimed as raw _CRS.
 Other addresses/counts exercise portability; no physical I2C behavior is faked.
 """
+
 import json
 import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from acpi_kernel_fixture import install
 from host_build import sanitizer_flags
 from production_source_fixture import service_source, method
 
 ROOT = Path(__file__).resolve().parents[2]
-capture = json.loads((ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text())
+capture = json.loads(
+    (ROOT / "Tests/Fixtures/Captured/ZenbookUM3402YAR.json").read_text()
+)
 assert capture["speaker_ids"] == [1, 1] and capture["r0"] == [10344, 10628]
-CPP = r'''
+CPP = r"""
 #define KERNEL 1
 #include "Fixture.hpp"
 inline const void* gIOServicePlane=IORegistryEntry::getPlane("IOService");
@@ -231,18 +235,25 @@ int main(){
  {transport::I2CPlatformResources bad;assert(!bad.load(&nub,reason)&&!strcmp(reason,"I2C_ACPI_DEVICE_UNAVAILABLE"));}
  assert(descriptor->refs==1&&amp->refs==1);
 }
-'''
+"""
 # Execute the production reset policy through the I2C path; legacy quirk
 # implementation is outside this fixture and retains its separate coverage.
 reset = method(service_source(), "CirrusAudioFixup", "performPlatformHardwareReset")
-reset = reset[:reset.index("    const cirrus::platform::ResetControllerQuirk*")] + "    return true;\n}"
+reset = (
+    reset[: reset.index("    const cirrus::platform::ResetControllerQuirk*")]
+    + "    return true;\n}"
+)
 CPP = CPP.replace("RESET_METHOD", reset.replace("CirrusAudioFixup::", "ResetService::"))
 for name, value in {
     "CAPTURED_ERROR": capture["followup"]["probe_returns"][0],
     "SPEAKER_PIN": capture["followup"]["speaker_gpio_pin"],
-    "CLOCK_HZ": capture["provider"]["clock_hz"], "FIRST_ADDRESS": capture["endpoints"][0],
-    "SECOND_ADDRESS": capture["endpoints"][1], "SPEAKER_LEFT": capture["speaker_ids"][0],
-    "SPEAKER_RIGHT": capture["speaker_ids"][1], "VENDOR": capture["identity"]["vendor"], "DEVICE": capture["identity"]["device"],
+    "CLOCK_HZ": capture["provider"]["clock_hz"],
+    "FIRST_ADDRESS": capture["endpoints"][0],
+    "SECOND_ADDRESS": capture["endpoints"][1],
+    "SPEAKER_LEFT": capture["speaker_ids"][0],
+    "SPEAKER_RIGHT": capture["speaker_ids"][1],
+    "VENDOR": capture["identity"]["vendor"],
+    "DEVICE": capture["identity"]["device"],
 }.items():
     CPP = re.sub(r"\b" + name + r"\b", str(value), CPP)
 with tempfile.TemporaryDirectory(prefix="cirrus-i2c-discovery-") as directory:
@@ -251,8 +262,27 @@ with tempfile.TemporaryDirectory(prefix="cirrus-i2c-discovery-") as directory:
     (tmp / "test.cpp").write_text(CPP)
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I"+str(tmp), "-I"+str(ROOT/"CirrusAudioFixup"), str(tmp/"test.cpp"),
-                        str(ROOT/"CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/FirmwareData.cpp"), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                str(
+                    ROOT
+                    / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/FirmwareData.cpp"
+                ),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
-print("PASS captured Zenbook I2C discovery, measured speaker identities, variable endpoints, malformed resources and provider consistency")
+print(
+    "PASS captured Zenbook I2C discovery, measured speaker identities, variable endpoints, malformed resources and provider consistency"
+)

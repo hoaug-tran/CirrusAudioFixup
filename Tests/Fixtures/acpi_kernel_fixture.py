@@ -1,13 +1,23 @@
 """Minimal ACPI registry/property/mapping resources for production parsers."""
 
+
 def install(tmp):
     for name in ("IOKit", "IOKit/acpi", "IOKit/pci", "libkern/c++"):
         (tmp / name).mkdir(parents=True, exist_ok=True)
-    for name in ("IOKit/IOMemoryDescriptor.h", "IOKit/IOLib.h", "IOKit/IOService.h", "IOKit/IORegistryEntry.h", "IOKit/acpi/IOACPIPlatformDevice.h",
-                 "IOKit/pci/IOPCIDevice.h", "libkern/c++/OSArray.h", "libkern/c++/OSData.h",
-                 "libkern/c++/OSNumber.h", "libkern/c++/OSString.h"):
+    for name in (
+        "IOKit/IOMemoryDescriptor.h",
+        "IOKit/IOLib.h",
+        "IOKit/IOService.h",
+        "IOKit/IORegistryEntry.h",
+        "IOKit/acpi/IOACPIPlatformDevice.h",
+        "IOKit/pci/IOPCIDevice.h",
+        "libkern/c++/OSArray.h",
+        "libkern/c++/OSData.h",
+        "libkern/c++/OSNumber.h",
+        "libkern/c++/OSString.h",
+    ):
         (tmp / name).write_text('#pragma once\n#include "Fixture.hpp"\n')
-    (tmp / "Fixture.hpp").write_text(r'''
+    (tmp / "Fixture.hpp").write_text(r"""
 #pragma once
 #include <cassert>
 #include <cstdint>
@@ -71,4 +81,4 @@ class IOACPIPlatformDevice:public IOService {public:std::map<std::string,OSObjec
  IOMemoryMap* mapDeviceMemoryWithIndex(unsigned n){auto i=maps.find(n);auto* selected=i!=maps.end()?i->second:n==0?map:nullptr;if(selected)selected->retain();return selected;}
 };
 class IOPCIDevice:public IOService {};
-''')
+""")

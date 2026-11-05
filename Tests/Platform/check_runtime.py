@@ -1,27 +1,72 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import method
 from production_source_fixture import source as production_source, chip_state
 import re
 import subprocess
 import tempfile
-from service_runtime_fixture import PRODUCTION_DRIVER,FIELDS,BIND,IOLIB
+from service_runtime_fixture import PRODUCTION_DRIVER, FIELDS, BIND, IOLIB
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = production_source()
-HEADER = (ROOT / 'CirrusAudioFixup/Service/CirrusAudioFixup.hpp').read_text(encoding='utf-8')
+HEADER = (ROOT / "CirrusAudioFixup/Service/CirrusAudioFixup.hpp").read_text(
+    encoding="utf-8"
+)
+
 
 def function(name):
-    return method(SOURCE,'CirrusAudioFixup',name)
+    return method(SOURCE, "CirrusAudioFixup", name)
 
-names = ['checkProtectionStatus', 'stopPlayback', 'runBackgroundMonitor', 'sendMailboxCommand', 'unlockTestKey', 'lockTestKey', 'stopDSP', 'bringUpDSP', 'verifyDSPAlive', 'handlePowerChange', 'supportedHdaFormat', 'publishDriverVerdict', 'publishRuntimeStatus', 'applyPLL', 'applyASP', 'applyRegisterSequence', 'powerUpAmplifier', 'verifyIdleConfiguration']
-names.extend(['configureCS35L41Interrupt','monitorCS35L41','validateCS35L41Playback','commitCS35L41Playback','snapshotDiagnostics', 'stopRuntimePlayback', 'configureAmplifierInterrupt', 'amplifierInterruptReceived', 'retryBringUpResources'])
-functions = '\n'.join(function(name) for name in names).replace('CirrusAudioFixup::runBackgroundMonitor()', 'CirrusAudioFixup::runMonitorStep()').replace('void CirrusAudioFixup::runMonitorStep() {','void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierManager.bound() && bindAmplifierDrivers())mAmplifierManager.bringUp();')
+
+names = [
+    "checkProtectionStatus",
+    "stopPlayback",
+    "runBackgroundMonitor",
+    "sendMailboxCommand",
+    "unlockTestKey",
+    "lockTestKey",
+    "stopDSP",
+    "bringUpDSP",
+    "verifyDSPAlive",
+    "handlePowerChange",
+    "supportedHdaFormat",
+    "publishDriverVerdict",
+    "publishRuntimeStatus",
+    "applyPLL",
+    "applyASP",
+    "applyRegisterSequence",
+    "powerUpAmplifier",
+    "verifyIdleConfiguration",
+]
+names.extend(
+    [
+        "configureCS35L41Interrupt",
+        "monitorCS35L41",
+        "validateCS35L41Playback",
+        "commitCS35L41Playback",
+        "snapshotDiagnostics",
+        "stopRuntimePlayback",
+        "configureAmplifierInterrupt",
+        "amplifierInterruptReceived",
+        "retryBringUpResources",
+    ]
+)
+functions = (
+    "\n".join(function(name) for name in names)
+    .replace(
+        "CirrusAudioFixup::runBackgroundMonitor()", "CirrusAudioFixup::runMonitorStep()"
+    )
+    .replace(
+        "void CirrusAudioFixup::runMonitorStep() {",
+        "void CirrusAudioFixup::runMonitorStep() {\n if(!mAmplifierManager.bound() && bindAmplifierDrivers())mAmplifierManager.bringUp();",
+    )
+)
 
 amp = chip_state()
 
-LEGACY_CONSTANTS = r'''
+LEGACY_CONSTANTS = r"""
 #define CS35L41_SW_RESET 0x00000020
 #define CS35L41_SW_RESET_VAL 0x5A000000
 #define CS35L41_TEST_KEY_CTL 0x00000040
@@ -121,9 +166,9 @@ LEGACY_CONSTANTS = r'''
 #define CS35L41_OTPID_REG 0x00000010
 #define CS35L41_PM_STS_REG 0x00002908
 #define CS35L41_DEVICE_ID 0x35A40
-'''
+"""
 
-preamble = r'''
+preamble = r"""
 #include "Platform/Board/PlatformProfile.hpp"
 #include <cstdint>
 #include <cstddef>
@@ -189,15 +234,19 @@ public:
 using namespace cirrus::diagnostics;
 using namespace cirrus::devices::amplifiers::cs35l41;
 bool gCirrusDebug = false;
-'''
+"""
 
-preamble += '#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"\n#include "Devices/Amplifiers/CS35L41/DSPControl.hpp"\n' + amp + '\nusing CS35L41Amp = AmplifierState;\n'
+preamble += (
+    '#include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"\n#include "Devices/Amplifiers/CS35L41/DSPControl.hpp"\n'
+    + amp
+    + "\nusing CS35L41Amp = AmplifierState;\n"
+)
 
 # Runtime fault positions exclude boot transactions. Preserve the existing
 # simulated boot boundary, while running extracted production playback methods
 # through a test-only hook adapter. Production orchestration is extracted in
 # check_bringup; the complete owning driver is linked in check_cs35l41_driver.
-RUNTIME_WRAPPER = r'''
+RUNTIME_WRAPPER = r"""
 class RuntimeFixtureHooks final : public cirrus::core::AmplifierLifecycleHooks {
     cirrus::core::AmplifierLifecycleHooks* chip;
     CirrusAudioFixup::FixtureHost& platform;
@@ -240,10 +289,14 @@ cirrus::core::AmplifierLifecycleHooks* createRuntimeFixture(const cirrus::platfo
     auto* p=static_cast<CirrusAudioFixup::FixtureHost*>(c.platformContext);
     return new RuntimeFixtureHooks(driver,*p);
 }
-'''
-RUNTIME_BIND = BIND.replace('createFixtureDriver,destroyFixtureDriver', 'createRuntimeFixture,CirrusAudioFixup::destroyFixtureDriver')
+"""
+RUNTIME_BIND = BIND.replace(
+    "createFixtureDriver,destroyFixtureDriver",
+    "createRuntimeFixture,CirrusAudioFixup::destroyFixtureDriver",
+)
 
-mock = r'''
+mock = (
+    r"""
 namespace cirrus { namespace platform { namespace hda {
 struct AudioEventState {
     bool routeKnown=false,speakers=false,engineKnown=false,engineRunning=false;
@@ -266,7 +319,9 @@ struct IOInterruptEventSource {
 #define OSDynamicCast(type, object) reinterpret_cast<type*>(object)
 class CirrusAudioFixup {
 public:
-''' + FIELDS + r'''
+"""
+    + FIELDS
+    + r"""
     void suspendCommunication() {}
     bool resumeCommunication() {return true;}
 public:
@@ -456,13 +511,19 @@ public:
             runMonitorStep();
         }
     }
-'''
+"""
+)
 
-declarations = '\n'.join(function(name).split('{', 1)[0].replace('CirrusAudioFixup::', '') + ';' for name in names).replace('runBackgroundMonitor()', 'runMonitorStep()')
+declarations = "\n".join(
+    function(name).split("{", 1)[0].replace("CirrusAudioFixup::", "") + ";"
+    for name in names
+).replace("runBackgroundMonitor()", "runMonitorStep()")
 
-declarations = declarations.replace('void amplifierInterruptReceived(', 'static void amplifierInterruptReceived(')
+declarations = declarations.replace(
+    "void amplifierInterruptReceived(", "static void amplifierInterruptReceived("
+)
 
-adapter = r'''
+adapter = r"""
 class ServiceRegisterIO : public cirrus::core::RegisterIO {
     CirrusAudioFixup* mService;
     CS35L41Amp& mAmplifier;
@@ -475,9 +536,9 @@ public:
     bool bulkRead(uint32_t reg, uint8_t* buf, size_t len) override { return mService->bulkRead(mAmplifier, reg, buf, len); }
     bool bulkWrite(uint32_t, const uint8_t*, size_t) override { return true; }
 };
-'''
+"""
 
-checks = r'''
+checks = r"""
 int main() {
 
     // Stream changes require cleanup before preparing the replacement.
@@ -1224,13 +1285,43 @@ int main() {
     assert(halted.ops==0 && halted.unmute==0);
     puts("PASS configuration, external boost invariants, protection and active-state loss checks");
 }
-'''
+"""
 
-with tempfile.TemporaryDirectory(prefix='cirrus-runtime-check-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-runtime-check-") as directory:
     tmp = Path(directory)
-    (tmp / 'IOKit').mkdir()
-    (tmp / 'IOKit/IOLib.h').write_text(IOLIB.replace('inline void IOSleep(unsigned){}','inline void IOSleep(unsigned);'))
-    source = tmp / 'runtime.cpp'
-    source.write_text(preamble + LEGACY_CONSTANTS + mock + '\n' + declarations + '\n};\n' + adapter + PRODUCTION_DRIVER + RUNTIME_WRAPPER + RUNTIME_BIND + functions + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', '-I' + str(tmp), '-I' + str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'runtime.exe')], check=True)
-    subprocess.run([str(tmp / 'runtime.exe')], check=True)
+    (tmp / "IOKit").mkdir()
+    (tmp / "IOKit/IOLib.h").write_text(
+        IOLIB.replace(
+            "inline void IOSleep(unsigned){}", "inline void IOSleep(unsigned);"
+        )
+    )
+    source = tmp / "runtime.cpp"
+    source.write_text(
+        preamble
+        + LEGACY_CONSTANTS
+        + mock
+        + "\n"
+        + declarations
+        + "\n};\n"
+        + adapter
+        + PRODUCTION_DRIVER
+        + RUNTIME_WRAPPER
+        + RUNTIME_BIND
+        + functions
+        + checks,
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-O0",
+            "-I" + str(tmp),
+            "-I" + str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(tmp / "runtime.exe"),
+        ],
+        check=True,
+    )
+    subprocess.run([str(tmp / "runtime.exe")], check=True)

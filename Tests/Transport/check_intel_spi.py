@@ -1,23 +1,25 @@
 """Exercise Intel LPSS FIFO engine and CS35L41 frames against a register model."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-intel-spi-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-intel-spi-") as directory:
     tmp = Path(directory)
-    (tmp/'IOKit').mkdir()
-    (tmp/'IOKit/IOLib.h').write_text('''#pragma once
+    (tmp / "IOKit").mkdir()
+    (tmp / "IOKit/IOLib.h").write_text("""#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
  kIOReturnUnsupported=-3,kIOReturnBusy=-4,kIOReturnNoDevice=-5,
  kIOReturnIOError=-6,kIOReturnTimeout=-7,kIOReturnNotPermitted=-8;
 inline void IOSleep(unsigned) {}
-''')
-    (tmp/'test.cpp').write_text(r'''
+""")
+    (tmp / "test.cpp").write_text(r"""
 #include <cassert>
 #include <deque>
 #include <vector>
@@ -376,17 +378,34 @@ int main(int argc,char** argv) {
     assert(logical.engine.firstIdentityTransaction(0,0)->sequence==identitySequence);
     assert(!logical.engine.firstIdentityTransaction(0,4));
 }
-''')
+""")
     for flags in sanitizer_flags():
-        exe=tmp/'intel-spi-test'
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
-                        '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
-                        str(tmp/'test.cpp'),'-o',str(exe)],check=True)
-        failures=[]
+        exe = tmp / "intel-spi-test"
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I",
+                str(tmp),
+                "-I",
+                str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
+        failures = []
         for case in range(4):
-            result=subprocess.run([str(exe),str(case)],timeout=10)
+            result = subprocess.run([str(exe), str(case)], timeout=10)
             if result.returncode:
                 failures.append(case)
-        assert not failures, f'cleanup regressions failed: {failures}'
-        subprocess.run([str(exe)],check=True,timeout=10)
-print('PASS Intel LPSS PIO + CS35L41: native CS, full-duplex FIFO, modes, clock, firmware chunks, errors, timeout and suspend; hardware untested')
+        assert not failures, f"cleanup regressions failed: {failures}"
+        subprocess.run([str(exe)], check=True, timeout=10)
+print(
+    "PASS Intel LPSS PIO + CS35L41: native CS, full-duplex FIFO, modes, clock, firmware chunks, errors, timeout and suspend; hardware untested"
+)

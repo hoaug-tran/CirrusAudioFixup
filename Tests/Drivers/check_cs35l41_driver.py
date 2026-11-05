@@ -3,15 +3,18 @@
 Only kernel resources and bus responses are fake. Real silicon, firmware lookup,
 errata, OTP, idle checks, shutdown and lifecycle methods execute unchanged.
 """
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import driver_sources, cs35l56_sources
 from host_build import sanitizer_flags
-import subprocess,tempfile
+import subprocess, tempfile
 from driver_kernel_fixture import install
-ROOT=Path(__file__).resolve().parents[2]
-CPP=r'''
+
+ROOT = Path(__file__).resolve().parents[2]
+CPP = r"""
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
 #include "Devices/Amplifiers/CS35L41/DeviceConfiguration.hpp"
@@ -294,10 +297,32 @@ int main(){
 
     printf("PASS complete owned CS35L41 driver: %u transfer fault positions, reset/OTP/errata/idle, native identity errors, wait timeout, debug phases, PM and teardown/rebind\n",total);
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-independent-driver-') as directory:
-    p=Path(directory);install(p);(p/'driver.cpp').write_text(CPP)
+"""
+with tempfile.TemporaryDirectory(prefix="cirrus-independent-driver-") as directory:
+    p = Path(directory)
+    install(p)
+    (p / "driver.cpp").write_text(CPP)
     compiler = "g++" if sys.platform == "win32" else "clang++"
     for flags in sanitizer_flags():
-        subprocess.run([compiler,'-std=c++17','-O0','-g',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'driver.cpp'),str(ROOT/'CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp'),*[str(source) for source in driver_sources()],*map(str, cs35l56_sources()),'-o',str(p/'driver')],check=True)
-        subprocess.run([str(p/'driver')],check=True)
+        subprocess.run(
+            [
+                compiler,
+                "-std=c++17",
+                "-O0",
+                "-g",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "driver.cpp"),
+                str(
+                    ROOT
+                    / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41DriverFactory.cpp"
+                ),
+                *[str(source) for source in driver_sources()],
+                *map(str, cs35l56_sources()),
+                "-o",
+                str(p / "driver"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "driver")], check=True)

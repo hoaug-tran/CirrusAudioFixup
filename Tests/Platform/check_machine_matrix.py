@@ -6,8 +6,10 @@ Lenovo ThinkBook 16p G6 IAX: issue #16 (17AA391E, L/R on I2C 0x31/0x30, broadcas
 Zenbook: captured fixture; G614JV issues #2/#4 lack verified SSID/tuning: test rejection.
 Legacy Lenovo endpoints remain covered by the complete driver lifecycle suite.
 """
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
@@ -15,7 +17,7 @@ from driver_kernel_fixture import install
 from host_build import sanitizer_flags
 
 ROOT = Path(__file__).resolve().parents[2]
-CPP = r'''
+CPP = r"""
 #include <cassert>
 #include <cstdio>
 #include <memory>
@@ -371,15 +373,34 @@ int main(){
   printf("PASS ASUS ROG Zephyrus G14 GA403UV issue #18: I2C dual-amp (0x31/0x30, 0x3A ignored), DSP software reset, firmware 1043:1B13\n");
  }
 }
-'''
+"""
 with tempfile.TemporaryDirectory(prefix="cirrus-machine-matrix-") as directory:
     tmp = Path(directory)
     install(tmp)
     (tmp / "test.cpp").write_text(CPP)
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I"+str(tmp), "-I"+str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"),
-                        *[str(ROOT / f"CirrusAudioFixup/Devices/Amplifiers/{model}/Resources/FirmwareData.cpp")
-                          for model in ("CS35L41", "CS35L56")], "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                *[
+                    str(
+                        ROOT
+                        / f"CirrusAudioFixup/Devices/Amplifiers/{model}/Resources/FirmwareData.cpp"
+                    )
+                    for model in ("CS35L41", "CS35L56")
+                ],
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)

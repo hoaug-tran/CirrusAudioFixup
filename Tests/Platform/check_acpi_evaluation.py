@@ -1,4 +1,5 @@
 """Exercise the production interpreter bridge and bounded reference conversion."""
+
 import subprocess
 import sys
 import tempfile
@@ -13,8 +14,8 @@ with tempfile.TemporaryDirectory(prefix="cirrus-acpi-evaluation-") as directory:
     tmp = Path(directory)
     install(tmp)
     (tmp / "Headers").mkdir()
-    (tmp / "Headers/kern_patcher.hpp").write_text('#pragma once\n')
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "Headers/kern_patcher.hpp").write_text("#pragma once\n")
+    (tmp / "test.cpp").write_text(r"""
 #define KERNEL 1
 #include "Fixture.hpp"
 #include <cstdlib>
@@ -139,12 +140,25 @@ int main(){
  {ACPIDeviceProperties properties;assert(properties.load(&amp)==0&&!properties.get("reset-gpios"));}
  assert(evaluations==before&&!allocations);
 }
-''')
+""")
     executable = tmp / "test.exe"
-    command = ["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation",
-               "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), "-I" + str(ROOT / "Lilu/Lilu"),
-               str(tmp / "test.cpp"), "-o", str(executable)]
+    command = [
+        "g++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-I" + str(tmp),
+        "-I" + str(ROOT / "CirrusAudioFixup"),
+        "-I" + str(ROOT / "Lilu/Lilu"),
+        str(tmp / "test.cpp"),
+        "-o",
+        str(executable),
+    ]
     for flags in sanitizer_flags():
         subprocess.run(command + flags, check=True)
         subprocess.run([str(executable)], check=True)
-print("PASS native ACPI references, symbol availability, owned conversion, bounded malformed results and failure cleanup")
+print(
+    "PASS native ACPI references, symbol availability, owned conversion, bounded malformed results and failure cleanup"
+)

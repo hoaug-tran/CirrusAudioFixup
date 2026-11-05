@@ -38,13 +38,15 @@ def embedded_payloads(header):
 
 def binary_strings(data):
     # Keep both Windows Unicode strings and ordinary ASCII diagnostic labels.
-    ascii_strings = [m[0].decode("ascii") for m in re.finditer(rb"[\x20-\x7e]{6,}", data)]
+    ascii_strings = [
+        m[0].decode("ascii") for m in re.finditer(rb"[\x20-\x7e]{6,}", data)
+    ]
     wide_strings = [
-        m[0].decode("utf-16le")
-        for m in re.finditer(rb"(?:[\x20-\x7e]\x00){6,}", data)
+        m[0].decode("utf-16le") for m in re.finditer(rb"(?:[\x20-\x7e]\x00){6,}", data)
     ]
     terms = re.compile(
-        r"calibr|hibern|mailbox|interrupt|playback|ramp|tuning|gain|power|speaker|\.pdb", re.I
+        r"calibr|hibern|mailbox|interrupt|playback|ramp|tuning|gain|power|speaker|\.pdb",
+        re.I,
     )
     return sorted({s for s in ascii_strings + wide_strings if terms.search(s)})
 
@@ -68,8 +70,10 @@ def audit_nahimic(path):
             continue
         name = setting.tag.removeprefix("kSet_")
         text = text.strip()
-        if not any(term in name for term in
-                   ("Filter", "Attenuator", "Gain", "Limiter", "BassBoost")):
+        if not any(
+            term in name
+            for term in ("Filter", "Attenuator", "Gain", "Limiter", "BassBoost")
+        ):
             continue
         entry = {"value": text}
         if "FilterF" in name or "ThresholdDB" in name or "FrequencyResponse" in name:
@@ -79,7 +83,8 @@ def audit_nahimic(path):
                 values = struct.unpack("<" + "f" * (len(payload) // 4), payload)
                 finite = all(math.isfinite(v) for v in values)
                 entry["float32le_hypothesis"] = {
-                    "count": len(values), "all_finite": finite,
+                    "count": len(values),
+                    "all_finite": finite,
                     "minimum": min(values) if finite else None,
                     "maximum": max(values) if finite else None,
                     "sum": math.fsum(values) if finite else None,
@@ -87,11 +92,15 @@ def audit_nahimic(path):
         fields[name] = entry
     left = fields.get("DeviceOptimizationFilterFL", {})
     right = fields.get("DeviceOptimizationFilterFR", {})
-    return {"path": str(path), "sha256": digest(data), "fields": fields,
-            "optimization_filters_byte_identical": bool(left.get("sha256")) and
-            left.get("sha256") == right.get("sha256"),
-            "boundary": "Static OEM settings only. Float layout, sample rate, frequency bins, "
-                        "active APO selection and acoustic response are not established."}
+    return {
+        "path": str(path),
+        "sha256": digest(data),
+        "fields": fields,
+        "optimization_filters_byte_identical": bool(left.get("sha256"))
+        and left.get("sha256") == right.get("sha256"),
+        "boundary": "Static OEM settings only. Float layout, sample rate, frequency bins, "
+        "active APO selection and acoustic response are not established.",
+    }
 
 
 def audit(header, roots, drivers):
@@ -109,41 +118,79 @@ def audit(header, roots, drivers):
                 candidates.setdefault(digest(data), []).append(str(path))
             elif path.suffix.lower() == ".inf":
                 data = path.read_bytes()
-                encoding = "utf-16" if data[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig"
+                encoding = (
+                    "utf-16" if data[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig"
+                )
                 section = None
-                for number, line in enumerate(data.decode(encoding, errors="replace").splitlines(), 1):
+                for number, line in enumerate(
+                    data.decode(encoding, errors="replace").splitlines(), 1
+                ):
                     # Section provenance matters: an INF can contain gains and
                     # profiles for many unrelated boards. These are candidate
                     # settings, not proof of the installed driver's selection.
                     heading = re.fullmatch(r"\s*\[([^]]+)\]\s*(?:;.*)?", line)
                     if heading:
                         section = heading[1]
-                    if re.search(r"CLSA.*0100|3847|Gain,|HKR,\s*Tunings\\|VolumeRampRate|DefaultTuningSet|EnableHibernation|EnableIntHandler|EnableAutoCal|ForceAmpSafeState", line, re.I):
-                        configurations.append({"path": str(path), "line": number,
-                                               "section": section, "text": line.strip()})
+                    if re.search(
+                        r"CLSA.*0100|3847|Gain,|HKR,\s*Tunings\\|VolumeRampRate|DefaultTuningSet|EnableHibernation|EnableIntHandler|EnableAutoCal|ForceAmpSafeState",
+                        line,
+                        re.I,
+                    ):
+                        configurations.append(
+                            {
+                                "path": str(path),
+                                "line": number,
+                                "section": section,
+                                "text": line.strip(),
+                            }
+                        )
     payloads = []
     for name, data in arrays.items():
         checksum = digest(data)
-        payloads.append({"symbol": name, "size": len(data), "sha256": checksum,
-                         "exact_matches": candidates.get(checksum, [])})
+        payloads.append(
+            {
+                "symbol": name,
+                "size": len(data),
+                "sha256": checksum,
+                "exact_matches": candidates.get(checksum, []),
+            }
+        )
     binaries = []
     for path in drivers:
         data = path.read_bytes()
-        binaries.append({"path": str(path), "size": len(data), "sha256": digest(data),
-                         "strings": binary_strings(data)})
-    return {"embedded_payloads": payloads, "inf_evidence": configurations,
-            "driver_evidence": binaries,
-            "boundary": "Byte identity and static configuration only; no runtime selection or acoustic proof."}
+        binaries.append(
+            {
+                "path": str(path),
+                "size": len(data),
+                "sha256": digest(data),
+                "strings": binary_strings(data),
+            }
+        )
+    return {
+        "embedded_payloads": payloads,
+        "inf_evidence": configurations,
+        "driver_evidence": binaries,
+        "boundary": "Byte identity and static configuration only; no runtime selection or acoustic proof.",
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--header", type=Path, default=Path(__file__).resolve().parents[2] /
-                        "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Generated/FirmwareData.inc")
+    parser.add_argument(
+        "--header",
+        type=Path,
+        default=Path(__file__).resolve().parents[2]
+        / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Generated/FirmwareData.inc",
+    )
     parser.add_argument("--packages", type=Path, nargs="+", required=True)
     parser.add_argument("--driver", type=Path, action="append", default=[])
-    parser.add_argument("--nahimic", type=Path, action="append", default=[],
-                        help="Extracted OEM .nsx profile; inspected read-only")
+    parser.add_argument(
+        "--nahimic",
+        type=Path,
+        action="append",
+        default=[],
+        help="Extracted OEM .nsx profile; inspected read-only",
+    )
     args = parser.parse_args()
     try:
         result = audit(args.header, args.packages, args.driver)

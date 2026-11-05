@@ -1,17 +1,19 @@
 """Execute the production PCI SPI owner against IOKit lifecycle mocks."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import subprocess
 import tempfile
 
-ROOT=Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-spi-pci-') as directory:
-    tmp=Path(directory)
-    for name in ['IOKit/pci','IOKit/pwr_mgt','kern','mach']:
-        (tmp/name).mkdir(parents=True,exist_ok=True)
-    (tmp/'IOKit/IOLib.h').write_text(r'''
+ROOT = Path(__file__).resolve().parents[2]
+with tempfile.TemporaryDirectory(prefix="cirrus-spi-pci-") as directory:
+    tmp = Path(directory)
+    for name in ["IOKit/pci", "IOKit/pwr_mgt", "kern", "mach"]:
+        (tmp / name).mkdir(parents=True, exist_ok=True)
+    (tmp / "IOKit/IOLib.h").write_text(r"""
 #pragma once
 #include <cstdint>
 #include <cassert>
@@ -37,8 +39,9 @@ inline void IOSleep(unsigned ms) {
     fakeNs+=uint64_t(ms)*1000000;
 }
 inline void OSSynchronizeIO() {}
-''')
-    (tmp/'IOKit/IOService.h').write_text(r'''
+""")
+    (tmp / "IOKit/IOService.h").write_text(
+        r"""
 #pragma once
 #include "IOLib.h"
 constexpr unsigned kIOPMPowerOn=2,kIOPMDeviceUsable=0x8000;
@@ -70,10 +73,13 @@ struct IOMemoryMap {
     size_t getLength(){return shortMap?0x100:sizeof(regs);}
     void release(){++releases;}
 };
-'''.replace('#include "IOLib.h"','#include "IOLib.h"\n#include <cstddef>'))
-    for name in ['IOPM.h','IOPMpowerState.h']:
-        (tmp/'IOKit/pwr_mgt'/name).write_text('#pragma once\n#include "IOKit/IOService.h"\n')
-    (tmp/'IOKit/pci/IOPCIDevice.h').write_text(r'''
+""".replace('#include "IOLib.h"', '#include "IOLib.h"\n#include <cstddef>')
+    )
+    for name in ["IOPM.h", "IOPMpowerState.h"]:
+        (tmp / "IOKit/pwr_mgt" / name).write_text(
+            '#pragma once\n#include "IOKit/IOService.h"\n'
+        )
+    (tmp / "IOKit/pci/IOPCIDevice.h").write_text(r"""
 #pragma once
 #include "IOKit/IOService.h"
 constexpr uint8_t kIOPCIPowerManagementCapability=1,kIOPCIConfigCommand=4,kIOPCIConfigBaseAddress0=0x10;
@@ -95,18 +101,18 @@ struct IOPCIDevice : IOService {
     bool setMemoryEnable(bool b){if(!rejectMemory)memory=b;return memory;}
     IOMemoryMap* mapDeviceMemoryWithRegister(uint8_t reg){assert(reg==0x10&&(state&3)==0);return rejectMap?nullptr:&map;}
 };
-''')
-    (tmp/'kern/clock.h').write_text(r'''
+""")
+    (tmp / "kern/clock.h").write_text(r"""
 #pragma once
 #include "IOKit/IOLib.h"
 inline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* ns){*ns=t;}
-''')
-    (tmp/'mach/mach_time.h').write_text(r'''
+""")
+    (tmp / "mach/mach_time.h").write_text(r"""
 #pragma once
 #include "IOKit/IOLib.h"
 inline uint64_t mach_absolute_time(){fakeNs+=1000;return fakeNs;}
-''')
-    (tmp/'test.cpp').write_text(r'''
+""")
+    (tmp / "test.cpp").write_text(r"""
 #include <cstring>
 #include <initializer_list>
 #include "Transport/SPI/Intel/IntelLPSSSPIController.hpp"
@@ -228,12 +234,32 @@ int main(){
     }
     assert(pmClients==pmStops);
 }
-''')
+""")
     for flags in sanitizer_flags():
-        exe=tmp/'pci-test'
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,
-                        '-I',str(tmp),'-I',str(ROOT/'CirrusAudioFixup'),
-                        str(tmp/'test.cpp'),str(ROOT/'CirrusAudioFixup/Transport/SPI/Intel/IntelLPSSSPIController.cpp'),
-                        '-o',str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
-print('PASS production Intel SPI PCI owner: identity, exclusive ownership, D0, BAR, suspend, teardown and allocation failures')
+        exe = tmp / "pci-test"
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I",
+                str(tmp),
+                "-I",
+                str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                str(
+                    ROOT
+                    / "CirrusAudioFixup/Transport/SPI/Intel/IntelLPSSSPIController.cpp"
+                ),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
+        subprocess.run([str(exe)], check=True)
+print(
+    "PASS production Intel SPI PCI owner: identity, exclusive ownership, D0, BAR, suspend, teardown and allocation failures"
+)

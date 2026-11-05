@@ -1,6 +1,8 @@
 """Internal/external CS35L41 power sequences with real playback state machines."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import subprocess
 import tempfile
@@ -8,7 +10,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="cirrus-power-") as directory:
     tmp = Path(directory)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #include <cassert>
 #include <map>
 #include <vector>
@@ -159,11 +161,30 @@ int main(){
  Port wrong;wrong.r[0x2014]=1;wrong.r[0x2018]=0x3001;PlaybackTransition prepared{};prepared.phase=PlaybackPhase::Prepared;
  assert(!Playback::commit(wrong,prepared,17<<5,true,internal)&&wrong.writes.empty());
 }
-''')
-    flag_list = [[]] if sys.platform == "win32" else [[], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]]
+""")
+    flag_list = (
+        [[]]
+        if sys.platform == "win32"
+        else [[], ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]]
+    )
     for flags in flag_list:
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
-print("PASS CS35L41 legacy/internal power isolation, coefficients, muted preparation, commit and shutdown")
+print(
+    "PASS CS35L41 legacy/internal power isolation, coefficients, muted preparation, commit and shutdown"
+)

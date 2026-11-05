@@ -1,20 +1,24 @@
 """Production AMD command engine with CS35L41 frames and fault injection."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-import subprocess,tempfile
-ROOT=Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-amd-spi-') as directory:
-    p=Path(directory);(p/'IOKit').mkdir()
-    (p/'IOKit/IOLib.h').write_text('''#pragma once
+import subprocess, tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+with tempfile.TemporaryDirectory(prefix="cirrus-amd-spi-") as directory:
+    p = Path(directory)
+    (p / "IOKit").mkdir()
+    (p / "IOKit/IOLib.h").write_text("""#pragma once
 using IOReturn=int;
 constexpr int kIOReturnSuccess=0,kIOReturnBadArgument=-1,kIOReturnNotReady=-2,
 kIOReturnNotPermitted=-3,kIOReturnTimeout=-4,kIOReturnBusy=-5,
 kIOReturnUnsupported=-6,kIOReturnNoDevice=-7;
 inline void IOSleep(unsigned) {}
-''')
-    (p/'test.cpp').write_text(r'''
+""")
+    (p / "test.cpp").write_text(r"""
 #include <cassert>
 #include <map>
 #include <vector>
@@ -94,8 +98,25 @@ int main() {
  cirrus::devices::amplifiers::cs35l41::CS35L41SPIRegisterIO io(&bus,{0,4000000,0},true);assert(io.write(0x100,1));bus.shutdown();
  assert(clean.read32(0x20)==0&&clean.read32(0x6c)==0&&clean.read8(0x1d)==0);
 }
-''')
+""")
     for flags in sanitizer_flags():
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
-        subprocess.run([str(p/'test')],check=True)
-print('PASS AMD V1/V2 command FIFO: CS35L41 bulk/RMW, clocks, limits, timeout and power gating; hardware untested')
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "test.cpp"),
+                "-o",
+                str(p / "test"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "test")], check=True)
+print(
+    "PASS AMD V1/V2 command FIFO: CS35L41 bulk/RMW, clocks, limits, timeout and power gating; hardware untested"
+)

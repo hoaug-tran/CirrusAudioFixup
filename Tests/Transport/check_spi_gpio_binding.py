@@ -1,6 +1,8 @@
 """Run production _DSD -> evaluated _CRS -> GPIO provider/map ownership."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 import subprocess
@@ -11,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="cirrus-gpio-binding-") as directory:
     tmp = Path(directory)
     install(tmp)
-    (tmp / "test.cpp").write_text(r'''
+    (tmp / "test.cpp").write_text(r"""
 #define KERNEL 1
 #include "Platform/ACPI/ACPIBoardMetadata.hpp"
 #include "Transport/SPI/Intel/IntelSPIChipSelects.hpp"
@@ -325,11 +327,26 @@ int main(){
   assert(!tglGpio.opened&&tglGpio.opens==1&&tglGpio.closes==1&&comm1Map->refs==1&&comm2Map->refs==1);
  }
 }
-''')
+""")
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"),
-                        str(tmp / "test.cpp"), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
-print("PASS production SPI GPIO binding: _DSD references, _CRS, provider exclusivity, maps, PM, failure cleanup")
+print(
+    "PASS production SPI GPIO binding: _DSD references, _CRS, provider exclusivity, maps, PM, failure cleanup"
+)

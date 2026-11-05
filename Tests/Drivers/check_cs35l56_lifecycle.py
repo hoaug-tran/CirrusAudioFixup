@@ -1,15 +1,18 @@
 """Execute the complete CS35L56 driver with real firmware and bounded OS mocks."""
+
 import subprocess
 import sys
 import json
 import tempfile
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "Tests/Fixtures"))
 from driver_kernel_fixture import install
 from host_build import sanitizer_flags
 from production_source_fixture import cs35l56_sources
-CPP = r'''
+
+CPP = r"""
 #include <cassert>
 #include <map>
 #include <vector>
@@ -306,21 +309,44 @@ int main(){
   bytes[25]=0;assert(!firmware::EFICalibration::select(bytes.data(),bytes.size(),1,0,cal));}
  assert(fixtureLiveAllocations==0);
 }
-'''
-capture=json.loads((ROOT/"Tests/Fixtures/gu605mv-asp-readback.json").read_text())
-assert capture["register"]==0xe0dc and capture["written"]==0xffffffff
-assert capture["read_return"]==capture["write_return"]==0
-CPP=CPP.replace("CAPTURED_IRQ_MASK20_READBACK",hex(capture["readback"])+"U")
-CPP=CPP.replace("CAPTURED_CALIBRATION",",".join(hex(b) for b in bytes.fromhex(capture["calibration_hex"])))
-CPP=CPP.replace("CAPTURED_R0_LEFT",str(capture["calibration_r0"][0])).replace("CAPTURED_R0_RIGHT",str(capture["calibration_r0"][1]))
+"""
+capture = json.loads((ROOT / "Tests/Fixtures/gu605mv-asp-readback.json").read_text())
+assert capture["register"] == 0xE0DC and capture["written"] == 0xFFFFFFFF
+assert capture["read_return"] == capture["write_return"] == 0
+CPP = CPP.replace("CAPTURED_IRQ_MASK20_READBACK", hex(capture["readback"]) + "U")
+CPP = CPP.replace(
+    "CAPTURED_CALIBRATION",
+    ",".join(hex(b) for b in bytes.fromhex(capture["calibration_hex"])),
+)
+CPP = CPP.replace("CAPTURED_R0_LEFT", str(capture["calibration_r0"][0])).replace(
+    "CAPTURED_R0_RIGHT", str(capture["calibration_r0"][1])
+)
 with tempfile.TemporaryDirectory(prefix="cirrus-cs35l56-lifecycle-") as directory:
-    tmp=Path(directory)
+    tmp = Path(directory)
     install(tmp)
-    (tmp/"test.cpp").write_text(CPP)
+    (tmp / "test.cpp").write_text(CPP)
     for flags in sanitizer_flags():
-        exe=tmp/"test"
-        subprocess.run(["g++","-std=c++17","-O1","-Wall","-Wextra","-Werror","-Wno-misleading-indentation",*flags,
-                        "-I"+str(tmp),"-I"+str(ROOT/"CirrusAudioFixup"),str(tmp/"test.cpp"),
-                        *map(str,cs35l56_sources()),"-o",str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
-print("PASS complete CS35L56: real firmware/tuning, calibration, idle, route/playback, PM, allocation/transfer faults and debug stops")
+        exe = tmp / "test"
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-O1",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-misleading-indentation",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                *map(str, cs35l56_sources()),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
+        subprocess.run([str(exe)], check=True)
+print(
+    "PASS complete CS35L56: real firmware/tuning, calibration, idle, route/playback, PM, allocation/transfer faults and debug stops"
+)

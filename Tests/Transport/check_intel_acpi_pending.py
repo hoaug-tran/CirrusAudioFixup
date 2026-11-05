@@ -1,12 +1,19 @@
 """Drive the production owner across late ACPI publication and terminal failures."""
+
 from pathlib import Path
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
-source = (root / "CirrusAudioFixup/Transport/SPI/Intel/IntelSPIControllerOwner.hpp").read_text()
-source = source[source.index("class IntelSPIControllerOwner final"):source.index("inline NativeSPIControllerOwner*")]
-fixture = r'''
+source = (
+    root / "CirrusAudioFixup/Transport/SPI/Intel/IntelSPIControllerOwner.hpp"
+).read_text()
+source = source[
+    source.index("class IntelSPIControllerOwner final") : source.index(
+        "inline NativeSPIControllerOwner*"
+    )
+]
+fixture = r"""
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -54,8 +61,8 @@ const char* reason(){return "DSD_INTERPRETER_UNAVAILABLE";}
 using Evaluator=IOReturn(*)(IOACPIPlatformDevice*,void**);
 Evaluator nativePropertyEvaluator=nullptr;
 const char* nativePropertySetupState="CALLBACK_NOT_REACHED";
-'''
-checks = r'''
+"""
+checks = r"""
 int main(){
  IOACPIPlatformDevice target;IOService service;NativeSPIControllerFailure failure;
  IntelSPIControllerOwner owner;owner.setContext(&target,&service);
@@ -86,12 +93,17 @@ int main(){
  IntelSPIControllerOwner malformed;malformed.setContext(&target,&service);csResult=kIOReturnUnsupported;
  assert(malformed.continueBind(failure)==kIOReturnUnsupported&&!malformed.powerPending());
 }
-'''
+"""
 with tempfile.TemporaryDirectory(prefix="cirrus-acpi-pending-") as directory:
     path = Path(directory)
     cpp = path / "test.cpp"
     cpp.write_text(fixture + source + checks)
     exe = path / "test.exe"
-    subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)], check=True)
+    subprocess.run(
+        ["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)],
+        check=True,
+    )
     subprocess.run([str(exe)], check=True)
-print("PASS owner: late ACPI, PCI pending, exactly-once CS bind, deadline, symbol/registration failure, malformed CS")
+print(
+    "PASS owner: late ACPI, PCI pending, exactly-once CS bind, deadline, symbol/registration failure, malformed CS"
+)

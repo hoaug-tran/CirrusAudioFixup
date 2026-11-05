@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import source as production_source, chip_state
 import subprocess
@@ -7,10 +8,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 source = production_source()
-start = source.index('    uint32_t codecSSID = 0;')
-end = source.index('    uint32_t ssid = 0;', start)
+start = source.index("    uint32_t codecSSID = 0;")
+end = source.index("    uint32_t ssid = 0;", start)
 lookup = source[start:end]
-program = r'''#include <cstdint>
+program = (
+    r"""#include <cstdint>
 #include <cassert>
 #include <map>
 #include <string>
@@ -35,7 +37,9 @@ std::map<std::string,std::vector<IORegistryEntry*>> registry;
 OSDictionary* serviceMatching(const char* key){return new OSDictionary{key};}
 OSIterator* getMatchingServices(OSDictionary* match){return new OSIterator{registry[match->key]};}
 uint32_t discover(){
-''' + lookup + r'''return codecSSID;
+"""
+    + lookup
+    + r"""return codecSSID;
 }
 int main(){
     assert(discover()==0);
@@ -61,10 +65,16 @@ int main(){
     registry["AppleHDACodecGeneric"]={&function};
     assert(discover()==0x17AA3847);
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-identity-') as directory:
+"""
+)
+with tempfile.TemporaryDirectory(prefix="cirrus-identity-") as directory:
     path = Path(directory)
-    (path / 'identity.cpp').write_text(program)
-    subprocess.run(['g++', '-std=c++17', str(path / 'identity.cpp'), '-o', str(path / 'identity')], check=True)
-    subprocess.run([str(path / 'identity')], check=True)
-print('PASS production codec identity lookup: delayed publication, FunctionSubsystemID number/data, zero skip, GPU rejection and legacy property')
+    (path / "identity.cpp").write_text(program)
+    subprocess.run(
+        ["g++", "-std=c++17", str(path / "identity.cpp"), "-o", str(path / "identity")],
+        check=True,
+    )
+    subprocess.run([str(path / "identity")], check=True)
+print(
+    "PASS production codec identity lookup: delayed publication, FunctionSubsystemID number/data, zero skip, GPU rejection and legacy property"
+)

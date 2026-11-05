@@ -1,6 +1,8 @@
 """Exercise the production hook and mailbox code with a small IOKit fixture."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import re
 import plistlib
@@ -8,23 +10,42 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-header = (ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEventSource.hpp').read_text(encoding='utf-8')
-source = (ROOT / 'CirrusAudioFixup/Platform/HDA/AudioEventSource.cpp').read_text(encoding='utf-8')
-sdk_types = (ROOT / 'MacKernelSDK/Headers/IOKit/audio/IOAudioTypes.h').read_text(encoding='utf-8')
-engine_enum = re.search(r'typedef\s+enum\s+(\w+)\s*\{[^}]*kIOAudioEngineRunning', sdk_types, re.S).group(1)
-assert f'__ZN13IOAudioEngine8setStateE{len(engine_enum)}{engine_enum}' in source, 'Hook must use the SDK enum tag, not its typedef alias'
-strip_includes = lambda text: re.sub(r'^\s*#(?:include|pragma).*$', '', text, flags=re.M)
-metadata = plistlib.loads((ROOT / 'CirrusAudioFixup/Info.plist').read_bytes())
-bootstrap = metadata['IOKitPersonalities']['CirrusAudioBootstrap']
-assert bootstrap['IOProviderClass'] == 'IOResources' and bootstrap['IOResourceMatch'] == 'IOKit'
-assert metadata['OSBundleRequired'] == 'Root'
-bootstrap_start = source[source.index('bool start(IOService* provider)'):source.index('OSDefineMetaClassAndStructors(CirrusAudioBootstrap')]
-assert 'IOService::start(provider)' in bootstrap_start
+header = (ROOT / "CirrusAudioFixup/Platform/HDA/AudioEventSource.hpp").read_text(
+    encoding="utf-8"
+)
+source = (ROOT / "CirrusAudioFixup/Platform/HDA/AudioEventSource.cpp").read_text(
+    encoding="utf-8"
+)
+sdk_types = (ROOT / "MacKernelSDK/Headers/IOKit/audio/IOAudioTypes.h").read_text(
+    encoding="utf-8"
+)
+engine_enum = re.search(
+    r"typedef\s+enum\s+(\w+)\s*\{[^}]*kIOAudioEngineRunning", sdk_types, re.S
+).group(1)
+assert f"__ZN13IOAudioEngine8setStateE{len(engine_enum)}{engine_enum}" in source, (
+    "Hook must use the SDK enum tag, not its typedef alias"
+)
+strip_includes = lambda text: re.sub(
+    r"^\s*#(?:include|pragma).*$", "", text, flags=re.M
+)
+metadata = plistlib.loads((ROOT / "CirrusAudioFixup/Info.plist").read_bytes())
+bootstrap = metadata["IOKitPersonalities"]["CirrusAudioBootstrap"]
+assert (
+    bootstrap["IOProviderClass"] == "IOResources"
+    and bootstrap["IOResourceMatch"] == "IOKit"
+)
+assert metadata["OSBundleRequired"] == "Root"
+bootstrap_start = source[
+    source.index("bool start(IOService* provider)") : source.index(
+        "OSDefineMetaClassAndStructors(CirrusAudioBootstrap"
+    )
+]
+assert "IOService::start(provider)" in bootstrap_start
 assert 'checkKernelArgument("-cirrusoff")' in bootstrap_start
-assert 'IOCatalogue' not in source and 'IOTimerEventSource' not in source
-assert 'CSC3551' not in bootstrap_start and 'getMatchingServices' not in bootstrap_start
+assert "IOCatalogue" not in source and "IOTimerEventSource" not in source
+assert "CSC3551" not in bootstrap_start and "getMatchingServices" not in bootstrap_start
 
-fixture = r'''
+fixture = r"""
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -125,9 +146,9 @@ struct LiluAPI {
         KernelPatcher patcher; info[0].loadIndex=3; callback(nullptr,patcher,3,0,0); return Error::NoError;
     }
 } lilu;
-'''
+"""
 
-checks = r'''
+checks = r"""
 using namespace cirrus::platform::hda;
 AudioEventState delivered;
 unsigned deliveries=0;
@@ -192,12 +213,15 @@ int main() {
     assert(CirrusAudioFixup_stop(nullptr,nullptr)==KERN_FAILURE);
     puts("PASS production audio hooks: original calls, controller/engine/input filtering, seed, coalescing, generation and detach");
 }
-'''
+"""
 
-with tempfile.TemporaryDirectory(prefix='cirrus-audio-events-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-audio-events-") as directory:
     tmp = Path(directory)
-    cpp = tmp / 'events.cpp'
-    cpp.write_text(fixture + strip_includes(header) + strip_includes(source) + checks, encoding='utf-8')
-    exe = tmp / 'events.exe'
-    subprocess.run(['g++', '-std=c++17', '-O0', str(cpp), '-o', str(exe)], check=True)
+    cpp = tmp / "events.cpp"
+    cpp.write_text(
+        fixture + strip_includes(header) + strip_includes(source) + checks,
+        encoding="utf-8",
+    )
+    exe = tmp / "events.exe"
+    subprocess.run(["g++", "-std=c++17", "-O0", str(cpp), "-o", str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

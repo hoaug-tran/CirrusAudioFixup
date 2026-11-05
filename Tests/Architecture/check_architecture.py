@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 import subprocess
@@ -8,7 +9,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = service_source()
 
-cpp = r'''
+cpp = r"""
 #include <cassert>
 #include <cstring>
 #include "Core/AudioTypes.hpp"
@@ -41,7 +42,7 @@ int main() {
     assert(!unknown.allowAutomaticInitialization);
     return 0;
 }
-'''
+"""
 
 with tempfile.TemporaryDirectory(prefix="cirrus-architecture-check-") as directory:
     tmp = Path(directory)
@@ -49,17 +50,29 @@ with tempfile.TemporaryDirectory(prefix="cirrus-architecture-check-") as directo
     binary = tmp / "architecture.exe"
     source.write_text(cpp, encoding="utf-8")
     subprocess.run(
-        ["g++", "-std=c++17", "-O0", "-I", str(ROOT / "CirrusAudioFixup"), str(source), "-o", str(binary)],
+        [
+            "g++",
+            "-std=c++17",
+            "-O0",
+            "-I",
+            str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(binary),
+        ],
         check=True,
     )
     subprocess.run([str(binary)], check=True)
 
-print("PASS declared platform profiles (registered silicon is checked by the complete driver fixture)")
+print(
+    "PASS declared platform profiles (registered silicon is checked by the complete driver fixture)"
+)
 
 # Execute discovery itself: legacy mode permits reads, never invented devices.
 start = SOURCE.index("size_t CirrusAudioFixup::detectAmplifiers()")
-detect = SOURCE[start:SOURCE.index("\n}", start) + 2]
-fixture = r'''
+detect = SOURCE[start : SOURCE.index("\n}", start) + 2]
+fixture = (
+    r"""
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -121,7 +134,9 @@ public:
     template<class... T>void setProperty(T...){}
     size_t detectAmplifiers();
 };
-''' + detect + r'''
+"""
+    + detect
+    + r"""
 int main() {
     CirrusAudioFixup unknown; unknown.responsive=3;
     assert(unknown.detectAmplifiers()==0 && unknown.reads==0);
@@ -132,12 +147,31 @@ int main() {
     CirrusAudioFixup reference; reference.mPlatformAuthorized=true; reference.responsive=3;
     assert(reference.detectAmplifiers()==2);
 }
-'''
+"""
+)
 with tempfile.TemporaryDirectory(prefix="cirrus-discovery-check-") as directory:
-    tmp=Path(directory); source=tmp / "discovery.cpp"; binary=tmp / "discovery.exe"
+    tmp = Path(directory)
+    source = tmp / "discovery.cpp"
+    binary = tmp / "discovery.exe"
     source.write_text(fixture)
     from driver_kernel_fixture import install
+
     install(tmp)
-    subprocess.run(["g++","-std=c++17","-I",str(tmp),"-I",str(ROOT / "CirrusAudioFixup"),str(source),"-o",str(binary)],check=True)
-    subprocess.run([str(binary)],check=True)
-print("PASS production discovery: unknown board, legacy read-only discovery, no phantom endpoints and channel identity")
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-I",
+            str(tmp),
+            "-I",
+            str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(binary),
+        ],
+        check=True,
+    )
+    subprocess.run([str(binary)], check=True)
+print(
+    "PASS production discovery: unknown board, legacy read-only discovery, no phantom endpoints and channel identity"
+)

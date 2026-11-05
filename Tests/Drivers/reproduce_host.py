@@ -1,17 +1,19 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import re
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-CODEC = ROOT / 'CirrusAudioFixup/Firmware/WMFW'
-DEVICE = ROOT / 'CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources'
-with tempfile.TemporaryDirectory(prefix='cirrus-host-check-') as directory:
+CODEC = ROOT / "CirrusAudioFixup/Firmware/WMFW"
+DEVICE = ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources"
+with tempfile.TemporaryDirectory(prefix="cirrus-host-check-") as directory:
     tmp = Path(directory)
-    (tmp / 'IOKit').mkdir()
-    (tmp / 'IOKit/IOLib.h').write_text(r'''
+    (tmp / "IOKit").mkdir()
+    (tmp / "IOKit/IOLib.h").write_text(
+        r"""
 #pragma once
 #include <cstdint>
 #include <cstddef>
@@ -41,18 +43,28 @@ inline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* n) { *n=t; }
 struct OSObject {};
 struct OSNumber : OSObject { unsigned unsigned32BitValue() { return 0; } };
 constexpr int TRACE_OTHER = 0;
-''', encoding='utf-8')
-    uploader = (CODEC / 'WMFWUploader.hpp').read_text(encoding='utf-8')
-    uploader = uploader.replace('#include "Core/RegisterIO.hpp"', '#include "fake.hpp"').replace('#include "Firmware/WMFW/WMFWParser.hpp"', '#include "WMFWParser.hpp"')
-    (tmp / 'uploader.hpp').write_text(uploader, encoding='utf-8')
-    resources = (DEVICE / 'Generated/FirmwareData.inc').read_text(encoding='utf-8')
-    arrays = '\n'.join(re.findall(r'const uint8_t \w+\[\s*\d*\s*\] = \{.*?\};', resources, re.S))
-    (tmp / 'arrays.hpp').write_text(arrays, encoding='utf-8')
-    header = (ROOT / 'CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp').read_text(encoding='utf-8')
-    resource_type = header[header.index('struct FirmwareResource {'):]
-    table = resources[resources.index('const FirmwareResource cs35l41Firmware[]'):]
-    (tmp / 'resources.hpp').write_text(resource_type + table, encoding='utf-8')
-    (tmp / 'fake.hpp').write_text(r'''
+""",
+        encoding="utf-8",
+    )
+    uploader = (CODEC / "WMFWUploader.hpp").read_text(encoding="utf-8")
+    uploader = uploader.replace(
+        '#include "Core/RegisterIO.hpp"', '#include "fake.hpp"'
+    ).replace('#include "Firmware/WMFW/WMFWParser.hpp"', '#include "WMFWParser.hpp"')
+    (tmp / "uploader.hpp").write_text(uploader, encoding="utf-8")
+    resources = (DEVICE / "Generated/FirmwareData.inc").read_text(encoding="utf-8")
+    arrays = "\n".join(
+        re.findall(r"const uint8_t \w+\[\s*\d*\s*\] = \{.*?\};", resources, re.S)
+    )
+    (tmp / "arrays.hpp").write_text(arrays, encoding="utf-8")
+    header = (
+        ROOT
+        / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/ResourceSchema.hpp"
+    ).read_text(encoding="utf-8")
+    resource_type = header[header.index("struct FirmwareResource {") :]
+    table = resources[resources.index("const FirmwareResource cs35l41Firmware[]") :]
+    (tmp / "resources.hpp").write_text(resource_type + table, encoding="utf-8")
+    (tmp / "fake.hpp").write_text(
+        r"""
 #pragma once
 #include <IOKit/IOLib.h>
 #include <map>
@@ -87,8 +99,20 @@ public:
         return true;
     }
 };
-''', encoding='utf-8')
-    command = ['g++', '-std=c++17', '-O0', '-g', '-I'+str(tmp), '-I'+str(CODEC), '-I'+str(ROOT/'CirrusAudioFixup'),
-               str(ROOT / 'Tests/Fixtures/host_regression.cpp'), '-o', str(tmp/'check.exe')]
+""",
+        encoding="utf-8",
+    )
+    command = [
+        "g++",
+        "-std=c++17",
+        "-O0",
+        "-g",
+        "-I" + str(tmp),
+        "-I" + str(CODEC),
+        "-I" + str(ROOT / "CirrusAudioFixup"),
+        str(ROOT / "Tests/Fixtures/host_regression.cpp"),
+        "-o",
+        str(tmp / "check.exe"),
+    ]
     subprocess.run(command, check=True)
-    subprocess.run([str(tmp/'check.exe')], check=True)
+    subprocess.run([str(tmp / "check.exe")], check=True)

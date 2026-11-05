@@ -1,6 +1,8 @@
 """Execute the service's real discovery callback over evaluated ACPI packages."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from host_build import sanitizer_flags
@@ -13,8 +15,13 @@ ROOT = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="cirrus-platform-discovery-") as directory:
     tmp = Path(directory)
     install(tmp)
-    owner = method(service_source(), "CirrusAudioFixup", "adoptDiscoveredBoard") + "\n" + method(service_source(), "CirrusAudioFixup", "discoverPlatformConfiguration")
-    source = r'''
+    owner = (
+        method(service_source(), "CirrusAudioFixup", "adoptDiscoveredBoard")
+        + "\n"
+        + method(service_source(), "CirrusAudioFixup", "discoverPlatformConfiguration")
+    )
+    source = (
+        r"""
 #define KERNEL 1
 #include "Fixture.hpp"
 #include "Diagnostics/ACPIObjectEvidence.hpp"
@@ -55,7 +62,9 @@ OSArray* pair(const char* name,std::initializer_list<uint32_t> values){
 OSArray* dsd(OSArray* entries){
  return make<OSArray>(std::vector<OSObject*>{make<OSData>(std::vector<uint8_t>{0x14,0xd8,0xff,0xda,0xba,0x6e,0x8c,0x4d,0x8a,0x91,0xbc,0x9b,0xbf,0x4a,0xa3,0x01}),entries});
 }
-''' + owner + r'''
+"""
+        + owner
+        + r"""
 namespace cirrus::transport {
 ACPIPropertyEvaluator nativePropertyEvaluator{nullptr};
 const char* nativePropertySetupState{"CALLBACK_NOT_REACHED"};
@@ -163,11 +172,28 @@ int main(){
   assert(callbacks==before&&!service.mPlatformAuthorized&&!service.mDiscoveredBoard);}
  assert(package->refs==1);
 }
-'''
+"""
+    )
     (tmp / "test.cpp").write_text(source)
     for flags in sanitizer_flags():
         exe = tmp / "test"
-        subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror", *flags,
-                        "-I" + str(tmp), "-I" + str(ROOT / "CirrusAudioFixup"), str(tmp / "test.cpp"), "-o", str(exe)], check=True)
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(tmp),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True)
-print("PASS real service discovery callback, evaluated ACPI arrays, owned endpoints, resource gate and malformed input cleanup")
+print(
+    "PASS real service discovery callback, evaluated ACPI arrays, owned endpoints, resource gate and malformed input cleanup"
+)

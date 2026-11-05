@@ -3,8 +3,10 @@
 The seam models PMstop's SDK drain contract; it does not validate Apple's PM
 scheduler or prove that a target PCI domain will grant power.
 """
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 import shutil
 import subprocess
@@ -13,12 +15,12 @@ import tempfile
 from host_build import sanitizer_flags
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / 'CirrusAudioFixup/Transport/SPI/SPIPowerClient.cpp'
-with tempfile.TemporaryDirectory(prefix='cirrus-pm-client-') as directory:
+SOURCE = ROOT / "CirrusAudioFixup/Transport/SPI/SPIPowerClient.cpp"
+with tempfile.TemporaryDirectory(prefix="cirrus-pm-client-") as directory:
     tmp = Path(directory)
-    for folder in ['IOKit', 'kern', 'mach']:
+    for folder in ["IOKit", "kern", "mach"]:
         (tmp / folder).mkdir()
-    (tmp / 'IOKit/IOLib.h').write_text(r'''
+    (tmp / "IOKit/IOLib.h").write_text(r"""
 #pragma once
 #include <cassert>
 #include <cstdint>
@@ -30,8 +32,8 @@ inline IOLock* IOLockAlloc(){if(failLock)return nullptr;++locks;return new IOLoc
 inline void IOLockFree(IOLock* p){--locks;delete p;}
 inline void IOLockLock(IOLock* p){p->lock();}
 inline void IOLockUnlock(IOLock* p){p->unlock();}
-''')
-    (tmp / 'IOKit/IOService.h').write_text(r'''
+""")
+    (tmp / "IOKit/IOService.h").write_text(r"""
 #pragma once
 #include "IOLib.h"
 #include <functional>
@@ -79,20 +81,20 @@ public:
   stopped=true;
  }
 };
-''')
-    (tmp / 'kern/clock.h').write_text(r'''
+""")
+    (tmp / "kern/clock.h").write_text(r"""
 #pragma once
 #include <cstdint>
 inline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* ns){*ns=t;}
-''')
-    (tmp / 'mach/mach_time.h').write_text(r'''
+""")
+    (tmp / "mach/mach_time.h").write_text(r"""
 #pragma once
 #include <atomic>
 #include <cstdint>
 inline std::atomic<uint64_t> nowNs{1000000};
 inline uint64_t mach_absolute_time(){return nowNs.fetch_add(1000);}
-''')
-    (tmp / 'kern/thread.h').write_text(r'''
+""")
+    (tmp / "kern/thread.h").write_text(r"""
 #pragma once
 #include <atomic>
 #include <cstdint>
@@ -101,8 +103,8 @@ using thread_t=uint64_t;
 inline thread_t current_thread(){static std::atomic<uint64_t> next{1};
  thread_local uint64_t id=next.fetch_add(1);return id;}
 inline uint64_t thread_tid(thread_t t){return t;}
-''')
-    (tmp / 'test.cpp').write_text(r'''
+""")
+    (tmp / "test.cpp").write_text(r"""
 #include "Transport/SPI/SPIPowerClient.hpp"
 #include <cstring>
 int main(){
@@ -155,27 +157,60 @@ int main(){
  failInit=true;client=new CirrusSPIPowerClient;assert(!client->init());
  client->release();assert(live==0&&locks==0);
 }
-''')
+""")
     for flags in sanitizer_flags():
-        exe = tmp / 'pm-client-test'
-        subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
-                        '-pthread', '-DKERNEL', *flags, '-I', str(tmp),
-                        '-I', str(ROOT / 'CirrusAudioFixup'), str(tmp / 'test.cpp'),
-                        str(SOURCE), '-o', str(exe)], check=True)
+        exe = tmp / "pm-client-test"
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-pthread",
+                "-DKERNEL",
+                *flags,
+                "-I",
+                str(tmp),
+                "-I",
+                str(ROOT / "CirrusAudioFixup"),
+                str(tmp / "test.cpp"),
+                str(SOURCE),
+                "-o",
+                str(exe),
+            ],
+            check=True,
+        )
         subprocess.run([str(exe)], check=True, timeout=30)
 
-    clang = shutil.which('clang++')
+    clang = shutil.which("clang++")
     if clang:
-        common = [clang, '-std=c++17', '-Wall', '-Wextra', '-Werror', '-fsyntax-only']
+        common = [clang, "-std=c++17", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"]
         subprocess.run([*common, str(SOURCE)], check=True)
-        sdk = ROOT / 'MacKernelSDK/Headers'
+        sdk = ROOT / "MacKernelSDK/Headers"
         if sdk.is_dir():
-            subprocess.run([*common, '-target', 'x86_64-apple-darwin',
-                            '-DKERNEL', '-DKERNEL_PRIVATE', '-DAPPLE', '-D__APPLE__',
-                            '-nostdinc', '-isystem', str(sdk), '-isystem', str(sdk / 'i386'),
-                            str(SOURCE)], check=True)
+            subprocess.run(
+                [
+                    *common,
+                    "-target",
+                    "x86_64-apple-darwin",
+                    "-DKERNEL",
+                    "-DKERNEL_PRIVATE",
+                    "-DAPPLE",
+                    "-D__APPLE__",
+                    "-nostdinc",
+                    "-isystem",
+                    str(sdk),
+                    "-isystem",
+                    str(sdk / "i386"),
+                    str(SOURCE),
+                ],
+                check=True,
+            )
         else:
-            print('SKIP target syntax: MacKernelSDK headers unavailable')
+            print("SKIP target syntax: MacKernelSDK headers unavailable")
     else:
-        print('SKIP syntax checks: clang++ unavailable')
-print('PASS production SPI PM helper: callbacks, bounded evidence, cancellation drain, ownership and failure cleanup')
+        print("SKIP syntax checks: clang++ unavailable")
+print(
+    "PASS production SPI PM helper: callbacks, bounded evidence, cancellation drain, ownership and failure cleanup"
+)

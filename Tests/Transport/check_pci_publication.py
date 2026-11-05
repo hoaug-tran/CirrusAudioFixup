@@ -1,17 +1,20 @@
 """Exercise the production PCI association method, including late publication."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
 from host_build import host_compiler
 import subprocess
 import tempfile
+
 root = Path(__file__).resolve().parents[2]
-header = (root/'CirrusAudioFixup/Transport/SPI/NativeSPIHost.hpp').read_text()
-start=header.index('    static IOPCIDevice* findPCI(')
-end=header.index('    const char* controllerSource',start)
-method=header[start:end]
-fixture=r'''
+header = (root / "CirrusAudioFixup/Transport/SPI/NativeSPIHost.hpp").read_text()
+start = header.index("    static IOPCIDevice* findPCI(")
+end = header.index("    const char* controllerSource", start)
+method = header[start:end]
+fixture = r"""
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -58,8 +61,8 @@ using cirrus::transport::canonicalACPIPath;
 static bool amdContract=false;
 inline bool nativeSPIControllerHasACPIContract(IOACPIPlatformDevice*){return amdContract;}
 struct Association {
-'''
-checks=r'''
+"""
+checks = r"""
 };
 int main(){
  IOACPIPlatformDevice target;target.path="IOACPIPlane:/_SB/PC00/SPI0@1e0002";
@@ -89,14 +92,40 @@ int main(){
  result=Association::findPCI(&target,&owner);assert(result==&pci&&waits==5);result->release();
  assert(target.refs==1&&pci.refs==1&&duplicate.refs==1);
 }
-'''
+"""
 with tempfile.TemporaryDirectory() as folder:
-    p=Path(folder)
-    for name in ['IOKit/IORegistryEntry.h','IOKit/acpi/IOACPIPlatformDevice.h','IOKit/pci/IOPCIDevice.h']:
-        f=p/name;f.parent.mkdir(parents=True,exist_ok=True);f.write_text('')
-    cpp=p/'publication.cpp';cpp.write_text(fixture+method+checks)
+    p = Path(folder)
+    for name in [
+        "IOKit/IORegistryEntry.h",
+        "IOKit/acpi/IOACPIPlatformDevice.h",
+        "IOKit/pci/IOPCIDevice.h",
+    ]:
+        f = p / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("")
+    cpp = p / "publication.cpp"
+    cpp.write_text(fixture + method + checks)
     for flags in sanitizer_flags():
-        binary=p/'publication'
-        subprocess.run([host_compiler(),'-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I',folder,'-I',str(root/'CirrusAudioFixup'),str(cpp),'-o',str(binary)],check=True)
-        subprocess.run([str(binary)],check=True)
-print('PASS production PCI association: HP path, direct/path match, late publication, finite timeout, pre/post-wait ambiguity, wrong type, retain balance and AMD no-wait')
+        binary = p / "publication"
+        subprocess.run(
+            [
+                host_compiler(),
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I",
+                folder,
+                "-I",
+                str(root / "CirrusAudioFixup"),
+                str(cpp),
+                "-o",
+                str(binary),
+            ],
+            check=True,
+        )
+        subprocess.run([str(binary)], check=True)
+print(
+    "PASS production PCI association: HP path, direct/path match, late publication, finite timeout, pre/post-wait ambiguity, wrong type, retain balance and AMD no-wait"
+)

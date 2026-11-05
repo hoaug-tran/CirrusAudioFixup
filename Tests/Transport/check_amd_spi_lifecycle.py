@@ -1,14 +1,18 @@
 """Run AMD ACPI/MMIO ownership code against failure and power-transition mocks."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from host_build import sanitizer_flags
-import subprocess,tempfile
-ROOT=Path(__file__).resolve().parents[2]
-with tempfile.TemporaryDirectory(prefix='cirrus-amd-acpi-') as directory:
-    p=Path(directory)
-    for d in ['IOKit/acpi','libkern/c++','kern','mach']: (p/d).mkdir(parents=True)
-    (p/'IOKit/IOLib.h').write_text(r'''
+import subprocess, tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+with tempfile.TemporaryDirectory(prefix="cirrus-amd-acpi-") as directory:
+    p = Path(directory)
+    for d in ["IOKit/acpi", "libkern/c++", "kern", "mach"]:
+        (p / d).mkdir(parents=True)
+    (p / "IOKit/IOLib.h").write_text(r"""
 #pragma once
 #include <cstdint>
 #include <cstddef>
@@ -25,15 +29,15 @@ inline void IOLockLock(IOLock* p){assert(!p->held);p->held=true;}
 inline void IOLockUnlock(IOLock* p){assert(p->held);p->held=false;}
 inline uint64_t now=0;inline void IODelay(unsigned n){now+=uint64_t(n)*1000;}
 inline void OSSynchronizeIO(){}
-''')
-    (p/'libkern/c++/OSString.h').write_text(r'''
+""")
+    (p / "libkern/c++/OSString.h").write_text(r"""
 #pragma once
 #include <cstring>
 struct OSObject {unsigned refs=1;virtual ~OSObject()=default;void release(){--refs;}};
 struct OSString:OSObject {const char* value="AMDI0061";bool isEqualTo(const char* v){return !strcmp(value,v);}};
 #define OSDynamicCast(type,obj) dynamic_cast<type*>(obj)
-''')
-    (p/'IOKit/acpi/IOACPIPlatformDevice.h').write_text(r'''
+""")
+    (p / "IOKit/acpi/IOACPIPlatformDevice.h").write_text(r"""
 #pragma once
 #include "IOKit/IOLib.h"
 #include "libkern/c++/OSString.h"
@@ -54,10 +58,14 @@ struct IOACPIPlatformDevice {
  void close(IOService* o){assert(!storage.held);assert(opened&&o==owner);++closes;opened=false;}
  IOMemoryMap* mapDeviceMemoryWithIndex(unsigned i){assert(i==0);return failMap?nullptr:&map;}
 };
-''')
-    (p/'kern/clock.h').write_text('#pragma once\n#include "IOKit/IOLib.h"\ninline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* n){*n=t;}\n')
-    (p/'mach/mach_time.h').write_text('#pragma once\n#include "IOKit/IOLib.h"\ninline uint64_t mach_absolute_time(){return ++now;}\n')
-    (p/'test.cpp').write_text(r'''
+""")
+    (p / "kern/clock.h").write_text(
+        '#pragma once\n#include "IOKit/IOLib.h"\ninline void absolutetime_to_nanoseconds(uint64_t t,uint64_t* n){*n=t;}\n'
+    )
+    (p / "mach/mach_time.h").write_text(
+        '#pragma once\n#include "IOKit/IOLib.h"\ninline uint64_t mach_absolute_time(){return ++now;}\n'
+    )
+    (p / "test.cpp").write_text(r"""
 #include "Transport/SPI/AMD/AMDSPIController.hpp"
 using namespace cirrus::transport;using namespace cirrus::transport::amd;
 int main(){
@@ -90,8 +98,26 @@ int main(){
  assert(bus.bind(&acpi,&owner)==kIOReturnNoMemory&&acpi.opens==0);failAlloc=false;
  acpi.hasPSC=false;assert(bus.bind(&acpi,&owner)==0);bus.shutdown();assert(allocs==frees);
 }
-''')
+""")
     for flags in sanitizer_flags():
-        subprocess.run(['g++','-std=c++17','-Wall','-Wextra','-Werror',*flags,'-I'+str(p),'-I'+str(ROOT/'CirrusAudioFixup'),str(p/'test.cpp'),str(ROOT/'CirrusAudioFixup/Transport/SPI/AMD/AMDSPIController.cpp'),'-o',str(p/'test')],check=True)
-        subprocess.run([str(p/'test')],check=True)
-print('PASS AMD ACPI owner: HID, exclusive access, mapping, D0, allocation cleanup and repeat bind')
+        subprocess.run(
+            [
+                "g++",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                *flags,
+                "-I" + str(p),
+                "-I" + str(ROOT / "CirrusAudioFixup"),
+                str(p / "test.cpp"),
+                str(ROOT / "CirrusAudioFixup/Transport/SPI/AMD/AMDSPIController.cpp"),
+                "-o",
+                str(p / "test"),
+            ],
+            check=True,
+        )
+        subprocess.run([str(p / "test")], check=True)
+print(
+    "PASS AMD ACPI owner: HID, exclusive access, mapping, D0, allocation cleanup and repeat bind"
+)

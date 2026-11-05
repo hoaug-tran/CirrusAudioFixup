@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
 from production_source_fixture import service_source
 from production_source_fixture import method
@@ -10,10 +11,12 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = service_source()
 
-def function(name):
-    return method(SOURCE,'CirrusAudioFixup',name)
 
-preamble = r'''
+def function(name):
+    return method(SOURCE, "CirrusAudioFixup", name)
+
+
+preamble = r"""
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -106,9 +109,9 @@ public:
 };
 unsigned failures=0;
 void check(bool ok,const char* label) { if(!ok) { ++failures; fprintf(stderr,"FAIL %s\n",label); } }
-'''
+"""
 
-checks = r'''
+checks = r"""
 int main() {
     CirrusAudioFixup normal;
     check(normal.synchronizeHdaStream() && normal.mHdaLastDescriptor==0 && normal.mHdaLastStreamTag==1,"fixed output stream");
@@ -193,19 +196,48 @@ int main() {
     if(failures) return 1;
     puts("PASS HDA BAR bounds/ownership, controller reset, fixed/bidirectional streams, format, ambiguity and power guard");
 }
-'''
+"""
 
-with tempfile.TemporaryDirectory(prefix='cirrus-hda-check-') as directory:
+with tempfile.TemporaryDirectory(prefix="cirrus-hda-check-") as directory:
     tmp = Path(directory)
-    source = tmp / 'hda.cpp'
-    source.write_text(preamble + function('clearHdaCache') + function('synchronizeHdaStream') + '\n' + function('supportedHdaFormat') + checks, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-O0', '-I', str(ROOT / 'CirrusAudioFixup'), str(source), '-o', str(tmp / 'hda.exe')], check=True)
-    subprocess.run([str(tmp / 'hda.exe')], check=True)
+    source = tmp / "hda.cpp"
+    source.write_text(
+        preamble
+        + function("clearHdaCache")
+        + function("synchronizeHdaStream")
+        + "\n"
+        + function("supportedHdaFormat")
+        + checks,
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-O0",
+            "-I",
+            str(ROOT / "CirrusAudioFixup"),
+            str(source),
+            "-o",
+            str(tmp / "hda.exe"),
+        ],
+        check=True,
+    )
+    subprocess.run([str(tmp / "hda.exe")], check=True)
 
 # Matching iterators own borrowed candidates until release, including termination.
-controller = SOURCE[SOURCE.index('IOService* CirrusAudioFixup::audioController()'):SOURCE.index('IOService* CirrusAudioFixup::getAudioController()')]
-fallback = controller[controller.index('    OSDictionary* matching = serviceMatching("IOPCIDevice");'):controller.rfind('}')]
-lifetime = r'''
+controller = SOURCE[
+    SOURCE.index("IOService* CirrusAudioFixup::audioController()") : SOURCE.index(
+        "IOService* CirrusAudioFixup::getAudioController()"
+    )
+]
+fallback = controller[
+    controller.index(
+        '    OSDictionary* matching = serviceMatching("IOPCIDevice");'
+    ) : controller.rfind("}")
+]
+lifetime = (
+    r"""
 #include <cassert>
 #include <cstdint>
 #include <cstddef>
@@ -230,7 +262,9 @@ OSIterator* getMatchingServices(OSDictionary*){return &iterator;}
 constexpr int kIOPCIConfigVendorID=0;
 #define OSDynamicCast(T,p) dynamic_cast<T*>(p)
 IOService* fallback(){
-''' + fallback + r'''
+"""
+    + fallback
+    + r"""
 }
 int main(){
  auto* result=fallback();assert(result==&device&&device.refs==1);result->release();assert(!device.refs);
@@ -238,9 +272,22 @@ int main(){
  assert(!fallback()&&!device.refs);
  puts("PASS HDA fallback retains selected controller before iterator release; rejected candidates released");
 }
-'''
-with tempfile.TemporaryDirectory(prefix='cirrus-hda-lifetime-') as directory:
+"""
+)
+with tempfile.TemporaryDirectory(prefix="cirrus-hda-lifetime-") as directory:
     tmp = Path(directory)
-    (tmp / 'lifetime.cpp').write_text(lifetime, encoding='utf-8')
-    subprocess.run(['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror', str(tmp / 'lifetime.cpp'), '-o', str(tmp / 'lifetime.exe')], check=True)
-    subprocess.run([str(tmp / 'lifetime.exe')], check=True)
+    (tmp / "lifetime.cpp").write_text(lifetime, encoding="utf-8")
+    subprocess.run(
+        [
+            "g++",
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            str(tmp / "lifetime.cpp"),
+            "-o",
+            str(tmp / "lifetime.exe"),
+        ],
+        check=True,
+    )
+    subprocess.run([str(tmp / "lifetime.exe")], check=True)

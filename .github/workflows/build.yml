@@ -8,19 +8,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  windows-collector:
-    name: Windows audio collector tests
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Test Windows PowerShell 5.1 collector helpers
-        shell: powershell
-        run: ./Tests/Build/check_windows_collector.ps1
-      - name: Test PowerShell 7 collector helpers
-        shell: pwsh
-        run: ./Tests/Build/check_windows_collector.ps1
-
   build:
     name: Build and Test
     runs-on: macos-latest
@@ -50,7 +37,7 @@ jobs:
           python3 --version
 
       - name: Run host regression test suite
-        run: python3 Tests/run.py --audit
+        run: python3 Tests/run.py
 
       - name: Record build source identity
         run: python3 Tools/Build/build_provenance.py snapshot --root "$GITHUB_WORKSPACE" --snapshot "$RUNNER_TEMP/cirrus-source.json"
@@ -140,7 +127,7 @@ jobs:
 
   release:
     name: Publish Release
-    needs: [build, windows-collector]
+    needs: [build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

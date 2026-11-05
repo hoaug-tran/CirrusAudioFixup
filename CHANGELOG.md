@@ -12,6 +12,7 @@
 - Corrected HP ZBook Fury 16 G9 GPIO resources in board tests.
 - Added clock wait recovery on cold start power-up timeout.
 - Added authorized AMD GPIO reset preparation before I2C amplifier identity reads.
+- Corrected AMD GPIO reset pulse polarity to assert low and release high for active-low lines.
 - Synchronized GPIO debounce revision threshold to `0x92` to match Linux driver specifications.
 
 Implementation: [PR #11](https://github.com/hoaug-tran/CirrusAudioFixup/pull/11), [PR #13](https://github.com/hoaug-tran/CirrusAudioFixup/pull/13) (closes [#12](https://github.com/hoaug-tran/CirrusAudioFixup/issues/12)), [PR #15](https://github.com/hoaug-tran/CirrusAudioFixup/pull/15) (closes [#14](https://github.com/hoaug-tran/CirrusAudioFixup/issues/14)).

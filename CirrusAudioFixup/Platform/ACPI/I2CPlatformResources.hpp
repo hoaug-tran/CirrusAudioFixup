@@ -34,7 +34,7 @@ public:
     }
     bool reset(const char* property, int32_t resourceIndex) override {
         if (!property)
-            return resourceIndex >= 0 && pulseACPIGPIOReset(mACPI, uint32_t(resourceIndex), 0, false, mOwner);
+            return resourceIndex >= 0 && pulseACPIGPIOReset(mACPI, uint32_t(resourceIndex), 0, true, mOwner);
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
         if (!tuples || !tuples->getCount() || tuples->getCount() % 4 || tuples->getCount() > 64)
             return false;

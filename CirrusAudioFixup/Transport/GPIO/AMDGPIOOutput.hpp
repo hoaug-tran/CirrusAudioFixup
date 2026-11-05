@@ -15,8 +15,8 @@ bool pulseGPIOReset(Window& window, size_t bytes, uint16_t pin, bool activeLow, 
         return false;
     const uint32_t levelMask = (1U << 23) | (1U << 22);
     const uint32_t base = (config & ~((1U << 28) | (1U << 29) | (1U << 22))) | (1U << 23);
-    const uint32_t asserted = base | (activeLow ? 1U << 22 : 0);
-    const uint32_t released = base | (activeLow ? 0 : 1U << 22);
+    const uint32_t asserted = base | (activeLow ? 0 : 1U << 22);
+    const uint32_t released = base | (activeLow ? 1U << 22 : 0);
     window.write32(offset, asserted);
     const uint32_t heldValue = window.read32(offset);
     const bool held = heldValue != UINT32_MAX && (heldValue & levelMask) == (asserted & levelMask);

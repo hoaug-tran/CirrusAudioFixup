@@ -72,14 +72,21 @@ int main(){
  for(unsigned fault=0;fault<5;++fault){
   ResetWindow window;window.rejectAssertion=fault==1;window.rejectRelease=fault==2;window.unavailableAt=fault>=3?fault-1:0;
   unsigned delays=0;const char* why=nullptr;
-  const bool ok=transport::amd::pulseGPIOReset(window,1024,84,false,[&](uint32_t ms){assert(ms==2);++delays;},why);
+  const bool ok=transport::amd::pulseGPIOReset(window,1024,84,true,[&](uint32_t ms){assert(ms==2);++delays;},why);
   assert(ok==(fault==0)&&delays==2&&window.writes.size()==2);
   assert(!(window.writes[0]&((1U<<28)|(1U<<29)|(1U<<22))));
   assert(window.writes[1]&(1U<<22)); // release is attempted after any assertion failure
  }
+ {
+  ResetWindow window; const char* why = nullptr;
+  const bool ok = transport::amd::pulseGPIOReset(window, 1024, 84, false, [](uint32_t ms){ assert(ms == 2); }, why);
+  assert(ok && window.writes.size() == 2);
+  assert(window.writes[0] & (1U << 22)); // active-high asserted is high
+  assert(!(window.writes[1] & (1U << 22))); // active-high released is low
+ }
  for(auto pin:{63U,190U,191U,256U}){
   ResetWindow window;const char* why=nullptr;
-  assert(!transport::amd::pulseGPIOReset(window,1024,uint16_t(pin),false,[](uint32_t){assert(false);},why));
+  assert(!transport::amd::pulseGPIOReset(window,1024,uint16_t(pin),true,[](uint32_t){assert(false);},why));
   assert(window.writes.empty()&&!window.reads);
  }
 
@@ -205,8 +212,8 @@ int main(){
   transport::I2CPlatformResources described;assert(described.load(&nub,reason));
   assert(described.read("spk-id-gpios",1,value)&&value==1);
   assert(!described.read("spk-id-gpios",2,value));
-  auto* resetTuples=make<OSArray>(std::vector<OSObject*>{amp,make<OSNumber>(0),make<OSNumber>(0),make<OSNumber>(0),
-                                                    amp,make<OSNumber>(0),make<OSNumber>(0),make<OSNumber>(0)});
+  auto* resetTuples=make<OSArray>(std::vector<OSObject*>{amp,make<OSNumber>(0),make<OSNumber>(0),make<OSNumber>(1),
+                                                    amp,make<OSNumber>(0),make<OSNumber>(0),make<OSNumber>(1)});
   entries->v.push_back(make<OSArray>(std::vector<OSObject*>{make<OSString>("reset-gpios"),resetTuples}));
   transport::I2CPlatformResources declared;declared.setDiagnosticOwner(&owner);assert(declared.load(&nub,reason));
   assert(declared.reset("reset-gpios",-1));

@@ -19,8 +19,9 @@ if sys.platform == 'win32':
 assert bash, 'bash is required for the release gate fixture'
 workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 triggers = workflow.split("\njobs:", 1)[0]
-assert re.search(r"  push:\n    branches: \['\*\*'\]\n    tags: \['v\*'\]", triggers)
-assert re.search(r"  pull_request:\n  workflow_dispatch:", triggers)
+assert re.search(r"  push:\n    branches: \[(?:main|'main')\]\n    tags: \['v\*'\]", triggers)
+assert re.search(r"  pull_request:\n    branches: \[(?:main, develop|'main', 'develop')\]\n  workflow_dispatch:", triggers)
+assert "cancel-in-progress: true" in triggers
 build_job, release_job = workflow.split("\n  release:\n", 1)
 assert 'needs: [build]' in release_job
 for name in ("Package kext bundles", "Upload Release artifact", "Upload Debug artifact"):

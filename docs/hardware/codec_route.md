@@ -198,12 +198,29 @@ The following table summarizes real-world hardware where this diagnostic methodo
 
 | Laptop model | Codec | Amplifier | Tweeter pin | Woofer pin | Active DAC | Verified verb sequence | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Alienware x17 R2 / Dell Horizon 17** (`1028:0B28`) | ALC289 | 2x CS35L41 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` | `alcid=93` (or Layout 87 + `01770100 01770500 0173b000 01770c02 01770740`) | Verified |
 | **ASUS ROG Zephyrus G16 GU605MV** (`1043:1C63`) | ALC285 | 2x CS35L56 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770c02 01770740` | Verified (#8) |
 | **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`) | ALC287 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770740` | Verified (#16) |
 | **HP ENVY x360 15-ey0xxx** (`103C:8A31`) | ALC245 | 2x CS35L41 (I2C) | N/A (dual) | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD) | Verified (#14) |
 
 ### Machine notes
 
+#### Alienware x17 R2 / Dell Horizon 17 (`1028:0B28`, Realtek ALC289)
+- **Problem**: Tweeters play normally on Node `0x14`, but woofers on 2x CS35L41 over SPI are completely silent. Driver logs `Cirrus_Diag_LatestFailure_spi0 = POWER_UP_TIMEOUT` with `0x10010` actual `0x400000` (`CLK_ERR`), expected `0x1000000` (`PUP_DONE`), or `PLL_UNLOCKED`.
+- **Root cause**:
+  1. The Alienware x17 R2 features 4 discrete physical speakers: 2 tweeters driven by the ALC289 integrated analog amplifier (Node `0x14`), and 2 woofers driven by dual mono CS35L41 amplifiers receiving digital audio over I2S from Node `0x17`.
+  2. AppleALC Layout 87 (`alcid=87`) only configures Node `0x14` (tweeters) and completely omits Node `0x17` from `PinConfigurations` and `Platforms87.xml`. AppleHDA therefore never starts or clocks Node `0x17`. The missing BCLK causes CS35L41 to fail PLL locking (`PLL_UNLOCKED`), exhausting the driver's safety recovery attempts during early boot and latching `playbackFaulted`.
+  3. AppleALC Layout 13 (`alcid=13`) is an incompatible XPS 9500 layout that omits Node `0x14`, disables the internal microphone (Node `0x12`), and attempts a 4-channel stream format (`0x0033`) that fails with `HDA_STREAM_FORMAT`.
+- **Solution**:
+  1. **Recommended (Zero-Configuration)**: Use AppleALC Layout 93 (`alcid=93`). Layout 93 defines both Node `0x14` (`0x90170140`) and Node `0x17` (`0x90112160`) as internal speakers with EAPD enabled (`0x70c 0x02`) and routes both in parallel from DAC `0x02` in `Platforms93.xml` (`0x14 -> 0x02, 0x17 -> 0x02, 0x21 -> 0x03`). BCLK is present from early boot, locking the PLL on the first attempt, while internal mic (Node `0x12`) and headset mic (Node `0x19`) remain fully functional on ADC `0x08`.
+  2. **Alternative (Layout 87 + Verbs)**: If retaining Layout 87, send the 5-verb activation sequence to Node `0x17` during early boot before the driver's PLL recovery timeout engages:
+     ```bash
+     alc-verb 0x17 0x701 0x00   # Connect Node 0x17 to DAC 0x02
+     alc-verb 0x17 0x705 0x00   # Wake Pin Complex to D0
+     alc-verb 0x17 0x3b0 0x00   # Unmute amp at 0 dB gain
+     alc-verb 0x17 0x70c 0x02   # Enable EAPD external amplifier gate
+     alc-verb 0x17 0x707 0x40   # Pin widget control: enable OUT to start BCLK/I2S
+     ```
 #### Lenovo ThinkBook 16p G6 IAX (`17AA:391E`, Realtek ALC287)
 - **Problem**: With AppleALC Layout 21 (`alcid=21`), tweeters played on Node `0x14` but woofers on 2x CS35L56 were silent.
 - **Root cause**: Node `0x17` defaults to connection index 1 (DAC `0x03`), which carries no audio stream.

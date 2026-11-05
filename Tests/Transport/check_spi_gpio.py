@@ -103,6 +103,35 @@ int main(){
  for(unsigned pin:{5U,31U,121U,127U,153U,159U,451U,65535U})assert(!lookupIntelGPIOPad("INTC1083",pin,pad));
  assert(!lookupIntelGPIOPad("INTC1082",0x82,pad));
  assert(lookupIntelGPIOPad("INTC105E",0x82,pad));
+ // Tiger Lake-LP: Linux pinctrl-tigerlake.c tgllp_soc_data, PAD_OWN=0x20, PADCFGLOCKTX=0x84.
+ assert(lookupIntelGPIOPad("INTC1055",304,pad));
+ assert(pad.memoryIndex==2&&pad.pad==40&&pad.group==1&&pad.bit==16&&pad.ownershipWord==5&&pad.ownershipBase==0x20&&pad.lockTxBase==0x84);
+ assert(lookupIntelGPIOPad("INTC1055",103,pad));
+ assert(pad.memoryIndex==1&&pad.pad==7&&pad.group==0&&pad.bit==7&&pad.ownershipWord==0&&pad.ownershipBase==0x20&&pad.lockTxBase==0x84);
+ assert(lookupIntelGPIOPad("INTC1055",101,pad));
+ assert(pad.memoryIndex==1&&pad.pad==5&&pad.group==0&&pad.bit==5&&pad.ownershipWord==0);
+ assert(lookupIntelGPIOPad("INTC1055",327,pad));
+ assert(pad.memoryIndex==2&&pad.pad==62&&pad.group==3&&pad.bit==7&&pad.ownershipWord==8);
+ assert(lookupIntelGPIOPad("INT34C5",304,pad));
+ assert(!lookupIntelGPIOPad("INTC1055",26,pad));
+ assert(!lookupIntelGPIOPad("INTC1055",360,pad));
+ assert(!lookupIntelGPIOPad("INTC1054",304,pad));
+ lookupIntelGPIOPad("INTC1055",304,pad);
+ Window tgl;const auto tglCsOffset=0x700+40*16;tgl.r[tglCsOffset/4]=0x84000201;
+ tgl.r[(0xa0+4*5)/4]=0xffffffff;tgl.r[(0x114+1*8)/4]=0xffffffff;
+ IntelGPIOOutput tglCsLine;assert(tglCsLine.bind(tgl,sizeof(tgl.r),pad,true)==0);
+ assert(tglCsLine.setActive(true)==0&&tgl.r[tglCsOffset/4]==0x84000200);
+ assert(tglCsLine.setActive(false)==0&&tgl.r[tglCsOffset/4]==0x84000201);
+ tgl.r[(0x84+1*8)/4]=1U<<16;
+ assert(tglCsLine.setActive(true)==kIOReturnNotPermitted);
+ assert(!strcmp(tglCsLine.evidence().reason,"PAD_TX_LOCKED"));
+ tgl.r[(0x84+1*8)/4]=0;tgl.r[(0x20+5*4)/4]=1U;
+ assert(tglCsLine.setActive(true)==kIOReturnNotPermitted);
+ assert(!strcmp(tglCsLine.evidence().reason,"PAD_NOT_HOST_OWNED"));
+ Window rev92;rev92.r[0]=0x00920000;rev92.r[3]=0x700;rev92.r[tglCsOffset/4]=0x84000201;
+ assert(IntelGPIOOutput{}.bind(rev92,sizeof(rev92.r),pad,true)==0);
+ Window rev91;rev91.r[0]=0x00910000;rev91.r[3]=0x700;rev91.r[tglCsOffset/4]=0x84000201;
+ assert(IntelGPIOOutput{}.bind(rev91,sizeof(rev91.r),pad,true)==kIOReturnUnsupported);
  Window newLayout;newLayout.r[0]=0x01100000;
  assert(IntelGPIOOutput{}.bind(newLayout,sizeof(newLayout.r),pad,true)==kIOReturnUnsupported);
 }

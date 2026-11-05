@@ -31,7 +31,7 @@ for mode in Debug Release; do
     # A failed rebuild must not leave an earlier source claim on a new binary.
     rm -f "$bundle/Contents/Resources/CirrusBuildManifest.plist"
     xcodebuild -project CirrusAudioFixup.xcodeproj -target CirrusAudioFixup \
-        -configuration "$mode" -sdk macosx \
+        -configuration "$mode" -sdk macosx -jobs "$(sysctl -n hw.ncpu)" \
         CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO \
         CONFIGURATION_BUILD_DIR="$root/build/Local-$mode" build
     binary="$bundle/Contents/MacOS/CirrusAudioFixup"

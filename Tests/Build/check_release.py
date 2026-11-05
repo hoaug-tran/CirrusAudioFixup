@@ -23,7 +23,7 @@ assert re.search(r"  push:\n    branches: \['\*\*'\]\n    tags: \['v\*'\]", trig
 assert re.search(r"  pull_request:\n  workflow_dispatch:", triggers)
 build_job, release_job = workflow.split("\n  release:\n", 1)
 assert 'needs: [build, windows-collector]' in release_job
-for name in ("Package kext bundles", "Upload Release artifact", "Upload Debug artifact", "Upload matching debug symbols"):
+for name in ("Package kext bundles", "Upload Release artifact", "Upload Debug artifact"):
     step = build_job.split("      - name: " + name + "\n", 1)[1].split("\n      - name:", 1)[0]
     conditions = re.findall(r"^        if: (.+)$", step, re.M)
     assert conditions == ["github.event_name != 'pull_request'"], name + " must skip PRs and run on pushes/manual runs"

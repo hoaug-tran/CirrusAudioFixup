@@ -62,6 +62,7 @@ jobs:
             -target CirrusAudioFixup \
             -configuration Release \
             -sdk macosx \
+            -jobs "$(sysctl -n hw.ncpu)" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
@@ -75,6 +76,7 @@ jobs:
             -target CirrusAudioFixup \
             -configuration Debug \
             -sdk macosx \
+            -jobs "$(sysctl -n hw.ncpu)" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
@@ -113,11 +115,10 @@ jobs:
           zip -qry "${GITHUB_WORKSPACE}/CirrusAudioFixup-RELEASE.zip" CirrusAudioFixup.kext
 
           cd "${GITHUB_WORKSPACE}/build/Debug"
-          zip -qry "${GITHUB_WORKSPACE}/CirrusAudioFixup-DEBUG.zip" CirrusAudioFixup.kext
+          zip -qry "${GITHUB_WORKSPACE}/CirrusAudioFixup-DEBUG.zip" CirrusAudioFixup.kext CirrusAudioFixup.kext.dSYM
 
           cd "${GITHUB_WORKSPACE}"
-          zip -qry CirrusAudioFixup-SYMBOLS.zip build/Release/*.dSYM build/Debug/*.dSYM
-          ls -lh CirrusAudioFixup-*.zip
+          ls -lh CirrusAudioFixup-RELEASE.zip CirrusAudioFixup-DEBUG.zip
 
       - name: Upload Release artifact
         if: github.event_name != 'pull_request'
@@ -134,15 +135,6 @@ jobs:
         with:
           name: CirrusAudioFixup-DEBUG-${{ github.sha }}
           path: CirrusAudioFixup-DEBUG.zip
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload matching debug symbols
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: CirrusAudioFixup-SYMBOLS-${{ github.sha }}
-          path: CirrusAudioFixup-SYMBOLS.zip
           retention-days: 7
           if-no-files-found: error
 
@@ -204,7 +196,7 @@ jobs:
           echo '```' >> dist/RELEASE_NOTES.md
           shasum -a 256 "CirrusAudioFixup-${VERSION}-RELEASE.zip" "CirrusAudioFixup-${VERSION}-DEBUG.zip" >> dist/RELEASE_NOTES.md
           echo '```' >> dist/RELEASE_NOTES.md
-          ls -la CirrusAudioFixup-*.zip
+          ls -la "CirrusAudioFixup-${VERSION}-RELEASE.zip" "CirrusAudioFixup-${VERSION}-DEBUG.zip"
           cat dist/RELEASE_NOTES.md
 
       - name: Publish a new version (never overwrite an existing release)

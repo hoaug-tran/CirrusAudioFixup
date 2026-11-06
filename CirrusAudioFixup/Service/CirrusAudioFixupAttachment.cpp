@@ -85,6 +85,12 @@ bool CirrusAudioFixup::bindAmplifierDrivers() {
             delete mI2CBuses[i];
             mI2CBuses[i] = nullptr;
             amp.registerIO = nullptr;
+            if (!mI2CController)
+                mI2CController = createI2CController();
+            if (!mI2CController) {
+                ret = kIOReturnNoMemory;
+                break;
+            }
             mI2CBuses[i] = new cirrus::transport::I2CRegisterBus(mI2CController, {amp.endpoint.i2cAddress, amp.endpoint.tenBitAddress});
             if (!mI2CBuses[i]) {
                 ret = kIOReturnNoMemory;
@@ -92,6 +98,8 @@ bool CirrusAudioFixup::bindAmplifierDrivers() {
             }
             mI2CMaps[i] = new cirrus::core::RegisterMap(*mI2CBuses[i], *definition->format(amp.endpoint.transport), true);
             if (!mI2CMaps[i]) {
+                delete mI2CBuses[i];
+                mI2CBuses[i] = nullptr;
                 ret = kIOReturnNoMemory;
                 break;
             }
@@ -99,6 +107,7 @@ bool CirrusAudioFixup::bindAmplifierDrivers() {
             amp.endpointIndex = uint8_t(i);
         }
         mHostAdapters[i].bind(this, &amp);
+        delete mRuntimePorts[i];
         mRuntimePorts[i] = new ServiceRegisterIO(this, amp);
         if (!mRuntimePorts[i]) {
             ret = kIOReturnNoMemory;
@@ -959,8 +968,11 @@ size_t CirrusAudioFixup::detectConfiguredI2CAmplifiers() {
                 break;
             mI2CMaps[mAmplifierCount] =
                 new cirrus::core::RegisterMap(*mI2CBuses[mAmplifierCount], *driver->format(cirrus::core::BusTransportType::I2C), false);
-            if (!mI2CMaps[mAmplifierCount])
+            if (!mI2CMaps[mAmplifierCount]) {
+                delete mI2CBuses[mAmplifierCount];
+                mI2CBuses[mAmplifierCount] = nullptr;
                 break;
+            }
             amp.registerIO = mI2CMaps[mAmplifierCount];
         }
         amp.model = driver->model;

@@ -93,6 +93,7 @@ lifecycle = "\n".join(
         "lifecycleAction",
         "setPowerState",
         "stop",
+        "free",
     ]
 )
 cpp = (
@@ -108,8 +109,9 @@ constexpr int kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-3,IO
 #define CIRRUS_ERR(...) ((void)0)
 #define OSDynamicCast(T,p) static_cast<T*>(p)
 struct OSObject {};
-struct IOService:OSObject {void stop(IOService*){}};
+struct IOService:OSObject {void stop(IOService*){} void free(){}};
 #define OSSafeReleaseNULL(p) do {p=nullptr;}while(0)
+#define IOLockFree(p) ((void)0)
 struct IOTimerEventSource {unsigned arms=0;void setTimeoutMS(unsigned){++arms;}void cancelTimeout(){}};
 struct CirrusAudioFixup:IOService {
  using super=IOService;
@@ -120,6 +122,9 @@ struct CirrusAudioFixup:IOService {
  void teardownAudioEvents(){if(!mStopping)++unsafeTeardowns;}
  void PMstop(){}
  void stop(IOService*);
+ void free();
+ void clearHdaCache(){}
+ void* mTraceLock=nullptr;
  bool mStopping=false,mStartupFailed=false,mStartupPending=true,mResumePending=false,mPowerAvailable=true;
  bool finishOK=true,setupOK=true,wakeReady=false;
  unsigned finishes=0,setups=0,teardowns=0,failures=0,acks=0,monitors=0,probes=0;
@@ -162,6 +167,11 @@ int main(){
  start.probeTimerFired(&start,&start.timer);
  assert(!start.mStartupPending&&start.setups==1&&start.finishes==1&&!start.teardowns);
  start.probeTimerFired(&start,&start.timer);assert(start.monitors==1&&start.finishes==1);
+ CirrusAudioFixup deferredFinishFail;
+ deferredFinishFail.mNativeSPI.pending=false;deferredFinishFail.mNativeSPI.result=0;
+ deferredFinishFail.finishOK=false;
+ deferredFinishFail.probeTimerFired(&deferredFinishFail,&deferredFinishFail.timer);
+ assert(deferredFinishFail.mStartupFailed&&!deferredFinishFail.mStartupPending&&!deferredFinishFail.mStopping&&deferredFinishFail.teardowns==1);
  CirrusAudioFixup timeout;timeout.mNativeSPI.pending=false;timeout.mNativeSPI.result=-4;
  timeout.probeTimerFired(&timeout,&timeout.timer);
  assert(timeout.mStartupFailed&&timeout.failures==1&&timeout.teardowns==1&&!timeout.finishes);
@@ -179,6 +189,8 @@ int main(){
  wake.probeTimerFired(&wake,&wake.timer);assert(wake.acks==1&&wake.monitors==1);
  CirrusAudioFixup shutdown;shutdown.stop(shutdown.mProvider);
  assert(shutdown.mStopping&&!shutdown.unsafeTeardowns&&shutdown.teardowns==1&&!shutdown.mProvider);
+ shutdown.free();
+ assert(!shutdown.mPMInitialized&&!shutdown.mWorkLoop&&!shutdown.mProbeTimer&&!shutdown.mCommandGate&&shutdown.teardowns==2);
  CirrusAudioFixup cancel;cancel.mStartupPending=false;cancel.mResumePending=true;cancel.mPowerAvailable=false;
  assert(cancel.lifecycleAction(&cancel,reinterpret_cast<void*>(uintptr_t(2)),nullptr,nullptr,nullptr)==0);
  cancel.probeTimerFired(&cancel,&cancel.timer);

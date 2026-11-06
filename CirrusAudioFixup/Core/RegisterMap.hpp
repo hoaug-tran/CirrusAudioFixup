@@ -4,6 +4,7 @@
 #pragma once
 #include "RegisterBus.hpp"
 #include "RegisterIO.hpp"
+#include <string.h>
 namespace cirrus::core {
 enum class RegisterEndian { Big, Little };
 struct RegisterMapConfig {
@@ -196,14 +197,16 @@ private:
             return fail(kIOReturnNotPermitted);
         // Validate every addressed register before issuing the first chunk.
         for (size_t i = 0; i < count; ++i) {
-            uint32_t address = reg + uint32_t(i) * mConfig.stride;
+            uint32_t address = reg + (increment ? uint32_t(i) * mConfig.stride : 0);
             uint8_t encoded[4]{};
             encode(encoded, address, mConfig.addressBytes, mConfig.addressEndian);
             if (encoded[0] & (mConfig.readFlag | mConfig.writeFlag))
                 return fail(kIOReturnBadArgument);
-            auto permitted = rx ? mConfig.readable : mConfig.writable;
-            if (permitted && !permitted(address))
-                return fail(kIOReturnNotPermitted);
+            if (increment) {
+                auto permitted = rx ? mConfig.readable : mConfig.writable;
+                if (permitted && !permitted(address))
+                    return fail(kIOReturnNotPermitted);
+            }
         }
         const size_t header = mConfig.addressBytes + mConfig.paddingBytes;
         size_t limit = mBus.maxPayloadBytes(header, rx != nullptr);
@@ -223,8 +226,7 @@ private:
             encode(frame, address, mConfig.addressBytes, mConfig.addressEndian);
             frame[0] |= rx ? mConfig.readFlag : mConfig.writeFlag;
             if (tx)
-                for (size_t i = 0; i < chunk; ++i)
-                    frame[header + i] = tx[offset + i];
+                memcpy(frame + header, tx + offset, chunk);
             mLastReturn = mBus.command(frame, rx ? header : header + chunk, rx ? rx + offset : nullptr, rx ? chunk : 0);
             if (mLastReturn != kIOReturnSuccess)
                 return false;

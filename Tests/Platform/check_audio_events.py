@@ -196,6 +196,7 @@ int main() {
     assert(!source->unchanged(delivered.generation));
     source->checkForWork(); assert(deliveries==2 && !delivered.speakers);
     const auto generation=delivered.generation;
+    source->observe(nullptr,true,0x6973706B,false);
     source->observe(&control,true,0x6973706B,true);
     source->checkForWork();
     assert(deliveries==2 && !source->snapshot().speakers && source->unchanged(generation));

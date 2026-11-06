@@ -210,6 +210,8 @@ CirrusAudioEventSource* CirrusAudioEventSource::create(OSObject* target, IOServi
 }
 
 bool CirrusAudioEventSource::belongsToController(IORegistryEntry* entry) {
+    if (!entry || !mController)
+        return false;
     entry->retain();
     bool found = false;
     for (size_t depth = 0; entry && depth < 64; ++depth) {

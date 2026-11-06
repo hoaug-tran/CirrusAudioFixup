@@ -6,6 +6,7 @@
 #include <IOKit/IOLib.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 namespace cirrus::transport {
 
@@ -41,12 +42,10 @@ public:
             return kIOReturnBadArgument;
         uint8_t outgoing[kCommandLimit]{};
         uint8_t incoming[kCommandLimit]{};
-        for (size_t i = 0; i < txLength; ++i)
-            outgoing[i] = tx[i];
+        memcpy(outgoing, tx, txLength);
         IOReturn result = exchange(endpoint, outgoing, rxLength ? incoming : nullptr, txLength + rxLength);
-        if (result == kIOReturnSuccess)
-            for (size_t i = 0; i < rxLength; ++i)
-                rx[i] = incoming[txLength + i];
+        if (result == kIOReturnSuccess && rx && rxLength)
+            memcpy(rx, incoming + txLength, rxLength);
         return result;
     }
 

@@ -272,9 +272,8 @@ bool CirrusAudioFixup::finishStartup() {
     if (!powerManagementReady)
         retainFailedServiceEvidence(this);
 #endif
-    if (!powerManagementReady) {
+    if (!powerManagementReady)
         return false;
-    }
     setupAmplifierInterrupt();
     registerService();
     CIRRUS_LOG("BOOT_FLOW START_END");
@@ -315,6 +314,21 @@ void CirrusAudioFixup::stop(IOService* provider) {
 
 void CirrusAudioFixup::free() {
     CIRRUS_LOG("free");
+    teardownAmplifierInterrupt();
+    teardownAudioEvents();
+    if (mPMInitialized) {
+        PMstop();
+        mPMInitialized = false;
+    }
+    if (mProbeTimer && mWorkLoop) {
+        mProbeTimer->cancelTimeout();
+        mWorkLoop->removeEventSource(mProbeTimer);
+    }
+    OSSafeReleaseNULL(mProbeTimer);
+    if (mCommandGate && mWorkLoop)
+        mWorkLoop->removeEventSource(mCommandGate);
+    OSSafeReleaseNULL(mCommandGate);
+    OSSafeReleaseNULL(mWorkLoop);
     teardownCommunication();
     clearHdaCache();
     if (mTraceLock) {

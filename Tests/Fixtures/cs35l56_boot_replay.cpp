@@ -109,7 +109,9 @@ struct CirrusAudioFixup:IOService {
   return true;
  }
  void teardownCommunication(){mNativeSPI.shutdown();}
- void stop(IOService*){mStopping=true;mStartupPending=false;timer.due=UINT64_MAX;teardownCommunication();stopped=true;}
+ unsigned stopCalls=0;
+ bool pmFails=false;
+ void stop(IOService*){++stopCalls;mStopping=true;mStartupPending=false;timer.due=UINT64_MAX;teardownCommunication();stopped=true;}
  void recordAttachmentFailure(const char*,const char* reason,int,unsigned=0,const char* =""){
   if(firstFailure.empty())firstFailure=reason;++failures;
  }
@@ -118,7 +120,7 @@ struct CirrusAudioFixup:IOService {
  size_t detectNativeSPIAmplifiers();
  void detectAmplifiers(){assert(false);}void bringUpAmplifiers(){}
  void scheduleReadOnlyProbe(unsigned){timer.setTimeoutMS(100);}void setupAmplifierInterrupt(){}
- bool setupPowerManagement(IOService*){mPMInitialized=true;return true;}
+ bool setupPowerManagement(IOService*){if(pmFails)return false;mPMInitialized=true;return true;}
  void runReadOnlyProbe(){probeDone=true;timer.due=UINT64_MAX;}
  void runBackgroundMonitor(){timer.due=UINT64_MAX;}void handlePowerChange(bool){}void acknowledgeSetPowerState(){}
  bool start(IOService*);bool finishStartup();void continueStartup();
@@ -165,6 +167,12 @@ struct Machine {
 };
 
 int main(){
+ {Machine m;CirrusAudioFixup s;s.pmFails=true;
+  assert(s.start(&m.amp));assert(s.mStartupPending);
+  acpiLoaded(nullptr,patcher,13,0xFFFFFF8008C01000ULL,491520);
+  m.run(s,callbackAtNs+200000000);
+  assert(s.mStartupFailed&&s.stopCalls==0);
+  puts("PASS deferred finishStartup failure does not destroy workloop via premature stop()");}
  {Machine m;CirrusAudioFixup s;
   assert(s.start(&m.amp));assert(s.mStartupPending&&!s.finishes&&!frames&&!writes&&!csBinds);
   acpiLoaded(nullptr,patcher,13,0xFFFFFF8008C01000ULL,491520);assert(!nativePropertyEvaluator);

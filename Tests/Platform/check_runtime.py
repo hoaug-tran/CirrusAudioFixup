@@ -337,7 +337,7 @@ public:
     CS35L41Amp mAmplifiers[2]{};
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
-    bool mPowerAvailable=true,mStopping=false,mNeedsReinitialization=false,mResumePending=false,mStartupPending=false;
+    bool mPowerAvailable=true,mStopping=false,mStartupFailed=false,mNeedsReinitialization=false,mResumePending=false,mStartupPending=false;
     bool mDebugPhaseHalted=false;
     void clearHdaCache() {}
     struct DummyPci { void release() {} };

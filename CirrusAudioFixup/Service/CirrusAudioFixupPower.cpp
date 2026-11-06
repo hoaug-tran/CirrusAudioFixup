@@ -55,7 +55,28 @@ IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device)
 }
 
 void CirrusAudioFixup::handlePowerChange(bool powered) {
-    if (mStopping || (powered == mPowerAvailable && !(mResumePending && !powered)))
+    if (mStopping)
+        return;
+
+    if (mStartupFailed) {
+        if (mAmpInterrupt)
+            mAmpInterrupt->disable();
+
+        if (mProbeTimer)
+            mProbeTimer->cancelTimeout();
+
+        if (!powered)
+            clearHdaCache();
+
+        mResumePending = false;
+        mNeedsReinitialization = false;
+        mPowerAvailable = powered;
+
+        setProperty("Cirrus_PM_Powered", uint64_t(uint32_t(powered ? 1 : 0)), 32);
+        return;
+    }
+
+    if (powered == mPowerAvailable && !(mResumePending && !powered))
         return;
     if (!powered) {
         if (mAmpInterrupt)

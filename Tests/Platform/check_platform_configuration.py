@@ -120,6 +120,21 @@ for symbol, size, digest in (
         5532,
         "724fd7c9a88fb641ea3d2e4920c3bfd156126959af11982c3179ee2d474fe7e5",
     ),
+    (
+        "cs35l41_dsp1_spk_prot_17aa3877_wmfw",
+        34068,
+        "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_17aa3877_generic_l0_bin",
+        5680,
+        "1fe9f1593beac744b44bf319ea484266d4a097fe810d29d55df73dbb031ef5f7",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_17aa3877_generic_r0_bin",
+        5680,
+        "36b22de87170b3d7f5802085b7034cc6d1dc68bd11e40fa19fd02f7f8053c55f",
+    ),
 ):
     found = re.findall(r"const uint8_t " + symbol + r"\[\] = \{(.*?)\};", header, re.S)
     assert len(found) == 1, symbol

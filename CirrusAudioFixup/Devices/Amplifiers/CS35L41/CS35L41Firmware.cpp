@@ -514,6 +514,7 @@ void CS35L41Driver::discoverFirmware(AmplifierState& amp) {
     };
     static const SsidTranslationQuirk kSsidQuirks[] = {
         {0x17AA, 0x382B, 0x17AA, 0x3847},
+        {0x17AA, 0x385C, 0x17AA, 0x3877},
     };
     auto firmwareResourceExists = [](uint16_t vendor, uint16_t device) -> bool {
         for (size_t i = 0; i < cs35l41FirmwareCount; ++i) {

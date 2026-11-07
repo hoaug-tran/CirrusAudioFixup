@@ -139,15 +139,15 @@ int main(){
         assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
     }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
-    for(uint32_t ssid:{0x17aa382bU,0x17aa3847U}){
+    for(uint32_t ssid:{0x17aa382bU,0x17aa3847U,0x17aa385cU,0x17aa3877U}){
         IOService codec;OSNumber identity;identity.value=ssid;codec.properties["subsystem-id"]=&identity;
         fixtureCodecs={&codec};Fixture f;f.host.bypass=false;
         f.bind();(void)f.runtime.bringUp();
         assert(f.host.properties.at("Cirrus_FW_Source_owned-driver")=="EmbeddedResource");
         fixtureCodecs.clear();
     }
-    // Both verified Legion SSIDs and I2C channels retain external no-switch power.
-    for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)})for(uint32_t channel:{0U,1U}){
+    // Verified Legion SSIDs and I2C channels retain external no-switch power.
+    for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847),uint16_t(0x3877)})for(uint32_t channel:{0U,1U}){
         Fixture f;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
         f.endpoint.i2cAddress=uint16_t(0x40+channel);f.binding.endpoint=f.context.endpoint=f.endpoint;
         f.binding.channelIndex=f.assets.target.channelIndex=channel;f.assets.target.subsystemDevice=ssid;

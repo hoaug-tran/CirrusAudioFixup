@@ -194,6 +194,7 @@ The following table summarizes real-world hardware where this diagnostic methodo
 | **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`)        | ALC287 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770740`                                      | Verified (#16) |
 | **ASUS ROG Zephyrus G14 GA403UV** (`1043:1B13`)      | ALC285 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x03` | `alcid=33` (or `01770c02 01770740`)                                        | Verified (#18) |
 | **HP ENVY x360 15-ey0xxx** (`103C:8A31`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD)                                 | Verified (#14) |
+| **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)          | ALC287 | 2x CS35L41 (I2C) | Node `0x14` (dual) | N/A         | Node `0x02` | AppleALC Layout 21 (`alcid=21`)                                             | Verified (#21) |
 
 ### Machine notes
 
@@ -238,5 +239,13 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **Problem**: Internal speakers silent on generic layouts despite "Built-in Output" appearing in Sound Settings.
 - **Root cause**: Node `0x17` pincap (`0x0000001c`) lacks an internal EAPD widget. Output depends entirely on CS35L41 receiving power over I2C.
 - **Solution**: Layout 13 connects Node `0x17` to DAC `0x03`, allowing CS35L41 amplifiers to receive the PCM stream.
+
+#### Lenovo Legion Slim 7 Gen 7 (`17AA:3877` / `17AA:385C`, Realtek ALC287)
+
+- **AppleALC Layout**: Layout 21 (`alcid=21`) (or Layout 13 `alcid=13`). Note that inside macOS, AppleALC may dynamically map Layout 21 onto AppleHDA's internal layout index (e.g. Layout 7 on MacBookPro16,1 SMBIOS). Boot-args must specify `alcid=21`.
+- **Speaker Pin**: Node `0x14` routed to DAC Node `0x02` (connection select `01470c02`). Node `0x17` is not routed on this model.
+- **Amplifiers**: Dual CS35L41 (`CSC3551`) over I2C at addresses `0x40` (Left) and `0x41` (Right).
+- **Topology**: External boost without internal boost inductor/capacitor.
+- **SSID Notes**: ACPI `_SUB` evaluates to `17AA:3877`, while audio PCI controller reports subsystem `17AA:385C`. CirrusAudioFixup automatically maps both to the verified embedded speaker protection tuning.
 
 [Back to main guide](../../README.md#installation)

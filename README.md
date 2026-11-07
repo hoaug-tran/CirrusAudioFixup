@@ -67,6 +67,7 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | ---------------------------------- | ------------ | --------- | --- | ------ | ------- |
 | Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | CS35L41   | I2C | ALC287 | Working |
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | CS35L41   | I2C | ALC287 | Working |
+| Lenovo Legion Slim 7 Gen 7 (2022)  | `17AA:3877`  | CS35L41   | I2C | ALC287 | Working |
 | Lenovo ThinkBook 16p G6 IAX        | `17AA:391E`  | CS35L56   | I2C | ALC287 | Working |
 | HP ZBook Fury 16 G9                | `103C:89C6`  | CS35L41   | SPI | ALC245 | Working |
 | HP ENVY x360 15-ey0xxx             | `103C:8A31`  | CS35L41   | I2C | ALC245 | Working |

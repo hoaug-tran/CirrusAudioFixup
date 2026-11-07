@@ -56,7 +56,7 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
             continue;
         bool external = true;
         for (size_t i = 0; i < context.count; ++i)
-            external = external && boost[i] == 1;
+            external = external && (boost[i] != 0);
         // External power has no internal inductor/current/capacitor settings.
         if (fieldIndex >= 5 && external && !properties.contains(field.name))
             continue;
@@ -72,7 +72,7 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
             }
             const uint32_t defaults[]{
                 uint32_t(i),
-                facts->channels[i], facts->internalBoost ? 0U : 1U, facts->internalBoost ? 0U : 1U, 2U,
+                facts->channels[i], facts->boostType(), facts->gpio1Function(), 2U,
                 facts->inductor, facts->peak, facts->capacitor};
             field.values[i] = defaults[fieldIndex];
         }
@@ -155,18 +155,20 @@ inline platform::DiscoveredBoard* resolveBoardConfiguration(const platform::Boar
         usedChannel[channels[index]] = true;
         auto& device = result->devices[i];
         if (const auto* correction = boardProperties(context.identity.subsystemVendor, context.identity.subsystemDevice)) {
-            boost[index] = correction->internalBoost ? 0 : 1;
+            boost[index] = correction->boostType();
             inductor[index] = correction->inductor;
             peak[index] = correction->peak;
             capacitor[index] = correction->capacitor;
         }
-        if (boost[index] > 1) {
+        if (boost[index] > 2) {
             reason = "CS35L41_BOOST_TOPOLOGY_UNIMPLEMENTED";
             delete result;
             return nullptr;
         }
-        device.power = {boost[index] == 0 ? BoostTopology::Internal : BoostTopology::ExternalWithSwitch,
-                        inductor[index], peak[index], capacitor[index]};
+        const BoostTopology topology = boost[index] == 0 ? BoostTopology::Internal
+                                     : boost[index] == 1 ? BoostTopology::ExternalWithSwitch
+                                                         : BoostTopology::ExternalWithoutSwitch;
+        device.power = {topology, inductor[index], peak[index], capacitor[index]};
         device.gpio1Function = uint8_t(gpio1[index]);
         device.gpio2Function = uint8_t(gpio2[index]);
         if (!device.valid()) {

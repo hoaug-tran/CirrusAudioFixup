@@ -202,6 +202,7 @@ int main(){
     const Machine machines[]{
         {0x17aa,0x382b,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
         {0x17aa,0x3847,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
+        {0x17aa,0x3877,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
         {0x103c,0x89c6,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
         {0x1043,0x1c9f,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
         {0x1043,0x1683,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch}};

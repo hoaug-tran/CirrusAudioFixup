@@ -102,7 +102,13 @@ int main(){
    assert(binding.channelIndex==(physical?1-board.leftFirst:board.leftFirst)&&binding.speakerId==board.speaker);
    l41::DeviceConfiguration config;
    assert(l41::decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config));
-   assert(config.power.switched()==(board.bus==core::BusTransportType::I2C));
+   assert(config.power.switched() == (board.device == 0x1683));
+   if (board.device == 0x3877) {
+    assert(config.power.topology == l41::BoostTopology::ExternalWithoutSwitch);
+    GPIO testGpio;
+    assert(found->prepareHardware(testGpio));
+    assert(testGpio.resets == 0);
+   }
    const auto* resource=l41::selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,board.vendor,board.device,binding.speakerId);
    assert(resource);checkFirmware(*resource);
   }

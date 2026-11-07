@@ -70,8 +70,8 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
     bool known = readRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kPowerControl1, &before, TRACE_PLAYBACK);
     bool needPdn = !known || (before & 1);
     ok = known && ok;
-    bool unlocked = !amp.power.internal() && unlockTestKey(amp);
-    ok = (amp.power.internal() || unlocked) && ok;
+    bool unlocked = amp.power.switched() && unlockTestKey(amp);
+    ok = (!amp.power.switched() || unlocked) && ok;
     if (unlocked)
         ok = writeRegister(amp, 0x00007438, 0x00585941, TRACE_PLAYBACK) && ok;
     if (needPdn)
@@ -95,7 +95,7 @@ bool CS35L41Driver::stopPlayback(AmplifierState& amp) {
         recordDiagnosticFailure(amp, DIAG_POWER_DOWN_TIMEOUT, 0x00010010, 0x00800000, irq);
     if (unlocked)
         ok = writeRegister(amp, 0x00007438, 0x00580941, TRACE_PLAYBACK) && ok;
-    if (!amp.power.internal()) {
+    if (amp.power.switched()) {
         ok = lockTestKey(amp) && ok;
         ok = writeRegister(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegGpio1Control1, 0x00000001, TRACE_PLAYBACK) && ok;
     }

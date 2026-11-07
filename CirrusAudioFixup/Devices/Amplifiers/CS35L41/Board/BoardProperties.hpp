@@ -4,6 +4,7 @@
 #pragma once
 #include <stdint.h>
 namespace cirrus::devices::amplifiers::cs35l41 {
+static constexpr uint16_t kSubsystemVendorLenovo = 0x17aa;
 struct BoardProperties {
     uint32_t subsystem;
     uint8_t count;
@@ -11,6 +12,16 @@ struct BoardProperties {
     uint8_t channels[4];
     int8_t resetResource, speakerResource, csResource;
     uint32_t inductor, peak, capacitor;
+    constexpr uint32_t boostType() const {
+        if (internalBoost)
+            return 0;
+        if ((subsystem >> 16) == kSubsystemVendorLenovo)
+            return 2;
+        return 1;
+    }
+    constexpr uint32_t gpio1Function() const {
+        return boostType() == 1 ? 1 : 0;
+    }
 };
 inline constexpr BoardProperties kBoardProperties[] = {
     {0x10280b27, 2, true, {0, 1, 0, 0}, 1, 2, 0, 1000, 4500, 24},
@@ -96,7 +107,7 @@ inline constexpr BoardProperties kBoardProperties[] = {
     {0x17aa3866, 2, false, {0, 1, 0, 0}, 0, -1, -1, 0, 0, 0},
     {0x17aa386e, 2, false, {0, 1, 0, 0}, 0, 2, -1, 0, 0, 0},
     {0x17aa386f, 2, false, {0, 1, 0, 0}, 0, -1, -1, 0, 0, 0},
-    {0x17aa3877, 2, false, {0, 1, 0, 0}, 0, -1, -1, 0, 0, 0},
+    {0x17aa3877, 2, false, {0, 1, 0, 0}, -1, -1, -1, 0, 0, 0},
     {0x17aa3878, 2, false, {0, 1, 0, 0}, 0, -1, -1, 0, 0, 0},
     {0x17aa38a9, 2, false, {0, 1, 0, 0}, 0, 2, -1, 0, 0, 0},
     {0x17aa38ab, 2, false, {0, 1, 0, 0}, 0, 2, -1, 0, 0, 0},

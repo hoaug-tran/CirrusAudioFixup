@@ -196,7 +196,7 @@ The following table summarizes real-world hardware where this diagnostic methodo
 | **HP ENVY x360 15-ey0xxx** (`103C:8A31`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD)                                 | Verified (#14) |
 | **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)          | ALC287 | 2x CS35L41 (I2C) | Node `0x14` (dual) | N/A         | Node `0x02` | AppleALC Layout 21 (`alcid=21`)                                             | Verified (#21) |
 | **ASUS ROG Strix G17 G713P** (`1043:1D1F`)            | ALC294 | 2x CS35L41 (I2C) | Node `0x17` (dual) | N/A         | Node `0x03` | AppleALC Layout 13 (`alcid=13`), no extra verbs; 48 kHz required          | Verified (#22) |
-
+| **HP ENVY x360 13-bf0xxx** (`103C:8A28`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD)                                 | Working        |
 ### Machine notes
 
 #### Alienware x17 R2 / Dell Horizon 17 (`1028:0B28`, Realtek ALC289)
@@ -256,5 +256,9 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **Amplifiers**: Dual CS35L41 (`CSC3551`) over AMD I2C (`AMDI0010`) at `0x40` (Left) and `0x41` (Right), IRQ polling.
 - **Topology**: Internal boost, 1000 nH / 4500 mA / 24 uF. Uses the G733 (`1043:1503`) speaker protection tuning.
 - **Stream format**: 48 kHz is required. With the built-in output at 44.1 kHz the stream is rejected (`UNSUPPORTED_STREAM_FORMAT`) and the speakers stay silent; select 48 kHz in Audio MIDI Setup.
+#### HP ENVY x360 13-bf0xxx (`103C:8A28`, Realtek ALC245)
 
+- **Hardware**: Intel Core i7-1250U (Alder Lake-UP4) with Realtek ALC245 and 2x CS35L41 amplifiers over I2C (`_SB.PC00.I2C1.SPKR`, addresses `0x40` Left, `0x41` Right).
+- **Speaker route**: Node `0x17` pincap (`0x0000001c`, no EAPD) driven by DAC `0x03`. Headphone output on Node `0x21` and internal microphone on Node `0x19`.
+- **Solution**: AppleALC Layout 13 (`alcid=13`) provides the correct speaker and headphone routes. Dual CS35L41 smart amplifiers receive power, clocks, and DSP firmware from `CirrusAudioFixup`.
 [Back to main guide](../../README.md#installation)

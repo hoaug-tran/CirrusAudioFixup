@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### CS35L41
+
+- Added HP ENVY x360 13-bf0xxx support (`CSC3551`, subsystem `103C:8A28`) over I2C (`0x40` Left, `0x41` Right) with internal boost topology.
 ## [1.2.1]
 
 ### CS35L41

@@ -30,6 +30,7 @@ Add arguments to your OpenCore configuration under `NVRAM → Add → 7C436110-A
 | `-cirruscompact` | Omits register names in snapshots for more compact log output. |
 | `-cirrusdumptrace` | Publishes `Cirrus_Trace_Dump` in the read-only IORegistry snapshot. |
 | `-cirruslegacyprobe` | Permits read-only fixed-address probing outside automatic profile policy. Does not authorize writes. |
+| `-cirrusreset` | Permits GPIO hardware reset assertion under `-cirrusro` read-only probe mode to awaken uninitialized amplifiers for silicon ID verification. |
 | `-cirrusirq` | Experimental GPIO84 protection interrupt delivery (polling remains default). |
 
 ### Valid Debug Phases

@@ -193,7 +193,7 @@ void CirrusAudioFixup::releaseAmplifierDrivers() {
 }
 
 bool CirrusAudioFixup::performPlatformHardwareReset() {
-    if (bootArgEnabled("-cirrusro") || bootArgStrEquals("-cirrusphase", "probe")) {
+    if ((bootArgEnabled("-cirrusro") && !bootArgEnabled("-cirrusreset")) || bootArgStrEquals("-cirrusphase", "probe")) {
         setProperty("Cirrus_Reset_Policy", bootArgEnabled("-cirrusro") ? "SKIPPED_READ_ONLY" : "SKIPPED_PROBE_PHASE");
         return true;
     }

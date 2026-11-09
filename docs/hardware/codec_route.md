@@ -195,6 +195,7 @@ The following table summarizes real-world hardware where this diagnostic methodo
 | **ASUS ROG Zephyrus G14 GA403UV** (`1043:1B13`)      | ALC285 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x03` | `alcid=33` (or `01770c02 01770740`)                                        | Verified (#18) |
 | **HP ENVY x360 15-ey0xxx** (`103C:8A31`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD)                                 | Verified (#14) |
 | **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)          | ALC287 | 2x CS35L41 (I2C) | Node `0x14` (dual) | N/A         | Node `0x02` | AppleALC Layout 21 (`alcid=21`)                                             | Verified (#21) |
+| **ASUS ROG Strix G17 G713P** (`1043:1D1F`)            | ALC294 | 2x CS35L41 (I2C) | Not captured | Not captured | Not captured | AppleALC Layout 13 (`layout-id` 13), no extra verbs                        | Verified (#22) |
 
 ### Machine notes
 
@@ -247,5 +248,13 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **Amplifiers**: Dual CS35L41 (`CSC3551`) over I2C at addresses `0x40` (Left) and `0x41` (Right).
 - **Topology**: External boost without switch (ExternalWithoutSwitch), software reset over I2C (no GPIO reset).
 - **SSID Notes**: ACPI `_SUB` evaluates to `17AA:3877`, while audio PCI controller reports subsystem `17AA:385C`. CirrusAudioFixup automatically maps both to the verified embedded speaker protection tuning.
+
+#### ASUS ROG Strix G17 G713P (`1043:1D1F`, Realtek ALC294)
+
+- **AppleALC Layout**: Layout 13 (`layout-id` 13 in DeviceProperties). Speakers play without additional `alc-verb` sequences.
+- **Amplifiers**: Dual CS35L41 (`CSC3551`) over AMD I2C (`AMDI0010`) at `0x40` (Left) and `0x41` (Right), IRQ polling.
+- **Topology**: Internal boost, 1000 nH / 4500 mA / 24 uF.
+- **Stream format**: The amplifiers accept 48 kHz. With the built-in output at 44.1 kHz the stream is rejected (`UNSUPPORTED_STREAM_FORMAT`); select 48 kHz in Audio MIDI Setup.
+- **Pin/DAC nodes**: Not captured from a codec dump.
 
 [Back to main guide](../../README.md#installation)

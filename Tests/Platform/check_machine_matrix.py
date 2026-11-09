@@ -78,6 +78,8 @@ int main(){
   {"ASUS G614JI speaker 0 / issue #5",0x1043,0x1c9f,0,0,core::BusTransportType::SPI},
   {"ASUS G614JI speaker 1 / issue #5",0x1043,0x1c9f,1,0,core::BusTransportType::SPI},
   {"ASUS Zenbook UM3402Y",0x1043,0x1683,1,0,core::BusTransportType::I2C},
+  {"ASUS ROG Strix G17 G713P speaker 0",0x1043,0x1d1f,0,0,core::BusTransportType::I2C},
+  {"ASUS ROG Strix G17 G713P speaker 1",0x1043,0x1d1f,1,0,core::BusTransportType::I2C},
   {"Lenovo Legion Slim 7 Gen 7 / issue #21",0x17aa,0x3877,UINT32_MAX,0,core::BusTransportType::I2C},
   {"Alienware x17 R2 speaker 0 / issue #12",0x1028,0x0b28,0,0,core::BusTransportType::SPI},
   {"Alienware x17 R2 speaker 1 / issue #12",0x1028,0x0b28,1,0,core::BusTransportType::SPI}};
@@ -86,7 +88,9 @@ int main(){
    {"cirrus,boost-type",{0,0}},{"cirrus,gpio1-func",{0,0}},{"cirrus,gpio2-func",{2,2}},
    {"cirrus,boost-ind-nanohenry",{1000,1000}},{"cirrus,boost-peak-milliamp",{4500,4500}},
    {"cirrus,boost-cap-microfarad",{24,24}}};
-  if(board.bus==core::BusTransportType::I2C)p.values["cirrus,gpio1-func"]={1,1};
+  // Internal-boost boards leave GPIO1 unused (Linux generic_dsd_config); only external boost drives VSPK.
+  const auto* facts=l41::boardProperties(board.vendor,board.device);
+  if(board.bus==core::BusTransportType::I2C&&!(facts&&facts->internalBoost))p.values["cirrus,gpio1-func"]={1,1};
   if(board.speaker!=UINT32_MAX)p.values["cirrus,speaker-id"]={board.speaker,board.speaker};
   core::BusEndpoint endpoints[]={{board.bus,"controller",0x40,false,0,4000000,0},
                                 {board.bus,"controller",0x41,false,1,4000000,0}};

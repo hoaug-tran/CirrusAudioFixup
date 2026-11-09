@@ -4,6 +4,7 @@
 
 ### CS35L41
 
+- Added ASUS ROG Strix G17 G713PI/PU/PV/PVN support (`CSC3551`, subsystem `1043:1D1F`) over AMD I2C with internal boost topology, using the G733 (`1043:1503`) speaker protection tuning that the Cirrus Windows package assigns to the same configuration.
 - Added Lenovo Legion Slim 7 Gen 7 (2022) support (`CSC3551`, subsystem `17AA:3877` / PCI `17AA:385C`) over I2C with external boost topology.
 - Added HP ENVY x360 15-ey0xxx support (`CSC3551`, subsystem `103C:8A31`) over I2C with internal boost topology.
 - Added Alienware x17 R2 / Dell Horizon 17 support (`CSC3551`, subsystem `1028:0B28`) over SPI with Tiger Lake-LP GPIO chip select.

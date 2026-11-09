@@ -73,6 +73,7 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 | HP ENVY x360 15-ey0xxx             | `103C:8A31`  | CS35L41   | I2C | ALC245 | Working |
 | ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | CS35L41   | SPI | ALC285 | Working |
 | ASUS Zenbook 14 UM3402Y            | `1043:1683`  | CS35L41   | I2C | ALC294 | Working |
+| ASUS ROG Strix G17 G713P (2023)    | `1043:1D1F`  | CS35L41   | I2C | ALC294 | Working |
 | ASUS ROG Zephyrus G14 GA403UV      | `1043:1B13`  | CS35L56   | I2C | ALC285 | Working |
 | ASUS ROG Zephyrus G16 GU605MV      | `1043:1C63`  | CS35L56   | SPI | ALC285 | Working |
 | Alienware x17 R2                   | `1028:0B28`  | CS35L41   | SPI | ALC289 | Working |

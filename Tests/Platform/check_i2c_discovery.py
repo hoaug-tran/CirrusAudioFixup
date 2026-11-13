@@ -62,7 +62,6 @@ struct ResetService:IOService {
  bool prepareDiscoveredI2CReset();
  bool performPlatformHardwareReset();
 };
-constexpr bool kOSBooleanFalse=false;
 PREPARE_RESET_METHOD
 RESET_METHOD
 struct ResetWindow {

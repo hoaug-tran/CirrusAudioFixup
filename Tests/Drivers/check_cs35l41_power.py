@@ -78,12 +78,24 @@ int main(){
   for(uint64_t now=0;now<20&&result==PlaybackProgress::Pending;++now)
    result=Playback::advance(io,playback,now,dsp,0x2b01,nullptr,switched);
   assert(result==PlaybackProgress::Prepared&&io.r[0x11008]==0x8001);
+  assert(io.r[0x40]==0x33&&io.r[0x742c]==(dsp?0x79U:0xf9U));
   assert(Playback::commit(io,playback,17<<5,dsp,switched));
   ShutdownTransition shutdown{};result=PlaybackProgress::Pending;
   for(uint64_t now=20;now<40&&result==PlaybackProgress::Pending;++now)
    result=Playback::shutdown(io,shutdown,now,dsp,0x2b01,nullptr,switched);
   assert(result==PlaybackProgress::Prepared&&io.r[0x11008]==1&&!(io.r[0x2014]&1));
   assert(switched.safeReset(io,[](uint32_t){}));
+ }
+ {
+  Port io;PlaybackTransition timeout{};
+  assert(switched.configure(io));
+  while(timeout.phase<PlaybackPhase::Pup)
+   assert(Playback::advance(io,timeout,0,true,0x2b01,nullptr,switched)==PlaybackProgress::Pending);
+  // Test keys remain unlocked during PUP_DONE polling and lock on timeout.
+  assert(io.r[0x40]==0xaa);
+  io.r[0x10010]=0;
+  assert(Playback::advance(io,timeout,100,true,0x2b01,nullptr,switched)==PlaybackProgress::Failed);
+  assert(timeout.failure==cirrus::diagnostics::DIAG_POWER_UP_TIMEOUT&&io.r[0x40]==0x33);
  }
  Port activeSwitch;activeSwitch.r[0x2014]=1;assert(!switched.configure(activeSwitch)&&activeSwitch.writes.empty());
  Port active;active.r[0x2014]=1;assert(!internal.configure(active)&&active.writes.empty());

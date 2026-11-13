@@ -4,7 +4,6 @@
 #pragma once
 #include <stdint.h>
 namespace cirrus::devices::amplifiers::cs35l41 {
-static constexpr uint16_t kSubsystemVendorLenovo = 0x17aa;
 struct BoardProperties {
     uint32_t subsystem;
     uint8_t count;
@@ -13,11 +12,7 @@ struct BoardProperties {
     int8_t resetResource, speakerResource, csResource;
     uint32_t inductor, peak, capacitor;
     constexpr uint32_t boostType() const {
-        if (internalBoost)
-            return 0;
-        if ((subsystem >> 16) == kSubsystemVendorLenovo)
-            return 2;
-        return 1;
+        return internalBoost ? 0 : 1;
     }
     constexpr uint32_t gpio1Function() const {
         return boostType() == 1 ? 1 : 0;

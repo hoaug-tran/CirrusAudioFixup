@@ -4,9 +4,9 @@
 
 ### CS35L41
 
-- Added Lenovo Legion Slim 7 Gen 7 (2022) support (`CSC3551`, subsystem `17AA:3877` / PCI `17AA:385C`) over I2C with unswitched external boost topology ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)).
+- Added Lenovo Legion Slim 7 Gen 7 (2022) support (`CSC3551`, subsystem `17AA:3877` / PCI `17AA:385C`) over I2C with switched external boost topology ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)).
 - Added ASUS ROG Strix G17 G713PI/PU/PV/PVN support (`CSC3551`, subsystem `1043:1D1F`) over AMD I2C with internal boost topology, using the G733 (`1043:1503`) speaker protection tuning that the Cirrus Windows package assigns to the same configuration ([#22](https://github.com/hoaug-tran/CirrusAudioFixup/pull/22)).
-- Added support for unswitched external boost topology (`ExternalWithoutSwitch`) with active-low GPIO reset (`resetResource = 0` on `17AA:3877`) and optional software-only reset fallback over I2C on CS35L41 amplifiers.
+- Added support for external boost topology with active-low GPIO reset (`resetResource = 0` on `17AA:3877`) and optional software-only reset fallback over I2C on CS35L41 amplifiers.
 
 ### Platform & Infrastructure
 

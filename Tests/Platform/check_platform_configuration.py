@@ -275,9 +275,9 @@ void profileChecks(){
   delete noSwitch;
   p.values["cirrus,boost-type"]={3,3};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));
  }
- // Lenovo Legion Slim 7 Gen 7 issue #21: I2C dual-amp, external boost without switch, active-low GPIO reset resource 0
+ // Lenovo Legion Slim 7 Gen 7 issue #21: I2C dual-amp, external boost with VSPK switch, active-low GPIO reset resource 0
  {
-  Properties p;
+  Properties p;p.values.clear();
   core::BusEndpoint e[]={{core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x40},
                          {core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x41}};
   const char* reason=nullptr;
@@ -287,9 +287,9 @@ void profileChecks(){
   for(size_t i=0;i<2;++i){
    const auto& binding=legion->configuration.amplifiers[i];DeviceConfiguration config;
    assert(decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config));
-   assert(config.power.topology==BoostTopology::ExternalWithoutSwitch);
-   assert(!config.power.switched()&&!config.power.internal());
-   assert(config.gpio1Function==0&&config.gpio2Function==2);
+   assert(config.power.topology==BoostTopology::ExternalWithSwitch);
+   assert(config.power.switched()&&!config.power.internal());
+   assert(config.gpio1Function==1&&config.gpio2Function==2);
   }
   struct Legion_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
    unsigned resets=0;

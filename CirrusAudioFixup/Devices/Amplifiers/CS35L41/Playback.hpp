@@ -64,6 +64,14 @@ class Playback final {
         return first && second;
     }
 
+    static PlaybackProgress failLocked(core::RegisterIO& io, bool lockKeys, PlaybackTransition& state,
+                                       diagnostics::DiagnosticFailure failure, uint32_t reg = 0, uint32_t expected = 0,
+                                       uint32_t actual = 0) {
+        if (lockKeys)
+            closeKeys(io);
+        return fail(state, failure, reg, expected, actual);
+    }
+
     static PlaybackProgress mailbox(core::RegisterIO& io, PlaybackTransition& state, uint64_t now, uint64_t (*clock)()) {
         uint32_t status = 0;
         if (!io.read(0x13004, &status))
@@ -257,9 +265,8 @@ public:
             bool ok = power.internal() ? io.updateBits(0x2014, 1, 1)
                                        : io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0x0F) && io.write(0x742C, 0x79) &&
                                              io.write(0x7438, 0x00585941) && io.updateBits(0x2014, 1, 1);
-            bool locked = power.internal() || closeKeys(io);
-            if (!ok || !locked)
-                return fail(state, DIAG_PLAYBACK_INVARIANT);
+            if (!ok)
+                return failLocked(io, !power.internal(), state, DIAG_PLAYBACK_INVARIANT);
             state.phase = PlaybackPhase::Pup;
             state.deadlineMs = sampleTime(now, clock) + 100;
             return PlaybackProgress::Pending;
@@ -267,28 +274,27 @@ public:
         case PlaybackPhase::Pup: {
             uint32_t irq = 0;
             if (!io.read(0x10010, &irq))
-                return fail(state, DIAG_PLAYBACK_INVARIANT, 0x10010);
+                return failLocked(io, !power.internal(), state, DIAG_PLAYBACK_INVARIANT, 0x10010);
             state.actual = irq;
             if (irq & registers::kMaskProtectionFault)
-                return fail(state, DIAG_AMP_PROTECTION, 0x10010, 0, irq);
+                return failLocked(io, !power.internal(), state, DIAG_AMP_PROTECTION, 0x10010, 0, irq);
             if (!(irq & 0x01000000)) {
                 if (sampleTime(now, clock) >= state.deadlineMs)
-                    return fail(state, DIAG_POWER_UP_TIMEOUT, 0x10010, 0x01000000, irq);
+                    return failLocked(io, !power.internal(), state, DIAG_POWER_UP_TIMEOUT, 0x10010, 0x01000000, irq);
                 return PlaybackProgress::Pending;
             }
             if (!io.write(0x10010, 0x01000000))
-                return fail(state, DIAG_PLAYBACK_INVARIANT, 0x10010);
-            bool ok = power.internal() ||
-                      (io.write(0x40, 0x55) && io.write(0x40, 0xAA) && io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
-            bool locked = power.internal() || closeKeys(io);
-            if (!ok || !locked)
-                return fail(state, DIAG_PLAYBACK_INVARIANT);
+                return failLocked(io, !power.internal(), state, DIAG_PLAYBACK_INVARIANT, 0x10010);
             if (dsp && firmwareVersion > 0x001C00) {
                 if (!io.write(0x13020, registers::kCmdMailboxSpeakerOutputEnable))
-                    return fail(state, DIAG_DSP_MAILBOX, 0x13020);
+                    return failLocked(io, !power.internal(), state, DIAG_DSP_MAILBOX, 0x13020);
                 state.phase = PlaybackPhase::Output;
                 state.deadlineMs = sampleTime(now, clock) + 5;
             } else {
+                bool ok = power.internal() || (io.write(0x742C, 0xF9) && io.write(0x7438, 0x00580941));
+                bool locked = power.internal() || closeKeys(io);
+                if (!ok || !locked)
+                    return fail(state, DIAG_PLAYBACK_INVARIANT);
                 state.phase = PlaybackPhase::Pll;
                 state.deadlineMs = sampleTime(now, clock) + 20;
             }
@@ -296,12 +302,16 @@ public:
         }
         case PlaybackPhase::Output: {
             auto result = mailbox(io, state, now, clock);
-            if (result == PlaybackProgress::Prepared) {
-                state.phase = PlaybackPhase::Pll;
-                state.deadlineMs = sampleTime(now, clock) + 20;
-                return PlaybackProgress::Pending;
-            }
-            return result;
+            if (result == PlaybackProgress::Pending)
+                return result;
+            bool locked = power.internal() || closeKeys(io);
+            if (result == PlaybackProgress::Failed)
+                return result;
+            if (!locked)
+                return fail(state, DIAG_PLAYBACK_INVARIANT, 0x40);
+            state.phase = PlaybackPhase::Pll;
+            state.deadlineMs = sampleTime(now, clock) + 20;
+            return PlaybackProgress::Pending;
         }
         case PlaybackPhase::Pll: {
             uint32_t pll = 0;

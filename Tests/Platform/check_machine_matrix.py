@@ -106,9 +106,10 @@ int main(){
    assert(binding.channelIndex==(physical?1-board.leftFirst:board.leftFirst)&&binding.speakerId==board.speaker);
    l41::DeviceConfiguration config;
    assert(l41::decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config));
-   assert(config.power.switched() == (board.device == 0x1683));
+   assert(config.power.switched() == (board.device == 0x1683 || board.device == 0x3877));
    if (board.device == 0x3877) {
-    assert(config.power.topology == l41::BoostTopology::ExternalWithoutSwitch);
+    assert(config.power.topology == l41::BoostTopology::ExternalWithSwitch);
+    assert(config.gpio1Function == 1);
     GPIO testGpio;
     assert(found->prepareHardware(testGpio));
     assert(testGpio.resets == 1 && testGpio.lastResetResource == 0);

@@ -59,9 +59,11 @@ struct ResetService:IOService {
  bool bootArgStrEquals(const char*,const char*){return false;}
  unsigned failures=0;
  void recordAttachmentFailure(const char*,const char*,IOReturn){++failures;}
+ bool prepareDiscoveredI2CReset();
  bool performPlatformHardwareReset();
 };
 constexpr bool kOSBooleanFalse=false;
+PREPARE_RESET_METHOD
 RESET_METHOD
 struct ResetWindow {
  uint32_t value=(1U<<28)|(1U<<29)|(1U<<20);
@@ -194,8 +196,55 @@ int main(){
   ResetService service;service.mProvider=&nub;service.mDiscoveredBoard=board;
   assert(service.performPlatformHardwareReset());assert(pulses==2&&identityReturn()==0);
   assert(service.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_PREPARED");
+  assert(service.mPlatformAuthorized);
   assert(service.strings["Cirrus_I2C_Reset_Reason"]=="RESET_PULSE_COMPLETE");
   assert(memory->r[84]==((1U<<20)|(1U<<23)|(1U<<22)));
+  // ensureACPIDeviceD0 transitions _PS0, verifies _PSC==0, tolerates AppleACPIPlatform absent-method codes, and catches validation/power failures.
+  {
+   amp->values["_PS0"]=make<OSNumber>(0);amp->values["_PSC"]=make<OSNumber>(0);
+   transport::ACPIPowerTransition readyState{};
+   assert(transport::ensureACPIDeviceD0(amp,readyState)&&!strcmp(readyState.statusText(),"PS0_PSC_D0")&&readyState.deviceStatus==15);
+   amp->values.erase("_PS0");amp->values.erase("_PSC");
+   for(auto absentCode:{kIOReturnNotFound,kIOReturnUnsupported,kIOReturnError,kIOReturnLockedWrite}){
+    amp->absentValidation=absentCode;
+    transport::ACPIPowerTransition absentState{};
+    assert(transport::ensureACPIDeviceD0(amp,absentState));
+    assert(!strcmp(absentState.statusText(),"NO_PM_METHODS")&&absentState.ps0ValidationReturn==absentCode&&absentState.pscValidationReturn==absentCode);
+   }
+   amp->absentValidation=kIOReturnNoMemory;
+   transport::ACPIPowerTransition badValState{};
+   assert(!transport::ensureACPIDeviceD0(amp,badValState)&&!strcmp(badValState.statusText(),"ACPI_PS0_VALIDATION_FAILED")&&
+          badValState.ps0ValidationReturn==kIOReturnNoMemory);
+   amp->absentValidation=0;
+   transport::ACPIPowerTransition ps0FailState{};
+   assert(!transport::ensureACPIDeviceD0(amp,ps0FailState)&&!strcmp(ps0FailState.statusText(),"ACPI_PS0_FAILED"));
+   amp->absentValidation=kIOReturnNotFound;
+   amp->values["_PSC"]=make<OSNumber>(3);
+   transport::ACPIPowerTransition d3State{};
+   assert(!transport::ensureACPIDeviceD0(amp,d3State)&&!strcmp(d3State.statusText(),"ACPI_DEVICE_NOT_D0"));
+   amp->values.erase("_PSC");
+  }
+  // GPIO reset controller busy returns false cleanly for best-effort I2C fallback without clearing authorization.
+  controller->opened=true;
+  assert(!service.performPlatformHardwareReset());
+  assert(service.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_RESET_FAILED"&&service.mPlatformAuthorized);
+  controller->opened=false;
+  // A board without GPIO reset reports NO_GPIO_RESET_REQUIRED.
+  platform::DiscoveredBoard noResetBoard;
+  service.mDiscoveredBoard=&noResetBoard;
+  assert(service.performPlatformHardwareReset());
+  assert(service.strings["Cirrus_Reset_Policy"]=="NO_GPIO_RESET_REQUIRED"&&service.mPlatformAuthorized);
+  // I2CPlatformResources releases mCRSData cleanly across repeated loads.
+  {
+   auto* crsObj=amp->values["_CRS"];
+   unsigned baseRefs=crsObj->refs;
+   {
+    transport::I2CPlatformResources cached;
+    assert(cached.load(&nub,reason)&&cached.crsData()==crsObj&&crsObj->refs==baseRefs+1);
+    assert(cached.load(&nub,reason)&&cached.crsData()==crsObj&&crsObj->refs==baseRefs+1);
+   }
+   assert(crsObj->refs==baseRefs);
+  }
   delete board;fixtureSleep={};
   const uint32_t resetHigh=memory->r[84];
   controller->opened=true;assert(!automatic.reset(nullptr,0));controller->opened=false;
@@ -227,6 +276,27 @@ int main(){
 
   tuples->v[3]=make<OSNumber>(2);assert(!described.read("spk-id-gpios",0,value));
   assert(!memcmp(memory->r,before.data(),sizeof(memory->r)));
+  // ACPI IoRestrictionNoneAndPreserve (0x03/0x0b/0x1b) is legal for both reset outputs and inputs.
+  for(unsigned validResetFlags:{0x00u,0x02u,0x03u,0x08u,0x0au,0x0bu,0x13u,0x1bu}){
+   auto crsBytes=gpioDescriptor(84,validResetFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,true,true)&&out.pin==84);
+  }
+  for(unsigned invalidResetFlags:{0x01u,0x04u,0x09u,0x19u,0x20u}){
+   auto crsBytes=gpioDescriptor(84,invalidResetFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(!transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,true,true));
+  }
+  for(unsigned validInputFlags:{0x00u,0x01u,0x03u,0x08u,0x09u,0x0bu,0x19u,0x1bu}){
+   auto crsBytes=gpioDescriptor(SPEAKER_PIN,validInputFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,false,false)&&out.pin==SPEAKER_PIN);
+  }
+  for(unsigned invalidInputFlags:{0x02u,0x04u,0x0au,0x12u,0x1au,0x20u}){
+   auto crsBytes=gpioDescriptor(SPEAKER_PIN,invalidInputFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(!transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,false,false));
+  }
  }
  assert(memory->refs==1&&controller->refs==1&&amp->refs==1);
  nub.objects["i2cAddress"]=make<OSNumber>(0x23);
@@ -238,12 +308,18 @@ int main(){
 """
 # Execute the production reset policy through the I2C path; legacy quirk
 # implementation is outside this fixture and retains its separate coverage.
+prepare_reset = method(
+    service_source(), "CirrusAudioFixup", "prepareDiscoveredI2CReset"
+).replace("CirrusAudioFixup::", "ResetService::")
 reset = method(service_source(), "CirrusAudioFixup", "performPlatformHardwareReset")
 reset = (
     reset[: reset.index("    const cirrus::platform::ResetControllerQuirk*")]
     + "    return true;\n}"
 )
-CPP = CPP.replace("RESET_METHOD", reset.replace("CirrusAudioFixup::", "ResetService::"))
+CPP = (
+    CPP.replace("PREPARE_RESET_METHOD", prepare_reset)
+    .replace("RESET_METHOD", reset.replace("CirrusAudioFixup::", "ResetService::"))
+)
 for name, value in {
     "CAPTURED_ERROR": capture["followup"]["probe_returns"][0],
     "SPEAKER_PIN": capture["followup"]["speaker_gpio_pin"],

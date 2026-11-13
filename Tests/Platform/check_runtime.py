@@ -324,6 +324,7 @@ public:
     + r"""
     void suspendCommunication() {}
     bool resumeCommunication() {return true;}
+    struct NativeSPI { bool spiBound=false; bool bound() const { return spiBound; } } mNativeSPI;
 public:
     bool retryPlatformIdentity(){return false;}
     cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
@@ -337,7 +338,7 @@ public:
     CS35L41Amp mAmplifiers[2]{};
     Timer* mProbeTimer=nullptr;
     Provider* mProvider=nullptr;
-    bool mPowerAvailable=true,mStopping=false,mStartupFailed=false,mNeedsReinitialization=false,mResumePending=false,mStartupPending=false;
+    bool mPowerAvailable=true,mStopping=false,mStartupFailed=false,mNeedsReinitialization=false,mResumePending=false,mWakeFailed=false,mStartupPending=false;
     bool mDebugPhaseHalted=false;
     void clearHdaCache() {}
     struct DummyPci { void release() {} };

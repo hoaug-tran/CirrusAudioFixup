@@ -18,6 +18,10 @@ def owner_function(name):
 
 
 HEADER = (ROOT / "CirrusAudioFixup/Service/CirrusAudioFixup.hpp").read_text()
+ACPI_POWER_HEADER = (ROOT / "CirrusAudioFixup/Platform/ACPI/ACPIDeviceProperties.hpp").read_text()
+ACPI_POWER_HELPER = ACPI_POWER_HEADER[
+    ACPI_POWER_HEADER.index("struct ACPIPowerTransition") : ACPI_POWER_HEADER.index("class ACPIDeviceProperties")
+]
 
 
 def power_wrapper(name):
@@ -44,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-native-spi-") as directory:
 #include <cstdint>
 #include <cstddef>
 #include "Diagnostics/DiagnosticTypes.hpp"
-constexpr int kIOReturnBadArgument=-1,kIOReturnNotReady=-2,kIOReturnNotFound=-3,kIOReturnUnsupported=-4,kIOReturnNoMemory=-5,kIOReturnNotPermitted=-6,kIOReturnTimeout=-7;
+constexpr int kIOReturnBadArgument=-1,kIOReturnNotReady=-2,kIOReturnNotFound=-3,kIOReturnUnsupported=-4,kIOReturnNoMemory=-5,kIOReturnNotPermitted=-6,kIOReturnTimeout=-7,kIOReturnError=-11,kIOReturnLockedWrite=static_cast<int>(0xe00002c4U);
 inline unsigned fixtureSleptMs=0;
 inline void IOSleep(unsigned ms){fixtureSleptMs+=ms;}
 """)
@@ -78,12 +82,24 @@ struct IORegistryEntry:OSObject {
 struct OSIterator {std::vector<IORegistryEntry*> list;size_t pos=0;OSIterator(std::vector<IORegistryEntry*> v):list(v){++iteratorLive;}virtual ~OSIterator(){--iteratorLive;}OSObject* getNextObject(){return pos<list.size()?list[pos++]:nullptr;}void release(){delete this;}};
 constexpr int kIORegistryIterateRecursively=1;
 struct IORegistryIterator:OSIterator {using OSIterator::OSIterator;static IORegistryIterator* iterateOver(IORegistryEntry*,const IORegistryPlane*,int){return iteratorFailure?nullptr:new IORegistryIterator(nodes);}};
-class IOService:public IORegistryEntry {public:bool addressedABI=true;void* metaCast(const char*){return addressedABI?this:nullptr;}static OSObject* serviceMatching(const char*){pciMatchingDictionary.retain();return &pciMatchingDictionary;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}};
+class IOService:public IORegistryEntry {public:bool addressedABI=true;void* metaCast(const char*){return addressedABI?this:nullptr;}static OSObject* serviceMatching(const char*){pciMatchingDictionary.retain();return &pciMatchingDictionary;}static OSIterator* getMatchingServices(void*){return iteratorFailure?nullptr:new OSIterator(pciNodes);}virtual OSObject* getProperty(const char*){return nullptr;}};
 class IOACPIPlatformDevice:public IOService {public:
- OSData crs;OSString hid;unsigned status=3,power=0;bool rejectCRS=false;bool amd=false,hasPSC=true;
+ OSData crs;OSString hid;unsigned status=3,power=0;bool rejectCRS=false,rejectPS0=false,ps0Called=false,clearPowerOnPS0=false;bool amd=false,hasPSC=true,hasPS0=false,hasPR0=false;
+ int ps0Validation=kIOReturnNotFound,pscValidation=0;
+ IOReturn validateObject(const char* method){
+  if(!strcmp(method,"_PS0"))return ps0Validation!=kIOReturnNotFound?ps0Validation:(hasPS0?0:kIOReturnNotFound);
+  if(!strcmp(method,"_PR0"))return hasPR0?0:kIOReturnNotFound;
+  if(!strcmp(method,"_PSC"))return hasPSC?pscValidation:kIOReturnNotFound;
+  return kIOReturnNotFound;
+ }
  int evaluateInteger(const char*,uint32_t* out){*out=power;return hasPSC?0:kIOReturnNotFound;}
  unsigned getDeviceStatus(){return status;}
- int evaluateObject(const char* method,OSObject** out){if(!strcmp(method,"_HID")){if(hid.value.empty())return kIOReturnNotFound;hid.retain();*out=&hid;return 0;}if(rejectCRS)return kIOReturnNotFound;crs.retain();*out=&crs;return 0;}
+ int evaluateObject(const char* method,OSObject** out){
+  if(!strcmp(method,"_PS0")){ps0Called=true;if(rejectPS0)return kIOReturnNotReady;if(clearPowerOnPS0)power=0;*out=nullptr;return 0;}
+  if(!strcmp(method,"_HID")){if(hid.value.empty())return kIOReturnNotFound;hid.retain();*out=&hid;return 0;}
+  if(rejectCRS)return kIOReturnNotFound;
+  crs.retain();*out=&crs;return 0;
+ }
 };
 class IOPCIDevice:public IOService {public:uint16_t configRead16(unsigned offset){return offset?0x7aaa:0x8086;}IOACPIPlatformDevice* acpi=nullptr;bool supported=true;OSString acpiPath;OSObject* getProperty(const char* key){return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):!strcmp(key,"acpi-path")&&!acpiPath.value.empty()?&acpiPath:nullptr;}};
 inline unsigned liveControllers=0,suspends=0,resumes=0;
@@ -170,6 +186,9 @@ constexpr bool kOSBooleanFalse=false,kOSBooleanTrue=true;
 
 #include "Platform/ACPI/ACPII2CResources.hpp"
 namespace cirrus::transport {
+"""
+        + ACPI_POWER_HELPER
+        + r"""
 // ACPI ownership/parser is exercised with real kernel fixtures in check_i2c_discovery.
 struct ACPIPlatformProperties final:platform::PlatformProperties {
  ACPIPlatformProperties()=default;
@@ -177,13 +196,19 @@ struct ACPIPlatformProperties final:platform::PlatformProperties {
  bool array(const char*,uint32_t*,size_t)const override{return false;}
 };
 inline int fixtureSpeakerGPIO=1;
+inline bool fixtureI2CResourcesFail=false,fixtureResetSucceed=true;
 struct I2CPlatformResources : platform::BoardDiscoveryContext::GPIOAccess {
  void setDiagnosticOwner(IOService*){}
  bool readResource(uint32_t resource,uint32_t pin,bool low,uint32_t& value)override{assert(resource==1&&pin==0&&!low);if(fixtureSpeakerGPIO<0)return false;value=unsigned(fixtureSpeakerGPIO);return true;}
  bool read(const char*,size_t,uint32_t&)override{return false;}
+ bool reset(const char*,int32_t resource)override{if(resource<0)return false;mResetExecuted=fixtureResetSucceed;return fixtureResetSucceed;}
+ bool mResetExecuted=false;
+ bool resetExecuted()const{return mResetExecuted;}
  core::BusEndpoint endpoints[ACPII2CResources::kCapacity]{};size_t count=0;
  ACPIPlatformProperties properties;
  bool load(IOService* provider,const char*& reason){
+  mResetExecuted=false;
+  if(fixtureI2CResourcesFail){reason="I2C_ACPI_RESOURCES_INVALID";return false;}
   count=2;endpoints[0]={core::BusTransportType::I2C,provider->path.c_str(),0x40};
   endpoints[1]={core::BusTransportType::I2C,provider->path.c_str(),0x41};
   reason="I2C_ACPI_RESOURCES_RESOLVED";return true;
@@ -210,6 +235,8 @@ public:
  void setProperty(const char* k,uint64_t v,unsigned){numbers[k]=v;}
  void setProperty(const char* k,const char* v){strings[k]=v;}
  bool mPlatformAuthorized=true;std::map<std::string,bool> flags;
+ unsigned statsPublished=0;
+ void publishStatistics(){++statsPublished;}
  bool bootArgEnabled(const char* k){return flags[k];}
  void setProperty(const char* k,bool value){numbers[k]=value;}
  const cirrus::platform::PlatformProfile* mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
@@ -226,6 +253,11 @@ public:
  cirrus::core::RegisterMap* mI2CMaps[4]{};
 """
         + PLATFORM_ADAPTER
+        + " void publishACPIPowerDebugEvidence(const cirrus::transport::ACPIPowerTransition&){}\n"
+        + " void publishI2CResourceDebugEvidence(const cirrus::transport::I2CPlatformResources&){}\n"
+        + " bool ensureACPIDeviceReady(IOACPIPlatformDevice*,const char*,const char*);\n"
+        + " bool prepareDiscoveredI2CReset();\n"
+        + " bool resumeI2CCommunication();\n"
         + power_wrapper("suspendCommunication")
         + power_wrapper("resumeCommunication")
         + r"""
@@ -295,6 +327,9 @@ using cirrus::diagnostics::DIAG_DEVICE_ID;
         + owner_function("bindAmplifierDrivers")
         + owner_function("releaseAmplifierDrivers")
         + owner_function("detectConfiguredI2CAmplifiers")
+        + owner_function("ensureACPIDeviceReady")
+        + owner_function("prepareDiscoveredI2CReset")
+        + owner_function("resumeI2CCommunication")
         + owner_function("setupCommunication")
         + owner_function("detectNativeSPIAmplifiers")
         + owner_function("teardownCommunication")
@@ -766,7 +801,7 @@ int main(){
   assert(!strcmp(unsupportedCommunication.mAttachment.first.stage,"COMMUNICATION") && unsupportedCommunication.mAttachment.first.result==(isIntel?kIOReturnUnsupported:kIOReturnNotFound));
   assert(!liveControllers && writeTransfers==writesBefore);pci.supported=true;a.amd=!isIntel;
   CirrusAudioFixup readyI2C;readyI2C.mProvider=&i2cProvider;readyI2C.mPlatformProfile=&i2cProfile;readyI2C.mPlatformSubsystemId=0x12345678;readyI2C.setProperty("Cirrus_CPU_Vendor",cpu);
-  assert(readyI2C.mDriverRegistry.add(i2cDefinition));assert(readyI2C.setupCommunication(&i2cProvider) && readyI2C.detectConfiguredI2CAmplifiers()==1 && readyI2C.bindAmplifierDrivers());
+  assert(readyI2C.mDriverRegistry.add(i2cDefinition));assert(readyI2C.setupCommunication(&i2cProvider) && readyI2C.detectConfiguredI2CAmplifiers()==1 && readyI2C.statsPublished==1 && readyI2C.bindAmplifierDrivers());
   assert(readyI2C.mAmplifierManager.bringUp()==0 && readyI2C.mAmplifierManager.startPlayback()==0);readyI2C.teardownCommunication();
   CirrusAudioFixup unsupportedI2C;unsupportedI2C.mProvider=&i2cProvider;unsupportedI2C.mPlatformProfile=&i2cProfile;unsupportedI2C.mPlatformSubsystemId=0x12345678;
   assert(unsupportedI2C.mDriverRegistry.add(i2cDefinition));i2cProvider.addressedABI=false;auto readsBefore=i2cReads.size();auto i2cWritesBefore=i2cWrites.size();
@@ -775,7 +810,7 @@ int main(){
   unsupportedI2C.teardownCommunication();i2cProvider.addressedABI=true;
   CirrusAudioFixup wrongIdentity;wrongIdentity.mProvider=&i2cProvider;wrongIdentity.mPlatformProfile=&i2cProfile;wrongIdentity.mPlatformSubsystemId=0x12345678;
   assert(wrongIdentity.mDriverRegistry.add(i2cDefinition));i2cProbeID=0xdead;
-  assert(wrongIdentity.detectConfiguredI2CAmplifiers()==0 && i2cWrites.size()==i2cWritesBefore);
+  assert(wrongIdentity.detectConfiguredI2CAmplifiers()==0 && wrongIdentity.statsPublished==1 && i2cWrites.size()==i2cWritesBefore);
   assert(!strcmp(wrongIdentity.mAttachment.communication,"READY") && !strcmp(wrongIdentity.mAttachment.first.reason,"AMP_IDENTITY_MISMATCH"));wrongIdentity.teardownCommunication();i2cProbeID=0x35a40;
   CirrusAudioFixup missingFunction;missingFunction.mProvider=&i2cProvider;missingFunction.mPlatformProfile=&i2cProfile;missingFunction.mPlatformSubsystemId=0x12345678;
   assert(missingFunction.mDriverRegistry.add(i2cDefinition));i2cResult=kIOReturnUnsupported;
@@ -858,6 +893,140 @@ int main(){
   if(speaker!=1)assert(!strcmp(zen.mAttachment.first.reason,reason));
  }
  cirrus::transport::fixtureSpeakerGPIO=1;fixtureBootArguments.clear();
+ {
+  struct ACPIBackedNub final : IOService {
+   IOACPIPlatformDevice* acpi=nullptr;
+   OSObject* getProperty(const char* key)override{return !strcmp(key,"acpi-device")?static_cast<OSObject*>(acpi):nullptr;}
+  };
+  struct NoResetBoard : cirrus::platform::DiscoveredBoard {
+   cirrus::platform::AmplifierBinding binding{};
+   NoResetBoard(const cirrus::platform::BoardIdentity& id, const cirrus::core::BusEndpoint& ep) {
+    binding.endpoint=ep;
+    binding.siliconId=0x35a40;
+    binding.tuningResource="no-reset-test";
+    configuration.identity=id;
+    configuration.wiringVerified=true;
+    configuration.powerVerified=true;
+    configuration.tuningVerified=true;
+    configuration.amplifiers=&binding;
+    configuration.count=1;
+   }
+  };
+  IOACPIPlatformDevice d3Acpi;
+  d3Acpi.hasPS0=true;d3Acpi.hasPSC=true;d3Acpi.power=3;d3Acpi.clearPowerOnPS0=true;
+  ACPIBackedNub nub;nub.path="IOService:/I2CB/SPK1";nub.acpi=&d3Acpi;
+  CirrusAudioFixup i2cSetup;i2cSetup.mProvider=&nub;
+  i2cSetup.mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
+  i2cSetup.mPlatformSubsystemId=0x10431683;i2cSetup.mPlatformAuthorized=false;
+  auto reg=legacyDefinition;reg.name="i2c-d0-setup";reg.transportMask=1;
+  reg.i2cFormat=reg.spiFormat;reg.i2cFormat.paddingBytes=0;reg.i2cFormat.readFlag=0;
+  reg.discoverBoard=[](const cirrus::platform::BoardDiscoveryContext& ctx,const char*& reason)->cirrus::platform::DiscoveredBoard*{
+   reason="NO_RESET_BOARD_RESOLVED";
+   return new NoResetBoard(ctx.identity,ctx.endpoints[0]);
+  };
+  assert(i2cSetup.mDriverRegistry.add(reg));
+  assert(i2cSetup.setupCommunication(&nub));
+  assert(i2cSetup.mDiscoveredBoard && i2cSetup.mPlatformAuthorized);
+  assert(d3Acpi.ps0Called && d3Acpi.power==0 && i2cSetup.strings["Cirrus_ACPI_D0_Status"]=="PS0_PSC_D0");
+  // Simulate sleep returning SPK1 to D3; wake re-evaluates _PS0 before GPIO/I2C readiness.
+  d3Acpi.power=3;d3Acpi.ps0Called=false;
+  assert(i2cSetup.resumeCommunication());
+  assert(d3Acpi.ps0Called && d3Acpi.power==0 && i2cSetup.strings["Cirrus_ACPI_D0_Status"]=="PS0_PSC_D0");
+  assert(i2cSetup.strings["Cirrus_Reset_Policy"]=="NO_GPIO_RESET_REQUIRED");
+  // Discovered board exercising GPIO reset keeps wake alive with soft-reset fallback if GPIO reset cannot execute,
+  // while still failing closed on ACPI power transition errors.
+  struct ResetBoard final : NoResetBoard {
+   using NoResetBoard::NoResetBoard;
+   bool prepareHardware(cirrus::platform::BoardDiscoveryContext::GPIOAccess& gpio)const override{return gpio.reset(nullptr,0);}
+  };
+  i2cSetup.teardownCommunication();
+  i2cSetup.mDiscoveredBoard=new ResetBoard({0x1043,0x1683,"CSC3551"},{cirrus::core::BusTransportType::I2C,nub.path.c_str(),0x40});
+  i2cSetup.mPlatformAuthorized=true;
+  d3Acpi.power=3;d3Acpi.ps0Called=false;
+  assert(i2cSetup.resumeCommunication());
+  assert(d3Acpi.ps0Called && d3Acpi.power==0 && i2cSetup.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_PREPARED");
+  assert(i2cSetup.mPlatformAuthorized);
+  cirrus::transport::fixtureResetSucceed=false;
+  assert(i2cSetup.resumeCommunication());
+  assert(i2cSetup.mPlatformAuthorized && !strcmp(i2cSetup.mAttachment.communication,"READY"));
+  assert(i2cSetup.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_RESET_FAILED");
+  cirrus::transport::fixtureResetSucceed=true;
+  cirrus::transport::fixtureI2CResourcesFail=true;
+  assert(i2cSetup.resumeCommunication());
+  assert(i2cSetup.strings["Cirrus_Reset_Policy"]=="I2C_ACPI_RESOURCES_UNAVAILABLE");
+  cirrus::transport::fixtureI2CResourcesFail=false;
+  d3Acpi.rejectPS0=true;
+  assert(!i2cSetup.resumeCommunication());
+  assert(i2cSetup.mPlatformAuthorized && !strcmp(i2cSetup.mAttachment.communication,"FAILED"));
+  assert(i2cSetup.strings["Cirrus_ACPI_D0_Status"]=="ACPI_PS0_FAILED");
+  d3Acpi.rejectPS0=false;
+
+  // Fail closed during I2C setup when _PS0 fails, _PSC stays in D3, or _STA is disabled.
+  const auto readsAtStart=i2cReads.size(),writesAtStart=i2cWrites.size();
+  for(unsigned mode=0;mode<3;++mode){
+   IOACPIPlatformDevice badAcpi;badAcpi.hasPS0=true;badAcpi.hasPSC=true;
+   badAcpi.rejectPS0=(mode==0);
+   badAcpi.clearPowerOnPS0=false;
+   badAcpi.power=(mode==1)?3:0;
+   badAcpi.status=(mode==2)?0:3;
+   ACPIBackedNub badNub;badNub.path="IOService:/I2CB/SPK1";badNub.acpi=&badAcpi;
+   CirrusAudioFixup badSetup;badSetup.mProvider=&badNub;
+   badSetup.mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
+   assert(badSetup.mDriverRegistry.add(reg));
+   assert(!badSetup.setupCommunication(&badNub));
+   assert(i2cReads.size()==readsAtStart && i2cWrites.size()==writesAtStart);
+   assert(!strcmp(badSetup.mAttachment.communication,"FAILED"));
+   const char* expectedReason=mode==0?"ACPI_PS0_FAILED":mode==1?"ACPI_DEVICE_NOT_D0":"ACPI_DEVICE_DISABLED";
+   assert(badSetup.strings["Cirrus_ACPI_D0_Status"]==expectedReason);
+   assert(!strcmp(badSetup.mAttachment.first.reason,expectedReason));
+  }
+  // Direct ACPI / NativeSPI providers preserve NativeSPIHost controller-first power sequencing and proceed directly to _CRS.
+  IOACPIPlatformDevice directSpi;directSpi.hasPS0=true;directSpi.rejectPS0=true;directSpi.rejectCRS=true;
+  CirrusAudioFixup directSpiSetup;directSpiSetup.mProvider=&directSpi;
+  assert(!directSpiSetup.setupCommunication(&directSpi));
+  assert(!directSpi.ps0Called && !strcmp(directSpiSetup.mAttachment.first.reason,"ACPI_SERIAL_RESOURCE_REJECTED"));
+  // AppleACPIPlatform absent-object returns (Error/LockedWrite) on optional _PS0/_PSC still allow D0 check.
+  for(auto absentCode:{kIOReturnError,kIOReturnLockedWrite}){
+   IOACPIPlatformDevice noPmAcpi;noPmAcpi.hasPS0=false;noPmAcpi.hasPSC=true;noPmAcpi.ps0Validation=absentCode;noPmAcpi.pscValidation=absentCode;
+   ACPIBackedNub noPmNub;noPmNub.path="IOService:/I2CB/SPK1";noPmNub.acpi=&noPmAcpi;
+   CirrusAudioFixup noPmSetup;noPmSetup.mProvider=&noPmNub;
+   noPmSetup.mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
+   noPmSetup.mPlatformSubsystemId=0x10431683;noPmSetup.mPlatformAuthorized=false;
+   assert(noPmSetup.mDriverRegistry.add(reg));
+   assert(noPmSetup.setupCommunication(&noPmNub));
+   assert(noPmSetup.strings["Cirrus_ACPI_D0_Status"]=="NO_PM_METHODS");
+  }
+  {
+   IOACPIPlatformDevice failValAcpi;failValAcpi.ps0Validation=kIOReturnNoMemory;
+   ACPIBackedNub failValNub;failValNub.path="IOService:/I2CB/SPK1";failValNub.acpi=&failValAcpi;
+   CirrusAudioFixup failValSetup;failValSetup.mProvider=&failValNub;
+   failValSetup.mPlatformProfile=cirrus::platform::findPlatformProfile("CSC3551");
+   assert(failValSetup.mDriverRegistry.add(reg));
+   assert(!failValSetup.setupCommunication(&failValNub));
+   assert(failValSetup.strings["Cirrus_ACPI_D0_Status"]=="ACPI_PS0_VALIDATION_FAILED");
+  }
+  // Non-discovered ACPI-backed I2C wake transitions D3->D0 and fails closed on _PS0 rejection.
+  IOACPIPlatformDevice wakeAcpi;wakeAcpi.hasPS0=true;wakeAcpi.hasPSC=true;wakeAcpi.power=3;wakeAcpi.clearPowerOnPS0=true;
+  ACPIBackedNub wakeNub;wakeNub.path="IOService:/I2CB/SPK1";wakeNub.acpi=&wakeAcpi;
+  CirrusAudioFixup wakeService;wakeService.mProvider=&wakeNub;
+  assert(wakeService.resumeCommunication());
+  assert(wakeAcpi.ps0Called && wakeAcpi.power==0 && wakeService.strings["Cirrus_ACPI_D0_Status"]=="PS0_PSC_D0");
+  assert(!strcmp(wakeService.mAttachment.communication,"READY"));
+  wakeAcpi.rejectPS0=true;
+  assert(!wakeService.resumeCommunication());
+  assert(!strcmp(wakeService.mAttachment.communication,"FAILED"));
+  assert(wakeService.strings["Cirrus_ACPI_D0_Status"]=="ACPI_PS0_FAILED");
+  wakeAcpi.rejectPS0=false;wakeAcpi.power=3;wakeAcpi.ps0Called=false;
+  assert(wakeService.resumeCommunication());
+  assert(!strcmp(wakeService.mAttachment.communication,"READY"));
+  assert(wakeAcpi.ps0Called && wakeAcpi.power==0 && wakeService.strings["Cirrus_ACPI_D0_Status"]=="PS0_PSC_D0");
+  // An unbound direct ACPI provider without an I2C controller does not invoke _PS0 or clobber SPI failure status.
+  IOACPIPlatformDevice unboundSpiAcpi;unboundSpiAcpi.hasPS0=true;unboundSpiAcpi.rejectPS0=true;
+  CirrusAudioFixup unboundSpiService;unboundSpiService.mProvider=&unboundSpiAcpi;
+  unboundSpiService.mAttachment.communication="FAILED";unboundSpiService.mPlatformAuthorized=false;
+  assert(unboundSpiService.resumeCommunication());
+  assert(!unboundSpiAcpi.ps0Called && !strcmp(unboundSpiService.mAttachment.communication,"FAILED"));
+ }
  puts("PASS Intel/AMD x I2C/SPI attachment/runtime matrix, unsupported controller/AMP separation, ACPI bus classification and no unsupported AMP writes");
  assert(pciMatchingDictionary.refs==1);
  fixtureIdentityRegister=0;fixtureIdentityMask=0xffffffffU;i2cProbeID=0x35a40;

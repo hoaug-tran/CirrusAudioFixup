@@ -43,10 +43,10 @@ struct Properties:platform::PlatformProperties {
  }
 };
 struct GPIO:platform::BoardDiscoveryContext::GPIOAccess {
- uint32_t speaker=0;bool readable=true;unsigned resets=0;
+ uint32_t speaker=0;bool readable=true;unsigned resets=0;int32_t lastResetResource=-1;bool resetOk=true;
  ~GPIO() override = default;
  bool read(const char*,size_t,uint32_t& value)override{value=speaker;return readable;}
- bool reset(const char*,int32_t)override{++resets;return true;}
+ bool reset(const char*,int32_t resource)override{++resets;lastResetResource=resource;return resetOk;}
 };
 bool available(uint16_t vendor,uint16_t device,uint32_t speaker){
  return l41::selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,vendor,device,speaker)!=nullptr;
@@ -111,7 +111,9 @@ int main(){
     assert(config.power.topology == l41::BoostTopology::ExternalWithoutSwitch);
     GPIO testGpio;
     assert(found->prepareHardware(testGpio));
-    assert(testGpio.resets == 0);
+    assert(testGpio.resets == 1 && testGpio.lastResetResource == 0);
+    testGpio.resetOk = false;
+    assert(!found->prepareHardware(testGpio));
    }
    const auto* resource=l41::selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,board.vendor,board.device,binding.speakerId);
    assert(resource);checkFirmware(*resource);

@@ -246,7 +246,7 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **AppleALC Layout**: Layout 21 (`alcid=21`) (or Layout 13 `alcid=13`). Note that inside macOS, AppleALC may dynamically map Layout 21 onto AppleHDA's internal layout index (e.g. Layout 7 on MacBookPro16,1 SMBIOS). Boot-args must specify `alcid=21`.
 - **Speaker Pin**: Node `0x14` routed to DAC Node `0x02` (connection select `01470c02`). Node `0x17` is not routed on this model.
 - **Amplifiers**: Dual CS35L41 (`CSC3551`) over I2C at addresses `0x40` (Left) and `0x41` (Right).
-- **Topology**: External boost without switch (ExternalWithoutSwitch), software reset over I2C (no GPIO reset).
+- **Topology**: External boost without switch (ExternalWithoutSwitch), active-low GPIO reset (`resetResource = 0`) and ACPI D0 (`_PS0`) power transition.
 - **SSID Notes**: ACPI `_SUB` evaluates to `17AA:3877`, while audio PCI controller reports subsystem `17AA:385C`. CirrusAudioFixup automatically maps both to the verified embedded speaker protection tuning.
 
 #### ASUS ROG Strix G17 G713P (`1043:1D1F`, Realtek ALC294)

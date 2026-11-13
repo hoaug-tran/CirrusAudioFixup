@@ -98,7 +98,7 @@ struct CirrusAudioFixup:IOService {
   d.spiFormat=cirrus::devices::amplifiers::cs35l56::CS35L56SPIRegisterIO::config();
   d.prepareIdentity=cirrus::devices::amplifiers::cs35l56::CS35L56Device::prepareIdentity;return true;}void resolvePlatformProfile(){}
  void logProviderInfo(IOService*){}void dumpProviderProperties(IOService*){}
- bool setupProbeTimer(){return true;}void publishAttachmentStatus(){}void publishDriverVerdict(){}
+ bool setupProbeTimer(){return true;}void publishAttachmentStatus(){}void publishDriverVerdict(){}void publishStatistics(){}
  uint64_t playbackTimeMilliseconds(){return nowNs/1000000;}
  bool setupCommunication(IOService* provider){
   // Adapter ends at the real NativeSPIHost; board/DSP lifecycle has its own suite.

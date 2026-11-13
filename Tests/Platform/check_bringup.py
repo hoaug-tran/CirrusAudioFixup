@@ -71,7 +71,9 @@ mock = (
 class CirrusAudioFixup {
 public:
     void suspendCommunication() {}
-    bool resumeCommunication() { return true; }
+    bool resumeCommOK=true;
+    bool resumeCommunication() { return resumeCommOK; }
+    struct NativeSPI { bool spiBound=false; bool bound() const { return spiBound; } } mNativeSPI;
     cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
     uint32_t mPublishedRuntimeStage=UINT32_MAX,mPublishedRuntimeCount=UINT32_MAX;
     void publishStatistics(){}
@@ -83,7 +85,7 @@ public:
     Timer* mProbeTimer=nullptr;
     Timer* mAmpInterrupt=nullptr;
     bool configureAmplifierInterrupt() { return true; }
-    bool mPowerAvailable=true,mStopping=false,mStartupFailed=false,mNeedsReinitialization=false,mResumePending=false,mStartupPending=false;
+    bool mPowerAvailable=true,mStopping=false,mStartupFailed=false,mNeedsReinitialization=false,mResumePending=false,mWakeFailed=false,mStartupPending=false;
     bool mDebugPhaseHalted=false;
     void clearHdaCache() {}
     std::string phase;
@@ -338,6 +340,41 @@ int main() {
     CirrusAudioFixup wake; wake.bringUpAmplifiers(); wake.handlePowerChange(false);
     wake.failStage="dsp-verify"; wake.handlePowerChange(true);
     check(!wake.mAmplifiers[0].initialized && wake.mAmplifiers[0].playbackFaulted && wake.muted[0],"wake verify failure cannot reuse pre-sleep readiness");
+    {
+        CirrusAudioFixup maskCheck;
+        maskCheck.mPlatformAuthorized=false;
+        maskCheck.mAttachment.communication="FAILED";
+        maskCheck.mAttachment.record("COMMUNICATION","ACPI_PS0_FAILED",-1,0);
+        maskCheck.publishDriverVerdict();
+        check(maskCheck.properties["Cirrus_Driver_Verdict"]=="COMMUNICATION_FAILED",
+              "communication setup failure takes precedence over unsupported platform");
+    }
+    {
+        CirrusAudioFixup wakeFail; wakeFail.bringUpAmplifiers();
+        wakeFail.handlePowerChange(false);
+        check(wakeFail.properties["Cirrus_Driver_Verdict"]=="SUSPENDED","suspended sleep verdict");
+        wakeFail.resumeCommOK=false;
+        wakeFail.mAttachment.communication="FAILED";
+        wakeFail.mAttachment.record("CONTROLLER_PM","ACPI_PS0_FAILED",-1,0);
+        wakeFail.handlePowerChange(true);
+        check(!wakeFail.mPowerAvailable && wakeFail.mWakeFailed &&
+              wakeFail.properties.count("Cirrus_SPI_Status")==0 &&
+              wakeFail.properties["Cirrus_Driver_Verdict"]=="COMMUNICATION_FAILED",
+              "failed I2C wake does not emit bogus SPI status or remain masked as SUSPENDED");
+        wakeFail.resumeCommOK=true;
+        wakeFail.mAttachment.communication="READY";
+        wakeFail.handlePowerChange(true);
+        check(wakeFail.mPowerAvailable && !wakeFail.mWakeFailed &&
+              wakeFail.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
+              "subsequent successful wake clears mWakeFailed and restores READY_DSP");
+        wakeFail.handlePowerChange(false);
+        wakeFail.mNativeSPI.spiBound=true;
+        wakeFail.resumeCommOK=false;
+        wakeFail.handlePowerChange(true);
+        check(!wakeFail.mPowerAvailable && wakeFail.mWakeFailed &&
+              wakeFail.properties["Cirrus_SPI_Status"]=="WAKE_CONTROLLER_NOT_READY",
+              "failed SPI wake preserves WAKE_CONTROLLER_NOT_READY diagnostic property");
+    }
     if(failures) { printf("FAIL bringup assertions=%u\n",failures); return 1; }
     printf("PASS codec init single-I/O fault sweep (%u positions)\n",codec.io);
     puts("PASS OTP error/read failure, stale identity, 11 boot-stage faults, explicit bypass, cleanup faults and actual boot/wake orchestration");

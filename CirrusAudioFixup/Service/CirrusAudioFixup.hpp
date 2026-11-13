@@ -28,6 +28,11 @@
 #include "Transport/I2C/VoodooI2CController.hpp"
 #include "Transport/I2C/VoodooI2CProvider.hpp"
 
+namespace cirrus::transport {
+struct ACPIPowerTransition;
+class I2CPlatformResources;
+}
+
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOInterruptEventSource.h>
 #include <IOKit/IOLib.h>
@@ -188,6 +193,8 @@ private:
                 CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",
                            failure.reason, static_cast<unsigned long>(failure.index), failure.detail, ret);
         }
+        if (!mNativeSPI.bound())
+            return resumeI2CCommunication();
         return ret == kIOReturnSuccess;
     }
     bool communicationReady() const { return mProvider && mPowerAvailable && !mStopping; }
@@ -198,6 +205,7 @@ private:
     IOPMPowerState mPowerStates[2]{};
     bool mPowerAvailable{true};
     bool mResumePending{false};
+    bool mWakeFailed{false};
     bool mStopping{false};
     bool mNeedsReinitialization{false};
     bool mDebugPhaseHalted{false};
@@ -240,6 +248,11 @@ private:
                                                                         : mNativeSPI.count())
                                 : 0;
     }
+    void publishACPIPowerDebugEvidence(const cirrus::transport::ACPIPowerTransition& power);
+    void publishI2CResourceDebugEvidence(const cirrus::transport::I2CPlatformResources& resources);
+    bool ensureACPIDeviceReady(IOACPIPlatformDevice* acpi, const char* failureStage, const char* context);
+    bool prepareDiscoveredI2CReset();
+    bool resumeI2CCommunication();
     bool mPlatformAuthorized{false};
     uint32_t mPlatformSubsystemId{0};
     cirrus::platform::AmplifierDriverRegistry mDriverRegistry;

@@ -136,7 +136,7 @@ struct CirrusAudioFixup:IOService {
  void free();
  void clearHdaCache(){++hdaClears;}
  void* mTraceLock=nullptr;
- bool mStopping=false,mStartupFailed=false,mStartupPending=true,mResumePending=false,mPowerAvailable=true;
+ bool mStopping=false,mStartupFailed=false,mStartupPending=true,mResumePending=false,mWakeFailed=false,mPowerAvailable=true;
  bool finishOK=true,setupOK=true,wakeReady=false;
  unsigned finishes=0,setups=0,teardowns=0,failures=0,acks=0,monitors=0,probes=0;
  unsigned brings=0,suspendsComm=0,resumesComm=0,releases=0,hdaClears=0;
@@ -168,6 +168,7 @@ struct CirrusAudioFixup:IOService {
   struct Failure{const char* reason="DOMAIN_TIMEOUT";unsigned index=0;} f;
   int continueBind(){++polls;return result;}
   bool powerPending(){return pending;}
+  bool bound()const{return false;}
   const Failure& failure(){return f;}
  }mNativeSPI;
  struct Gate {CirrusAudioFixup* self;int runAction(int(*f)(OSObject*,void*,void*,void*,void*),void* a){return f(self,a,nullptr,nullptr,nullptr);}} gate{this};

@@ -275,7 +275,7 @@ void profileChecks(){
   delete noSwitch;
   p.values["cirrus,boost-type"]={3,3};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));
  }
- // Lenovo Legion Slim 7 Gen 7 issue #21: I2C dual-amp, external boost without switch, no GPIO reset
+ // Lenovo Legion Slim 7 Gen 7 issue #21: I2C dual-amp, external boost without switch, active-low GPIO reset resource 0
  {
   Properties p;
   core::BusEndpoint e[]={{core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x40},
@@ -293,11 +293,21 @@ void profileChecks(){
   }
   struct Legion_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
    unsigned resets=0;
+   int32_t lastResource=-1;
+   bool hadProperty=false;
+   bool succeed=true;
    bool read(const char*,size_t,uint32_t&) override { return false; }
-   bool reset(const char*,int32_t) override { ++resets; return true; }
+   bool reset(const char* prop,int32_t resource) override {
+    ++resets;
+    hadProperty=(prop!=nullptr);
+    lastResource=resource;
+    return succeed;
+   }
   } gpio;
   assert(legion->prepareHardware(gpio));
-  assert(gpio.resets==0);
+  assert(gpio.resets==1&&gpio.lastResource==0&&!gpio.hadProperty);
+  gpio.succeed=false;
+  assert(!legion->prepareHardware(gpio));
   delete legion;
  }
  // Native per-device speaker IDs survive reversed channel wiring.

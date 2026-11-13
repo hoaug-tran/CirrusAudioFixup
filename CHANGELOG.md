@@ -6,10 +6,12 @@
 
 - Added Lenovo Legion Slim 7 Gen 7 (2022) support (`CSC3551`, subsystem `17AA:3877` / PCI `17AA:385C`) over I2C with unswitched external boost topology ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)).
 - Added ASUS ROG Strix G17 G713PI/PU/PV/PVN support (`CSC3551`, subsystem `1043:1D1F`) over AMD I2C with internal boost topology, using the G733 (`1043:1503`) speaker protection tuning that the Cirrus Windows package assigns to the same configuration ([#22](https://github.com/hoaug-tran/CirrusAudioFixup/pull/22)).
-- Added support for unswitched external boost topology (`ExternalWithoutSwitch`) and software-only reset over I2C on CS35L41 amplifiers.
+- Added support for unswitched external boost topology (`ExternalWithoutSwitch`) with active-low GPIO reset (`resetResource = 0` on `17AA:3877`) and optional software-only reset fallback over I2C on CS35L41 amplifiers.
 
 ### Platform & Infrastructure
 
+- Enforced ACPI D0 (`_PS0`/`_PSC`) readiness on ACPI-backed I2C amplifier devices during setup and wake, and surfaced wake/communication failures as `COMMUNICATION_FAILED`.
+- Accepted `IoRestrictionNoneAndPreserve` ACPI `GpioIo` descriptors for shared GPIO resources and separated `NO_GPIO_RESET_REQUIRED` from `ACPI_GPIO_PREPARED` reset reporting.
 - Enforced fail-closed power management transitions on startup failure.
 - Hardened service lifecycle teardown idempotency and added null guards for audio event observers and HDA controller references.
 - Fixed `RegisterMap` non-incrementing FIFO transfers to properly evaluate bounds without scalar permission rejection.

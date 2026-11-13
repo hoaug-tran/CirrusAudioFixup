@@ -439,17 +439,20 @@ void CirrusAudioFixup::publishDriverVerdict() {
     if (anyFaulted)
         mAttachment.amplifier = "FAULTED";
     publishAttachmentStatus();
-    const char* verdict = !mPowerAvailable              ? "SUSPENDED"
+    const bool communicationFailed = !strcmp(mAttachment.communication, "FAILED") && (!strcmp(mAttachment.latest.stage, "COMMUNICATION") ||
+                                                                                      !strcmp(mAttachment.latest.stage, "CONTROLLER_PM"));
+    const char* verdict = !mPowerAvailable              ? (mWakeFailed ? "COMMUNICATION_FAILED" : "SUSPENDED")
                           : bootArgEnabled("-cirrusro") ? "READ_ONLY"
+                          : communicationFailed         ? "COMMUNICATION_FAILED"
                           : !mPlatformAuthorized        ? "UNSUPPORTED_PLATFORM"
                           : anyFaulted                  ? "FAULT_LATCHED"
                           : !topologyComplete && !strcmp(mAttachment.latest.stage, "COMMUNICATION") ? "COMMUNICATION_FAILED"
-                          : !topologyComplete           ? "INCOMPLETE_TOPOLOGY"
-                          : identityPending             ? waitingVerdict
-                          : mDebugPhaseHalted           ? "DEBUG_PHASE_HALTED"
-                          : !allInitialized             ? "FAILED_INIT"
-                          : readyVerdict                ? readyVerdict
-                                                        : "READY_DRIVERS";
+                          : !topologyComplete                                                       ? "INCOMPLETE_TOPOLOGY"
+                          : identityPending                                                         ? waitingVerdict
+                          : mDebugPhaseHalted                                                       ? "DEBUG_PHASE_HALTED"
+                          : !allInitialized                                                         ? "FAILED_INIT"
+                          : readyVerdict                                                            ? readyVerdict
+                                                                                                    : "READY_DRIVERS";
     OSString* value = OSString::withCString(verdict);
     if (value) {
         setProperty("Cirrus_Driver_Verdict", value);
@@ -602,4 +605,34 @@ void CirrusAudioFixup::recordAttachmentFailure(const char* stage, const char* re
 void CirrusAudioFixup::publishAttachmentStatus() {
     setProperty("Cirrus_Communication_Status", mAttachment.communication);
     setProperty("Cirrus_Amplifier_Status", mAttachment.amplifier);
+}
+
+void CirrusAudioFixup::publishACPIPowerDebugEvidence(const cirrus::transport::ACPIPowerTransition& power) {
+    if (!gCirrusDebug || !power.checked)
+        return;
+    setProperty("Cirrus_ACPI_Device_Status", uint64_t(power.deviceStatus), 32);
+    setProperty("Cirrus_ACPI_D0_Return", uint64_t(uint32_t(power.result)), 32);
+    setProperty("Cirrus_ACPI_PS0_Present", power.hasPS0 ? kOSBooleanTrue : kOSBooleanFalse);
+    setProperty("Cirrus_ACPI_PS0_Validate_Return", uint64_t(uint32_t(power.ps0ValidationReturn)), 32);
+    setProperty("Cirrus_ACPI_PS0_Return", uint64_t(uint32_t(power.ps0Return)), 32);
+    setProperty("Cirrus_ACPI_PR0_Present", power.hasPR0 ? kOSBooleanTrue : kOSBooleanFalse);
+    setProperty("Cirrus_ACPI_PSC_Present", power.hasPSC ? kOSBooleanTrue : kOSBooleanFalse);
+    setProperty("Cirrus_ACPI_PSC_Validate_Return", uint64_t(uint32_t(power.pscValidationReturn)), 32);
+    setProperty("Cirrus_ACPI_PSC_Return", uint64_t(uint32_t(power.pscReturn)), 32);
+    setProperty("Cirrus_ACPI_PSC_Value", uint64_t(power.pscValue), 32);
+}
+
+void CirrusAudioFixup::publishI2CResourceDebugEvidence(const cirrus::transport::I2CPlatformResources& resources) {
+    if (!gCirrusDebug)
+        return;
+    setProperty("Cirrus_ACPI_CRS_Return", uint64_t(uint32_t(resources.crsReturn())), 32);
+    setProperty("Cirrus_ACPI_CRS_Object_Type", resources.crsObjectType() ? resources.crsObjectType() : "NONE");
+    if (resources.crsData() && resources.crsData()->getLength() <= 65536)
+        setProperty("Cirrus_ACPI_CRS_Data", resources.crsData());
+    if (resources.properties.reason())
+        setProperty("Cirrus_Platform_Properties_Reason", resources.properties.reason());
+    if (resources.properties.source())
+        setProperty("Cirrus_Platform_Properties_Source", resources.properties.source());
+    if (resources.properties.object())
+        cirrus::diagnostics::ACPIObjectEvidence::publish(this, "Cirrus_Platform_DSD", resources.properties.object());
 }

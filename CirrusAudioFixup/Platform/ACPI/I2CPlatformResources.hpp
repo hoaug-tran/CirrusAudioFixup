@@ -1,17 +1,29 @@
 // VoodooI2C publishes its backing ACPI device; endpoint and _DSD data stay owned
 // here until driver discovery has copied the immutable board configuration.
 #pragma once
+#include "Platform/ACPI/ACPIGPIOAccess.hpp"
 #include "Platform/ACPI/ACPII2CResources.hpp"
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
-#include "Platform/ACPI/ACPIGPIOAccess.hpp"
 namespace cirrus::transport {
 class I2CPlatformResources final : public platform::BoardDiscoveryContext::GPIOAccess {
     IOACPIPlatformDevice* mACPI{nullptr};
     IOService* mOwner{nullptr};
+    OSData* mCRSData{nullptr};
+    IOReturn mCRSReturn{kIOReturnNotReady};
+    const char* mCRSObjectType{"NONE"};
+    bool mResetExecuted{false};
     char mPath[256]{};
+
 public:
-    ~I2CPlatformResources() override { OSSafeReleaseNULL(mACPI); }
+    ~I2CPlatformResources() override {
+        OSSafeReleaseNULL(mCRSData);
+        OSSafeReleaseNULL(mACPI);
+    }
     void setDiagnosticOwner(IOService* owner) { mOwner = owner; }
+    bool resetExecuted() const { return mResetExecuted; }
+    IOReturn crsReturn() const { return mCRSReturn; }
+    const char* crsObjectType() const { return mCRSObjectType; }
+    OSData* crsData() const { return mCRSData; }
     bool readResource(uint32_t resource, uint32_t pin, bool low, uint32_t& value) override {
         return readACPIGPIOInput(mACPI, resource, pin, low, mOwner, value);
     }
@@ -23,8 +35,8 @@ public:
         auto* resource = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
         auto* pin = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
         auto* low = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
-        if (!resource || !pin || !low || resource->unsigned64BitValue() > UINT32_MAX ||
-            pin->unsigned64BitValue() > UINT32_MAX || low->unsigned64BitValue() > 1)
+        if (!resource || !pin || !low || resource->unsigned64BitValue() > UINT32_MAX || pin->unsigned64BitValue() > UINT32_MAX ||
+            low->unsigned64BitValue() > 1)
             return false;
         auto* source = resolveACPIReference(mACPI, tuples->getObject(i));
         const bool result = readACPIGPIOInput(source, resource->unsigned32BitValue(), pin->unsigned32BitValue(),
@@ -33,24 +45,30 @@ public:
         return result;
     }
     bool reset(const char* property, int32_t resourceIndex) override {
-        if (!property)
-            return resourceIndex >= 0 && pulseACPIGPIOReset(mACPI, uint32_t(resourceIndex), 0, true, mOwner);
+        mResetExecuted = false;
+        if (!property) {
+            if (resourceIndex < 0)
+                return false;
+            mResetExecuted = pulseACPIGPIOReset(mACPI, uint32_t(resourceIndex), 0, true, mOwner);
+            return mResetExecuted;
+        }
         auto* tuples = OSDynamicCast(OSArray, properties.get(property));
         if (!tuples || !tuples->getCount() || tuples->getCount() % 4 || tuples->getCount() > 64)
             return false;
         // Current discovery supports one shared reset; reject distinct tuples
         // before changing hardware rather than partially resetting a group.
         IOACPIPlatformDevice* source = nullptr;
-        uint32_t resource = 0, pin = 0; bool low = false;
+        uint32_t resource = 0, pin = 0;
+        bool low = false;
         for (unsigned i = 0; i < tuples->getCount(); i += 4) {
             auto* r = OSDynamicCast(OSNumber, tuples->getObject(i + 1));
             auto* p = OSDynamicCast(OSNumber, tuples->getObject(i + 2));
             auto* l = OSDynamicCast(OSNumber, tuples->getObject(i + 3));
             auto* candidate = resolveACPIReference(mACPI, tuples->getObject(i));
-            const bool valid = candidate && r && p && l && r->unsigned64BitValue() <= UINT32_MAX &&
-                p->unsigned64BitValue() <= UINT32_MAX && l->unsigned64BitValue() <= 1 &&
-                (!source || (source == candidate && resource == r->unsigned32BitValue() &&
-                             pin == p->unsigned32BitValue() && low == (l->unsigned32BitValue() != 0)));
+            const bool valid = candidate && r && p && l && r->unsigned64BitValue() <= UINT32_MAX && p->unsigned64BitValue() <= UINT32_MAX &&
+                               l->unsigned64BitValue() <= 1 &&
+                               (!source || (source == candidate && resource == r->unsigned32BitValue() && pin == p->unsigned32BitValue() &&
+                                            low == (l->unsigned32BitValue() != 0)));
             if (!valid) {
                 OSSafeReleaseNULL(candidate);
                 OSSafeReleaseNULL(source);
@@ -65,6 +83,7 @@ public:
                 candidate->release();
         }
         const bool result = pulseACPIGPIOReset(source, resource, pin, low, mOwner);
+        mResetExecuted = result;
         OSSafeReleaseNULL(source);
         return result;
     }
@@ -73,6 +92,10 @@ public:
     ACPIDeviceProperties properties;
     bool load(IOService* provider, const char*& reason) {
         count = 0;
+        mResetExecuted = false;
+        mCRSReturn = kIOReturnNotReady;
+        mCRSObjectType = "NONE";
+        OSSafeReleaseNULL(mCRSData);
         OSSafeReleaseNULL(mACPI);
         reason = "I2C_ACPI_DEVICE_UNAVAILABLE";
         auto* acpi = provider ? support::acpiDeviceCast(provider->getProperty("acpi-device")) : nullptr;
@@ -81,10 +104,16 @@ public:
         reason = "I2C_ACPI_RESOURCES_INVALID";
         OSObject* object = nullptr;
         const auto result = acpi->evaluateObject("_CRS", &object);
+        mCRSReturn = result;
+        mCRSObjectType = ACPIDeviceProperties::objectType(object);
         auto* bytes = OSDynamicCast(OSData, object);
+        if (bytes) {
+            mCRSData = bytes;
+            mCRSData->retain();
+        }
         ACPII2CResources resources;
         const bool valid = result == kIOReturnSuccess && bytes &&
-            parseACPII2CResources(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(), resources);
+                           parseACPII2CResources(static_cast<const uint8_t*>(bytes->getBytesNoCopy()), bytes->getLength(), resources);
         OSSafeReleaseNULL(object);
         if (!valid)
             return false;

@@ -69,6 +69,88 @@ inline IOACPIPlatformDevice* resolveACPIReference(IOACPIPlatformDevice* scope, O
         return canonicalACPIPath(text, canonical, sizeof(canonical)) ? resolveACPIDevice(scope, canonical) : nullptr;
     return resolveACPIDevice(scope, text);
 }
+struct ACPIPowerTransition {
+    bool checked{false};
+    bool hasPS0{false};
+    bool hasPR0{false};
+    bool hasPSC{false};
+    uint32_t deviceStatus{0};
+    uint32_t pscValue{0};
+    IOReturn ps0ValidationReturn{kIOReturnNotFound};
+    IOReturn ps0Return{kIOReturnSuccess};
+    IOReturn pscValidationReturn{kIOReturnNotFound};
+    IOReturn pscReturn{kIOReturnSuccess};
+    IOReturn result{kIOReturnNotReady};
+    const char* reason{"ACPI_DEVICE_UNAVAILABLE"};
+
+    const char* statusText() const {
+        if (!checked)
+            return "NOT_CHECKED";
+        if (result != kIOReturnSuccess)
+            return reason;
+        if (hasPS0 && hasPSC)
+            return "PS0_PSC_D0";
+        if (hasPS0)
+            return "PS0_D0";
+        if (hasPSC)
+            return "PSC_D0";
+        return "NO_PM_METHODS";
+    }
+    static constexpr bool isAbsentReturn(IOReturn status) {
+        return status == kIOReturnNotFound || status == kIOReturnUnsupported || status == kIOReturnError || status == kIOReturnLockedWrite;
+    }
+};
+inline bool ensureACPIDeviceD0(IOACPIPlatformDevice* device, ACPIPowerTransition& state) {
+    state = {};
+    if (!device)
+        return false;
+    state.checked = true;
+    state.deviceStatus = uint32_t(device->getDeviceStatus());
+    if ((state.deviceStatus & 3U) != 3U) {
+        state.reason = "ACPI_DEVICE_DISABLED";
+        state.result = kIOReturnNotReady;
+        return false;
+    }
+    state.hasPR0 = device->validateObject("_PR0") == kIOReturnSuccess;
+    state.ps0ValidationReturn = device->validateObject("_PS0");
+    if (state.ps0ValidationReturn == kIOReturnSuccess) {
+        state.hasPS0 = true;
+        OSObject* ps0Result = nullptr;
+        state.ps0Return = device->evaluateObject("_PS0", &ps0Result);
+        OSSafeReleaseNULL(ps0Result);
+        if (state.ps0Return != kIOReturnSuccess) {
+            state.reason = "ACPI_PS0_FAILED";
+            state.result = state.ps0Return;
+            return false;
+        }
+    } else if (!ACPIPowerTransition::isAbsentReturn(state.ps0ValidationReturn)) {
+        state.reason = "ACPI_PS0_VALIDATION_FAILED";
+        state.result = state.ps0ValidationReturn;
+        return false;
+    }
+    state.pscValidationReturn = device->validateObject("_PSC");
+    if (state.pscValidationReturn == kIOReturnSuccess) {
+        state.hasPSC = true;
+        state.pscReturn = device->evaluateInteger("_PSC", &state.pscValue);
+        if (state.pscReturn != kIOReturnSuccess) {
+            state.reason = "ACPI_PSC_READ_FAILED";
+            state.result = state.pscReturn;
+            return false;
+        }
+        if (state.pscValue != 0) {
+            state.reason = "ACPI_DEVICE_NOT_D0";
+            state.result = kIOReturnNotReady;
+            return false;
+        }
+    } else if (!ACPIPowerTransition::isAbsentReturn(state.pscValidationReturn)) {
+        state.reason = "ACPI_PSC_VALIDATION_FAILED";
+        state.result = state.pscValidationReturn;
+        return false;
+    }
+    state.reason = "ACPI_D0_READY";
+    state.result = kIOReturnSuccess;
+    return true;
+}
 class ACPIDeviceProperties {
 public:
     ACPIDeviceProperties() = default;
@@ -88,8 +170,7 @@ public:
     // as absent native metadata, allowing verified board profile fallback without forcing a custom SSDT,
     // while preserving fail-closed behavior on interpreter execution, allocation or syntax failures.
     bool missingNativeMetadata() const {
-        const bool validationAbsent = mValidationReturn == kIOReturnNotFound || mValidationReturn == kIOReturnError ||
-                                      mValidationReturn == kIOReturnUnsupported || mValidationReturn == kIOReturnLockedWrite;
+        const bool validationAbsent = ACPIPowerTransition::isAbsentReturn(mValidationReturn);
         const bool evaluationAbsent = !strcmp(mReason ? mReason : "", "DSD_EVALUATION_FAILED") &&
                                       (mEvaluationReturn == kIOReturnNotFound || mEvaluationReturn == kIOReturnLockedWrite);
         const bool interpreterAbsent = mReason && (!strcmp(mReason, "DSD_INTERPRETER_UNAVAILABLE") ||

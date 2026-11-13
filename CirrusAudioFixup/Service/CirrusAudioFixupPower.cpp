@@ -69,6 +69,7 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
             clearHdaCache();
 
         mResumePending = false;
+        mWakeFailed = false;
         mNeedsReinitialization = false;
         mPowerAvailable = powered;
 
@@ -96,6 +97,7 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
         }
         suspendCommunication();
         mResumePending = false;
+        mWakeFailed = false;
         mPowerAvailable = false;
         clearHdaCache();
         mHdaState.streamActive = mHdaState.observed = mHdaState.converterPrepared = false;
@@ -111,12 +113,18 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
             return;
         }
         if (!resumeCommunication()) {
-            if (mResumePending && mProbeTimer)
+            if (mResumePending && mProbeTimer) {
                 mProbeTimer->setTimeoutMS(10);
-            else
+                return;
+            }
+            mWakeFailed = true;
+            if (mNativeSPI.bound())
                 setProperty("Cirrus_SPI_Status", "WAKE_CONTROLLER_NOT_READY");
+            setProperty("Cirrus_PM_Powered", uint64_t(uint32_t(0)), 32);
+            publishDriverVerdict();
             return;
         }
+        mWakeFailed = false;
         mPowerAvailable = true;
         mNeedsReinitialization = !bootArgEnabled("-cirrusro");
         mHdaState.topologyLogged = false;

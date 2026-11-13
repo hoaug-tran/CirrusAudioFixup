@@ -43,11 +43,12 @@ inline bool parseACPIGPIOResource(const uint8_t* data, size_t length, uint32_t r
         if (!large && ((*d >> 3) == 6 || (*d >> 3) == 7))
             return false;
         if (*d == 0x8c && index++ == resourceIndex) {
-            // Read-only sampling accepts input/unrestricted shared resources;
-            // reset may be shared; other output leases remain exclusive.
-            if (size < 23 || d[3] != 1 || d[4] != 1 || le16(d + 5) != 1 ||
-                (outputOnly ? (resetOutput ? (le16(d + 7) & ~uint16_t(0x1a)) != 0 : le16(d + 7) != 2)
-                           : (le16(d + 7) & ~uint16_t(0x19)) != 0) || d[16] != 0)
+            // Read-only sampling accepts input/unrestricted shared resources (including NoneAndPreserve);
+            // reset may be shared (None, OutputOnly, NoneAndPreserve); other output leases remain exclusive.
+            const uint16_t flags = le16(d + 7);
+            const bool validFlags = outputOnly ? (resetOutput ? (flags & ~uint16_t(0x1b)) == 0 && (flags & 3U) != 1U : flags == 2)
+                                               : (flags & ~uint16_t(0x1b)) == 0 && (flags & 3U) != 2U;
+            if (size < 23 || d[3] != 1 || d[4] != 1 || le16(d + 5) != 1 || !validFlags || d[16] != 0)
                 return false;
             const size_t pins = le16(d + 14), source = le16(d + 17);
             const size_t vendor = le16(d + 19), vendorSize = le16(d + 21);

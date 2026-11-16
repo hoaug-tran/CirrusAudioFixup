@@ -297,6 +297,79 @@ int main(){
    assert(!transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,false,false));
   }
  }
+ {
+  // Intel GPIO Controller (INTC1085, Alder Lake / Raptor Lake)
+  auto* intelCtrl = make<IOACPIPlatformDevice>();
+  intelCtrl->path = "IOACPIPlane:/_SB/GPI0";
+  intelCtrl->values["_HID"] = make<OSString>("INTC1085");
+  auto* intelMap = make<IOMemoryMap>();
+  // Community 2 (memoryIndex = 2 for pin 269)
+  intelCtrl->maps[2] = intelMap;
+  intelMap->bytes = sizeof(intelMap->r);
+  intelMap->r[0] = 0x960000; // revision
+  intelMap->r[3] = 0x700;    // padbar
+  intelMap->r[0xac / 4] = 0; // host owned
+  const uint32_t padReg = (0x700 + 22 * 16) / 4;
+  intelMap->r[padReg] = (1U << 8) | (1U << 1); // input, physical value = 1
+
+  auto intelGpioDesc = [](unsigned pin, unsigned restriction) {
+   const char source[] = "\\_SB.GPI0";
+   std::vector<uint8_t> d(25 + sizeof(source));
+   d[0] = 0x8c; d[1] = uint8_t(d.size() - 3); d[3] = 1; d[4] = 1; d[5] = 1; d[7] = restriction;
+   d[14] = 23; d[17] = 25; d[19] = uint8_t(d.size()); d[23] = uint8_t(pin); d[24] = uint8_t(pin >> 8);
+   memcpy(d.data() + 25, source, sizeof(source));
+   return d;
+  };
+
+  auto intelCRS = captured;
+  intelCRS.resize(intelCRS.size() - 2);
+  auto d = intelGpioDesc(269, 0x19); // pin 269, unrestricted input
+  intelCRS.insert(intelCRS.end(), d.begin(), d.end());
+  intelCRS.insert(intelCRS.end(), {0x79, 0});
+  amp->values["_CRS"] = make<OSData>(intelCRS);
+  amp->values.erase("_DSD");
+  ::devices = {amp, intelCtrl};
+
+  transport::I2CPlatformResources intelResources;
+  IOService owner;
+  intelResources.setDiagnosticOwner(&owner);
+  assert(intelResources.load(&nub, reason));
+  uint32_t val = 0;
+  assert(intelResources.readResource(0, 0, false, val) && val == 1);
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "INPUT_READ_WITHOUT_WRITES");
+  assert(owner.numbers["Cirrus_GPIO_Input_Value"] == 1);
+
+  // Test activeLow inverted logic
+  assert(intelResources.readResource(0, 0, true, val) && val == 0);
+
+  // Test when bit 1 is 0
+  intelMap->r[padReg] = (1U << 8); // input, physical value = 0
+  assert(intelResources.readResource(0, 0, false, val) && val == 0);
+  assert(intelResources.readResource(0, 0, true, val) && val == 1);
+
+  // Test not GPIO input (RxDisable set)
+  intelMap->r[padReg] |= (1U << 9);
+  assert(!intelResources.readResource(0, 0, false, val));
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "PAD_NOT_GPIO_INPUT");
+
+  // Test _CID fallback when _HID is proprietary
+  intelMap->r[padReg] = (1U << 8) | (1U << 1);
+  intelCtrl->values["_HID"] = make<OSString>("LEN0001");
+  intelCtrl->values["_CID"] = make<OSString>("INTC1085");
+  assert(intelResources.readResource(0, 0, false, val) && val == 1);
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "INPUT_READ_WITHOUT_WRITES");
+
+  // Test unpowered controller (_PSC = 3)
+  intelCtrl->values["_PSC"] = make<OSNumber>(3);
+  assert(!intelResources.readResource(0, 0, false, val));
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "GPIO_CONTROLLER_NOT_POWERED");
+  intelCtrl->values.erase("_PSC");
+  intelCtrl->values.erase("_CID");
+  intelCtrl->values["_HID"] = make<OSString>("INTC1085");
+
+  // Restore amp & devices
+  ::devices = {amp, controller};
+ }
  assert(memory->refs==1&&controller->refs==1&&amp->refs==1);
  nub.objects["i2cAddress"]=make<OSNumber>(0x23);
  {transport::I2CPlatformResources bad;assert(!bad.load(&nub,reason)&&!strcmp(reason,"I2C_PROVIDER_ENDPOINT_UNMATCHED"));}

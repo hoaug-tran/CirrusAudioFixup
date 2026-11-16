@@ -194,7 +194,8 @@ The following table summarizes real-world hardware where this diagnostic methodo
 | **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`)        | ALC287 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770740`                                      | Verified (#16) |
 | **ASUS ROG Zephyrus G14 GA403UV** (`1043:1B13`)      | ALC285 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x03` | `alcid=33` (or `01770c02 01770740`)                                        | Verified (#18) |
 | **HP ENVY x360 15-ey0xxx** (`103C:8A31`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD)                                 | Verified (#14) |
-| **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)          | ALC287 | 2x CS35L41 (I2C) | Node `0x14` (dual) | N/A         | Node `0x02` | AppleALC Layout 21 (`alcid=21`)                                             | Verified (#21) |
+| **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)          | ALC287 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x02` | AppleALC Layout 21 (`alcid=21`) + Node `0x17` verbs (`01770100 01770500 0173b000 01770740`) | Verified (#21) |
+| **Lenovo ThinkBook 16P G5 IRX** (`17AA:38F9`)        | ALC287 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` (L11) / Node `0x02` (L13/21) | AppleALC Layout 11 (`alcid=11`, recommended zero-config) or Layout 13/21 + Node `0x17` verbs (`01770100 01770500 0173b000 01770740`) | Verified (#24) |
 | **ASUS ROG Strix G17 G713P** (`1043:1D1F`)            | ALC294 | 2x CS35L41 (I2C) | Node `0x17` (dual) | N/A         | Node `0x03` | AppleALC Layout 13 (`alcid=13`), no extra verbs; 48 kHz required          | Verified (#22) |
 
 ### Machine notes
@@ -243,11 +244,35 @@ The following table summarizes real-world hardware where this diagnostic methodo
 
 #### Lenovo Legion Slim 7 Gen 7 (`17AA:3877` / `17AA:385C`, Realtek ALC287)
 
-- **AppleALC Layout**: Layout 21 (`alcid=21`) (or Layout 13 `alcid=13`). Note that inside macOS, AppleALC may dynamically map Layout 21 onto AppleHDA's internal layout index (e.g. Layout 7 on MacBookPro16,1 SMBIOS). Boot-args must specify `alcid=21`.
-- **Speaker Pin**: Node `0x14` routed to DAC Node `0x02` (connection select `01470c02`). Node `0x17` is not routed on this model.
+- **AppleALC Layout**: Layout 21 (`alcid=21`). Boot-args should specify `alcid=21` to keep internal mic (Node `0x1A`) and headphone combo jack (Node `0x19`/`0x21`) fully functional.
+- **Speaker Pin**: Node `0x17` is the digital I2S audio and clock stream feeding both CS35L41 amplifiers (Node `0x14` is an unused analog pin). Because BIOS leaves Node `0x17` unconnected and AppleALC Layout 21 omits it, Node `0x17` must be initialized to DAC Node `0x02` (`01770100`) and pin widget control asserted (`01770740`) so ALC287 generates BCLK:
+  ```bash
+  alc-verb 0x17 0x701 0x00   # Select DAC Node 0x02 (connection index 0)
+  alc-verb 0x17 0x705 0x00   # Wake Pin Complex to D0
+  alc-verb 0x17 0x3b0 0x00   # Unmute amp at 0 dB gain
+  alc-verb 0x17 0x707 0x40   # Pin widget control: assert OUT to start BCLK and I2S stream
+  ```
+  *(Node `0x17` pincap `0x0000001c` lacks EAPD, so `01770c02` is omitted).*
 - **Amplifiers**: Dual CS35L41 (`CSC3551`) over I2C at addresses `0x40` (Left) and `0x41` (Right).
 - **Topology**: External boost with VSPK switch (`ExternalWithSwitch`), active-low GPIO reset (`resetResource = 0`) and ACPI D0 (`_PS0`) power transition.
 - **SSID Notes**: ACPI `_SUB` evaluates to `17AA:3877`, while audio PCI controller reports subsystem `17AA:385C`. CirrusAudioFixup automatically maps both to the verified embedded speaker protection tuning.
+
+#### Lenovo ThinkBook 16P G5 IRX (`17AA:38F9` / `17AA:3D3B`, Realtek ALC287)
+
+- **AppleALC Layout**:
+  - **Recommended (Zero-Configuration)**: AppleALC Layout 11 (`alcid=11`). In AppleALC, Layout 11 natively routes IntSpeaker to Pin Complex Node `0x17` (`0x90170110`) via DAC Node `0x03` in `Platforms11.xml` (PathMap 287), combo headphone to Node `0x21` (`0x03211020`) via DAC Node `0x02`, and combo mic to Node `0x19` (`0x03811030`). IntSpeaker audio and BCLK are generated automatically on Node `0x17` without requiring any manual `alc-verb` commands.
+  - **Alternative (Layout 13 or 21 with alc-verbs)**: If `alcid=13` or `alcid=21` is used, AppleALC routes IntSpeaker to Node `0x14` (which is unconnected/disabled on this machine, pin default `0x411111f0`) and either omits or explicitly disables Node `0x17` (Layout 13 injects ConfigData verb `01771cf0 01771d00 01771e00 01771f40` to disable Node `0x17`). To tap into DAC Node `0x02` on these layouts, Node `0x17` must be initialized manually via `alc-verb`:
+    ```bash
+    alc-verb 0x17 0x701 0x00   # Select DAC Node 0x02 (connection index 0)
+    alc-verb 0x17 0x705 0x00   # Wake Pin Complex to D0
+    alc-verb 0x17 0x3b0 0x00   # Unmute amp at 0 dB gain
+    alc-verb 0x17 0x707 0x40   # Pin widget control: assert OUT to start BCLK and I2S stream
+    ```
+    *(Node `0x17` pincap `0x0000001c` lacks EAPD, so `01770c02` is omitted).*
+- **Amplifiers**: Dual CS35L41 Rev B2 (`CSC3551`) over I2C on bus `I2C4` (PCI `8086:7A7C`) at addresses `0x41` (Right, endpoint 0) and `0x40` (Left, endpoint 1).
+- **Speaker ID & Reset**: Speaker ID is read from ACPI `_CRS` index 2 (GPIO pin 269, active-high, value `1`) on Intel GPIO controller `INTC1085` (`\_SB.GPI0`, ACPI memory index 2, Community 3 at offset `0x6B0000`). Active-low reset is on ACPI `_CRS` index 0 (GPIO pin 7 on `\_SB.GPI0`, ACPI memory index 0, Community 0).
+- **Topology**: External boost (`ExternalWithSwitch`), channels `{1, 0}` (endpoint 0 = Right, endpoint 1 = Left).
+- **Firmware & Tuning**: CS35L41 Rev B2 DSP1 firmware `halo_cspl_RAM_revB2_29.63.1.wmfw` (shared with 17AA:3877) and verified OEM tunings `cs35l41-dsp1-spk-prot-17aa38f9-spkid1-l0.bin` / `-spkid1-r0.bin` (48 kHz, +17.5 dB gain). PCI subsystem `17AA:3D3B` automatically translates to `17AA:38F9`.
 
 #### ASUS ROG Strix G17 G713P (`1043:1D1F`, Realtek ALC294)
 

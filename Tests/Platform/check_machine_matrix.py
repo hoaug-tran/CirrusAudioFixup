@@ -203,6 +203,84 @@ int main(){
   assert(!found->configuration.permits(wrong));
   printf("PASS HP ENVY x360 15-ey0xxx issue #14: I2C dual-amp (0x40/0x41), internal boost (1000nH/4100mA/24uF), GPIO reset(0)/speaker(1)\n");
  }
+ // Lenovo ThinkBook 16P G5 IRX / issue #24 (Realtek ALC287 / CS35L41 dual-amp on I2C 0x41/0x40)
+ {
+  const auto* facts = l41::boardProperties(0x17aa, 0x38f9);
+  assert(facts && facts->count == 2 && !facts->internalBoost);
+  assert(facts->channels[0] == 1 && facts->channels[1] == 0);
+  assert(facts->resetResource == 0 && facts->speakerResource == 2 && facts->csResource == -1);
+
+  const auto* profile = platform::findPlatformProfile("CSC3551");
+  assert(profile && profile->amplifierModel == core::AmplifierModel::CS35L41);
+
+  core::BusEndpoint endpoints[] = {
+   {core::BusTransportType::I2C, "\\_SB.PC00.I2C4.SPKR", 0x41, false, 0, 400000, 0},
+   {core::BusTransportType::I2C, "\\_SB.PC00.I2C4.SPKR", 0x40, false, 0, 400000, 0}
+  };
+  struct Lenovo_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+   unsigned resets = 0;
+   int32_t lastReset = -1;
+   uint32_t lastResource = UINT32_MAX;
+   bool read(const char*, size_t, uint32_t& value) override { value = 1; return true; }
+   bool readResource(uint32_t resource, uint32_t pin, bool low, uint32_t& value) override {
+    (void)pin; (void)low;
+    lastResource = resource;
+    value = 1;
+    return true;
+   }
+   bool reset(const char*, int32_t resource) override {
+    ++resets;
+    lastReset = resource;
+    return true;
+   }
+  } gpio;
+
+  const platform::BoardIdentity identity{0x17aa, 0x38f9, "CSC3551"};
+  const char* reason = nullptr;
+  Properties p;
+
+  // 1. Without GPIO access, speakerResource >= 0 fails closed
+  assert(!l41::resolveBoardConfiguration({identity, endpoints, 2, p}, available, reason));
+  assert(!strcmp(reason, "CS35L41_SPEAKER_ID_REQUIRED"));
+
+  // 2. With GPIO access, discovery succeeds via production available check and BoardProperties
+  std::unique_ptr<platform::DiscoveredBoard> found(
+   l41::resolveBoardConfiguration({identity, endpoints, 2, p, &gpio}, available, reason));
+  assert(found && found->configuration.permits(identity) && found->configuration.count == 2);
+  assert(gpio.lastResource == 2); // speakerResource index 2 verified
+
+  // Verify production firmware resource for speaker ID 1
+  const auto* res1 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x17aa, 0x38f9, 1);
+  assert(res1 && res1->wmfw && res1->wmfwSize);
+  checkFirmware(*res1);
+
+  // 3. Hardware preparation triggers reset on resetResource index 0
+  assert(found->prepareHardware(gpio));
+  assert(gpio.resets == 1 && gpio.lastReset == 0);
+
+  // 4. Validate amplifier endpoints, channels (endpoint 0 at 0x41 is Right/ch 1, endpoint 1 at 0x40 is Left/ch 0)
+  assert(found->configuration.amplifiers[0].channelIndex == 1);
+  assert(found->configuration.amplifiers[1].channelIndex == 0);
+  assert(found->configuration.amplifiers[0].speakerId == 1);
+  assert(found->configuration.amplifiers[1].speakerId == 1);
+
+  for (size_t i = 0; i < 2; ++i) {
+   const auto& binding = found->configuration.amplifiers[i];
+   assert(binding.endpoint.transport == core::BusTransportType::I2C);
+   assert(binding.endpoint.i2cAddress == (i == 0 ? 0x41 : 0x40));
+   l41::DeviceConfiguration config;
+   assert(l41::decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize,
+                                         binding.driverConfigurationKind, config));
+   assert(!config.power.internal());
+   assert(config.gpio1Function == 1 && config.gpio2Function == 2);
+  }
+
+  // 5. Permitting and mismatch rejection
+  auto wrong = identity;
+  wrong.subsystemDevice ^= 1;
+  assert(!found->configuration.permits(wrong));
+  printf("PASS Lenovo ThinkBook 16P G5 IRX issue #24: I2C dual-amp (0x41/0x40), external boost, GPIO reset(0)/speaker(2)\n");
+ }
  // Reported G614JV identity/tuning gaps must remain unauthorized.
  Properties empty;core::BusEndpoint unknown[]={{core::BusTransportType::SPI,"controller",0,false,0,4000000,0},
                                              {core::BusTransportType::SPI,"controller",0,false,1,4000000,0}};

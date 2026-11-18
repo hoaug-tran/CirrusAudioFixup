@@ -105,14 +105,14 @@ AppleALC must configure the actual speaker output path for the machine. A matchi
 
 ## macOS compatibility
 
-| macOS          | Status                                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------------ |
-| Big Sur 11     | Supported deployment target                                                                            |
-| Monterey 12    | Supported deployment target                                                                            |
-| **Ventura 13** | **Confirmed working**                                                                                  |
-| **Sonoma 14**  | **Confirmed working** (verified on HP ENVY x360 #14)                                                   |
-| **Sequoia 15** | **Confirmed working** (verified on ASUS G614JI #5, Zephyrus G16 #8, Zephyrus G14 #18)                  |
-| **Tahoe 26**   | **Confirmed working** (verified on Alienware x17 R2 #12, ThinkBook 16p G6 #16; requires host AppleHDA) |
+| macOS          | Status                      |
+| -------------- | --------------------------- |
+| Big Sur 11     | Supported deployment target |
+| Monterey 12    | Supported deployment target |
+| **Ventura 13** | **Confirmed working**       |
+| **Sonoma 14**  | **Confirmed working**       |
+| **Sequoia 15** | **Confirmed working**       |
+| **Tahoe 26**   | **Confirmed working**       |
 
 Builds target x86_64. Confirmed OS support applies to the working hardware configurations, not every laptop containing a Cirrus amplifier.
 

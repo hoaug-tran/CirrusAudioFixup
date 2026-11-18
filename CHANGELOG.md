@@ -4,12 +4,15 @@
 
 ### CS35L41
 
+- Added Lenovo ThinkBook 16P G5 IRX support (`CSC3551`, subsystem `17AA:38F9` / PCI `17AA:3D3B`) over I2C with switched external boost topology and embedded Rev B2 speaker protection tuning ([#24](https://github.com/hoaug-tran/CirrusAudioFixup/issues/24)).
 - Added Lenovo Legion Slim 7 Gen 7 (2022) support (`CSC3551`, subsystem `17AA:3877` / PCI `17AA:385C`) over I2C with switched external boost topology ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)).
 - Added ASUS ROG Strix G17 G713PI/PU/PV/PVN support (`CSC3551`, subsystem `1043:1D1F`) over AMD I2C with internal boost topology, using the G733 (`1043:1503`) speaker protection tuning that the Cirrus Windows package assigns to the same configuration ([#22](https://github.com/hoaug-tran/CirrusAudioFixup/pull/22)).
 - Added support for external boost topology with active-low GPIO reset (`resetResource = 0` on `17AA:3877`) and optional software-only reset fallback over I2C on CS35L41 amplifiers.
 
 ### Platform & Infrastructure
 
+- Restored Intel LPSS SPI private register state (fractional clock divider, reset deassertion, chip-select and clock gating) and SSP control registers across S3 resume to prevent wake SPI transfer timeouts ([#25](https://github.com/hoaug-tran/CirrusAudioFixup/issues/25)).
+- Added ACPI `_CID` fallback for Intel GPIO controller identification (`INTC1085`) when OEM custom `_HID` (e.g. `LEN0001`) is present, and enforced 32-bit MMIO alignment on GPIO register accesses.
 - Enforced ACPI D0 (`_PS0`/`_PSC`) readiness on ACPI-backed I2C amplifier devices during setup and wake, and surfaced wake/communication failures as `COMMUNICATION_FAILED`.
 - Accepted `IoRestrictionNoneAndPreserve` ACPI `GpioIo` descriptors for shared GPIO resources and separated `NO_GPIO_RESET_REQUIRED` from `ACPI_GPIO_PREPARED` reset reporting.
 - Enforced fail-closed power management transitions on startup failure.

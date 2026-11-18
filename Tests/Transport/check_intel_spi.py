@@ -238,6 +238,50 @@ int main(int argc,char** argv) {
         assert(engine.exchange({0,1000000,0},tx,rx,10)==kIOReturnNotReady&&!engine.online());
         engine.shutdown();assert(cold.regs[E::kReset/4]==4&&cold.regs[E::kClock/4]==0);
     }
+    {
+        // G614JI Issue #25: S3 power island loss clears LPSS private and SSP registers
+        Window s3;s3.guardPower=true;
+        const uint32_t savedClock = 0x80000000U | 1 | (2 << 1) | (5 << 16);
+        s3.regs[E::kClock/4] = savedClock;
+        s3.regs[E::kReset/4] = 7;
+        E engine(s3);assert(engine.initialize()==0);
+        engine.suspend();
+        // Hardware power island lost across S3: resets asserted, clock cleared, CS and SSP lost
+        s3.regs[E::kReset/4] = 0;
+        s3.regs[E::kClock/4] = 0;
+        s3.regs[E::kChipSelect/4] = 0;
+        s3.regs[E::kControl0/4] = 0;
+        s3.regs[E::kControl1/4] = 0;
+        assert(engine.resume()==0);
+        assert((s3.regs[E::kReset/4] & 7) == 7);
+        assert((s3.regs[E::kClock/4] & 0x7ffffffeU) == (savedClock & 0x7ffffffeU));
+        assert(s3.regs[E::kClock/4] & 1);
+        assert((s3.regs[E::kChipSelect/4] & 3) == 3);
+        assert((s3.regs[E::kControl0/4] & E::kEnabled) == 0);
+        uint8_t tx[10]={0x80,0,0,0},rx[10]{};
+        assert(engine.exchange({0,1000000,0},tx,rx,10)==0);
+        engine.shutdown();
+    }
+    {
+        // S3 resume edge case: hardware wakes with clock enable/update set but divider cleared
+        Window s3;s3.guardPower=true;
+        const uint32_t savedClock = 0x80000000U | 1 | (3 << 1) | (7 << 16);
+        s3.regs[E::kClock/4] = savedClock;
+        s3.regs[E::kReset/4] = 3; // cold boot left IDMA reset asserted
+        E engine(s3);assert(engine.initialize()==0);
+        engine.suspend();
+        // Firmware sets enable & update strobe but drops divider bits
+        s3.regs[E::kReset/4] = 0;
+        s3.regs[E::kClock/4] = 0x80000001U;
+        s3.regs[E::kChipSelect/4] = 0;
+        assert(engine.resume()==0);
+        assert((s3.regs[E::kReset/4] & 7) == 7); // all 3 resets deasserted
+        assert((s3.regs[E::kClock/4] & 0x7ffffffeU) == (savedClock & 0x7ffffffeU));
+        assert(s3.regs[E::kClock/4] & 1);
+        uint8_t tx[10]={0x80,0,0,0},rx[10]{};
+        assert(engine.exchange({0,1000000,0},tx,rx,10)==0);
+        engine.shutdown();
+    }
     for(bool clockFailure:{false,true}){
         Window cold;cold.guardPower=true;cold.blockReset=!clockFailure;cold.blockClock=clockFailure;
         cold.regs[E::kReset/4]=4;cold.regs[E::kClock/4]=0;

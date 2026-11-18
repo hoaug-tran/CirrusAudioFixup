@@ -147,7 +147,8 @@ public:
         mSavedControl1 = mWindow.read32(kControl1);
         mSavedTimeout = mWindow.read32(0x28);
         mSavedProtocol = mWindow.read32(0x2c);
-        if (mSavedControl0 == 0xffffffffU || mSavedControl1 == 0xffffffffU || mSavedTimeout == 0xffffffffU || mSavedProtocol == 0xffffffffU) {
+        if (mSavedControl0 == 0xffffffffU || mSavedControl1 == 0xffffffffU || mSavedTimeout == 0xffffffffU ||
+            mSavedProtocol == 0xffffffffU) {
             mWindow.stage("SSP_CONTEXT_END", kIOReturnNoDevice);
             restorePrerequisites();
             return kIOReturnNoDevice;
@@ -187,6 +188,20 @@ public:
         mWindow.stage("RESUME_FUNCTION_PREPARE_END", prepared);
         if (prepared != kIOReturnSuccess)
             return prepared;
+        mWindow.stage("RESUME_SSP_RESTORE_BEGIN");
+        mWindow.write32(kChipSelect, mSavedSelect | 3U);
+        uint32_t gate = mProfile.forceClockGate ? ((mSavedGate & ~3U) | 3U) : mSavedGate;
+        mWindow.write32(kClockGate, gate);
+        mWindow.write32(kControl1, mSavedControl1);
+        mWindow.write32(0x28, mSavedTimeout);
+        mWindow.write32(0x2c, mSavedProtocol);
+        mWindow.write32(kControl0, mSavedControl0 & ~kEnabled);
+        const auto drained = drainRx();
+        if (drained != kIOReturnSuccess)
+            return drained;
+        mWindow.write32(kStatus, kOverrun | kTimeoutStatus | kBitError);
+        mWindow.write32(kClockGate, mSavedGate);
+        mWindow.stage("RESUME_SSP_RESTORE_END");
         mOnline = true;
         return kIOReturnSuccess;
     }
@@ -226,8 +241,7 @@ public:
             mTransaction.primaryResult = result;
         if (endpoint.chipSelect < 4 && !mFirstTransactions[endpoint.chipSelect].valid)
             mFirstTransactions[endpoint.chipSelect] = mTransaction;
-        bool identity = tx && length == 10 && mTransaction.tx[0] == 0x80 &&
-                        (mTransaction.tx[3] == 0 || mTransaction.tx[3] == 4);
+        bool identity = tx && length == 10 && mTransaction.tx[0] == 0x80 && (mTransaction.tx[3] == 0 || mTransaction.tx[3] == 4);
         for (size_t i = 1; identity && i < 10; ++i)
             if (i != 3 && mTransaction.tx[i] != 0)
                 identity = false;
@@ -327,9 +341,8 @@ private:
         mTransaction.configured = true;
         // A completed MMIO write is not proof the requested frame was accepted.
         // Refuse to clock bytes with a different word size, mode or divider.
-        if (mTransaction.control0 != (cr0 | kEnabled) || mTransaction.control1 != cr1 ||
-            mTransaction.timeout != 0 || mTransaction.protocol != 0 ||
-            (mTransaction.csInactive & (mProfile.selectMask | 3U)) != (inactive & (mProfile.selectMask | 3U)))
+        if (mTransaction.control0 != (cr0 | kEnabled) || mTransaction.control1 != cr1 || mTransaction.timeout != 0 ||
+            mTransaction.protocol != 0 || (mTransaction.csInactive & (mProfile.selectMask | 3U)) != (inactive & (mProfile.selectMask | 3U)))
             return finish(kIOReturnIOError, inactive, gate);
         mTransaction.phase = "ASSERT_CS";
         if (external) {
@@ -339,8 +352,7 @@ private:
         } else
             mWindow.write32(kChipSelect, inactive & ~2U);
         mTransaction.csActive = mWindow.read32(kChipSelect);
-        if ((mTransaction.csActive & (mProfile.selectMask | 3U)) !=
-            ((external ? inactive : inactive & ~2U) & (mProfile.selectMask | 3U)))
+        if ((mTransaction.csActive & (mProfile.selectMask | 3U)) != ((external ? inactive : inactive & ~2U) & (mProfile.selectMask | 3U)))
             return finish(kIOReturnIOError, inactive, gate, external);
         mTransaction.phase = "TRANSFER";
 
@@ -407,19 +419,25 @@ private:
         const uint32_t reset = mWindow.read32(kReset), clock = mWindow.read32(kClock);
         if (reset == 0xffffffffU || clock == 0xffffffffU)
             return kIOReturnNoDevice;
-        if ((reset & 3U) != 3U) {
+        if ((reset & 7U) != 7U) {
             mResetChanged = true;
-            mWindow.write32(kReset, reset | 3U);
+            uint32_t targetReset = reset | mSavedReset | 7U;
+            mWindow.write32(kReset, targetReset);
             if ((mWindow.read32(kReset) & 3U) != 3U)
                 return kIOReturnNotReady;
         }
-        if ((clock & (kClockEnable | kClockUpdate)) != (kClockEnable | kClockUpdate)) {
+        uint32_t targetClock = clock;
+        if ((mSavedClock & 0x7ffffffeU) && !(targetClock & 0x7ffffffeU))
+            targetClock |= (mSavedClock & 0x7ffffffeU);
+        if ((targetClock & 0x7ffffffeU) != (clock & 0x7ffffffeU) ||
+            (targetClock & (kClockEnable | kClockUpdate)) != (kClockEnable | kClockUpdate)) {
             mClockChanged = true;
-            mWindow.write32(kClock, clock | kClockEnable | kClockUpdate);
+            targetClock |= kClockEnable | kClockUpdate;
+            mWindow.write32(kClock, targetClock);
         }
         mPreparedClock = mWindow.read32(kClock);
         if (mPreparedClock == 0xffffffffU || !(mPreparedClock & kClockEnable) ||
-            (mPreparedClock & 0x7ffffffeU) != (clock & 0x7ffffffeU))
+            (mPreparedClock & 0x7ffffffeU) != (targetClock & 0x7ffffffeU))
             return kIOReturnNotReady;
         return hardwareReady() ? kIOReturnSuccess : kIOReturnNotReady;
     }
@@ -475,8 +493,9 @@ private:
         mWindow.write32(kChipSelect, inactive);
         mTransaction.csFinal = mWindow.read32(kChipSelect);
         const uint32_t csMask = mProfile.selectMask | 3U;
-        mTransaction.cleanupNativeCS = mTransaction.csFinal == 0xffffffffU ? kIOReturnNoDevice :
-            ((mTransaction.csFinal & csMask) == (inactive & csMask) ? kIOReturnSuccess : kIOReturnIOError);
+        mTransaction.cleanupNativeCS = mTransaction.csFinal == 0xffffffffU
+                                           ? kIOReturnNoDevice
+                                           : ((mTransaction.csFinal & csMask) == (inactive & csMask) ? kIOReturnSuccess : kIOReturnIOError);
         recordCleanup(mTransaction.cleanupNativeCS);
         if (mTransaction.cleanupNativeCS != kIOReturnSuccess)
             mOnline = false;

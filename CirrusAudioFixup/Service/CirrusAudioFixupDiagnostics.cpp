@@ -25,8 +25,9 @@ void CirrusAudioFixup::logProviderInfo(IOService* provider) {
     setProperty("Cirrus_Provider_Class", provider->getMetaClass()->getClassName());
     char providerPath[256]{};
     int pathLength = sizeof(providerPath);
-    if (provider->getPath(providerPath, &pathLength, gIOServicePlane))
+    if (provider->getPath(providerPath, &pathLength, gIOServicePlane)) {
         setProperty("Cirrus_Provider_Path", providerPath);
+    }
     IOLog("CirrusAudioFixup: ATTACH cpu=%s brand=%s provider=%s class=%s path=%s\n", cirrus::support::cpuVendorName(cpu.vendor), cpu.brand,
           provider->getName(), provider->getMetaClass()->getClassName(), providerPath);
     CIRRUS_LOG("provider name=%s class=%s", provider->getName(), provider->getMetaClass()->getClassName());
@@ -48,8 +49,9 @@ void CirrusAudioFixup::logProviderInfo(IOService* provider) {
 }
 
 void CirrusAudioFixup::dumpProviderProperties(IOService* provider) {
-    if (!gCirrusDebug)
+    if (!gCirrusDebug) {
         return;
+    }
     if (!provider) {
         return;
     }
@@ -57,8 +59,9 @@ void CirrusAudioFixup::dumpProviderProperties(IOService* provider) {
     CIRRUS_LOG("provider properties follow");
 
     OSDictionary* properties = provider->getPropertyTable();
-    if (!properties)
+    if (!properties) {
         return;
+    }
     OSCollectionIterator* iterator = OSCollectionIterator::withCollection(properties);
     if (!iterator) {
         CIRRUS_ERR("property iterator failed");
@@ -102,8 +105,9 @@ void CirrusAudioFixup::initTraceBuffer() {
 
 void CirrusAudioFixup::recordTrace(TraceSource source, uint8_t ampIndex, bool isWrite, bool isBulk, uint32_t reg, uint32_t valOrLen,
                                    IOReturn ret) {
-    if (!mTraceLock)
+    if (!mTraceLock) {
         return;
+    }
 
     uint64_t time = 0;
     clock_get_uptime(&time);
@@ -120,21 +124,24 @@ void CirrusAudioFixup::recordTrace(TraceSource source, uint8_t ampIndex, bool is
     }
 
     if (isBulk) {
-        if (ret == kIOReturnSuccess)
+        if (ret == kIOReturnSuccess) {
             mTraceStats.bulkSuccess++;
-        else
+        } else {
             mTraceStats.bulkFail++;
+        }
     } else {
         if (isWrite) {
-            if (ret == kIOReturnSuccess)
+            if (ret == kIOReturnSuccess) {
                 mTraceStats.writeSuccess++;
-            else
+            } else {
                 mTraceStats.writeFail++;
+            }
         } else {
-            if (ret == kIOReturnSuccess)
+            if (ret == kIOReturnSuccess) {
                 mTraceStats.readSuccess++;
-            else
+            } else {
                 mTraceStats.readFail++;
+            }
         }
     }
 
@@ -156,8 +163,9 @@ void CirrusAudioFixup::recordTrace(TraceSource source, uint8_t ampIndex, bool is
 }
 
 void CirrusAudioFixup::publishStatistics() {
-    if (!mTraceLock)
+    if (!mTraceLock) {
         return;
+    }
     IOLockLock(mTraceLock);
     const auto stats = mTraceStats;
     IOLockUnlock(mTraceLock);
@@ -275,8 +283,9 @@ void CirrusAudioFixup::recordDiagnosticFailure(AmplifierState& amp, DiagnosticFa
         setProperty(key, uint64_t(uint32_t(ioReturn)), 32);
     }
     diag.latestFailure = failure;
-    if (diag.failureCount != UINT32_MAX)
+    if (diag.failureCount != UINT32_MAX) {
         ++diag.failureCount;
+    }
     diag.reg = reg;
     diag.expected = expected;
     diag.actual = actual;
@@ -343,13 +352,15 @@ bool CirrusAudioFixup::publishRuntimeStatus() {
     }
     for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
         const auto* status = mAmplifierManager.status(i);
-        if (!status)
+        if (!status) {
             continue;
+        }
         cirrus::diagnostics::RuntimeDiagnosticSnapshot next{uint32_t(status->stage),         uint32_t(status->firstFailureStage),
                                                             uint32_t(status->firstFailure),  uint32_t(status->latestFailure),
                                                             uint32_t(status->cleanupResult), status->failures};
-        if (!mRuntimePublished[i].update(next))
+        if (!mRuntimePublished[i].update(next)) {
             continue;
+        }
         changed = true;
         char key[64]{};
         const char* names[] = {"Stage", "FailureStage", "FirstFailure", "LatestFailure", "CleanupReturn", "FailureCount"};
@@ -377,8 +388,9 @@ bool CirrusAudioFixup::publishRuntimeStatus() {
         }
         mRuntimePublished[i] = {};
     }
-    if (changed)
+    if (changed) {
         publishStatistics();
+    }
     return changed;
 }
 
@@ -413,8 +425,9 @@ void CirrusAudioFixup::publishDriverVerdict() {
     }
     publishAttachmentStatus();
     bool topologyComplete = mPlatformProfile && mAmplifierCount == expectedAmplifierCount();
-    for (size_t i = 0; i < mAmplifierCount; ++i)
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
         topologyComplete &= mAmplifiers[i].present;
+    }
     bool allInitialized = (mAmplifierCount > 0);
     bool anyFaulted = false, identityPending = false;
     const char* readyVerdict = nullptr;
@@ -427,17 +440,20 @@ void CirrusAudioFixup::publishDriverVerdict() {
         allInitialized &= ready && (!report.managed || report.initialized);
         anyFaulted |= mAmplifiers[i].playbackFaulted || report.faulted;
         identityPending |= report.waiting;
-        if (report.waitingVerdict)
+        if (report.waitingVerdict) {
             waitingVerdict = report.waitingVerdict;
+        }
         const char* label = report.readyVerdict ? report.readyVerdict : "READY_DRIVERS";
-        if (!readyVerdict)
+        if (!readyVerdict) {
             readyVerdict = label;
-        else if (strcmp(readyVerdict, label))
+        } else if (strcmp(readyVerdict, label)) {
             readyVerdict = "READY_DRIVERS";
+        }
     }
     anyFaulted |= mAmplifierManager.stage() == cirrus::core::AmplifierStage::Faulted;
-    if (anyFaulted)
+    if (anyFaulted) {
         mAttachment.amplifier = "FAULTED";
+    }
     publishAttachmentStatus();
     const bool communicationFailed = !strcmp(mAttachment.communication, "FAILED") && (!strcmp(mAttachment.latest.stage, "COMMUNICATION") ||
                                                                                       !strcmp(mAttachment.latest.stage, "CONTROLLER_PM"));
@@ -458,15 +474,17 @@ void CirrusAudioFixup::publishDriverVerdict() {
         setProperty("Cirrus_Driver_Verdict", value);
         value->release();
     }
-    for (size_t i = 0; i < mAmplifierCount; ++i)
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
         CIRRUS_LOG("DIAG_VERDICT driver=%s amp=%s first=%s latest=%s last_good=%s", verdict, mAmplifiers[i].name,
                    failureName(mAmplifiers[i].diagnostic.firstFailure), failureName(mAmplifiers[i].diagnostic.latestFailure),
                    stageName(mAmplifiers[i].diagnostic.lastGoodStage));
+    }
 }
 
 void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mirrorPropertyName) {
-    if (!mTraceLock)
+    if (!mTraceLock) {
         return;
+    }
 
     CIRRUS_LOG("--- TRACE BUFFER DUMP START ---");
 
@@ -525,12 +543,11 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
 
         if (e.isBulk) {
             snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] BULK %s 0x%05X len=%u ret=0x%X\n",
-                     static_cast<unsigned long long>(e.timestamp), srcStr, ampStr,
-                     e.isWrite ? "WRITE" : "READ", e.reg, e.value, e.ret);
+                     static_cast<unsigned long long>(e.timestamp), srcStr, ampStr, e.isWrite ? "WRITE" : "READ", e.reg, e.value, e.ret);
         } else {
             snprintf(lineBuffer, sizeof(lineBuffer), "[%llu ms][%s][%s] %s 0x%05X %s 0x%08X ret=0x%X\n",
-                     static_cast<unsigned long long>(e.timestamp), srcStr, ampStr,
-                     e.isWrite ? "WRITE" : "READ", e.reg, e.isWrite ? "<-" : "->", e.value, e.ret);
+                     static_cast<unsigned long long>(e.timestamp), srcStr, ampStr, e.isWrite ? "WRITE" : "READ", e.reg,
+                     e.isWrite ? "<-" : "->", e.value, e.ret);
         }
 
         size_t lineLen = strlen(lineBuffer);
@@ -545,8 +562,9 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
     OSString* strObj = OSString::withCString(dumpBuffer);
     if (strObj) {
         setProperty(propertyName ? propertyName : "Cirrus_Trace_Dump", strObj);
-        if (mirrorPropertyName)
+        if (mirrorPropertyName) {
             setProperty(mirrorPropertyName, strObj);
+        }
         strObj->release();
     } else {
         CIRRUS_ERR("DIAGNOSTICS_UNAVAILABLE component=trace_property return=NO_MEMORY");
@@ -557,27 +575,32 @@ void CirrusAudioFixup::dumpTraceBuffer(const char* propertyName, const char* mir
 }
 
 void CirrusAudioFixup::captureFailureSnapshot(AmplifierState& amp, DiagnosticFailure) {
-    for (size_t i = 0; i < mAmplifierCount; ++i)
+    for (size_t i = 0; i < mAmplifierCount; ++i) {
         if (&mAmplifiers[i] == &amp) {
             mAmplifierManager.captureDiagnostics(i);
             return;
         }
+    }
 }
 
 void CirrusAudioFixup::recordAttachmentFailure(const char* stage, const char* reason, IOReturn result, uint32_t index,
                                                const char* indexKind) {
-    if (!stage)
+    if (!stage) {
         stage = "UNKNOWN";
-    if (!reason)
+    }
+    if (!reason) {
         reason = "UNSPECIFIED_FAILURE";
-    if (!indexKind)
+    }
+    if (!indexKind) {
         indexKind = "UNKNOWN";
+    }
 #if defined(KERNEL)
     publishMatchingEvent(reason, mProvider, result, "Cirrus_Last_Attachment_Failure");
 #endif
     const bool publish = mAttachment.record(stage, reason, result, index, indexKind);
-    if (!publish)
+    if (!publish) {
         return;
+    }
     setProperty("Cirrus_Attach_First_Stage", mAttachment.first.stage);
     setProperty("Cirrus_Attach_First_Reason", mAttachment.first.reason);
     setProperty("Cirrus_Attach_First_Return", uint64_t(uint32_t(mAttachment.first.result)), 32);
@@ -608,8 +631,9 @@ void CirrusAudioFixup::publishAttachmentStatus() {
 }
 
 void CirrusAudioFixup::publishACPIPowerDebugEvidence(const cirrus::transport::ACPIPowerTransition& power) {
-    if (!gCirrusDebug || !power.checked)
+    if (!gCirrusDebug || !power.checked) {
         return;
+    }
     setProperty("Cirrus_ACPI_Device_Status", uint64_t(power.deviceStatus), 32);
     setProperty("Cirrus_ACPI_D0_Return", uint64_t(uint32_t(power.result)), 32);
     setProperty("Cirrus_ACPI_PS0_Present", power.hasPS0 ? kOSBooleanTrue : kOSBooleanFalse);
@@ -623,16 +647,21 @@ void CirrusAudioFixup::publishACPIPowerDebugEvidence(const cirrus::transport::AC
 }
 
 void CirrusAudioFixup::publishI2CResourceDebugEvidence(const cirrus::transport::I2CPlatformResources& resources) {
-    if (!gCirrusDebug)
+    if (!gCirrusDebug) {
         return;
+    }
     setProperty("Cirrus_ACPI_CRS_Return", uint64_t(uint32_t(resources.crsReturn())), 32);
     setProperty("Cirrus_ACPI_CRS_Object_Type", resources.crsObjectType() ? resources.crsObjectType() : "NONE");
-    if (resources.crsData() && resources.crsData()->getLength() <= 65536)
+    if (resources.crsData() && resources.crsData()->getLength() <= 65536) {
         setProperty("Cirrus_ACPI_CRS_Data", resources.crsData());
-    if (resources.properties.reason())
+    }
+    if (resources.properties.reason()) {
         setProperty("Cirrus_Platform_Properties_Reason", resources.properties.reason());
-    if (resources.properties.source())
+    }
+    if (resources.properties.source()) {
         setProperty("Cirrus_Platform_Properties_Source", resources.properties.source());
-    if (resources.properties.object())
+    }
+    if (resources.properties.object()) {
         cirrus::diagnostics::ACPIObjectEvidence::publish(this, "Cirrus_Platform_DSD", resources.properties.object());
+    }
 }

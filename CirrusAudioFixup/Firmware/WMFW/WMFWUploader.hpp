@@ -11,7 +11,7 @@
 #include "Firmware/WMFW/WMFWUploadPlan.hpp"
 
 class WMFWUploadPlanner {
-public:
+  public:
     static bool generatePlan(uint32_t regionIndex, const MappedRegion& region, const UploadPolicy& policy, UploadPlan& outPlan) {
         outPlan.regionType = region.regionType;
         outPlan.regionIndex = regionIndex;
@@ -22,13 +22,16 @@ public:
         uint32_t mappedBase = 0;
         if (WMFWMemoryMapper::mapPackedAddress(region.regionType, 0, 0, mappedBase) != MappingStatus::OK || policy.maxPayloadBytes < 4 ||
             policy.maxPayloadBytes > 252 || (region.size && !region.data.begin) || region.data.size < region.size ||
-            (region.dspRegister & 3) || (region.size & 3) || uint64_t(region.dspRegister) + region.size > 0x100000000ULL)
+            (region.dspRegister & 3) || (region.size & 3) || uint64_t(region.dspRegister) + region.size > 0x100000000ULL) {
             return false;
-        if (!region.size)
+        }
+        if (!region.size) {
             return true;
+        }
         uint32_t chunkLimit = policy.maxPayloadBytes & ~uint32_t(3);
-        if ((uint64_t(region.size) + chunkLimit - 1) / chunkLimit > MAX_UPLOAD_TRANSACTIONS)
+        if ((uint64_t(region.size) + chunkLimit - 1) / chunkLimit > MAX_UPLOAD_TRANSACTIONS) {
             return false;
+        }
 
         uint32_t remaining = region.size;
         uint32_t currentOffset = 0;
@@ -85,7 +88,7 @@ public:
 };
 
 class WMFWUploadSimulator {
-public:
+  public:
     static void simulate(const UploadPlan& plan) {
         CIRRUS_LOG("--- Dry-Run Simulation for Region #%d ---", plan.regionIndex);
 
@@ -166,25 +169,30 @@ static inline const char* regionTypeName(RegionType t) {
 }
 
 class WMFWUploader {
-public:
+  public:
     static bool upload(const char* deviceName, cirrus::core::RegisterIO& io, const UploadPlan& plan, UploadStats* outStats = nullptr) {
-        if (outStats)
+        if (outStats) {
             *outStats = {};
-        if (!deviceName || plan.transactionCount > MAX_UPLOAD_TRANSACTIONS)
+        }
+        if (!deviceName || plan.transactionCount > MAX_UPLOAD_TRANSACTIONS) {
             return false;
-        if (!plan.transactionCount)
+        }
+        if (!plan.transactionCount) {
             return plan.totalSize == 0;
+        }
         uint64_t covered = 0;
         for (uint32_t i = 0; i < plan.transactionCount; ++i) {
             const auto& tx = plan.transactions[i];
             if (!tx.payload || !tx.size || tx.size > 252 || (tx.size & 3) || (tx.dspRegister & 3) || tx.payloadOffset != covered ||
                 uint64_t(tx.dspRegister) + tx.size > 0x100000000ULL ||
-                uint64_t(plan.transactions[0].dspRegister) + covered != tx.dspRegister)
+                uint64_t(plan.transactions[0].dspRegister) + covered != tx.dspRegister) {
                 return false;
+            }
             covered += tx.size;
         }
-        if (covered != plan.totalSize)
+        if (covered != plan.totalSize) {
             return false;
+        }
 
         uint32_t dspStart = plan.transactions[0].dspRegister;
         uint32_t totalSize = plan.totalSize;
@@ -199,10 +207,12 @@ public:
         uint8_t* verifyBuffer = isPM ? nullptr : static_cast<uint8_t*>(IOMallocData(totalSize));
         if (!isPM && (!backupBuffer || !verifyBuffer)) {
             CIRRUS_ERR("Amp %s: Failed to allocate Backup/Verify buffers", deviceName);
-            if (backupBuffer)
+            if (backupBuffer) {
                 IOFreeData(backupBuffer, totalSize);
-            if (verifyBuffer)
+            }
+            if (verifyBuffer) {
                 IOFreeData(verifyBuffer, totalSize);
+            }
             return false;
         }
 
@@ -216,7 +226,9 @@ public:
             for (uint32_t i = 0; i < plan.transactionCount; ++i) {
                 const auto& tx = plan.transactions[i];
                 if (!io.bulkRead(tx.dspRegister, backupBuffer + tx.payloadOffset, tx.size)) {
-                    if (outStats) outStats->nativeError = io.lastError();
+                    if (outStats) {
+                        outStats->nativeError = io.lastError();
+                    }
                     IOFreeData(backupBuffer, totalSize);
                     IOFreeData(verifyBuffer, totalSize);
                     return false;
@@ -224,8 +236,9 @@ public:
             }
         }
         auto restoreRegion = [&]() -> bool {
-            if (isPM || !backupBuffer || !verifyBuffer)
+            if (isPM || !backupBuffer || !verifyBuffer) {
                 return true;
+            }
             bool restored = true;
             for (uint32_t i = 0; i < plan.transactionCount; ++i) {
                 const auto& tx = plan.transactions[i];
@@ -264,16 +277,20 @@ public:
             accWriteMs += writeMs;
 
             if (!writeOk) {
-                if (outStats) outStats->nativeError = io.lastError();
+                if (outStats) {
+                    outStats->nativeError = io.lastError();
+                }
                 CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, %d ms)", deviceName, writeMs);
                 CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
-                if (backupBuffer)
+                if (backupBuffer) {
                     IOFreeData(backupBuffer, totalSize);
-                if (verifyBuffer)
+                }
+                if (verifyBuffer) {
                     IOFreeData(verifyBuffer, totalSize);
+                }
                 return false;
             }
             CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", deviceName, writeMs);
@@ -292,15 +309,19 @@ public:
             accRbMs += rbMs;
 
             if (!readOk) {
-                if (outStats) outStats->nativeError = io.lastError();
+                if (outStats) {
+                    outStats->nativeError = io.lastError();
+                }
                 CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", deviceName, rbMs);
                 CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
-                if (backupBuffer)
+                if (backupBuffer) {
                     IOFreeData(backupBuffer, totalSize);
-                if (verifyBuffer)
+                }
+                if (verifyBuffer) {
                     IOFreeData(verifyBuffer, totalSize);
+                }
                 return false;
             }
             CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", deviceName, rbMs);
@@ -342,10 +363,12 @@ public:
                 }
                 bool rbOk = restoreRegion();
                 CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
-                if (backupBuffer)
+                if (backupBuffer) {
                     IOFreeData(backupBuffer, totalSize);
-                if (verifyBuffer)
+                }
+                if (verifyBuffer) {
                     IOFreeData(verifyBuffer, totalSize);
+                }
 
                 return false;
             }
@@ -365,10 +388,12 @@ public:
             outStats->retries = accRetries;
         }
 
-        if (backupBuffer)
+        if (backupBuffer) {
             IOFreeData(backupBuffer, totalSize);
-        if (verifyBuffer)
+        }
+        if (verifyBuffer) {
             IOFreeData(verifyBuffer, totalSize);
+        }
         return true;
     }
 };
@@ -395,31 +420,35 @@ struct UploadSession {
 };
 
 class WMFWUploadScheduler {
-public:
+  public:
     static bool run(const char* deviceName, cirrus::core::RegisterIO& io, MappedImage& mappedImg, UploadSession& session) {
         // Avoid an aggregate temporary on the kernel stack in Debug builds.
         memset(static_cast<void*>(&session), 0, sizeof(session));
-        if (mappedImg.regionCount > MAX_MAPPED_REGIONS)
+        if (mappedImg.regionCount > MAX_MAPPED_REGIONS) {
             return false;
+        }
         uint32_t expectedRegions = 0;
         UploadPolicy policy{252, true, true};
         UploadPlan* preflight = static_cast<UploadPlan*>(IOMalloc(sizeof(UploadPlan)));
-        if (!preflight)
+        if (!preflight) {
             return false;
+        }
         bool valid = true;
         for (uint32_t i = 0; i < mappedImg.regionCount; ++i) {
             const auto& region = mappedImg.regions[i];
             if (region.regionType == RegionType::INFO_TEXT || region.regionType == RegionType::NAME_TEXT ||
-                region.regionType == RegionType::METADATA || region.regionType == RegionType::ALGORITHM_DATA)
+                region.regionType == RegionType::METADATA || region.regionType == RegionType::ALGORITHM_DATA) {
                 continue;
+            }
             if (++expectedRegions > MAX_MAPPED_REGIONS || !WMFWUploadPlanner::generatePlan(i, region, policy, *preflight)) {
                 valid = false;
                 break;
             }
         }
         IOFree(preflight, sizeof(UploadPlan));
-        if (!valid || !expectedRegions)
+        if (!valid || !expectedRegions) {
             return false;
+        }
 
         uint64_t t_session_start = mach_absolute_time();
 

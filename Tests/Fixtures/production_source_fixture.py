@@ -63,11 +63,12 @@ def source():
 
 
 def chip_state():
+    import re
     s = (
         ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/InstanceState.hpp"
     ).read_text()
     a = s.index("struct InstanceState")
-    b = s.index("\n};", a) + 3
+    b = a + re.search(r"\n\s*\};", s[a:]).end()
     return s[a:b].replace("struct InstanceState", "struct AmplifierState")
 
 

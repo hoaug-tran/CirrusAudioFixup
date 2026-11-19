@@ -8,13 +8,13 @@
 
 namespace cirrus::platform::hda {
 
-struct AudioEventState {
-    bool routeKnown{false};
-    bool speakers{false};
-    bool engineKnown{false};
-    bool engineRunning{false};
-    uint32_t generation{0};
-};
+    struct AudioEventState {
+        bool routeKnown{false};
+        bool speakers{false};
+        bool engineKnown{false};
+        bool engineRunning{false};
+        uint32_t generation{0};
+    };
 
 }
 
@@ -26,7 +26,7 @@ struct AudioEventState {
 class CirrusAudioEventSource : public IOEventSource {
     OSDeclareDefaultStructors(CirrusAudioEventSource)
 
-public:
+  public:
     using AudioEventState = cirrus::platform::hda::AudioEventState;
     using Handler = void (*)(OSObject*, const AudioEventState&);
     static CirrusAudioEventSource* create(OSObject* owner, IOService* controller, Handler handler);
@@ -40,7 +40,7 @@ public:
     AudioEventState snapshot();
     bool unchanged(uint32_t generation);
 
-private:
+  private:
     IOService* mController{nullptr};
     IOLock* mMailboxLock{nullptr};
     Handler mHandler{nullptr};
@@ -54,5 +54,5 @@ private:
 };
 
 namespace cirrus::platform::hda {
-using AudioEventSource = ::CirrusAudioEventSource;
+    using AudioEventSource = ::CirrusAudioEventSource;
 }

@@ -8,8 +8,9 @@
 OSDefineMetaClassAndStructors(CirrusSPIPowerClient, IOService)
 
 bool CirrusSPIPowerClient::init(OSDictionary* properties) {
-    if (!IOService::init(properties))
+    if (!IOService::init(properties)) {
         return false;
+    }
     mEvidenceLock = IOLockAlloc();
     return mEvidenceLock != nullptr;
 }
@@ -23,9 +24,8 @@ void CirrusSPIPowerClient::free() {
     IOService::free();
 }
 
-CirrusSPIPowerClient::Event CirrusSPIPowerClient::event(unsigned long ordinal,
-                                                     uint64_t deviceId, IOReturn result) {
-    Event value {};
+CirrusSPIPowerClient::Event CirrusSPIPowerClient::event(unsigned long ordinal, uint64_t deviceId, IOReturn result) {
+    Event value{};
     uint64_t ns = 0;
     absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
     value.uptimeUs = ns / 1000;
@@ -45,20 +45,22 @@ void CirrusSPIPowerClient::update(Event& destination, const Event& value) {
 void CirrusSPIPowerClient::identifyParent(IOService* parent) {
     const auto id = parent ? parent->getRegistryEntryID() : 0;
     IOLockLock(mEvidenceLock);
-    if (!mSnapshot.cancelled)
+    if (!mSnapshot.cancelled) {
         mSnapshot.parentId = id;
+    }
     IOLockUnlock(mEvidenceLock);
 }
 
-void CirrusSPIPowerClient::recordMilestone(Milestone phase, IOReturn result,
-                                          unsigned long ordinal) {
+void CirrusSPIPowerClient::recordMilestone(Milestone phase, IOReturn result, unsigned long ordinal) {
     const unsigned index = static_cast<unsigned>(phase);
-    if (index >= static_cast<unsigned>(Milestone::Count))
+    if (index >= static_cast<unsigned>(Milestone::Count)) {
         return;
+    }
     const auto value = event(ordinal, 0, result);
     IOLockLock(mEvidenceLock);
-    if (!mSnapshot.cancelled)
+    if (!mSnapshot.cancelled) {
         update(mSnapshot.milestones[index], value);
+    }
     IOLockUnlock(mEvidenceLock);
 }
 
@@ -74,20 +76,22 @@ void CirrusSPIPowerClient::cancelAndStop(bool pmInitialized) {
     IOLockLock(mEvidenceLock);
     const bool alreadyCancelled = mSnapshot.cancelled;
     mSnapshot.cancelled = true;
-    if (!alreadyCancelled)
+    if (!alreadyCancelled) {
         mSnapshot.cancelledUs = value.uptimeUs;
+    }
     IOLockUnlock(mEvidenceLock);
     // Never hold the evidence lock across the callback drain.
-    if (!alreadyCancelled && pmInitialized)
+    if (!alreadyCancelled && pmInitialized) {
         PMstop();
+    }
 }
 
 IOReturn CirrusSPIPowerClient::setPowerState(unsigned long ordinal, IOService* device) {
-    const auto value = event(ordinal, device ? device->getRegistryEntryID() : 0,
-                             kIOReturnSuccess);
+    const auto value = event(ordinal, device ? device->getRegistryEntryID() : 0, kIOReturnSuccess);
     IOLockLock(mEvidenceLock);
-    if (!mSnapshot.cancelled)
+    if (!mSnapshot.cancelled) {
         update(mSnapshot.setState, value);
+    }
     IOLockUnlock(mEvidenceLock);
     return IOPMAckImplied;
 }
@@ -95,8 +99,9 @@ IOReturn CirrusSPIPowerClient::setPowerState(unsigned long ordinal, IOService* d
 void CirrusSPIPowerClient::powerChangeDone(unsigned long previousState) {
     const auto value = event(previousState, getRegistryEntryID(), kIOReturnSuccess);
     IOLockLock(mEvidenceLock);
-    if (!mSnapshot.cancelled)
+    if (!mSnapshot.cancelled) {
         update(mSnapshot.completed, value);
+    }
     IOLockUnlock(mEvidenceLock);
     IOService::powerChangeDone(previousState);
 }

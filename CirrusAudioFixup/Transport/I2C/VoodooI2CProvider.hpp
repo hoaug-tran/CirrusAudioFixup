@@ -30,35 +30,35 @@ static_assert(offsetof(VoodooI2CAddressedTransfer, address) == 0 && offsetof(Voo
 #endif
 
 namespace cirrus::transport {
-class VoodooI2CProvider final {
-public:
-    VoodooI2CProvider(IOService* provider, uint8_t targetAddress) : mProvider(provider), mTargetAddress(targetAddress) {}
-    IOReturn lastReturn() const { return mLastReturn; }
-    bool transfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
-        if (mTargetAddress > 0x7F || (writeLen && !writeBuf) || (readLen && !readBuf) || (!writeLen && !readLen)) {
-            mLastReturn = kIOReturnBadArgument;
-            return false;
+    class VoodooI2CProvider final {
+      public:
+        VoodooI2CProvider(IOService* provider, uint8_t targetAddress) : mProvider(provider), mTargetAddress(targetAddress) {}
+        IOReturn lastReturn() const { return mLastReturn; }
+        bool transfer(uint8_t* writeBuf, uint16_t writeLen, uint8_t* readBuf, uint16_t readLen) {
+            if (mTargetAddress > 0x7F || (writeLen && !writeBuf) || (readLen && !readBuf) || (!writeLen && !readLen)) {
+                mLastReturn = kIOReturnBadArgument;
+                return false;
+            }
+            if (!mProvider) {
+                mLastReturn = kIOReturnNotReady;
+                return false;
+            }
+
+            VoodooI2CAddressedTransfer request{};
+            request.address = mTargetAddress;
+            request.writeBuffer = writeBuf;
+            request.writeLength = writeLen;
+            request.readBuffer = readBuf;
+            request.readLength = readLen;
+
+            mLastReturn = mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS, true, &request, nullptr, nullptr, nullptr);
+            return mLastReturn == kIOReturnSuccess;
         }
-        if (!mProvider) {
-            mLastReturn = kIOReturnNotReady;
-            return false;
-        }
 
-        VoodooI2CAddressedTransfer request{};
-        request.address = mTargetAddress;
-        request.writeBuffer = writeBuf;
-        request.writeLength = writeLen;
-        request.readBuffer = readBuf;
-        request.readLength = readLen;
-
-        mLastReturn = mProvider->callPlatformFunction(VOODOO_I2C_TRANSFER_TO_ADDRESS, true, &request, nullptr, nullptr, nullptr);
-        return mLastReturn == kIOReturnSuccess;
-    }
-
-private:
-    // Borrowed through the synchronous call.
-    IOService* mProvider{nullptr};
-    uint8_t mTargetAddress{0};
-    IOReturn mLastReturn{kIOReturnSuccess};
-};
+      private:
+        // Borrowed through the synchronous call.
+        IOService* mProvider{nullptr};
+        uint8_t mTargetAddress{0};
+        IOReturn mLastReturn{kIOReturnSuccess};
+    };
 }

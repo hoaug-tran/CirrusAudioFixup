@@ -21,8 +21,9 @@ bool CirrusAudioFixup::init(OSDictionary* properties) {
 
     if (gCirrusDebug || bootArgEnabled("-cirrusdumptrace")) {
         mTraceLock = IOLockAlloc();
-        if (!mTraceLock)
+        if (!mTraceLock) {
             CIRRUS_ERR("DIAGNOSTICS_UNAVAILABLE component=trace_lock return=NO_MEMORY; continuing without transfer history");
+        }
         initTraceBuffer();
     }
     setProperty("Cirrus_Trace_Enabled", mTraceLock ? kOSBooleanTrue : kOSBooleanFalse);
@@ -34,8 +35,9 @@ bool CirrusAudioFixup::init(OSDictionary* properties) {
 
 IOService* CirrusAudioFixup::probe(IOService* provider, SInt32* score) {
     IOService* result = super::probe(provider, score);
-    if (!result)
+    if (!result) {
         return nullptr;
+    }
 
     if (auto* acpi = cirrus::support::acpiDeviceCast(provider)) {
         OSObject* resources = nullptr;
@@ -43,10 +45,11 @@ IOService* CirrusAudioFixup::probe(IOService* provider, SInt32* score) {
         auto* resourceData = OSDynamicCast(OSData, resources);
         cirrus::transport::ACPISPIResources parsed{};
         bool hasI2C = false;
-        const auto resourceKind = resourceReturn == kIOReturnSuccess && resourceData
-                                      ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
-                                                                                 resourceData->getLength(), parsed, &hasI2C)
-                                      : cirrus::transport::ACPISPIResult::Malformed;
+        const auto resourceKind =
+            resourceReturn == kIOReturnSuccess && resourceData
+                ? cirrus::transport::parseACPISPIResources(static_cast<const uint8_t*>(resourceData->getBytesNoCopy()),
+                                                           resourceData->getLength(), parsed, &hasI2C)
+                : cirrus::transport::ACPISPIResult::Malformed;
         OSSafeReleaseNULL(resources);
         if (resourceKind != cirrus::transport::ACPISPIResult::Success) {
 #if defined(KERNEL)
@@ -179,8 +182,9 @@ void CirrusAudioFixup::continueStartup() {
         return;
     }
     mStartupPending = false;
-    if (result == kIOReturnSuccess && setupCommunication(mProvider) && finishStartup())
+    if (result == kIOReturnSuccess && setupCommunication(mProvider) && finishStartup()) {
         return;
+    }
     mStartupFailed = true;
     setProperty("Cirrus_Driver_Verdict", "STARTUP_FAILED");
     if (result != kIOReturnSuccess) {
@@ -196,9 +200,9 @@ void CirrusAudioFixup::continueStartup() {
 
 bool CirrusAudioFixup::finishStartup() {
     auto* provider = mProvider;
-    const bool isDynamicDiscoveryProfile = mPlatformProfile && mPlatformProfile->acpiHid &&
-                                           (strcmp(mPlatformProfile->acpiHid, "CSC3551") == 0 ||
-                                            strcmp(mPlatformProfile->acpiHid, "CSC3556") == 0);
+    const bool isDynamicDiscoveryProfile =
+        mPlatformProfile && mPlatformProfile->acpiHid &&
+        (strcmp(mPlatformProfile->acpiHid, "CSC3551") == 0 || strcmp(mPlatformProfile->acpiHid, "CSC3556") == 0);
     mPlatformIdentityPending = !mPlatformSubsystemId &&
                                ((mPlatformProfile && mPlatformProfile->allowAutomaticInitialization) || isDynamicDiscoveryProfile) &&
                                !bootArgEnabled("-cirrusro");
@@ -236,13 +240,15 @@ bool CirrusAudioFixup::finishStartup() {
 #if defined(KERNEL)
         publishBootCheckpoint(this, "AMP_DISCOVERY_BEGIN");
 #endif
-        if (mNativeSPI.bound())
+        if (mNativeSPI.bound()) {
             detectNativeSPIAmplifiers();
-        else
+        } else {
             detectAmplifiers();
+        }
         CIRRUS_LOG("BOOT_FLOW AMP_DISCOVERY_END count=%lu", static_cast<unsigned long>(mAmplifierCount));
 #if defined(KERNEL)
-        publishBootCheckpoint(this, "AMP_DISCOVERY_END", mAmplifierCount == expectedAmplifierCount() ? kIOReturnSuccess : kIOReturnNotFound);
+        publishBootCheckpoint(this, "AMP_DISCOVERY_END",
+                              mAmplifierCount == expectedAmplifierCount() ? kIOReturnSuccess : kIOReturnNotFound);
 #endif
     }
 
@@ -254,8 +260,9 @@ bool CirrusAudioFixup::finishStartup() {
         publishDriverVerdict();
     } else {
         CIRRUS_LOG("CirrusAudioFixup starting FULL DRIVER FLOW");
-        if (!mPlatformIdentityPending)
+        if (!mPlatformIdentityPending) {
             bringUpAmplifiers();
+        }
         if (mProbeTimer) {
             mProbeTimer->setTimeoutMS(50);
         }
@@ -269,11 +276,13 @@ bool CirrusAudioFixup::finishStartup() {
     CIRRUS_LOG("BOOT_FLOW PM_SETUP_END ready=%u", unsigned(powerManagementReady));
 #if defined(KERNEL)
     publishBootCheckpoint(this, "PM_SETUP_END", powerManagementReady ? kIOReturnSuccess : kIOReturnNotReady);
-    if (!powerManagementReady)
+    if (!powerManagementReady) {
         retainFailedServiceEvidence(this);
+    }
 #endif
-    if (!powerManagementReady)
+    if (!powerManagementReady) {
         return false;
+    }
     setupAmplifierInterrupt();
     registerService();
     CIRRUS_LOG("BOOT_FLOW START_END");
@@ -303,8 +312,9 @@ void CirrusAudioFixup::stop(IOService* provider) {
         mWorkLoop->removeEventSource(mProbeTimer);
     }
     OSSafeReleaseNULL(mProbeTimer);
-    if (mCommandGate && mWorkLoop)
+    if (mCommandGate && mWorkLoop) {
         mWorkLoop->removeEventSource(mCommandGate);
+    }
     OSSafeReleaseNULL(mCommandGate);
     OSSafeReleaseNULL(mWorkLoop);
     teardownCommunication();
@@ -325,8 +335,9 @@ void CirrusAudioFixup::free() {
         mWorkLoop->removeEventSource(mProbeTimer);
     }
     OSSafeReleaseNULL(mProbeTimer);
-    if (mCommandGate && mWorkLoop)
+    if (mCommandGate && mWorkLoop) {
         mWorkLoop->removeEventSource(mCommandGate);
+    }
     OSSafeReleaseNULL(mCommandGate);
     OSSafeReleaseNULL(mWorkLoop);
     teardownCommunication();

@@ -12,25 +12,25 @@
 #include "Diagnostics/AttachmentState.hpp"
 #include "Diagnostics/DiagnosticTypes.hpp"
 #include "Firmware/FirmwareBundle.hpp"
-#include "Runtime/AmplifierDriverRegistry.hpp"
-#include "Runtime/AmplifierHost.hpp"
-#include "Runtime/AmplifierManager.hpp"
+#include "Platform/ACPI/ACPISPIResources.hpp"
 #include "Platform/Board/BoardConfiguration.hpp"
+#include "Platform/Board/PlatformProfile.hpp"
 #include "Platform/HDA/AudioEventSource.hpp"
 #include "Platform/HDA/HDAStreamState.hpp"
 #include "Platform/HDA/HDAStreamWatcher.hpp"
-#include "Platform/Board/PlatformProfile.hpp"
+#include "Runtime/AmplifierDriverRegistry.hpp"
+#include "Runtime/AmplifierHost.hpp"
+#include "Runtime/AmplifierManager.hpp"
 #include "Runtime/SPIAmplifierManager.hpp"
 #include "Support/BitUtils.hpp"
 #include "Support/Logging.hpp"
-#include "Platform/ACPI/ACPISPIResources.hpp"
-#include "Transport/SPI/NativeSPIHost.hpp"
 #include "Transport/I2C/VoodooI2CController.hpp"
 #include "Transport/I2C/VoodooI2CProvider.hpp"
+#include "Transport/SPI/NativeSPIHost.hpp"
 
 namespace cirrus::transport {
-struct ACPIPowerTransition;
-class I2CPlatformResources;
+    struct ACPIPowerTransition;
+    class I2CPlatformResources;
 }
 
 #include <IOKit/IOCommandGate.h>
@@ -64,16 +64,17 @@ struct AmplifierState {
 class CirrusAudioFixup : public IOService {
     friend class ServiceRegisterIO;
 
-OSDeclareDefaultStructors(CirrusAudioFixup)
+    OSDeclareDefaultStructors(CirrusAudioFixup)
 
-    public : bool init(OSDictionary* properties = nullptr) override;
+  public:
+    bool init(OSDictionary* properties = nullptr) override;
     IOService* probe(IOService* provider, SInt32* score) override;
     bool start(IOService* provider) override;
     void stop(IOService* provider) override;
     void free() override;
     IOReturn setPowerState(unsigned long state, IOService* device) override;
 
-private:
+  private:
     void bringUpAmplifiers();
     // Borrowed serialized host facilities; cleared after driver destruction.
     struct AmplifierHostAdapter final : cirrus::platform::AmplifierHost {
@@ -159,13 +160,15 @@ private:
     void teardownCommunication();
     void suspendCommunication() {
         mNativeSPI.suspend();
-        if (mNativeSPI.bound())
+        if (mNativeSPI.bound()) {
             mAttachment.communication = "SUSPENDED";
-        else if (mI2CController)
+        } else if (mI2CController) {
             mAttachment.communication = "PROVIDER_PM_OWNED";
+        }
         publishAttachmentStatus();
-        if (mNativeSPI.bound())
+        if (mNativeSPI.bound()) {
             setProperty("Cirrus_SPI_Status", "SUSPENDED");
+        }
     }
     bool resumeCommunication() {
         IOReturn ret = mNativeSPI.resume();
@@ -187,14 +190,17 @@ private:
             setProperty("Cirrus_SPI_Failure_Detail", uint64_t(uint32_t(failure.detail)), 32);
             mAttachment.communication = ret == kIOReturnSuccess ? (mPlatformAuthorized ? "READY" : "READ_ONLY") : "FAILED";
             publishAttachmentStatus();
-            if (ret != kIOReturnSuccess)
+            if (ret != kIOReturnSuccess) {
                 recordAttachmentFailure("CONTROLLER_PM", failure.reason, ret, uint32_t(failure.index), "CONTROLLER_SLOT");
-            if (ret != kIOReturnSuccess)
+            }
+            if (ret != kIOReturnSuccess) {
                 CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",
                            failure.reason, static_cast<unsigned long>(failure.index), failure.detail, ret);
+            }
         }
-        if (!mNativeSPI.bound())
+        if (!mNativeSPI.bound()) {
             return resumeI2CCommunication();
+        }
         return ret == kIOReturnSuccess;
     }
     bool communicationReady() const { return mProvider && mPowerAvailable && !mStopping; }
@@ -307,13 +313,13 @@ private:
 
     bool mProbingAmplifiers{false};
 
-public:
+  public:
     bool bulkWrite(AmplifierState& amp, uint32_t reg, const uint8_t* data, size_t length,
                    cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
     bool bulkRead(AmplifierState& amp, uint32_t reg, uint8_t* data, size_t length,
                   cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
 
-private:
+  private:
     bool readRegister(AmplifierState& amp, uint32_t reg, uint32_t* value,
                       cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_OTHER);
     bool writeRegister(AmplifierState& amp, uint32_t reg, uint32_t value,

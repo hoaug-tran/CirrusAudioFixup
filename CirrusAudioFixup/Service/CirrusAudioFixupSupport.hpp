@@ -3,12 +3,12 @@
 // Hardware readiness is established by register and DSP checks. HDA stream
 // observation cannot confirm the downstream audio route or audible output.
 // See LICENSE for distribution terms.
-#include "Service/CirrusAudioFixup.hpp"
 #include "Diagnostics/ACPIObjectEvidence.hpp"
 #include "Diagnostics/FailureNames.hpp"
-#include "Support/CPUIdentity.hpp"
 #include "Platform/ACPI/ACPIPlatformProperties.hpp"
 #include "Platform/ACPI/I2CPlatformResources.hpp"
+#include "Service/CirrusAudioFixup.hpp"
+#include "Support/CPUIdentity.hpp"
 
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/pci/IOPCIDevice.h>
@@ -22,15 +22,17 @@
 using namespace cirrus::diagnostics;
 
 #if defined(KERNEL)
-    namespace {
+namespace {
     // Publish one coherent event on the registry root so failed service creation
     // remains observable after IOKit frees the temporary driver instance.
     inline void publishMatchingEvent(const char* stage, IOService* provider, IOReturn result, const char* retainedProperty = nullptr) {
-        if (!gCirrusDebug)
+        if (!gCirrusDebug) {
             return;
+        }
         auto* event = OSDictionary::withCapacity(4);
-        if (!event)
+        if (!event) {
             return;
+        }
         auto* text = OSString::withCString(stage);
         auto* code = OSNumber::withNumber(uint64_t(uint32_t(result)), 32);
         if (text) {
@@ -56,16 +58,19 @@ using namespace cirrus::diagnostics;
         auto* root = IORegistryEntry::getRegistryRoot();
         if (root) {
             root->setProperty("Cirrus_Last_Service_Lifecycle", event);
-            if (retainedProperty)
+            if (retainedProperty) {
                 root->setProperty(retainedProperty, event);
-            if (result != kIOReturnSuccess)
+            }
+            if (result != kIOReturnSuccess) {
                 root->setProperty("Cirrus_Last_Service_Failure", event);
+            }
         }
         event->release();
     }
     inline void publishBootCheckpoint(IOService* service, const char* stage, IOReturn result = kIOReturnSuccess) {
-        if (!gCirrusDebug || !service)
+        if (!gCirrusDebug || !service) {
             return;
+        }
         auto* previous = OSDynamicCast(OSNumber, service->getProperty("Cirrus_Boot_Checkpoint_Count"));
         const uint32_t count = previous ? previous->unsigned32BitValue() : 0;
         uint64_t ns = 0;
@@ -79,29 +84,34 @@ using namespace cirrus::diagnostics;
                      uint32_t(result));
             service->setProperty(key, value);
             service->setProperty("Cirrus_Boot_Checkpoint_Count", uint64_t(count + 1), 32);
-        } else
+        } else {
             service->setProperty("Cirrus_Boot_Checkpoint_Status", "PARTIAL_LIMIT");
+        }
         if (result != kIOReturnSuccess && !service->getProperty("Cirrus_Boot_First_Error")) {
             service->setProperty("Cirrus_Boot_First_Error", stage);
             service->setProperty("Cirrus_Boot_First_Return", uint64_t(uint32_t(result)), 32);
         }
     }
-    inline void retainFailedServiceEvidence(IOService * service) {
-        if (!gCirrusDebug)
+    inline void retainFailedServiceEvidence(IOService* service) {
+        if (!gCirrusDebug) {
             return;
+        }
         auto* properties = service->dictionaryWithProperties();
-        if (!properties)
+        if (!properties) {
             return;
+        }
         auto* evidence = OSDictionary::withCapacity(properties->getCount());
         auto* iterator = OSCollectionIterator::withCollection(properties);
         if (evidence && iterator) {
             while (auto* key = OSDynamicCast(OSString, iterator->getNextObject())) {
-                if (strncmp(key->getCStringNoCopy(), "Cirrus", 6) == 0)
+                if (strncmp(key->getCStringNoCopy(), "Cirrus", 6) == 0) {
                     evidence->setObject(key, properties->getObject(key));
+                }
             }
             auto* root = IORegistryEntry::getRegistryRoot();
-            if (root)
+            if (root) {
                 root->setProperty("Cirrus_Failed_Service_Evidence", evidence);
+            }
         }
         OSSafeReleaseNULL(iterator);
         OSSafeReleaseNULL(evidence);
@@ -109,8 +119,9 @@ using namespace cirrus::diagnostics;
     }
     inline void clearFailedServiceEvidence() {
         auto* root = IORegistryEntry::getRegistryRoot();
-        if (root)
+        if (root) {
             root->removeProperty("Cirrus_Failed_Service_Evidence");
+        }
     }
 }
 #endif
@@ -118,12 +129,12 @@ using namespace cirrus::diagnostics;
 class CirrusAudioFixup;
 
 class ServiceRegisterIO : public cirrus::core::RegisterIO {
-private:
+  private:
     CirrusAudioFixup* mService;
     AmplifierState& mAmplifier;
     cirrus::diagnostics::TraceSource mSource;
 
-public:
+  public:
     ServiceRegisterIO(CirrusAudioFixup* fixup, AmplifierState& amp,
                       cirrus::diagnostics::TraceSource source = cirrus::diagnostics::TRACE_PROBE)
         : mService(fixup), mAmplifier(amp), mSource(source) {}

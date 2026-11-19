@@ -21,9 +21,12 @@ match_body = re.search(
 )
 assert match_body, "Could not find kBoardProperties array in BoardProperties.hpp"
 lines = [
-    line.strip().rstrip(",")
+    item.strip()
     for line in match_body.group(1).splitlines()
-    if line.strip() and not line.strip().startswith("//")
+    for item in re.findall(
+        r"\{0x[0-9a-fA-F]{8},\s*[24],\s*(?:true|false),\s*\{[01](?:,\s*[01]){3}\},\s*-?\d+,\s*-?\d+,\s*-?\d+,\s*\d+,\s*\d+,\s*\d+\}",
+        line,
+    )
 ]
 assert len(lines) > 0, "No board properties found"
 

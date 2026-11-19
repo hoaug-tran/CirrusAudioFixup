@@ -3,4 +3,9 @@ IndentWidth: 4
 ColumnLimit: 140
 PointerAlignment: Left
 FixNamespaceComments: false
-AccessModifierOffset: -4
+NamespaceIndentation: All
+AccessModifierOffset: -2
+InsertBraces: true
+StatementMacros:
+  - OSDeclareDefaultStructors
+  - OSDefineMetaClassAndStructors

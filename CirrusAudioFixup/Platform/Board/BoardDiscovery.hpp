@@ -3,32 +3,32 @@
 #pragma once
 #include "Platform/Board/BoardConfiguration.hpp"
 namespace cirrus::platform {
-class PlatformProperties {
-public:
-    virtual ~PlatformProperties() = default;
-    // Distinguish an omitted optional field from a present malformed value.
-    virtual bool contains(const char* name) const = 0;
-    // Require exactly count integer elements, each representable as uint32_t.
-    virtual bool array(const char* name, uint32_t* output, size_t count) const = 0;
-};
-struct BoardDiscoveryContext {
-    BoardIdentity identity;
-    const core::BusEndpoint* endpoints;
-    size_t count;
-    const PlatformProperties& properties;
-    class GPIOAccess {
-    public:
-        virtual ~GPIOAccess() = default;
-        virtual bool read(const char* property, size_t index, uint32_t& value) = 0;
-        virtual bool readResource(uint32_t, uint32_t, bool, uint32_t&) { return false; }
-        virtual bool reset(const char*, int32_t) { return false; }
+    class PlatformProperties {
+      public:
+        virtual ~PlatformProperties() = default;
+        // Distinguish an omitted optional field from a present malformed value.
+        virtual bool contains(const char* name) const = 0;
+        // Require exactly count integer elements, each representable as uint32_t.
+        virtual bool array(const char* name, uint32_t* output, size_t count) const = 0;
     };
-    GPIOAccess* gpio{nullptr};
-};
-class DiscoveredBoard {
-public:
-    virtual ~DiscoveredBoard() = default;
-    virtual bool prepareHardware(BoardDiscoveryContext::GPIOAccess&) const { return true; }
-    BoardConfiguration configuration{};
-};
+    struct BoardDiscoveryContext {
+        BoardIdentity identity;
+        const core::BusEndpoint* endpoints;
+        size_t count;
+        const PlatformProperties& properties;
+        class GPIOAccess {
+          public:
+            virtual ~GPIOAccess() = default;
+            virtual bool read(const char* property, size_t index, uint32_t& value) = 0;
+            virtual bool readResource(uint32_t, uint32_t, bool, uint32_t&) { return false; }
+            virtual bool reset(const char*, int32_t) { return false; }
+        };
+        GPIOAccess* gpio{nullptr};
+    };
+    class DiscoveredBoard {
+      public:
+        virtual ~DiscoveredBoard() = default;
+        virtual bool prepareHardware(BoardDiscoveryContext::GPIOAccess&) const { return true; }
+        BoardConfiguration configuration{};
+    };
 }

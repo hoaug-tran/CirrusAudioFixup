@@ -80,6 +80,7 @@ int main(){
   {"ASUS Zenbook UM3402Y",0x1043,0x1683,1,0,core::BusTransportType::I2C},
   {"ASUS ROG Strix G17 G713P speaker 0",0x1043,0x1d1f,0,0,core::BusTransportType::I2C},
   {"ASUS ROG Strix G17 G713P speaker 1",0x1043,0x1d1f,1,0,core::BusTransportType::I2C},
+  {"ASUS ROG Flow X13 GV302 / issue #26",0x1043,0x1533,0,0,core::BusTransportType::I2C},
   {"Lenovo Legion Slim 7 Gen 7 / issue #21",0x17aa,0x3877,UINT32_MAX,0,core::BusTransportType::I2C},
   {"Alienware x17 R2 speaker 0 / issue #12",0x1028,0x0b28,0,0,core::BusTransportType::SPI},
   {"Alienware x17 R2 speaker 1 / issue #12",0x1028,0x0b28,1,0,core::BusTransportType::SPI}};

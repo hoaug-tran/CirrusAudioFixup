@@ -197,6 +197,7 @@ The following table summarizes real-world hardware where this diagnostic methodo
 | **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)         | ALC287 | 2x CS35L41 (I2C) | N/A (dual)         | Node `0x17` | Node `0x02`                              | AppleALC Layout 21 (`alcid=21`) + Node `0x17` verbs (`01770100 01770500 0173b000 01770740`)                                          | Verified (#21) |
 | **Lenovo ThinkBook 16P G5 IRX** (`17AA:38F9`)        | ALC287 | 2x CS35L41 (I2C) | N/A (dual)         | Node `0x17` | Node `0x03` (L11) / Node `0x02` (L13/21) | AppleALC Layout 11 (`alcid=11`, recommended zero-config) or Layout 13/21 + Node `0x17` verbs (`01770100 01770500 0173b000 01770740`) | Verified (#24) |
 | **ASUS ROG Strix G17 G713P** (`1043:1D1F`)           | ALC294 | 2x CS35L41 (I2C) | Node `0x17` (dual) | N/A         | Node `0x03`                              | AppleALC Layout 13 (`alcid=13`), no extra verbs; 48 kHz required                                                                     | Verified (#22) |
+| **ASUS ROG Flow X13 GV302** (`1043:1533`)            | ALC294 | 2x CS35L41 (I2C) | Node `0x17` (dual) | N/A         | Node `0x03`                              | AppleALC Layout 13 (`alcid=13`), no extra verbs; 48 kHz required                                                                     | Verified (#26) |
 
 ### Machine notes
 
@@ -280,6 +281,15 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **Speaker Pin**: Node `0x17` routed to DAC Node `0x03`.
 - **Amplifiers**: Dual CS35L41 (`CSC3551`) over AMD I2C (`AMDI0010`) at `0x40` (Left) and `0x41` (Right), IRQ polling.
 - **Topology**: Internal boost, 1000 nH / 4500 mA / 24 uF. Uses the G733 (`1043:1503`) speaker protection tuning.
+- **Stream format**: 48 kHz is required. With the built-in output at 44.1 kHz the stream is rejected (`UNSUPPORTED_STREAM_FORMAT`) and the speakers stay silent; select 48 kHz in Audio MIDI Setup.
+
+#### ASUS ROG Flow X13 GV302 (`1043:1533`, Realtek ALC294)
+
+- **AppleALC Layout**: Layout 13 (`alcid=13` or `layout-id` 13 in DeviceProperties). No extra `alc-verb` sequences are required.
+- **Speaker Pin**: Node `0x17` routed to DAC Node `0x03`.
+- **Amplifiers**: Dual CS35L41 Rev B2 (`CSC3551`) over AMD I2C (`AMDI0010`) at `0x40` (Left, endpoint 0) and `0x41` (Right, endpoint 1), IRQ polling.
+- **Topology**: Internal boost, 1000 nH / 4500 mA / 24 uF, channels `{0, 1}`.
+- **Firmware & Tuning**: Embedded CS35L41 Rev B2 DSP1 firmware `halo_cspl_RAM_revB2_29.63.1.wmfw` (shared with 1043:1C9F) and verified OEM speaker protection tunings `cs35l41-dsp1-spk-prot-10431533-spkid0-l0.bin` / `-spkid0-r0.bin` (48 kHz, +17.0 dB gain, spkid 0).
 - **Stream format**: 48 kHz is required. With the built-in output at 44.1 kHz the stream is rejected (`UNSUPPORTED_STREAM_FORMAT`) and the speakers stay silent; select 48 kHz in Audio MIDI Setup.
 
 [Back to main guide](../../README.md#installation)

@@ -269,7 +269,8 @@ public:
  // Synthetic registered drivers exercise resource ownership.
  // No chip state or silicon callbacks exist in this generic service fixture.
  bool stopAfterDebugStage(const char*){assert(false);return false;}
- bool bootArgStrEquals(const char*,const char*){assert(false);return false;}
+ std::map<std::string,std::string> strFlags;
+ bool bootArgStrEquals(const char* k,const char* v){auto it=strFlags.find(k);return it!=strFlags.end()&&it->second==v;}
  bool mDebugPhaseHalted=false;
  void removeProperty(const char*){}
  void publishDriverVerdict(){}
@@ -946,6 +947,16 @@ int main(){
   assert(i2cSetup.resumeCommunication());
   assert(d3Acpi.ps0Called && d3Acpi.power==0 && i2cSetup.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_PREPARED");
   assert(i2cSetup.mPlatformAuthorized);
+  // Unauthorized wake or -cirrusphase=probe must never pulse I2C GPIO reset.
+  i2cSetup.strings.erase("Cirrus_Reset_Policy");
+  i2cSetup.mPlatformAuthorized=false;
+  assert(i2cSetup.resumeCommunication());
+  assert(!i2cSetup.strings.count("Cirrus_Reset_Policy"));
+  i2cSetup.mPlatformAuthorized=true;
+  i2cSetup.strFlags["-cirrusphase"]="probe";
+  assert(i2cSetup.resumeCommunication());
+  assert(!i2cSetup.strings.count("Cirrus_Reset_Policy"));
+  i2cSetup.strFlags.clear();
   cirrus::transport::fixtureResetSucceed=false;
   assert(i2cSetup.resumeCommunication());
   assert(i2cSetup.mPlatformAuthorized && !strcmp(i2cSetup.mAttachment.communication,"READY"));

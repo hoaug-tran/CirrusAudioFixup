@@ -474,12 +474,12 @@ namespace cirrus::devices::amplifiers::cs35l41 {
 
         ok = updateRegisterBits(amp, 0x00002018, 0x00000001, 0x00000000) && ok;
 
-        if (amp.power.switched()) {
+        if (!amp.power.internal()) {
             ok = writeRegister(amp, 0x00000040, 0x00000055) && ok;
             ok = writeRegister(amp, 0x00000040, 0x000000AA) && ok;
         }
         ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegPowerControl1, 1, 0) && ok;
-        if (amp.power.switched()) {
+        if (!amp.power.internal()) {
             ok = writeRegister(amp, 0x00007438, 0x00585941) && ok;
             ok = writeRegister(amp, 0x00007414, 0x08C82222) && ok;
             ok = writeRegister(amp, 0x0000742C, 0x00000009) && ok;
@@ -487,7 +487,7 @@ namespace cirrus::devices::amplifiers::cs35l41 {
         ok = updateRegisterBits(amp, cirrus::devices::amplifiers::cs35l41::registers::kRegPowerControl2,
                                 0x00003000 | cirrus::devices::amplifiers::cs35l41::registers::kMaskBoostEnable, 0) &&
              ok;
-        if (amp.power.switched()) {
+        if (!amp.power.internal()) {
             ok = writeRegister(amp, 0x00000040, 0x000000CC) && ok;
             ok = writeRegister(amp, 0x00000040, 0x00000033) && ok;
         }

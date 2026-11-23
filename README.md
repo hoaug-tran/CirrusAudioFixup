@@ -134,7 +134,7 @@ Compare sound at matched output levels using the same track.
 
 ## Identify I2C or SPI
 
-The supported Lenovo configurations (Legion and ThinkBook 16p G6), ASUS Zenbook 14 UM3402Y, ASUS ROG Zephyrus G14 GA403UV and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI, ASUS ROG Zephyrus G16 GU605MV and Alienware x17 R2 use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
+The supported Lenovo configurations (Legion and ThinkBook 16P G5/G6), ASUS Zenbook 14 UM3402Y, ASUS ROG Strix G17 G713P, ASUS ROG Flow X13 GV302, ASUS ROG Zephyrus G14 GA403UV and HP ENVY x360 15-ey0xxx use **I2C**. The listed HP ZBook Fury 16 G9, ASUS ROG Strix G16 G614JI, ASUS ROG Zephyrus G16 GU605MV and Alienware x17 R2 use **SPI**. Other models must be checked; the CPU vendor or `CSC3551`/`CSC3556` name does not tell you the bus.
 
 If CirrusAudioFixup is already attached in macOS, run:
 
@@ -253,7 +253,7 @@ Open `cirrus-fixup-ioreg.txt` or inspect the output. For supported two-amplifier
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | Laptop and board identity                                                                              | Match a row in [supported laptops](#supported-laptops)                                                                           |
 | `Cirrus_Driver_Verdict`                                                                                | `READY_DSP` (normal) or `READ_ONLY` (with `-cirrusro`)                                                                           |
-| `Cirrus_Bus`                                                                                           | `I2C` for Lenovo, ASUS UM3402Y/GA403UV and HP ENVY 15-ey0xxx; `SPI` for HP ZBook Fury, ASUS G614JI, GU605MV and Alienware x17 R2 |
+| `Cirrus_Bus`                                                                                           | `I2C` for Lenovo, ASUS UM3402Y/G713P/GV302/GA403UV and HP ENVY 15-ey0xxx; `SPI` for HP ZBook Fury, ASUS G614JI, GU605MV and Alienware x17 R2 |
 | `Cirrus_Detected_Amplifiers`                                                                           | `2`                                                                                                                              |
 | `Cirrus_I2C_0_DeviceID` / `Cirrus_I2C_1_DeviceID`, or the corresponding `Cirrus_SPI_*_DeviceID` fields | Both `0x35A40` (CS35L41) or `0x35A56` (CS35L56)                                                                                  |
 | The corresponding `_0_Probe_Return` and `_1_Probe_Return` fields                                       | Both `0` (successful reads)                                                                                                      |

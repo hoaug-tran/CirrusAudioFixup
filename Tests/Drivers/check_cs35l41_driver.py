@@ -30,13 +30,14 @@ struct Port:core::RegisterIO {
     unsigned calls=0,failAt=0,failFrom=0,reads=0,writes=0,diagnosticReads=0;
     int error=0;
     bool alive=true;
+    bool emulatePowerAck=false;
     uint64_t readCostMs=0;
     std::vector<diagnostics::TraceSource> sources;
     Port(){values[0]=registers::kValDeviceId;values[4]=0xb2;values[0x10]=3;values[0x1001c]=2;values[0x10098]=2;}
     bool step(){assert(alive);++calls;error=(calls==failAt||(failFrom&&calls>=failFrom))?-99:0;return error==0;}
     int32_t lastError()const override{return error;}
     bool read(uint32_t r,uint32_t* v)override{++reads;fixtureTimeMs+=readCostMs;if(!step())return false;*v=values[r];return true;}
-    bool write(uint32_t r,uint32_t v)override{++writes;if(!step())return false;if(r==0x10010 || r==0x10018 || r==0x1001c)values[r]&=~v;else values[r]=v;if(r==0x20)values[0x1001c]=2;return true;}
+    bool write(uint32_t r,uint32_t v)override{++writes;if(!step())return false;if(r==0x10010 || r==0x10018 || r==0x1001c)values[r]&=~v;else values[r]=v;if(r==0x20)values[0x1001c]=2;if(emulatePowerAck&&r==0x2014)values[0x10010]|=(v&1)?0x01000000U:0x00800000U;return true;}
     bool updateBits(uint32_t r,uint32_t m,uint32_t v)override{uint32_t old=0;return read(r,&old) && write(r,(old&~m)|(v&m));}
     bool bulkRead(uint32_t,uint8_t* p,size_t n)override{if(!step())return false;memset(p,0,n);return true;}
     bool bulkWrite(uint32_t,const uint8_t*,size_t)override{return step();}
@@ -139,16 +140,17 @@ int main(){
         assert(probe.host.properties["Cirrus_Dump_Status_owned-driver"]=="COMPLETE");
     }
     static_assert(!std::is_base_of<IOService,CS35L41Driver>::value);
-    for(uint32_t ssid:{0x17aa382bU,0x17aa3847U,0x17aa385cU,0x17aa3877U}){
+    for(uint32_t ssid:{0x17aa382bU,0x17aa3847U,0x17aa385cU,0x17aa3877U,0x17aa3d3bU,0x17aa38f9U}){
         IOService codec;OSNumber identity;identity.value=ssid;codec.properties["subsystem-id"]=&identity;
         fixtureCodecs={&codec};Fixture f;f.host.bypass=false;
         f.bind();(void)f.runtime.bringUp();
         assert(f.host.properties.at("Cirrus_FW_Source_owned-driver")=="EmbeddedResource");
         fixtureCodecs.clear();
     }
-    // Verified CLSA0100 SSIDs and I2C channels retain external no-switch power.
+    // Verified CLSA0100 SSIDs and I2C channels retain external no-switch power,
+    // initialize idle boost registers (0x7414/0x742C/0x7438), and quiesce GPIO1/boost on suspend.
     for(uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)})for(uint32_t channel:{0U,1U}){
-        Fixture f;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
+        Fixture f;f.port.emulatePowerAck=true;f.board.identity.subsystemDevice=ssid;f.context.actualBoard=f.board.identity;
         f.endpoint.i2cAddress=uint16_t(0x40+channel);f.binding.endpoint=f.context.endpoint=f.endpoint;
         f.binding.channelIndex=f.assets.target.channelIndex=channel;f.assets.target.subsystemDevice=ssid;
         DeviceConfiguration configuration;
@@ -156,6 +158,12 @@ int main(){
         assert(configuration.power.topology==BoostTopology::ExternalWithoutSwitch);
         f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);
         assert(!f.port.values.count(0x3810)&&!f.port.values.count(0x3814)&&!f.port.values.count(0x3808));
+        assert(f.port.values[0x7414]==0x08c82222&&f.port.values[0x742c]==9&&f.port.values[0x7438]==0x00585941&&f.port.values[0x40]==0x33);
+        // Simulate active playback state (as left by Playback::advance) before synchronous suspend/stopPlayback.
+        f.port.values[0x11008]=0x8001;f.port.values[0x742c]=0x79;f.port.values[0x7438]=0x00585941;f.port.values[0x2014]=1;
+        assert(f.runtime.suspend()==0);
+        assert(f.port.values[0x742c]==9&&f.port.values[0x7438]==0x00580941&&f.port.values[0x11008]==1&&f.port.values[0x40]==0x33);
+        assert(f.runtime.resume()==0&&f.port.values[0x7414]==0x08c82222&&f.port.values[0x742c]==9);
         assert(f.runtime.unbind()==0);
     }
     for(uint32_t channel:{0U,1U}){
@@ -196,16 +204,20 @@ int main(){
             assert(dirty.port.values[0x7414]==0x00c82222&&dirty.port.values[0x742c]==0);
         }
     }
-    // Issue #3 HP and #5 G614JI plus both Lenovo profiles and the Zenbook branch.
-    // Real driver lifecycle with fixture transport/time and explicit DSP bypass.
-    struct Machine {uint16_t vendor,device;const char* hid;core::BusTransportType bus;BoostTopology boost;};
+    // All 11 production-supported CS35L41 profiles: real driver lifecycle with fixture transport/time and explicit DSP bypass.
+    struct Machine {uint16_t vendor,device;const char* hid;core::BusTransportType bus;BoostTopology boost;uint32_t peakMa;};
     const Machine machines[]{
-        {0x17aa,0x382b,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
-        {0x17aa,0x3847,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch},
-        {0x17aa,0x3877,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch},
-        {0x103c,0x89c6,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
-        {0x1043,0x1c9f,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal},
-        {0x1043,0x1683,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch}};
+        {0x17aa,0x382b,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch,0},
+        {0x17aa,0x3847,"CLSA0100",core::BusTransportType::I2C,BoostTopology::ExternalWithoutSwitch,0},
+        {0x17aa,0x3877,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch,0},
+        {0x17aa,0x38f9,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch,0},
+        {0x103c,0x89c6,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal,4500},
+        {0x103c,0x8a31,"CSC3551",core::BusTransportType::I2C,BoostTopology::Internal,4100},
+        {0x1043,0x1c9f,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal,4500},
+        {0x1043,0x1683,"CSC3551",core::BusTransportType::I2C,BoostTopology::ExternalWithSwitch,0},
+        {0x1043,0x1d1f,"CSC3551",core::BusTransportType::I2C,BoostTopology::Internal,4500},
+        {0x1043,0x1533,"CSC3551",core::BusTransportType::I2C,BoostTopology::Internal,4500},
+        {0x1028,0x0b28,"CSC3551",core::BusTransportType::SPI,BoostTopology::Internal,4500}};
     for(const auto& machine:machines)for(uint32_t channel:{0U,1U}){
         Fixture f;f.board.identity={machine.vendor,machine.device,machine.hid};f.board.useBoardFirmwareIdentity=true;
         f.context.actualBoard=f.board.identity;f.context.actualDeviceHid=machine.hid;
@@ -214,7 +226,7 @@ int main(){
         f.binding.endpoint=f.context.endpoint=f.endpoint;f.binding.channelIndex=channel;f.binding.acpiHid=machine.hid;
         DeviceConfiguration config;
         config.power={machine.boost,0,0,0};config.gpio1Function=machine.boost==BoostTopology::ExternalWithSwitch?1:0;
-        if(machine.boost==BoostTopology::Internal)config.power={machine.boost,1000,4500,24};
+        if(machine.boost==BoostTopology::Internal)config.power={machine.boost,1000,machine.peakMa,24};
         f.binding.driverConfiguration=&config;f.binding.driverConfigurationSize=sizeof(config);f.binding.driverConfigurationKind=kDeviceConfigurationKind;
         f.assets.target.subsystemVendor=machine.vendor;f.assets.target.subsystemDevice=machine.device;f.assets.target.channelIndex=channel;
         f.bind();assert(f.runtime.bringUp()==0&&f.runtime.report(0).initialized);

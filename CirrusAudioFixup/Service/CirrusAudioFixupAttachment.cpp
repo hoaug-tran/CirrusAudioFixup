@@ -260,7 +260,7 @@ bool CirrusAudioFixup::resumeI2CCommunication() {
     if (acpi && !ensureACPIDeviceReady(acpi, "CONTROLLER_PM", "wake")) {
         return false;
     }
-    if (mDiscoveredBoard && !bootArgEnabled("-cirrusro")) {
+    if (mDiscoveredBoard && mPlatformAuthorized && !bootArgEnabled("-cirrusro") && !bootArgStrEquals("-cirrusphase", "probe")) {
         prepareDiscoveredI2CReset();
     }
     mAttachment.communication = mPlatformAuthorized ? "READY" : "READ_ONLY";

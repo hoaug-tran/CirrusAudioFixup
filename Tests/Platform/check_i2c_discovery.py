@@ -367,6 +367,141 @@ int main(){
   intelCtrl->values.erase("_CID");
   intelCtrl->values["_HID"] = make<OSString>("INTC1085");
 
+  // Test Intel GPIO output reset pulse (success, release failure, and assertion failure with best-effort release)
+  auto intelResetCRS = captured;
+  intelResetCRS.resize(intelResetCRS.size() - 2);
+  auto dIn = intelGpioDesc(269, 0x19);
+  auto dOut = intelGpioDesc(269, 0x02);
+  intelResetCRS.insert(intelResetCRS.end(), dIn.begin(), dIn.end());
+  intelResetCRS.insert(intelResetCRS.end(), dOut.begin(), dOut.end());
+  intelResetCRS.insert(intelResetCRS.end(), {0x79, 0});
+  amp->values["_CRS"] = make<OSData>(intelResetCRS);
+  assert(intelResources.load(&nub, reason));
+
+  const uint32_t lockTxReg = (0x114 + 1 * 8) / 4;
+  const uint32_t lockTxBit = 1U << (269 - 256);
+  intelMap->r[lockTxReg] = 0;
+  intelMap->r[padReg] = 0;
+  unsigned intelPulses = 0;
+  fixtureSleep = [&](unsigned ms) {
+   assert(ms == 2);
+   // Active-low assertion writes bit 0 == 0; release writes bit 0 == 1.
+   assert((intelMap->r[padReg] & 1U) == (intelPulses++ % 2));
+  };
+  assert(intelResources.reset(nullptr, 1));
+  assert(intelPulses == 2 && (intelMap->r[padReg] & 1U) == 1U);
+  assert(owner.strings["Cirrus_I2C_Reset_Reason"] == "RESET_PULSE_COMPLETE");
+
+  // Release failure after successful assertion must fail rather than reporting RESET_PULSE_COMPLETE.
+  intelMap->r[padReg] = 0;
+  intelPulses = 0;
+  fixtureSleep = [&](unsigned ms) {
+   assert(ms == 2);
+   ++intelPulses;
+   intelMap->r[lockTxReg] = lockTxBit;
+  };
+  assert(!intelResources.reset(nullptr, 1));
+  assert(intelPulses == 1 && (intelMap->r[padReg] & 1U) == 0U);
+  assert(owner.strings["Cirrus_I2C_Reset_Reason"] == "PAD_TX_LOCKED");
+
+  // Pre-bind locked pad must reject before any assertion write or sleep.
+  intelPulses = 0;
+  fixtureSleep = [&](unsigned) { assert(false); };
+  assert(!intelResources.reset(nullptr, 1));
+  assert(intelPulses == 0);
+  assert(owner.strings["Cirrus_I2C_Reset_Reason"] == "PAD_TX_LOCKED");
+
+  // Direct fault-injection against intel::pulseGPIOReset: assert/release readback and register-loss paths.
+  struct IntelResetWindow final : transport::intel::IntelGPIOWindow {
+   uint32_t r[0x1000 / 4]{};
+   std::vector<uint32_t> writes;
+   bool rejectAssertion = false, rejectRelease = false, dropBeforeWrite = false;
+   unsigned padReads = 0;
+   uint32_t padOffset = 0x700 + 22 * 16;
+   IntelResetWindow() {
+    r[0] = 0x960000;
+    r[3] = 0x700;
+   }
+   uint32_t read32(uint32_t offset) override {
+    if (offset == padOffset) {
+     ++padReads;
+     // Read 1: bind()->validate(), Read 2: setActive(true)->validate(), Read 3: setActive(true) before-write.
+     if (dropBeforeWrite && padReads == 3) {
+      return 0xffffffffU;
+     }
+    }
+    return r[offset / 4];
+   }
+   void write32(uint32_t offset, uint32_t value) override {
+    assert(offset == padOffset);
+    writes.push_back(value);
+    if ((writes.size() == 1 && rejectAssertion) || (writes.size() == 2 && rejectRelease)) {
+     return;
+    }
+    r[offset / 4] = value;
+   }
+  };
+  transport::intel::IntelGPIOPad resetPad{};
+  assert(transport::intel::lookupIntelGPIOPad("INTC1085", 269, resetPad));
+  {
+   // Assertion readback failure must still execute best-effort release and preserve assertion failure reason.
+   IntelResetWindow w;
+   w.rejectAssertion = true;
+   w.r[w.padOffset / 4] = 1U;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(!transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, true, [&](unsigned) { ++sleeps; }, why));
+   assert(sleeps == 0 && w.writes.size() == 2);
+   assert((w.writes[0] & 1U) == 0U && (w.writes[1] & 1U) == 1U);
+   assert((w.r[w.padOffset / 4] & 1U) == 1U);
+   assert(!strcmp(why, "PAD_WRITE_READBACK_FAILED"));
+  }
+  {
+   // Release readback failure must fail rather than reporting RESET_PULSE_COMPLETE.
+   IntelResetWindow w;
+   w.rejectRelease = true;
+   w.r[w.padOffset / 4] = 1U;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(!transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, true, [&](unsigned ms) { assert(ms == 2); ++sleeps; }, why));
+   assert(sleeps == 1 && w.writes.size() == 2);
+   assert((w.writes[0] & 1U) == 0U && (w.writes[1] & 1U) == 1U);
+   assert(!strcmp(why, "PAD_WRITE_READBACK_FAILED"));
+  }
+  {
+   // Register vanishing between validate() and read-before-write must report REGISTER_UNAVAILABLE (not READY).
+   IntelResetWindow w;
+   w.dropBeforeWrite = true;
+   w.r[w.padOffset / 4] = 1U;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(!transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, true, [&](unsigned) { ++sleeps; }, why));
+   assert(sleeps == 0 && w.writes.size() == 1 && (w.writes[0] & 1U) == 1U);
+   assert(!strcmp(why, "REGISTER_UNAVAILABLE"));
+  }
+  {
+   // Active-high reset asserts high then releases low.
+   IntelResetWindow w;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, false, [&](unsigned ms) { assert(ms == 2); ++sleeps; }, why));
+   assert(sleeps == 2 && w.writes.size() == 2);
+   assert((w.writes[0] & 1U) == 1U && (w.writes[1] & 1U) == 0U);
+   assert(!strcmp(why, "RESET_PULSE_COMPLETE"));
+  }
+
+  // Empty OSData _HID must safely fall back to _CID without null memcpy UB.
+  intelMap->r[lockTxReg] = 0;
+  intelMap->r[padReg] = (1U << 8) | (1U << 1);
+  intelCtrl->values["_HID"] = make<OSData>(std::vector<uint8_t>{});
+  intelCtrl->values["_CID"] = make<OSString>("INTC1085");
+  assert(intelResources.readResource(0, 0, false, val) && val == 1);
+  intelCtrl->values.erase("_CID");
+  intelCtrl->values["_HID"] = make<OSString>("INTC1085");
+
+  fixtureSleep = {};
+  assert(intelCtrl->opens == intelCtrl->closes);
+
   // Restore amp & devices
   ::devices = {amp, controller};
  }

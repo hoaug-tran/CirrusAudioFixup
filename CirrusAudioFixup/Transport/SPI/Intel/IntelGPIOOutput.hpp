@@ -140,6 +140,7 @@ namespace cirrus::transport::intel {
             }
             const uint32_t before = mWindow->read32(mOffset);
             if (before == 0xffffffffU) {
+                mEvidence.reason = "REGISTER_UNAVAILABLE";
                 return kIOReturnNoDevice;
             }
             const uint32_t after = (before & ~1U) | uint32_t(active != mActiveLow);
@@ -168,4 +169,27 @@ namespace cirrus::transport::intel {
         uint32_t mOffset{0};
         bool mActiveLow{true};
     };
+
+    template <class Delay>
+    bool pulseGPIOReset(IntelGPIOWindow& window, size_t bytes, const IntelGPIOPad& pad, bool activeLow, Delay delay, const char*& reason) {
+        IntelGPIOOutput output;
+        if (output.bind(window, bytes, pad, activeLow) != kIOReturnSuccess) {
+            reason = output.evidence().reason;
+            return false;
+        }
+        const auto assertRes = output.setActive(true);
+        const char* assertReason = output.evidence().reason;
+        if (assertRes == kIOReturnSuccess) {
+            delay(2);
+        }
+        // Best-effort release even if assertion/readback failed so reset is not left held.
+        const auto releaseRes = output.setActive(false);
+        if (assertRes == kIOReturnSuccess && releaseRes == kIOReturnSuccess) {
+            delay(2);
+            reason = "RESET_PULSE_COMPLETE";
+            return true;
+        }
+        reason = assertRes != kIOReturnSuccess ? assertReason : output.evidence().reason;
+        return false;
+    }
 }

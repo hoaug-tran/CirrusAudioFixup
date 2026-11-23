@@ -12,7 +12,6 @@
 
 ### Platform & Infrastructure
 
-- Restored Intel LPSS SPI private register state (fractional clock divider, reset deassertion, chip-select and clock gating) and SSP control registers across S3 resume to prevent wake SPI transfer timeouts ([#25](https://github.com/hoaug-tran/CirrusAudioFixup/issues/25)).
 - Added ACPI `_CID` fallback for Intel GPIO controller identification (`INTC1085`) when OEM custom `_HID` (e.g. `LEN0001`) is present, and enforced 32-bit MMIO alignment on GPIO register accesses.
 - Enforced ACPI D0 (`_PS0`/`_PSC`) readiness on ACPI-backed I2C amplifier devices during setup and wake, and surfaced wake/communication failures as `COMMUNICATION_FAILED`.
 - Accepted `IoRestrictionNoneAndPreserve` ACPI `GpioIo` descriptors for shared GPIO resources and separated `NO_GPIO_RESET_REQUIRED` from `ACPI_GPIO_PREPARED` reset reporting.

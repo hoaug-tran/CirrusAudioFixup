@@ -48,8 +48,10 @@ namespace cirrus::transport {
             }
             if (auto* data = OSDynamicCast(OSData, object)) {
                 const size_t len = data->getLength() < maxLen - 1 ? data->getLength() : maxLen - 1;
-                memcpy(out, data->getBytesNoCopy(), len);
-                out[len] = '\0';
+                if (len && data->getBytesNoCopy()) {
+                    memcpy(out, data->getBytesNoCopy(), len);
+                    out[len] = '\0';
+                }
                 return out[0] != '\0';
             }
             return false;
@@ -57,28 +59,26 @@ namespace cirrus::transport {
 
         char candidate[16]{};
         OSObject* object = nullptr;
-        if (provider->evaluateObject("_HID", &object) == kIOReturnSuccess && object) {
-            if (parseObject(object, candidate)) {
+        const auto hidRet = provider->evaluateObject("_HID", &object);
+        if (hidRet == kIOReturnSuccess && object && parseObject(object, candidate)) {
+            snprintf(hid, maxLen, "%s", candidate);
+            if (isSupportedGPIOController(hid)) {
+                OSSafeReleaseNULL(object);
+                return true;
+            }
+        }
+        OSSafeReleaseNULL(object);
+        const auto cidRet = provider->evaluateObject("_CID", &object);
+        if (cidRet == kIOReturnSuccess && object && parseObject(object, candidate)) {
+            if (isSupportedGPIOController(candidate) || !hid[0]) {
                 snprintf(hid, maxLen, "%s", candidate);
-                if (isSupportedGPIOController(hid)) {
-                    OSSafeReleaseNULL(object);
-                    return true;
-                }
             }
-            OSSafeReleaseNULL(object);
-        }
-        if (provider->evaluateObject("_CID", &object) == kIOReturnSuccess && object) {
-            if (parseObject(object, candidate)) {
-                if (isSupportedGPIOController(candidate) || !hid[0]) {
-                    snprintf(hid, maxLen, "%s", candidate);
-                }
-                if (isSupportedGPIOController(hid)) {
-                    OSSafeReleaseNULL(object);
-                    return true;
-                }
+            if (isSupportedGPIOController(hid)) {
+                OSSafeReleaseNULL(object);
+                return true;
             }
-            OSSafeReleaseNULL(object);
         }
+        OSSafeReleaseNULL(object);
         if (auto* name = OSDynamicCast(OSData, provider->getProperty("name"))) {
             if (parseObject(name, candidate)) {
                 if (isSupportedGPIOController(candidate) || !hid[0]) {
@@ -138,7 +138,7 @@ namespace cirrus::transport {
                 } else {
                     auto* map = provider->mapDeviceMemoryWithIndex(0);
                     reason = "GPIO_MEMORY_UNAVAILABLE";
-                    if (map && map->getVirtualAddress()) {
+                    if (map && map->getVirtualAddress() && !(map->getVirtualAddress() & 3)) {
                         OSSynchronizeIO();
                         read = amd::readGPIOInput(reinterpret_cast<const volatile uint32_t*>(map->getVirtualAddress()), map->getLength(),
                                                   gpio.pin, activeLow, value, reason);
@@ -227,21 +227,8 @@ namespace cirrus::transport {
                         reason = "RESET_MEMORY_UNAVAILABLE";
                         if (map && map->getVirtualAddress() && !(map->getVirtualAddress() & 3)) {
                             IntelGPIOMemoryWindow window{map};
-                            intel::IntelGPIOOutput output;
-                            const auto bindRes = output.bind(window, map->getLength(), pad, activeLow);
-                            if (bindRes == kIOReturnSuccess) {
-                                if (output.setActive(true) == kIOReturnSuccess) {
-                                    IOSleep(2);
-                                    output.setActive(false);
-                                    IOSleep(2);
-                                    complete = true;
-                                    reason = "RESET_PULSE_COMPLETE";
-                                } else {
-                                    reason = output.evidence().reason;
-                                }
-                            } else {
-                                reason = output.evidence().reason;
-                            }
+                            complete = intel::pulseGPIOReset(
+                                window, map->getLength(), pad, activeLow, [](uint32_t ms) { IOSleep(ms); }, reason);
                         }
                         OSSafeReleaseNULL(map);
                         provider->close(owner);

@@ -58,13 +58,14 @@ void CirrusAudioFixup::dumpProviderProperties(IOService* provider) {
 
     CIRRUS_LOG("provider properties follow");
 
-    OSDictionary* properties = provider->getPropertyTable();
+    OSDictionary* properties = provider->dictionaryWithProperties();
     if (!properties) {
         return;
     }
     OSCollectionIterator* iterator = OSCollectionIterator::withCollection(properties);
     if (!iterator) {
         CIRRUS_ERR("property iterator failed");
+        properties->release();
         return;
     }
 
@@ -91,6 +92,7 @@ void CirrusAudioFixup::dumpProviderProperties(IOService* provider) {
     }
 
     iterator->release();
+    properties->release();
 }
 
 void CirrusAudioFixup::initTraceBuffer() {

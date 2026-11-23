@@ -24,6 +24,11 @@
 - Enabled develop push builds and automatic kext artifact uploads in CI workflows.
 - Added a read-only CS35L41/CS35L56 hardware candidate catalog (`Cirrus_Candidate_*` IORegistry diagnostics, `BoardProperties` upstream sync, and `Tools/Hardware/onboard_board.py` staging workflow); candidate recognition does not authorize unverified hardware or bypass protection checks.
 
+### Acknowledgments
+
+- Thanks to [@wjjkld](https://github.com/wjjkld) for contributing ASUS ROG Strix G17 G713P support ([#22](https://github.com/hoaug-tran/CirrusAudioFixup/pull/22)).
+- Thanks to [@yshen22](https://github.com/yshen22) ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)), [@zenghongfei1](https://github.com/zenghongfei1) ([#24](https://github.com/hoaug-tran/CirrusAudioFixup/issues/24)), and [@DrLinjiu](https://github.com/DrLinjiu) ([#26](https://github.com/hoaug-tran/CirrusAudioFixup/issues/26)) for hardware dumps and on-device testing.
+
 ## [1.2.0] - 2026-11-06
 
 ### CS35L41

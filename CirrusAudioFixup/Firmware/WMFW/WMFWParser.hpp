@@ -358,7 +358,7 @@ class WMFWMemoryMapper {
                     }
                 }
             } else if (coeff.type == (WMFW_NAME_TEXT << 8) || coeff.type == (WMFW_INFO_TEXT << 8) || coeff.type == (WMFW_METADATA << 8)) {
-                CIRRUS_LOG("Skipping non-memory coefficient block %u (ID=0x%06X type=0x%X)", i, coeff.id, type_masked);
+                // CIRRUS_LOG("Skipping non-memory coefficient block %u (ID=0x%06X type=0x%X)", i, coeff.id, type_masked);
                 continue;
             } else {
                 CIRRUS_ERR("Unsupported coefficient type 0x%X", coeff.type);
@@ -375,8 +375,8 @@ class WMFWMemoryMapper {
             if (status != MappingStatus::OK) {
                 return false;
             }
-            CIRRUS_LOG("Coefficient %u: ID=0x%06X type=0x%X alg_base=0x%06X byte_offset=0x%08X mapped=0x%08X", i, coeff.id, type_masked,
-                       algorithmBase, byteOffset, outReg.dspRegister);
+            // CIRRUS_LOG("Coefficient %u: ID=0x%06X type=0x%X alg_base=0x%06X byte_offset=0x%08X mapped=0x%08X", i, coeff.id, type_masked,
+            //            algorithmBase, byteOffset, outReg.dspRegister);
 
             outReg.size = coeff.length;
             outReg.data.begin = coeff.data;
@@ -550,10 +550,10 @@ class WMFWParser {
         uint32_t ncoeff = readLE32(&data[pos]);
         pos += 4;
 
-        CIRRUS_LOG("Algorithm:");
-        CIRRUS_LOG("  id      = %u (0x%08X)", alg_id, alg_id);
-        CIRRUS_LOG("  name    = %s", alg_name);
-        CIRRUS_LOG("  coeffs  = %u", ncoeff);
+        // CIRRUS_LOG("Algorithm:");
+        // CIRRUS_LOG("  id      = %u (0x%08X)", alg_id, alg_id);
+        // CIRRUS_LOG("  name    = %s", alg_name);
+        // CIRRUS_LOG("  coeffs  = %u", ncoeff);
 
         if (outImage->wmfwAlgorithmCount >= 64) {
             CIRRUS_LOG("Warning: Maximum algorithms reached.");
@@ -629,12 +629,12 @@ class WMFWParser {
             uint16_t c_flags = readLE16(&data[inner_pos + 2]);
             uint32_t c_len = readLE32(&data[inner_pos + 4]);
 
-            CIRRUS_LOG("  Coeff[%u] %s", i, c_name);
-            CIRRUS_LOG("    offset   = 0x%04X", c_offset);
-            CIRRUS_LOG("    type     = 0x%04X", c_type);
-            CIRRUS_LOG("    ctl_type = 0x%04X", c_ctl_type);
-            CIRRUS_LOG("    flags    = 0x%04X", c_flags);
-            CIRRUS_LOG("    len      = %u", c_len);
+            // CIRRUS_LOG("  Coeff[%u] %s", i, c_name);
+            // CIRRUS_LOG("    offset   = 0x%04X", c_offset);
+            // CIRRUS_LOG("    type     = 0x%04X", c_type);
+            // CIRRUS_LOG("    ctl_type = 0x%04X", c_ctl_type);
+            // CIRRUS_LOG("    flags    = 0x%04X", c_flags);
+            // CIRRUS_LOG("    len      = %u", c_len);
 
             if (outImage->wmfwControlCount >= 512) {
                 return false;
@@ -685,11 +685,11 @@ class WMFWParser {
         outImage->core = header->core;
         outImage->coreRevision = readLE16(data + 8);
 
-        CIRRUS_LOG("WMFW File Header:");
-        CIRRUS_LOG("  Magic    : 0x%08X", outImage->magic);
-        CIRRUS_LOG("  Version  : %u", outImage->version);
-        CIRRUS_LOG("  Core     : %u", outImage->core);
-        CIRRUS_LOG("  Core Rev : 0x%08X", outImage->coreRevision);
+        // CIRRUS_LOG("WMFW File Header:");
+        // CIRRUS_LOG("  Magic    : 0x%08X", outImage->magic);
+        // CIRRUS_LOG("  Version  : %u", outImage->version);
+        // CIRRUS_LOG("  Core     : %u", outImage->core);
+        // CIRRUS_LOG("  Core Rev : 0x%08X", outImage->coreRevision);
 
         size_t pos = OSSwapLittleToHostInt32(header->len);
 
@@ -728,9 +728,9 @@ class WMFWParser {
                     break;
                 case WMFW_ALGORITHM_DATA:
                     reg.regionType = RegionType::ALGORITHM_DATA;
-                    CIRRUS_LOG("WMFW Block Type: ALGORITHM_DATA (0xF2)");
-                    CIRRUS_LOG("WMFW Block Start Offset: 0x%08zX", pos);
-                    CIRRUS_LOG("WMFW Block Payload Size: %u bytes", len);
+                    // CIRRUS_LOG("WMFW Block Type: ALGORITHM_DATA (0xF2)");
+                    // CIRRUS_LOG("WMFW Block Start Offset: 0x%08zX", pos);
+                    // CIRRUS_LOG("WMFW Block Payload Size: %u bytes", len);
                     if (!parseWMFWAlgorithmData(raw_region->data, len, outImage, pos, outImage->version)) {
                         return false;
                     }

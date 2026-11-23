@@ -65,20 +65,20 @@ AppleHDA and AppleALC provide the codec route. CirrusAudioFixup manages the ampl
 
 | Laptop                             | Subsystem ID | Amplifier | Bus | Codec  | Status  |
 | ---------------------------------- | ------------ | --------- | --- | ------ | ------- |
-| Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | CS35L41   | I2C | ALC287 | Working |
+| Alienware x17 R2                   | `1028:0B28`  | CS35L41   | SPI | ALC289 | Working |
+| ASUS ROG Flow X13 GV302 (2023)     | `1043:1533`  | CS35L41   | I2C | ALC294 | Working |
+| ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | CS35L41   | SPI | ALC285 | Working |
+| ASUS ROG Strix G17 G713P (2023)    | `1043:1D1F`  | CS35L41   | I2C | ALC294 | Working |
+| ASUS Zenbook 14 UM3402Y            | `1043:1683`  | CS35L41   | I2C | ALC294 | Working |
+| HP ENVY x360 15-ey0xxx             | `103C:8A31`  | CS35L41   | I2C | ALC245 | Working |
+| HP ZBook Fury 16 G9                | `103C:89C6`  | CS35L41   | SPI | ALC245 | Working |
 | Lenovo Legion 5 Pro 16ACH6H (2021) | `17AA:382B`  | CS35L41   | I2C | ALC287 | Working |
+| Lenovo Legion 7 16ACHg6 (2021)     | `17AA:3847`  | CS35L41   | I2C | ALC287 | Working |
 | Lenovo Legion Slim 7 Gen 7 (2022)  | `17AA:3877`  | CS35L41   | I2C | ALC287 | Working |
 | Lenovo ThinkBook 16P G5 IRX        | `17AA:38F9`  | CS35L41   | I2C | ALC287 | Working |
-| Lenovo ThinkBook 16p G6 IAX        | `17AA:391E`  | CS35L56   | I2C | ALC287 | Working |
-| HP ZBook Fury 16 G9                | `103C:89C6`  | CS35L41   | SPI | ALC245 | Working |
-| HP ENVY x360 15-ey0xxx             | `103C:8A31`  | CS35L41   | I2C | ALC245 | Working |
-| ASUS ROG Strix G16 G614JI          | `1043:1C9F`  | CS35L41   | SPI | ALC285 | Working |
-| ASUS Zenbook 14 UM3402Y            | `1043:1683`  | CS35L41   | I2C | ALC294 | Working |
-| ASUS ROG Strix G17 G713P (2023)    | `1043:1D1F`  | CS35L41   | I2C | ALC294 | Working |
-| ASUS ROG Flow X13 GV302 (2023)     | `1043:1533`  | CS35L41   | I2C | ALC294 | Working |
 | ASUS ROG Zephyrus G14 GA403UV      | `1043:1B13`  | CS35L56   | I2C | ALC285 | Working |
 | ASUS ROG Zephyrus G16 GU605MV      | `1043:1C63`  | CS35L56   | SPI | ALC285 | Working |
-| Alienware x17 R2                   | `1028:0B28`  | CS35L41   | SPI | ALC289 | Working |
+| Lenovo ThinkBook 16p G6 IAX        | `17AA:391E`  | CS35L56   | I2C | ALC287 | Working |
 
 ### Other boards and controller support
 
@@ -247,18 +247,18 @@ ioreg -lw0 -p IOService -r -c CirrusAudioFixup
 sudo dmesg > ~/Desktop/cirrus-dmesg.txt
 ```
 
-Open `cirrus-fixup-ioreg.txt` or inspect the output. For supported two-amplifier configurations, check:
+Inspect the `ioreg` output. For supported two-amplifier configurations, check:
 
-| Field                                                                                                  | Expected result                                                                                                                  |
-| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Laptop and board identity                                                                              | Match a row in [supported laptops](#supported-laptops)                                                                           |
-| `Cirrus_Driver_Verdict`                                                                                | `READY_DSP` (normal) or `READ_ONLY` (with `-cirrusro`)                                                                           |
+| Field                                                                                                  | Expected result                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Laptop and board identity                                                                              | Match a row in [supported laptops](#supported-laptops)                                                                                       |
+| `Cirrus_Driver_Verdict`                                                                                | `READY_DSP` (normal) or `READ_ONLY` (with `-cirrusro`)                                                                                       |
 | `Cirrus_Bus`                                                                                           | `I2C` for Lenovo, ASUS UM3402Y/G713P/GV302/GA403UV and HP ENVY 15-ey0xxx; `SPI` for HP ZBook Fury, ASUS G614JI, GU605MV and Alienware x17 R2 |
-| `Cirrus_Detected_Amplifiers`                                                                           | `2`                                                                                                                              |
-| `Cirrus_I2C_0_DeviceID` / `Cirrus_I2C_1_DeviceID`, or the corresponding `Cirrus_SPI_*_DeviceID` fields | Both `0x35A40` (CS35L41) or `0x35A56` (CS35L56)                                                                                  |
-| The corresponding `_0_Probe_Return` and `_1_Probe_Return` fields                                       | Both `0` (successful reads)                                                                                                      |
-| `Cirrus_Attach_First_Reason`                                                                           | Absent or `NONE`                                                                                                                 |
-| `Cirrus_Diag_FirstFailure_*`                                                                           | Absent or `OK`; any named failure needs investigation                                                                            |
+| `Cirrus_Detected_Amplifiers`                                                                           | `2`                                                                                                                                          |
+| `Cirrus_I2C_0_DeviceID` / `Cirrus_I2C_1_DeviceID`, or the corresponding `Cirrus_SPI_*_DeviceID` fields | Both `0x35A40` (CS35L41) or `0x35A56` (CS35L56)                                                                                              |
+| The corresponding `_0_Probe_Return` and `_1_Probe_Return` fields                                       | Both `0` (successful reads)                                                                                                                  |
+| `Cirrus_Attach_First_Reason`                                                                           | Absent or `NONE`                                                                                                                             |
+| `Cirrus_Diag_FirstFailure_*`                                                                           | Absent or `OK`; any named failure needs investigation                                                                                        |
 
 **Stop if a device is missing, an ID differs or a read fails.**
 
@@ -318,12 +318,12 @@ Current board discovery supports up to two endpoints with distinct left/right ch
 
 **Use `-cirrusro -cirrusdbg` for the first boot.** After checking the hardware and removing read-only mode, a supported configuration needs no CirrusAudioFixup arguments for normal playback. AppleALC still needs the correct codec route.
 
-| Argument       | When to use it                                                                                                       |
-| -------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `-cirrusoff`   | Disable attachment while isolating a boot or driver problem                                                          |
-| `-cirrusdbg`   | Enable routine driver logs in a Release build; Debug already enables them                                            |
-| `-cirrusro`    | Inspect hardware without amplifier register writes, platform reset or normal initialization; playback stays disabled |
-| `-cirrusnodsp` | Test the direct DAC path during controlled bring-up; skips DSP firmware and removes DSP acoustic protection          |
+| Argument       | When to use it                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `-cirrusoff`   | Disable attachment while isolating a boot or driver problem                                                                |
+| `-cirrusdbg`   | Enable routine driver logs in a Release build; Debug already enables them                                                  |
+| `-cirrusro`    | Inspect hardware without amplifier register writes, platform reset or normal initialization; playback stays disabled       |
+| `-cirrusnodsp` | Test the direct DAC path during controlled bring-up (CS35L41 only); skips DSP firmware and removes DSP acoustic protection |
 
 For a diagnostic capture, start with `-cirrusdbg`. Use `-cirrusdbg -cirrusro` when the board has not been validated. Remove diagnostic arguments after testing.
 
@@ -422,7 +422,9 @@ Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when match
 
 ## Adding hardware support
 
-For a new board or amplifier family, follow [the contribution requirements](CONTRIBUTING.md). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support. To check candidate readiness or stage verified upstream I2C assets for testing, inspect [docs/hardware/hardware_catalog.json](docs/hardware/hardware_catalog.json) with `python3 Tools/Hardware/onboard_board.py --inspect <SSID>` (catalog recognition and staging are strictly diagnostic/preparatory and never authorize unverified hardware).
+For a new board or amplifier family, follow [the contribution requirements](CONTRIBUTING.md). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
+
+If your laptop is not listed above, you can check whether it is already recognized in the hardware catalog by running `python3 Tools/Hardware/onboard_board.py --inspect <SSID>` (for example, `103C:8A28`) or by inspecting the `Cirrus_Candidate_*` fields in IORegistry (see [checking support status for unlisted laptops](docs/diagnostics/diagnostics.md#checking-support-status-for-unlisted-laptops)). Catalog lookup is informational only and never enables unverified hardware.
 
 ## Build from source
 

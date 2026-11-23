@@ -467,14 +467,11 @@ void CirrusAudioFixup::resolvePlatformProfile() {
         }
         const uint32_t reportedSubsystem =
             candidate ? candidate->subsystem : (primaryCandidateId ? primaryCandidateId : fallbackCandidateId);
-        const auto candidateLevel =
-            candidate ? candidate->level : cirrus::platform::catalog::SupportLevel::Unknown;
-        const auto candidateFamily =
-            candidate ? candidate->family : cirrus::platform::catalog::AmplifierFamily::Unknown;
-        const auto missingReason =
-            candidate ? candidate->missingReason
-                      : (reportedSubsystem ? cirrus::platform::catalog::MissingReason::UnrecognizedSubsystemId
-                                           : cirrus::platform::catalog::MissingReason::NoSubsystemId);
+        const auto candidateLevel = candidate ? candidate->level : cirrus::platform::catalog::SupportLevel::Unknown;
+        const auto candidateFamily = candidate ? candidate->family : cirrus::platform::catalog::AmplifierFamily::Unknown;
+        const auto missingReason = candidate ? candidate->missingReason
+                                             : (reportedSubsystem ? cirrus::platform::catalog::MissingReason::UnrecognizedSubsystemId
+                                                                  : cirrus::platform::catalog::MissingReason::NoSubsystemId);
         setProperty("Cirrus_Candidate_Subsystem", uint64_t(reportedSubsystem), 32);
         setProperty("Cirrus_Candidate_Status", cirrus::platform::catalog::supportLevelName(candidateLevel));
         setProperty("Cirrus_Candidate_Family", cirrus::platform::catalog::familyName(candidateFamily));

@@ -47,39 +47,62 @@ namespace cirrus::platform::catalog {
 
     inline const char* familyName(AmplifierFamily family) {
         switch (family) {
-        case AmplifierFamily::CS35L41: return "CS35L41";
-        case AmplifierFamily::CS35L56: return "CS35L56";
-        default: return "UNKNOWN";
+        case AmplifierFamily::CS35L41:
+            return "CS35L41";
+        case AmplifierFamily::CS35L56:
+            return "CS35L56";
+        default:
+            return "UNKNOWN";
         }
     }
 
     inline const char* supportLevelName(SupportLevel level) {
         switch (level) {
-        case SupportLevel::ProductionSupported: return "PRODUCTION_SUPPORTED";
-        case SupportLevel::TechnicallySupportable: return "TECHNICALLY_SUPPORTABLE_NO_EMBEDDED_FW";
-        case SupportLevel::RecognizedCandidate: return "RECOGNIZED_CANDIDATE";
-        default: return "UNKNOWN_HARDWARE";
+        case SupportLevel::ProductionSupported:
+            return "PRODUCTION_SUPPORTED";
+        case SupportLevel::TechnicallySupportable:
+            return "TECHNICALLY_SUPPORTABLE_NO_EMBEDDED_FW";
+        case SupportLevel::RecognizedCandidate:
+            return "RECOGNIZED_CANDIDATE";
+        default:
+            return "UNKNOWN_HARDWARE";
         }
     }
 
     inline const char* missingReasonName(MissingReason reason) {
         switch (reason) {
-        case MissingReason::None: return "NONE";
-        case MissingReason::MissingEmbeddedFwAndHwValidation: return "MISSING_EMBEDDED_FW_AND_HW_VALIDATION";
-        case MissingReason::UnsupportedQuadAmp: return "UNSUPPORTED_QUAD_AMP";
-        case MissingReason::UnsupportedSingleAmp: return "UNSUPPORTED_SINGLE_AMP";
-        case MissingReason::UnsupportedSiliconRevB2: return "UNSUPPORTED_SILICON_REV_B2";
-        case MissingReason::SpiRequiresNativeAcpiDsdAndFw: return "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW";
-        case MissingReason::AmbiguousBusTopology: return "AMBIGUOUS_BUS_TOPOLOGY";
-        case MissingReason::RequiresNativeAcpiDsdOrMetadata: return "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA";
-        case MissingReason::MissingAcpiDsdOrBoardProperties: return "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES";
-        case MissingReason::MissingBoardMetadata: return "MISSING_BOARD_METADATA";
-        case MissingReason::MissingUpstreamFirmware: return "MISSING_UPSTREAM_FIRMWARE";
-        case MissingReason::UnverifiedChannelCoefficients: return "UNVERIFIED_CHANNEL_COEFFICIENTS";
-        case MissingReason::SpeakerIdGpioMismatch: return "SPEAKER_ID_GPIO_MISMATCH";
-        case MissingReason::UnrecognizedSubsystemId: return "UNRECOGNIZED_SUBSYSTEM_ID";
-        case MissingReason::NoSubsystemId: return "NO_SUBSYSTEM_ID";
-        default: return "UNRECOGNIZED_SUBSYSTEM_ID";
+        case MissingReason::None:
+            return "NONE";
+        case MissingReason::MissingEmbeddedFwAndHwValidation:
+            return "MISSING_EMBEDDED_FW_AND_HW_VALIDATION";
+        case MissingReason::UnsupportedQuadAmp:
+            return "UNSUPPORTED_QUAD_AMP";
+        case MissingReason::UnsupportedSingleAmp:
+            return "UNSUPPORTED_SINGLE_AMP";
+        case MissingReason::UnsupportedSiliconRevB2:
+            return "UNSUPPORTED_SILICON_REV_B2";
+        case MissingReason::SpiRequiresNativeAcpiDsdAndFw:
+            return "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW";
+        case MissingReason::AmbiguousBusTopology:
+            return "AMBIGUOUS_BUS_TOPOLOGY";
+        case MissingReason::RequiresNativeAcpiDsdOrMetadata:
+            return "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA";
+        case MissingReason::MissingAcpiDsdOrBoardProperties:
+            return "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES";
+        case MissingReason::MissingBoardMetadata:
+            return "MISSING_BOARD_METADATA";
+        case MissingReason::MissingUpstreamFirmware:
+            return "MISSING_UPSTREAM_FIRMWARE";
+        case MissingReason::UnverifiedChannelCoefficients:
+            return "UNVERIFIED_CHANNEL_COEFFICIENTS";
+        case MissingReason::SpeakerIdGpioMismatch:
+            return "SPEAKER_ID_GPIO_MISMATCH";
+        case MissingReason::UnrecognizedSubsystemId:
+            return "UNRECOGNIZED_SUBSYSTEM_ID";
+        case MissingReason::NoSubsystemId:
+            return "NO_SUBSYSTEM_ID";
+        default:
+            return "UNRECOGNIZED_SUBSYSTEM_ID";
         }
     }
 

@@ -711,18 +711,25 @@ def render_catalog_hpp(catalog: dict) -> str:
         "",
         "    inline const char* familyName(AmplifierFamily family) {",
         "        switch (family) {",
-        '        case AmplifierFamily::CS35L41: return "CS35L41";',
-        '        case AmplifierFamily::CS35L56: return "CS35L56";',
-        '        default: return "UNKNOWN";',
+        "        case AmplifierFamily::CS35L41:",
+        '            return "CS35L41";',
+        "        case AmplifierFamily::CS35L56:",
+        '            return "CS35L56";',
+        "        default:",
+        '            return "UNKNOWN";',
         "        }",
         "    }",
         "",
         "    inline const char* supportLevelName(SupportLevel level) {",
         "        switch (level) {",
-        '        case SupportLevel::ProductionSupported: return "PRODUCTION_SUPPORTED";',
-        '        case SupportLevel::TechnicallySupportable: return "TECHNICALLY_SUPPORTABLE_NO_EMBEDDED_FW";',
-        '        case SupportLevel::RecognizedCandidate: return "RECOGNIZED_CANDIDATE";',
-        '        default: return "UNKNOWN_HARDWARE";',
+        "        case SupportLevel::ProductionSupported:",
+        '            return "PRODUCTION_SUPPORTED";',
+        "        case SupportLevel::TechnicallySupportable:",
+        '            return "TECHNICALLY_SUPPORTABLE_NO_EMBEDDED_FW";',
+        "        case SupportLevel::RecognizedCandidate:",
+        '            return "RECOGNIZED_CANDIDATE";',
+        "        default:",
+        '            return "UNKNOWN_HARDWARE";',
         "        }",
         "    }",
         "",
@@ -730,10 +737,12 @@ def render_catalog_hpp(catalog: dict) -> str:
         "        switch (reason) {",
     ]
     for enum_expr, label in MISSING_REASON_ENUM.values():
-        lines.append(f'        case {enum_expr}: return "{label}";')
+        lines.append(f"        case {enum_expr}:")
+        lines.append(f'            return "{label}";')
     lines.extend(
         [
-            '        default: return "UNRECOGNIZED_SUBSYSTEM_ID";',
+            "        default:",
+            '            return "UNRECOGNIZED_SUBSYSTEM_ID";',
             "        }",
             "    }",
             "",

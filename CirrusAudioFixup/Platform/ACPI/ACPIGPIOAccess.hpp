@@ -227,8 +227,8 @@ namespace cirrus::transport {
                         reason = "RESET_MEMORY_UNAVAILABLE";
                         if (map && map->getVirtualAddress() && !(map->getVirtualAddress() & 3)) {
                             IntelGPIOMemoryWindow window{map};
-                            complete = intel::pulseGPIOReset(
-                                window, map->getLength(), pad, activeLow, [](uint32_t ms) { IOSleep(ms); }, reason);
+                            complete =
+                                intel::pulseGPIOReset(window, map->getLength(), pad, activeLow, [](uint32_t ms) { IOSleep(ms); }, reason);
                         }
                         OSSafeReleaseNULL(map);
                         provider->close(owner);

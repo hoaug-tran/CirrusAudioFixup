@@ -90,60 +90,32 @@ class WMFWUploadPlanner {
 class WMFWUploadSimulator {
   public:
     static void simulate(const UploadPlan& plan) {
-        CIRRUS_LOG("--- Dry-Run Simulation for Region #%d ---", plan.regionIndex);
-
-        for (uint32_t i = 0; i < plan.transactionCount; i++) {
-            const UploadTransaction& tx = plan.transactions[i];
-            CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Payload=[%d..%d], Size=%d", i, tx.dspRegister,
-                       tx.firmwareAddress, tx.payloadOffset, tx.payloadOffset, tx.payloadOffset + tx.size - 1, tx.size);
-        }
-
-        const char* typeName = "UNKNOWN";
-        switch (plan.regionType) {
-        case RegionType::PM_PACKED:
-            typeName = "PM_PACKED";
-            break;
-        case RegionType::XM_PACKED:
-            typeName = "XM_PACKED";
-            break;
-        case RegionType::YM_PACKED:
-            typeName = "YM_PACKED";
-            break;
-        case RegionType::ALGORITHM_DATA:
-            typeName = "ALGORITHM";
-            break;
-        case RegionType::METADATA:
-            typeName = "METADATA";
-            break;
-        case RegionType::NAME_TEXT:
-            typeName = "NAME_TEXT";
-            break;
-        case RegionType::INFO_TEXT:
-            typeName = "INFO_TEXT";
-            break;
-        default:
-            break;
-        }
-
-        uint32_t fwStart = plan.transactionCount > 0 ? plan.transactions[0].firmwareAddress : 0;
-        uint32_t fwEnd = plan.transactionCount > 0 ? plan.transactions[plan.transactionCount - 1].firmwareAddress +
-                                                         plan.transactions[plan.transactionCount - 1].size
-                                                   : 0;
-        uint32_t dspStart = plan.transactionCount > 0 ? plan.transactions[0].dspRegister : 0;
-        uint32_t dspEnd = plan.transactionCount > 0
-                              ? plan.transactions[plan.transactionCount - 1].dspRegister + plan.transactions[plan.transactionCount - 1].size
-                              : 0;
-
-        CIRRUS_LOG("UploadPlan Summary");
-        CIRRUS_LOG("Region        : %d (%s)", plan.regionIndex, typeName);
-        CIRRUS_LOG("FW Start      : 0x%06X", fwStart);
-        CIRRUS_LOG("FW End        : 0x%06X", fwEnd);
-        CIRRUS_LOG("DSP Start     : 0x%08X", dspStart);
-        CIRRUS_LOG("DSP End       : 0x%08X", dspEnd);
-        CIRRUS_LOG("Transactions  : %d", plan.transactionCount);
-        CIRRUS_LOG("Total Bytes   : %d", plan.totalSize);
-        CIRRUS_LOG("Plan CRC      : 0x%08X", plan.planCrc);
-        CIRRUS_LOG("Validation    : PASS");
+        (void)plan;
+        // CIRRUS_LOG("--- Dry-Run Simulation for Region #%d ---", plan.regionIndex);
+        // for (uint32_t i = 0; i < plan.transactionCount; i++) {
+        //     const UploadTransaction& tx = plan.transactions[i];
+        //     CIRRUS_LOG("[DRYRUN] Tx%d: Reg=0x%08X, FW_Word=0x%06X, ChunkByte=0x%06X, Payload=[%d..%d], Size=%d", i, tx.dspRegister,
+        //                tx.firmwareAddress, tx.payloadOffset, tx.payloadOffset, tx.payloadOffset + tx.size - 1, tx.size);
+        // }
+        // const char* typeName = regionTypeName(plan.regionType);
+        // uint32_t fwStart = plan.transactionCount > 0 ? plan.transactions[0].firmwareAddress : 0;
+        // uint32_t fwEnd = plan.transactionCount > 0 ? plan.transactions[plan.transactionCount - 1].firmwareAddress +
+        //                                                  plan.transactions[plan.transactionCount - 1].size
+        //                                            : 0;
+        // uint32_t dspStart = plan.transactionCount > 0 ? plan.transactions[0].dspRegister : 0;
+        // uint32_t dspEnd = plan.transactionCount > 0
+        //                       ? plan.transactions[plan.transactionCount - 1].dspRegister + plan.transactions[plan.transactionCount -
+        //                       1].size : 0;
+        // CIRRUS_LOG("UploadPlan Summary");
+        // CIRRUS_LOG("Region        : %d (%s)", plan.regionIndex, typeName);
+        // CIRRUS_LOG("FW Start      : 0x%06X", fwStart);
+        // CIRRUS_LOG("FW End        : 0x%06X", fwEnd);
+        // CIRRUS_LOG("DSP Start     : 0x%08X", dspStart);
+        // CIRRUS_LOG("DSP End       : 0x%08X", dspEnd);
+        // CIRRUS_LOG("Transactions  : %d", plan.transactionCount);
+        // CIRRUS_LOG("Total Bytes   : %d", plan.totalSize);
+        // CIRRUS_LOG("Plan CRC      : 0x%08X", plan.planCrc);
+        // CIRRUS_LOG("Validation    : PASS");
     }
 };
 
@@ -194,13 +166,12 @@ class WMFWUploader {
             return false;
         }
 
-        uint32_t dspStart = plan.transactions[0].dspRegister;
         uint32_t totalSize = plan.totalSize;
-        const char* rtype = regionTypeName(plan.regionType);
-
-        CIRRUS_LOG("amp %s: starting physical upload of region data", deviceName);
-        CIRRUS_LOG("Amp %s: Region %d (%s), Transactions: %d, Total: %d bytes, DSP Start: 0x%08X", deviceName, plan.regionIndex, rtype,
-                   plan.transactionCount, totalSize, dspStart);
+        // uint32_t dspStart = plan.transactions[0].dspRegister;
+        // const char* rtype = regionTypeName(plan.regionType);
+        // CIRRUS_LOG("amp %s: starting physical upload of region data", deviceName);
+        // CIRRUS_LOG("Amp %s: Region %d (%s), Transactions: %d, Total: %d bytes, DSP Start: 0x%08X", deviceName, plan.regionIndex, rtype,
+        //            plan.transactionCount, totalSize, dspStart);
 
         bool isPM = (plan.regionType == RegionType::PM_PACKED);
         uint8_t* backupBuffer = isPM ? nullptr : static_cast<uint8_t*>(IOMallocData(totalSize));
@@ -247,7 +218,7 @@ class WMFWUploader {
                 restored =
                     written && read && !memcmp(backupBuffer + tx.payloadOffset, verifyBuffer + tx.payloadOffset, tx.size) && restored;
             }
-            CIRRUS_LOG("Amp %s: REGION_RESTORE=%s; whole image remains invalid", deviceName, restored ? "VERIFIED" : "FAILED");
+            // CIRRUS_LOG("Amp %s: REGION_RESTORE=%s; whole image remains invalid", deviceName, restored ? "VERIFIED" : "FAILED");
             return restored;
         };
 
@@ -257,9 +228,8 @@ class WMFWUploader {
         for (uint32_t i = 0; i < plan.transactionCount; i++) {
             const UploadTransaction& tx = plan.transactions[i];
 
-            CIRRUS_LOG("amp %s: transaction %d/%d (dsp=0x%08x size=%d)", deviceName, i + 1, plan.transactionCount, tx.dspRegister, tx.size);
-
-            CIRRUS_LOG("Amp %s:   WRITE    : register payload = %d bytes", deviceName, tx.size);
+            // CIRRUS_LOG("amp %s: transaction %d/%d (dsp=0x%08x size=%d)", deviceName, i + 1, plan.transactionCount, tx.dspRegister,
+            // tx.size); CIRRUS_LOG("Amp %s:   WRITE    : register payload = %d bytes", deviceName, tx.size);
             uint64_t t0 = mach_absolute_time();
             bool writeOk = false;
             for (int attempt = 1; attempt <= 2; attempt++) {
@@ -268,7 +238,7 @@ class WMFWUploader {
                     break;
                 }
                 if (attempt < 2) {
-                    CIRRUS_LOG("Amp %s:   WRITE    : FAIL (Attempt 1/2) retrying...", deviceName);
+                    // CIRRUS_LOG("Amp %s:   WRITE    : FAIL (Attempt 1/2) retrying...", deviceName);
                     accRetries++;
                     IOSleep(10);
                 }
@@ -280,11 +250,12 @@ class WMFWUploader {
                 if (outStats) {
                     outStats->nativeError = io.lastError();
                 }
-                CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, %d ms)", deviceName, writeMs);
-                CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
-                CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
+                // CIRRUS_LOG("Amp %s:   WRITE    : FAIL (2/2, %d ms)", deviceName, writeMs);
+                // CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
+                // CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
-                CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
+                (void)rbOk;
+                // CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
                 if (backupBuffer) {
                     IOFreeData(backupBuffer, totalSize);
                 }
@@ -293,12 +264,12 @@ class WMFWUploader {
                 }
                 return false;
             }
-            CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", deviceName, writeMs);
+            // CIRRUS_LOG("Amp %s:   WRITE    : PASS (%d ms)", deviceName, writeMs);
 
             if (isPM) {
-                CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
-                CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
-                CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", deviceName);
+                // CIRRUS_LOG("Amp %s:   READBACK : SKIPPED", deviceName);
+                // CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
+                // CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", deviceName);
                 continue;
             }
 
@@ -312,10 +283,11 @@ class WMFWUploader {
                 if (outStats) {
                     outStats->nativeError = io.lastError();
                 }
-                CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", deviceName, rbMs);
-                CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
+                // CIRRUS_LOG("Amp %s:   READBACK : FAIL (%d ms)", deviceName, rbMs);
+                // CIRRUS_LOG("Amp %s:   CRC      : SKIPPED", deviceName);
                 bool rbOk = restoreRegion();
-                CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
+                (void)rbOk;
+                // CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
                 if (backupBuffer) {
                     IOFreeData(backupBuffer, totalSize);
                 }
@@ -324,7 +296,7 @@ class WMFWUploader {
                 }
                 return false;
             }
-            CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", deviceName, rbMs);
+            // CIRRUS_LOG("Amp %s:   READBACK : PASS (%d ms)", deviceName, rbMs);
 
             t0 = mach_absolute_time();
             uint32_t payCrc = 0xFFFFFFFF, rbCrc = 0xFFFFFFFF;
@@ -343,26 +315,25 @@ class WMFWUploader {
             accCrcMs += crcMs;
 
             if (payCrc != rbCrc || memcmp(paySlice, rbSlot, tx.size)) {
-                CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]", deviceName, crcMs, payCrc, rbCrc);
-
-                uint32_t dumpLen = (tx.size < 16) ? (uint32_t)tx.size : 16;
-                char payHex[64] = {0};
-                char rbHex[64] = {0};
-                for (uint32_t d = 0; d < dumpLen; d++) {
-                    snprintf(payHex + d * 3, sizeof(payHex) - d * 3, "%02X ", paySlice[d]);
-                    snprintf(rbHex + d * 3, sizeof(rbHex) - d * 3, "%02X ", rbSlot[d]);
-                }
-                CIRRUS_LOG("Amp %s:   PAYLOAD  : %s", deviceName, payHex);
-                CIRRUS_LOG("Amp %s:   READBACK : %s", deviceName, rbHex);
-
-                for (uint32_t b = 0; b < tx.size; b++) {
-                    if (paySlice[b] != rbSlot[b]) {
-                        CIRRUS_LOG("Amp %s:   memcmp   : offset 0x%06X (Exp=0x%02X Got=0x%02X)", deviceName, b, paySlice[b], rbSlot[b]);
-                        break;
-                    }
-                }
+                // CIRRUS_LOG("Amp %s:   CRC      : FAIL (%d ms) [Exp=0x%08X Got=0x%08X]", deviceName, crcMs, payCrc, rbCrc);
+                // uint32_t dumpLen = (tx.size < 16) ? (uint32_t)tx.size : 16;
+                // char payHex[64] = {0};
+                // char rbHex[64] = {0};
+                // for (uint32_t d = 0; d < dumpLen; d++) {
+                //     snprintf(payHex + d * 3, sizeof(payHex) - d * 3, "%02X ", paySlice[d]);
+                //     snprintf(rbHex + d * 3, sizeof(rbHex) - d * 3, "%02X ", rbSlot[d]);
+                // }
+                // CIRRUS_LOG("Amp %s:   PAYLOAD  : %s", deviceName, payHex);
+                // CIRRUS_LOG("Amp %s:   READBACK : %s", deviceName, rbHex);
+                // for (uint32_t b = 0; b < tx.size; b++) {
+                //     if (paySlice[b] != rbSlot[b]) {
+                //         CIRRUS_LOG("Amp %s:   memcmp   : offset 0x%06X (Exp=0x%02X Got=0x%02X)", deviceName, b, paySlice[b], rbSlot[b]);
+                //         break;
+                //     }
+                // }
                 bool rbOk = restoreRegion();
-                CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
+                (void)rbOk;
+                // CIRRUS_LOG("Amp %s:   ROLLBACK : %s", deviceName, rbOk ? "PASS" : "FAIL");
                 if (backupBuffer) {
                     IOFreeData(backupBuffer, totalSize);
                 }
@@ -372,13 +343,14 @@ class WMFWUploader {
 
                 return false;
             }
-            CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", deviceName, crcMs, payCrc);
-            CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", deviceName);
+            // CIRRUS_LOG("Amp %s:   CRC      : PASS (%d ms) [0x%08X]", deviceName, crcMs, payCrc);
+            // CIRRUS_LOG("Amp %s:   ROLLBACK : SKIPPED", deviceName);
         }
 
         uint32_t totalMs = toMs(mach_absolute_time() - t_total_start);
-        CIRRUS_LOG("Amp %s: Upload Complete | Tx=%d PASS, Write=%d ms, RB=%d ms, CRC=%d ms, Total=%d ms", deviceName, plan.transactionCount,
-                   accWriteMs, accRbMs, accCrcMs, totalMs);
+        // CIRRUS_LOG("Amp %s: Upload Complete | Tx=%d PASS, Write=%d ms, RB=%d ms, CRC=%d ms, Total=%d ms", deviceName,
+        // plan.transactionCount,
+        //            accWriteMs, accRbMs, accCrcMs, totalMs);
 
         if (outStats) {
             outStats->writeMs = accWriteMs;
@@ -452,17 +424,17 @@ class WMFWUploadScheduler {
 
         uint64_t t_session_start = mach_absolute_time();
 
-        CIRRUS_LOG("Amp %s: WMFW Upload — %d mapped regions total", deviceName, mappedImg.regionCount);
+        // CIRRUS_LOG("Amp %s: WMFW Upload — %d mapped regions total", deviceName, mappedImg.regionCount);
 
         for (uint32_t i = 0; i < mappedImg.regionCount; i++) {
             const MappedRegion& region = mappedImg.regions[i];
 
             const char* rname = regionTypeName(region.regionType);
-            CIRRUS_LOG("Amp %s: Region %d (%s) %d bytes", deviceName, i, rname, region.size);
+            // CIRRUS_LOG("Amp %s: Region %d (%s) %d bytes", deviceName, i, rname, region.size);
 
             if (region.regionType == RegionType::INFO_TEXT || region.regionType == RegionType::ALGORITHM_DATA ||
                 region.regionType == RegionType::METADATA || region.regionType == RegionType::NAME_TEXT) {
-                CIRRUS_LOG("Amp %s:   Region %d (%s) is metadata, skipping upload.", deviceName, i, rname);
+                // CIRRUS_LOG("Amp %s:   Region %d (%s) is metadata, skipping upload.", deviceName, i, rname);
                 continue;
             }
 
@@ -507,7 +479,7 @@ class WMFWUploadScheduler {
                 session.passCount++;
                 session.totalBytes += res.bytes;
                 session.totalTransactions += res.transactionCount;
-                CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", deviceName, i, rname, region.dspRegister, elapsedMs);
+                // CIRRUS_LOG("Amp %s:   Region %d (%s) MappedTo=0x%08X PASS (%d ms)", deviceName, i, rname, region.dspRegister, elapsedMs);
             } else {
                 session.nativeError = stats.nativeError;
                 CIRRUS_ERR("Amp %s:   Region %d (%s) FAIL — stopping", deviceName, i, rname);
@@ -520,23 +492,23 @@ class WMFWUploadScheduler {
         session.totalMs = (uint32_t)(t_ns / 1000000);
         session.complete = session.regionCount == expectedRegions && session.passCount == expectedRegions;
 
-        CIRRUS_LOG("Amp %s: ================================", deviceName);
-        CIRRUS_LOG("Amp %s: WMFW Upload Summary", deviceName);
-        CIRRUS_LOG("Amp %s: ================================", deviceName);
-        for (uint32_t i = 0; i < session.regionCount; i++) {
-            const RegionResult& r = session.results[i];
-            CIRRUS_LOG("Amp %s:   [%d] %-10s %s  %d bytes  %d tx  %d ms", deviceName, r.regionIndex, regionTypeName(r.type),
-                       r.success ? "PASS" : "FAIL", r.bytes, r.transactionCount, r.elapsedMs);
-        }
-        CIRRUS_LOG("Amp %s: ================================", deviceName);
-        CIRRUS_LOG("Amp %s:   Regions      : %d / %d PASS", deviceName, session.passCount, session.regionCount);
-        CIRRUS_LOG("Amp %s:   Bytes        : %d", deviceName, session.totalBytes);
-        CIRRUS_LOG("Amp %s:   Transactions : %d", deviceName, session.totalTransactions);
-        CIRRUS_LOG("Amp %s:   Total Time   : %d ms", deviceName, session.totalMs);
-        CIRRUS_LOG("Amp %s: ================================", deviceName);
+        // CIRRUS_LOG("Amp %s: ================================", deviceName);
+        // CIRRUS_LOG("Amp %s: WMFW Upload Summary", deviceName);
+        // CIRRUS_LOG("Amp %s: ================================", deviceName);
+        // for (uint32_t i = 0; i < session.regionCount; i++) {
+        //     const RegionResult& r = session.results[i];
+        //     CIRRUS_LOG("Amp %s:   [%d] %-10s %s  %d bytes  %d tx  %d ms", deviceName, r.regionIndex, regionTypeName(r.type),
+        //                r.success ? "PASS" : "FAIL", r.bytes, r.transactionCount, r.elapsedMs);
+        // }
+        // CIRRUS_LOG("Amp %s: ================================", deviceName);
+        // CIRRUS_LOG("Amp %s:   Regions      : %d / %d PASS", deviceName, session.passCount, session.regionCount);
+        // CIRRUS_LOG("Amp %s:   Bytes        : %d", deviceName, session.totalBytes);
+        // CIRRUS_LOG("Amp %s:   Transactions : %d", deviceName, session.totalTransactions);
+        // CIRRUS_LOG("Amp %s:   Total Time   : %d ms", deviceName, session.totalMs);
+        // CIRRUS_LOG("Amp %s: ================================", deviceName);
 
         if (session.complete) {
-            CIRRUS_LOG("Amp %s: WMFW UPLOAD COMPLETE", deviceName);
+            // CIRRUS_LOG("Amp %s: WMFW UPLOAD COMPLETE", deviceName);
         } else {
             CIRRUS_ERR("Amp %s: WMFW UPLOAD INCOMPLETE — %d/%d regions passed", deviceName, session.passCount, session.regionCount);
         }

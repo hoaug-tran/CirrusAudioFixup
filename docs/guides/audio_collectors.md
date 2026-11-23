@@ -22,8 +22,8 @@ The output folder and ZIP archive will be created in your **Documents** folder (
 | :--------------------- | :-------- | :--------------------------------------------------------------------------------------- |
 | `-OutputRoot <folder>` | Documents | Custom output directory.                                                                 |
 | `-IncludeDriverFiles`  | `false`   | Copies matching OEM driver binaries from `DriverStore` (useful for firmware extraction). |
-| `-EventDays <days>`    | `3`       | Number of days of Windows event logs to capture (1–30).                                  |
-| `-MaxMB <number>`      | `24`      | Maximum payload collection budget in MiB (8–128).                                        |
+| `-EventDays <days>`    | `3`       | Number of days of Windows event logs to capture (1-30).                                  |
+| `-MaxMB <number>`      | `24`      | Maximum payload collection budget in MiB (8-128).                                        |
 | `-NoZip`               | `false`   | Keeps the folder without compressing into a `.zip` file.                                 |
 
 To include OEM driver binaries for firmware extraction:
@@ -51,8 +51,8 @@ The output folder and `.tar.gz` archive will be saved in your home directory (na
 | `--output <folder>`     | `~`     | Custom parent output directory.                                        |
 | `--include-firmware`    | `false` | Copies matching firmware files from `/lib/firmware/cirrus`.            |
 | `--no-acpi`             | `false` | Skips collecting raw DSDT and SSDT ACPI tables.                        |
-| `--max-mb <number>`     | `24`    | Maximum collection budget in MiB (8–128).                              |
-| `--trace-seconds <sec>` | `0`     | Records live audio regmap activity for the specified duration (0–15s). |
+| `--max-mb <number>`     | `24`    | Maximum collection budget in MiB (8-128).                              |
+| `--trace-seconds <sec>` | `0`     | Records live audio regmap activity for the specified duration (0-15s). |
 
 To include matching Linux firmware binaries:
 

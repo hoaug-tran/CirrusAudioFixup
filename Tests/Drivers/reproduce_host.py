@@ -75,7 +75,7 @@ public:
     std::map<uint32_t,uint8_t> memory;
     unsigned reads=0,writes=0,failRead=0,failWrite=0,failWriteEnd=0,corruptRead=0;
     OSObject* getProperty(const char*) { return nullptr; }
-    
+
     bool read(uint32_t, uint32_t*) override { return false; }
     bool write(uint32_t, uint32_t) override { return false; }
     bool updateBits(uint32_t, uint32_t, uint32_t) override { return false; }

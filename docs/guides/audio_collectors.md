@@ -68,6 +68,6 @@ sudo bash Tools/Collectors/collect_audio_amp_linux.sh --include-firmware
 - **Bus & Controller Info**: SPI and I2C controller identities, clock frequencies, chip select pins, and GPIO reset lines.
 - **Audio Codec Dumps**: ALSA `/proc/asound/card*/codec#*` descriptions and active pin connections.
 - **Amplifier Registers**: Regmap dumps when exposed by the operating system kernel.
-- **OEM Calibration**: Measured DC resistance (R0) and ambient temperature from the `CirrusSmartAmpCalibrationData` EFI variable.
+- **OEM Calibration**: Measured DC resistance (R0) and ambient temperature from the `CirrusSmartAmpCalibrationData` or HP `SmartAmpCalibrationData` EFI variables when present.
 
 [Back to main guide](../../README.md#collect-windows-or-linux-data)

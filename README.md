@@ -253,7 +253,7 @@ Inspect the `ioreg` output. For supported two-amplifier configurations, check:
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Laptop and board identity                                                                              | Match a row in [supported laptops](#supported-laptops)                                                                                       |
 | `Cirrus_Driver_Verdict`                                                                                | `READY_DSP` (normal) or `READ_ONLY` (with `-cirrusro`)                                                                                       |
-| `Cirrus_Bus`                                                                                           | `I2C` for Lenovo, ASUS UM3402Y/G713P/GV302/GA403UV and HP ENVY 15-ey0xxx; `SPI` for HP ZBook Fury, ASUS G614JI, GU605MV and Alienware x17 R2 |
+| `Cirrus_Bus`                                                                                           | `I2C` or `SPI` (matching the [supported laptops](#supported-laptops) table) |
 | `Cirrus_Detected_Amplifiers`                                                                           | `2`                                                                                                                                          |
 | `Cirrus_I2C_0_DeviceID` / `Cirrus_I2C_1_DeviceID`, or the corresponding `Cirrus_SPI_*_DeviceID` fields | Both `0x35A40` (CS35L41) or `0x35A56` (CS35L56)                                                                                              |
 | The corresponding `_0_Probe_Return` and `_1_Probe_Return` fields                                       | Both `0` (successful reads)                                                                                                                  |
@@ -312,11 +312,11 @@ Runtime power, PLL and mailbox waits progress through timed phases. Protection a
 
 The HDA format gate accepts **48 kHz PCM (stereo or quad-channel format `0x0033`) with 16-, 20- or 24-bit samples**. ASP uses a **3.072 MHz bit clock, 32-bit slots and 24-bit words**. CoreAudio can resample music or application audio before it reaches the hardware; a 44.1 kHz hardware stream is not accepted.
 
-Current board discovery supports up to two endpoints with distinct left/right channel positions for CS35L41 and CS35L56. Supported power topologies include external boost (continuous and switched) and ACPI internal boost. Quad-amplifier topologies (4 physical Cirrus smart amps), shared boost and external boost with a separate VSPK switch are not currently supported. Silicon support requires CS35L41 revision B2 or CS35L56 revision B0.
+Current board discovery supports up to two endpoints with distinct left/right channel positions for CS35L41 and CS35L56. Supported power topologies include external boost (continuous and switched) and ACPI internal boost. Quad-amplifier topologies (4 physical Cirrus smart amps), shared boost and external GPIO-controlled VSPK switches are not currently supported. Silicon support requires CS35L41 revision B2 or CS35L56 revision B0.
 
 ## Boot arguments
 
-**Use `-cirrusro -cirrusdbg` for the first boot.** After checking the hardware and removing read-only mode, a supported configuration needs no CirrusAudioFixup arguments for normal playback. AppleALC still needs the correct codec route.
+**Supported laptops need no CirrusAudioFixup boot arguments for normal playback** (AppleALC still needs the correct codec route). When bringing up an unverified machine or troubleshooting, start with `-cirrusro -cirrusdbg`.
 
 | Argument       | When to use it                                                                                                             |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -355,7 +355,7 @@ Query the `CirrusAudioFixup` service in **IOService**. A matching ACPI node alon
 
 Use the channel suffixes actually published by the service; the Lenovo reference uses `left` and `right`.
 
-See the [verdict reference](docs/diagnostics/diagnostics.md#driver-and-playback-verdicts) for initialization and playback states. `READY_DSP` confirms DSP initialization; listen to both channels to check actual output.
+See the [verdict reference](docs/diagnostics/diagnostics.md#4-driver-and-playback-verdicts) for initialization and playback states. `READY_DSP` confirms DSP initialization; listen to both channels to check actual output.
 
 ### Capture logs and diagnostics
 
@@ -393,7 +393,7 @@ The collector creates a ZIP archive on your Desktop.
 | DSP bypass changes loudness or tone           | Verify matching program and speaker tuning; bypass is not a sound-quality mode                                                             |
 | Microphone clips                              | Check codec input gain and routing in AppleALC; amplifier gain does not control the microphone                                             |
 
-For a named failure, use the [failure-code reference](docs/diagnostics/diagnostics.md#failure-codes) and keep the first native I/O error.
+For a named failure, use the [failure-code reference](docs/diagnostics/diagnostics.md#5-failure-codes) and keep the first native I/O error.
 
 ## Collect Windows or Linux data
 
@@ -416,7 +416,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Collectors\Colle
 sudo bash Tools/Collectors/collect_audio_amp_linux.sh
 ```
 
-Windows collects audio/AMP devices, installed INF files, selected registry settings, recent events and the named Cirrus EFI calibration variable when available. Linux collects audio devices, codec dumps, bus/controller information, ACPI tables, available amplifier regmap snapshots and audio logs. Neither guarantees a complete DSP-memory dump or every OEM setting.
+Windows collects audio/AMP devices, installed INF files, selected registry settings, recent events and the named Cirrus/HP EFI calibration variables when available. Linux collects audio devices, codec dumps, bus/controller information, ACPI tables, available amplifier regmap snapshots, EFI calibration variables and audio logs. Neither guarantees a complete DSP-memory dump or every OEM setting.
 
 Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when matching driver/firmware files are needed. Both default to a 24 MiB collection budget and record missing or skipped data in `status.json`. See [collector options](docs/guides/audio_collectors.md) for output paths, limits and optional tracing.
 

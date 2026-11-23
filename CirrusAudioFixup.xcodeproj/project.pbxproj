@@ -238,7 +238,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1.2.0;
+				MODULE_VERSION = 1.2.1;
 				OTHER_CFLAGS = (
 					"-DDEBUG=1",
 					"-DKERNEL",
@@ -286,7 +286,7 @@
 				MODULE_NAME = com.hoaugtr.CirrusAudioFixup;
 				MODULE_START = CirrusAudioFixup_start;
 				MODULE_STOP = CirrusAudioFixup_stop;
-				MODULE_VERSION = 1.2.0;
+				MODULE_VERSION = 1.2.1;
 				OTHER_CFLAGS = (
 					"-DKERNEL",
 					"-DKERNEL_PRIVATE",
@@ -841,12 +841,19 @@
 			path = PlatformProfile.hpp;
 			sourceTree = "<group>";
 		};
+		D1DEE96129AE7010800B6327 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = HardwareCatalog.hpp;
+			sourceTree = "<group>";
+		};
 		8CCCC6A730958B508D279C40 = {
 			isa = PBXGroup;
 			children = (
 				1E4FC108153F3B68092EDD67,
 				614937864310FDEE840D627B,
 				D1DEE96129AE7010800B6326,
+				D1DEE96129AE7010800B6327,
 			);
 			sourceTree = "<group>";
 			path = Board;

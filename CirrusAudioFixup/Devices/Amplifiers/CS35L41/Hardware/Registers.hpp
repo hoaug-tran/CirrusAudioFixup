@@ -9,287 +9,287 @@
 
 namespace cirrus::devices::amplifiers::cs35l41::registers {
 
-// Linux v6.12 CS35L41_LASTREG, shared by I2C and SPI regmap.
-constexpr uint32_t kLastRegister = 0x03804FE8;
+    // Linux v6.12 CS35L41_LASTREG, shared by I2C and SPI regmap.
+    constexpr uint32_t kLastRegister = 0x03804FE8;
 
-constexpr uint32_t kRegDeviceId = 0x00000000;
-constexpr uint32_t kRegRevisionId = 0x00000004;
-constexpr uint32_t kRegFabricationId = 0x00000008;
-constexpr uint32_t kRegOtpId = 0x00000010;
+    constexpr uint32_t kRegDeviceId = 0x00000000;
+    constexpr uint32_t kRegRevisionId = 0x00000004;
+    constexpr uint32_t kRegFabricationId = 0x00000008;
+    constexpr uint32_t kRegOtpId = 0x00000010;
 
-constexpr uint32_t kRegPowerControl1 = 0x00002014;
-constexpr uint32_t kRegPowerControl2 = 0x00002018;
-constexpr uint32_t kRegPowerControl3 = 0x0000201C;
-constexpr uint32_t kRegAmpOutputMute = 0x00002024;
-constexpr uint32_t kRegPowerManagementStatus = 0x00002908;
+    constexpr uint32_t kRegPowerControl1 = 0x00002014;
+    constexpr uint32_t kRegPowerControl2 = 0x00002018;
+    constexpr uint32_t kRegPowerControl3 = 0x0000201C;
+    constexpr uint32_t kRegAmpOutputMute = 0x00002024;
+    constexpr uint32_t kRegPowerManagementStatus = 0x00002908;
 
-// Linux include/sound/cs35l41.h: CS35L41_SFT_RESET is distinct from DEVID.
-constexpr uint32_t kRegSoftwareReset = 0x00000020;
-constexpr uint32_t kRegTestKeyControl = 0x00000040;
+    // Linux include/sound/cs35l41.h: CS35L41_SFT_RESET is distinct from DEVID.
+    constexpr uint32_t kRegSoftwareReset = 0x00000020;
+    constexpr uint32_t kRegTestKeyControl = 0x00000040;
 
-constexpr uint32_t kRegIrq1Status1 = 0x00010010;
-constexpr uint32_t kRegIrq1Status2 = 0x00010014;
-constexpr uint32_t kRegIrq1Status3 = 0x00010018;
-constexpr uint32_t kRegIrq1Status4 = 0x0001001C;
-constexpr uint32_t kRegIrq1RawStatus3 = 0x00010098;
-constexpr uint32_t kRegIrq1Mask1 = 0x00010110;
-constexpr uint32_t kRegIrq1Mask2 = 0x00010114;
-constexpr uint32_t kRegIrq1Mask3 = 0x00010118;
-constexpr uint32_t kRegIrq1Mask4 = 0x0001011C;
-constexpr uint32_t kRegIrq2Status = 0x00010804;
-constexpr uint32_t kRegIrq2Status1 = 0x00010810;
-constexpr uint32_t kRegIrq2Mask1 = 0x00010910;
-constexpr uint32_t kRegIrq2Mask2 = 0x00010914;
-constexpr uint32_t kRegIrq2Mask3 = 0x00010918;
-constexpr uint32_t kRegIrq2Mask4 = 0x0001091C;
+    constexpr uint32_t kRegIrq1Status1 = 0x00010010;
+    constexpr uint32_t kRegIrq1Status2 = 0x00010014;
+    constexpr uint32_t kRegIrq1Status3 = 0x00010018;
+    constexpr uint32_t kRegIrq1Status4 = 0x0001001C;
+    constexpr uint32_t kRegIrq1RawStatus3 = 0x00010098;
+    constexpr uint32_t kRegIrq1Mask1 = 0x00010110;
+    constexpr uint32_t kRegIrq1Mask2 = 0x00010114;
+    constexpr uint32_t kRegIrq1Mask3 = 0x00010118;
+    constexpr uint32_t kRegIrq1Mask4 = 0x0001011C;
+    constexpr uint32_t kRegIrq2Status = 0x00010804;
+    constexpr uint32_t kRegIrq2Status1 = 0x00010810;
+    constexpr uint32_t kRegIrq2Mask1 = 0x00010910;
+    constexpr uint32_t kRegIrq2Mask2 = 0x00010914;
+    constexpr uint32_t kRegIrq2Mask3 = 0x00010918;
+    constexpr uint32_t kRegIrq2Mask4 = 0x0001091C;
 
-constexpr uint32_t kRegPllClockControl = 0x00002C04;
-constexpr uint32_t kRegDspClockControl = 0x00002C08;
-constexpr uint32_t kRegGlobalClockControl = 0x00002C0C;
+    constexpr uint32_t kRegPllClockControl = 0x00002C04;
+    constexpr uint32_t kRegDspClockControl = 0x00002C08;
+    constexpr uint32_t kRegGlobalClockControl = 0x00002C0C;
 
-constexpr uint32_t kRegSerialPortRateControl = 0x00004804;
-constexpr uint32_t kRegSerialPortFormat = 0x00004808;
-constexpr uint32_t kRegSerialPortFrameTxSlot = 0x00004810;
-constexpr uint32_t kRegSerialPortFrameRxSlot = 0x00004820;
-constexpr uint32_t kRegSerialPortTxWordLength = 0x00004830;
-constexpr uint32_t kRegSerialPortRxWordLength = 0x00004840;
-constexpr uint32_t kRegDacPcm1Source = 0x00004C00;
-constexpr uint32_t kRegAspTx1Source = 0x00004C20;
-constexpr uint32_t kRegAspTx2Source = 0x00004C24;
-constexpr uint32_t kRegAspTx3Source = 0x00004C28;
-constexpr uint32_t kRegAspTx4Source = 0x00004C2C;
-constexpr uint32_t kRegDsp1Rx1Source = 0x00004C40;
-constexpr uint32_t kRegDsp1Rx2Source = 0x00004C44;
-constexpr uint32_t kRegDsp1Rx3Source = 0x00004C48;
-constexpr uint32_t kRegDsp1Rx4Source = 0x00004C4C;
-constexpr uint32_t kRegDsp1Rx5Source = 0x00004C50;
-constexpr uint32_t kRegDsp1Rx6Source = 0x00004C54;
-constexpr uint32_t kRegSerialPortHighImpedanceControl = 0x0000480C;
-constexpr uint32_t kRegSerialPortEnables = 0x00004800;
+    constexpr uint32_t kRegSerialPortRateControl = 0x00004804;
+    constexpr uint32_t kRegSerialPortFormat = 0x00004808;
+    constexpr uint32_t kRegSerialPortFrameTxSlot = 0x00004810;
+    constexpr uint32_t kRegSerialPortFrameRxSlot = 0x00004820;
+    constexpr uint32_t kRegSerialPortTxWordLength = 0x00004830;
+    constexpr uint32_t kRegSerialPortRxWordLength = 0x00004840;
+    constexpr uint32_t kRegDacPcm1Source = 0x00004C00;
+    constexpr uint32_t kRegAspTx1Source = 0x00004C20;
+    constexpr uint32_t kRegAspTx2Source = 0x00004C24;
+    constexpr uint32_t kRegAspTx3Source = 0x00004C28;
+    constexpr uint32_t kRegAspTx4Source = 0x00004C2C;
+    constexpr uint32_t kRegDsp1Rx1Source = 0x00004C40;
+    constexpr uint32_t kRegDsp1Rx2Source = 0x00004C44;
+    constexpr uint32_t kRegDsp1Rx3Source = 0x00004C48;
+    constexpr uint32_t kRegDsp1Rx4Source = 0x00004C4C;
+    constexpr uint32_t kRegDsp1Rx5Source = 0x00004C50;
+    constexpr uint32_t kRegDsp1Rx6Source = 0x00004C54;
+    constexpr uint32_t kRegSerialPortHighImpedanceControl = 0x0000480C;
+    constexpr uint32_t kRegSerialPortEnables = 0x00004800;
 
-constexpr uint32_t kRegAmplifierDigitalVolumeControl = 0x00006000;
-constexpr uint32_t kRegAmplifierGainControl = 0x00006C04;
+    constexpr uint32_t kRegAmplifierDigitalVolumeControl = 0x00006000;
+    constexpr uint32_t kRegAmplifierGainControl = 0x00006C04;
 
-// Linux HDA mute/unmute policy keeps the PCM high-pass enabled at unity gain.
-// Clearing the volume word to zero also clears that filter; it is not an
-// equivalent representation of the upstream unmuted state.
-constexpr uint32_t kPlaybackDigitalVolume = 0x00008000;
-// Linux HDA defaults: PCM code 17 (17.5 dB), PDM code 19 (19.5 dB).
-// A board-specific tuning gain can differ; these defaults do not certify it.
-constexpr uint32_t kPlaybackDspGain = (17U << 5) | 19U;
-constexpr uint32_t kPlaybackBypassGain = (4U << 5) | 4U;
+    // Linux HDA mute/unmute policy keeps the PCM high-pass enabled at unity gain.
+    // Clearing the volume word to zero also clears that filter; it is not an
+    // equivalent representation of the upstream unmuted state.
+    constexpr uint32_t kPlaybackDigitalVolume = 0x00008000;
+    // Linux HDA defaults: PCM code 17 (17.5 dB), PDM code 19 (19.5 dB).
+    // A board-specific tuning gain can differ; these defaults do not certify it.
+    constexpr uint32_t kPlaybackDspGain = (17U << 5) | 19U;
+    constexpr uint32_t kPlaybackBypassGain = (4U << 5) | 4U;
 
-constexpr uint32_t kRegGpio1Control1 = 0x00011008;
-constexpr uint32_t kRegGpio2Control1 = 0x0001100C;
-constexpr uint32_t kRegGpioPadControl = 0x0000242C;
+    constexpr uint32_t kRegGpio1Control1 = 0x00011008;
+    constexpr uint32_t kRegGpio2Control1 = 0x0001100C;
+    constexpr uint32_t kRegGpioPadControl = 0x0000242C;
 
-constexpr uint32_t kRegDsp1Rx1Rate = 0x02B80080;
-constexpr uint32_t kRegDsp1Rx2Rate = 0x02B80088;
-constexpr uint32_t kRegDsp1Rx3Rate = 0x02B80090;
-constexpr uint32_t kRegDsp1Rx4Rate = 0x02B80098;
-constexpr uint32_t kRegDsp1Rx5Rate = 0x02B800A0;
-constexpr uint32_t kRegDsp1Rx6Rate = 0x02B800A8;
-constexpr uint32_t kRegDsp1Rx7Rate = 0x02B800B0;
-constexpr uint32_t kRegDsp1Rx8Rate = 0x02B800B8;
-constexpr uint32_t kRegDsp1Tx1Rate = 0x02B80280;
-constexpr uint32_t kRegDsp1Tx2Rate = 0x02B80288;
-constexpr uint32_t kRegDsp1Tx3Rate = 0x02B80290;
-constexpr uint32_t kRegDsp1Tx4Rate = 0x02B80298;
-constexpr uint32_t kRegDsp1Tx5Rate = 0x02B802A0;
-constexpr uint32_t kRegDsp1Tx6Rate = 0x02B802A8;
-constexpr uint32_t kRegDsp1Tx7Rate = 0x02B802B0;
-constexpr uint32_t kRegDsp1Tx8Rate = 0x02B802B8;
+    constexpr uint32_t kRegDsp1Rx1Rate = 0x02B80080;
+    constexpr uint32_t kRegDsp1Rx2Rate = 0x02B80088;
+    constexpr uint32_t kRegDsp1Rx3Rate = 0x02B80090;
+    constexpr uint32_t kRegDsp1Rx4Rate = 0x02B80098;
+    constexpr uint32_t kRegDsp1Rx5Rate = 0x02B800A0;
+    constexpr uint32_t kRegDsp1Rx6Rate = 0x02B800A8;
+    constexpr uint32_t kRegDsp1Rx7Rate = 0x02B800B0;
+    constexpr uint32_t kRegDsp1Rx8Rate = 0x02B800B8;
+    constexpr uint32_t kRegDsp1Tx1Rate = 0x02B80280;
+    constexpr uint32_t kRegDsp1Tx2Rate = 0x02B80288;
+    constexpr uint32_t kRegDsp1Tx3Rate = 0x02B80290;
+    constexpr uint32_t kRegDsp1Tx4Rate = 0x02B80298;
+    constexpr uint32_t kRegDsp1Tx5Rate = 0x02B802A0;
+    constexpr uint32_t kRegDsp1Tx6Rate = 0x02B802A8;
+    constexpr uint32_t kRegDsp1Tx7Rate = 0x02B802B0;
+    constexpr uint32_t kRegDsp1Tx8Rate = 0x02B802B8;
 
-constexpr uint32_t kRegDsp1CcmCoreControl = 0x02BC1000;
-constexpr uint32_t kRegDsp1CoreSoftReset = 0x02B80010;
-constexpr uint32_t kRegDsp1SystemId = 0x025E0000;
-constexpr uint32_t kRegDsp1SystemVersion = 0x025E0004;
-constexpr uint32_t kRegDsp1SystemCoreId = 0x025E0008;
+    constexpr uint32_t kRegDsp1CcmCoreControl = 0x02BC1000;
+    constexpr uint32_t kRegDsp1CoreSoftReset = 0x02B80010;
+    constexpr uint32_t kRegDsp1SystemId = 0x025E0000;
+    constexpr uint32_t kRegDsp1SystemVersion = 0x025E0004;
+    constexpr uint32_t kRegDsp1SystemCoreId = 0x025E0008;
 
-constexpr uint32_t kRegDspMailbox1 = 0x00013000;
-constexpr uint32_t kRegDspMailbox2 = 0x00013004;
-constexpr uint32_t kRegDspMbox3 = 0x00013008;
-constexpr uint32_t kRegDspMbox4 = 0x0001300C;
-constexpr uint32_t kRegDspVirtual1Mailbox1 = 0x00013020;
+    constexpr uint32_t kRegDspMailbox1 = 0x00013000;
+    constexpr uint32_t kRegDspMailbox2 = 0x00013004;
+    constexpr uint32_t kRegDspMbox3 = 0x00013008;
+    constexpr uint32_t kRegDspMbox4 = 0x0001300C;
+    constexpr uint32_t kRegDspVirtual1Mailbox1 = 0x00013020;
 
-constexpr uint32_t kRegDsp1MpuLockConfig = 0x02BC3140;
-constexpr uint32_t kRegDsp1MpuXmAccess0 = 0x02BC3000;
-constexpr uint32_t kRegDsp1MpuYmAccess0 = 0x02BC3004;
-constexpr uint32_t kRegDsp1MpuWndwAccess0 = 0x02BC3008;
-constexpr uint32_t kRegDsp1MpuXregAccess0 = 0x02BC300C;
-constexpr uint32_t kRegDsp1MpuYregAccess0 = 0x02BC3014;
-constexpr uint32_t kRegDsp1MpuXmAccess1 = 0x02BC3018;
-constexpr uint32_t kRegDsp1MpuYmAccess1 = 0x02BC301C;
-constexpr uint32_t kRegDsp1MpuWndwAccess1 = 0x02BC3020;
-constexpr uint32_t kRegDsp1MpuXregAccess1 = 0x02BC3024;
-constexpr uint32_t kRegDsp1MpuYregAccess1 = 0x02BC302C;
-constexpr uint32_t kRegDsp1MpuXmAccess2 = 0x02BC3030;
-constexpr uint32_t kRegDsp1MpuYmAccess2 = 0x02BC3034;
-constexpr uint32_t kRegDsp1MpuWndwAccess2 = 0x02BC3038;
-constexpr uint32_t kRegDsp1MpuXregAccess2 = 0x02BC303C;
-constexpr uint32_t kRegDsp1MpuYregAccess2 = 0x02BC3044;
-constexpr uint32_t kRegDsp1MpuXmAccess3 = 0x02BC3048;
-constexpr uint32_t kRegDsp1MpuYmAccess3 = 0x02BC304C;
-constexpr uint32_t kRegDsp1MpuWndwAccess3 = 0x02BC3050;
-constexpr uint32_t kRegDsp1MpuXregAccess3 = 0x02BC3054;
-constexpr uint32_t kRegDsp1MpuYregAccess3 = 0x02BC305C;
+    constexpr uint32_t kRegDsp1MpuLockConfig = 0x02BC3140;
+    constexpr uint32_t kRegDsp1MpuXmAccess0 = 0x02BC3000;
+    constexpr uint32_t kRegDsp1MpuYmAccess0 = 0x02BC3004;
+    constexpr uint32_t kRegDsp1MpuWndwAccess0 = 0x02BC3008;
+    constexpr uint32_t kRegDsp1MpuXregAccess0 = 0x02BC300C;
+    constexpr uint32_t kRegDsp1MpuYregAccess0 = 0x02BC3014;
+    constexpr uint32_t kRegDsp1MpuXmAccess1 = 0x02BC3018;
+    constexpr uint32_t kRegDsp1MpuYmAccess1 = 0x02BC301C;
+    constexpr uint32_t kRegDsp1MpuWndwAccess1 = 0x02BC3020;
+    constexpr uint32_t kRegDsp1MpuXregAccess1 = 0x02BC3024;
+    constexpr uint32_t kRegDsp1MpuYregAccess1 = 0x02BC302C;
+    constexpr uint32_t kRegDsp1MpuXmAccess2 = 0x02BC3030;
+    constexpr uint32_t kRegDsp1MpuYmAccess2 = 0x02BC3034;
+    constexpr uint32_t kRegDsp1MpuWndwAccess2 = 0x02BC3038;
+    constexpr uint32_t kRegDsp1MpuXregAccess2 = 0x02BC303C;
+    constexpr uint32_t kRegDsp1MpuYregAccess2 = 0x02BC3044;
+    constexpr uint32_t kRegDsp1MpuXmAccess3 = 0x02BC3048;
+    constexpr uint32_t kRegDsp1MpuYmAccess3 = 0x02BC304C;
+    constexpr uint32_t kRegDsp1MpuWndwAccess3 = 0x02BC3050;
+    constexpr uint32_t kRegDsp1MpuXregAccess3 = 0x02BC3054;
+    constexpr uint32_t kRegDsp1MpuYregAccess3 = 0x02BC305C;
 
-constexpr uint32_t kValDeviceId = 0x00035A40;
-constexpr uint32_t kValSoftwareReset = 0x5A000000;
-constexpr uint32_t kValHaloCoreEnable = 0x00000001;
-constexpr uint32_t kValHaloCoreReset = 0x00000200;
+    constexpr uint32_t kValDeviceId = 0x00035A40;
+    constexpr uint32_t kValSoftwareReset = 0x5A000000;
+    constexpr uint32_t kValHaloCoreEnable = 0x00000001;
+    constexpr uint32_t kValHaloCoreReset = 0x00000200;
 
-constexpr uint32_t kMaskOtpBootDone = 0x00000002;
-constexpr uint32_t kMaskOtpBootError = 0x80000000;
-constexpr uint32_t kMaskBoostEnable = 0x00000030;
-constexpr uint32_t kMaskProtectionFault = 0x800281C0;
+    constexpr uint32_t kMaskOtpBootDone = 0x00000002;
+    constexpr uint32_t kMaskOtpBootError = 0x80000000;
+    constexpr uint32_t kMaskBoostEnable = 0x00000030;
+    constexpr uint32_t kMaskProtectionFault = 0x800281C0;
 
-constexpr uint32_t kCmdMailboxResume = 2;
-constexpr uint32_t kCmdMailboxPause = 1;
-constexpr uint32_t kCmdMailboxSpeakerOutputEnable = 7;
+    constexpr uint32_t kCmdMailboxResume = 2;
+    constexpr uint32_t kCmdMailboxPause = 1;
+    constexpr uint32_t kCmdMailboxSpeakerOutputEnable = 7;
 
-constexpr uint32_t kStatusMailboxRunning = 0;
-constexpr uint32_t kStatusMailboxPaused = 1;
-constexpr uint32_t kStatusMailboxReadyForReinitialization = 2;
+    constexpr uint32_t kStatusMailboxRunning = 0;
+    constexpr uint32_t kStatusMailboxPaused = 1;
+    constexpr uint32_t kStatusMailboxReadyForReinitialization = 2;
 
-constexpr uint8_t kI2cAddressLeft = 0x40;
-constexpr uint8_t kI2cAddressRight = 0x41;
+    constexpr uint8_t kI2cAddressLeft = 0x40;
+    constexpr uint8_t kI2cAddressRight = 0x41;
 
-constexpr uint32_t kDeviceIdRegister = kRegDeviceId;
-constexpr uint32_t kRevisionIdRegister = kRegRevisionId;
-constexpr uint32_t kFabricationIdRegister = kRegFabricationId;
-constexpr uint32_t kOtpIdRegister = kRegOtpId;
-constexpr uint32_t kDeviceId = kValDeviceId;
+    constexpr uint32_t kDeviceIdRegister = kRegDeviceId;
+    constexpr uint32_t kRevisionIdRegister = kRegRevisionId;
+    constexpr uint32_t kFabricationIdRegister = kRegFabricationId;
+    constexpr uint32_t kOtpIdRegister = kRegOtpId;
+    constexpr uint32_t kDeviceId = kValDeviceId;
 
-constexpr uint32_t kPowerControl1 = kRegPowerControl1;
-constexpr uint32_t kPowerControl2 = kRegPowerControl2;
-constexpr uint32_t kPowerControl3 = kRegPowerControl3;
-constexpr uint32_t kAmpOutputMute = kRegAmpOutputMute;
-constexpr uint32_t kPowerManagementStatus = kRegPowerManagementStatus;
+    constexpr uint32_t kPowerControl1 = kRegPowerControl1;
+    constexpr uint32_t kPowerControl2 = kRegPowerControl2;
+    constexpr uint32_t kPowerControl3 = kRegPowerControl3;
+    constexpr uint32_t kAmpOutputMute = kRegAmpOutputMute;
+    constexpr uint32_t kPowerManagementStatus = kRegPowerManagementStatus;
 
-constexpr uint32_t kSoftwareReset = kRegSoftwareReset;
-constexpr uint32_t kSoftwareResetValue = kValSoftwareReset;
-constexpr uint32_t kTestKeyControl = kRegTestKeyControl;
+    constexpr uint32_t kSoftwareReset = kRegSoftwareReset;
+    constexpr uint32_t kSoftwareResetValue = kValSoftwareReset;
+    constexpr uint32_t kTestKeyControl = kRegTestKeyControl;
 
-constexpr uint32_t kIrq1Status1 = kRegIrq1Status1;
-constexpr uint32_t kIrq1Status2 = kRegIrq1Status2;
-constexpr uint32_t kIrq1Status3 = kRegIrq1Status3;
-constexpr uint32_t kIrq1Status4 = kRegIrq1Status4;
-constexpr uint32_t kIrq1RawStatus3 = kRegIrq1RawStatus3;
-constexpr uint32_t kIrq1Status1Register = kRegIrq1Status1;
-constexpr uint32_t kIrq1Mask1Register = kRegIrq1Mask1;
-constexpr uint32_t kIrq1Mask1 = kRegIrq1Mask1;
-constexpr uint32_t kIrq1Mask2 = kRegIrq1Mask2;
-constexpr uint32_t kIrq1Mask3 = kRegIrq1Mask3;
-constexpr uint32_t kIrq1Mask4 = kRegIrq1Mask4;
+    constexpr uint32_t kIrq1Status1 = kRegIrq1Status1;
+    constexpr uint32_t kIrq1Status2 = kRegIrq1Status2;
+    constexpr uint32_t kIrq1Status3 = kRegIrq1Status3;
+    constexpr uint32_t kIrq1Status4 = kRegIrq1Status4;
+    constexpr uint32_t kIrq1RawStatus3 = kRegIrq1RawStatus3;
+    constexpr uint32_t kIrq1Status1Register = kRegIrq1Status1;
+    constexpr uint32_t kIrq1Mask1Register = kRegIrq1Mask1;
+    constexpr uint32_t kIrq1Mask1 = kRegIrq1Mask1;
+    constexpr uint32_t kIrq1Mask2 = kRegIrq1Mask2;
+    constexpr uint32_t kIrq1Mask3 = kRegIrq1Mask3;
+    constexpr uint32_t kIrq1Mask4 = kRegIrq1Mask4;
 
-constexpr uint32_t kIrq2Status = kRegIrq2Status;
-constexpr uint32_t kIrq2Status1Register = kRegIrq2Status1;
-constexpr uint32_t kIrq2Mask1Register = kRegIrq2Mask1;
-constexpr uint32_t kIrq2Mask1 = kRegIrq2Mask1;
-constexpr uint32_t kIrq2Mask2 = kRegIrq2Mask2;
-constexpr uint32_t kIrq2Mask3 = kRegIrq2Mask3;
-constexpr uint32_t kIrq2Mask4 = kRegIrq2Mask4;
+    constexpr uint32_t kIrq2Status = kRegIrq2Status;
+    constexpr uint32_t kIrq2Status1Register = kRegIrq2Status1;
+    constexpr uint32_t kIrq2Mask1Register = kRegIrq2Mask1;
+    constexpr uint32_t kIrq2Mask1 = kRegIrq2Mask1;
+    constexpr uint32_t kIrq2Mask2 = kRegIrq2Mask2;
+    constexpr uint32_t kIrq2Mask3 = kRegIrq2Mask3;
+    constexpr uint32_t kIrq2Mask4 = kRegIrq2Mask4;
 
-constexpr uint32_t kOtpBootDone = kMaskOtpBootDone;
-constexpr uint32_t kOtpBootError = kMaskOtpBootError;
-constexpr uint32_t kBoostEnableMask = kMaskBoostEnable;
-constexpr uint32_t kProtectionMask = kMaskProtectionFault;
+    constexpr uint32_t kOtpBootDone = kMaskOtpBootDone;
+    constexpr uint32_t kOtpBootError = kMaskOtpBootError;
+    constexpr uint32_t kBoostEnableMask = kMaskBoostEnable;
+    constexpr uint32_t kProtectionMask = kMaskProtectionFault;
 
-constexpr uint32_t kPllClockControl = kRegPllClockControl;
-constexpr uint32_t kDspClockControl = kRegDspClockControl;
-constexpr uint32_t kGlobalClockControl = kRegGlobalClockControl;
+    constexpr uint32_t kPllClockControl = kRegPllClockControl;
+    constexpr uint32_t kDspClockControl = kRegDspClockControl;
+    constexpr uint32_t kGlobalClockControl = kRegGlobalClockControl;
 
-constexpr uint32_t kSerialPortRateControl = kRegSerialPortRateControl;
-constexpr uint32_t kSerialPortFormat = kRegSerialPortFormat;
-constexpr uint32_t kSerialPortFrameTxSlot = kRegSerialPortFrameTxSlot;
-constexpr uint32_t kSerialPortFrameRxSlot = kRegSerialPortFrameRxSlot;
-constexpr uint32_t kSerialPortTxWordLength = kRegSerialPortTxWordLength;
-constexpr uint32_t kSerialPortRxWordLength = kRegSerialPortRxWordLength;
-constexpr uint32_t kDacPcm1Source = kRegDacPcm1Source;
-constexpr uint32_t kAspTx1Source = kRegAspTx1Source;
-constexpr uint32_t kAspTx2Source = kRegAspTx2Source;
-constexpr uint32_t kAspTx3Source = kRegAspTx3Source;
-constexpr uint32_t kAspTx4Source = kRegAspTx4Source;
-constexpr uint32_t kDsp1Rx1Source = kRegDsp1Rx1Source;
-constexpr uint32_t kDsp1Rx2Source = kRegDsp1Rx2Source;
-constexpr uint32_t kDsp1Rx3Source = kRegDsp1Rx3Source;
-constexpr uint32_t kDsp1Rx4Source = kRegDsp1Rx4Source;
-constexpr uint32_t kDsp1Rx5Source = kRegDsp1Rx5Source;
-constexpr uint32_t kDsp1Rx6Source = kRegDsp1Rx6Source;
-constexpr uint32_t kSerialPortHighImpedanceControl = kRegSerialPortHighImpedanceControl;
-constexpr uint32_t kSerialPortEnables = kRegSerialPortEnables;
+    constexpr uint32_t kSerialPortRateControl = kRegSerialPortRateControl;
+    constexpr uint32_t kSerialPortFormat = kRegSerialPortFormat;
+    constexpr uint32_t kSerialPortFrameTxSlot = kRegSerialPortFrameTxSlot;
+    constexpr uint32_t kSerialPortFrameRxSlot = kRegSerialPortFrameRxSlot;
+    constexpr uint32_t kSerialPortTxWordLength = kRegSerialPortTxWordLength;
+    constexpr uint32_t kSerialPortRxWordLength = kRegSerialPortRxWordLength;
+    constexpr uint32_t kDacPcm1Source = kRegDacPcm1Source;
+    constexpr uint32_t kAspTx1Source = kRegAspTx1Source;
+    constexpr uint32_t kAspTx2Source = kRegAspTx2Source;
+    constexpr uint32_t kAspTx3Source = kRegAspTx3Source;
+    constexpr uint32_t kAspTx4Source = kRegAspTx4Source;
+    constexpr uint32_t kDsp1Rx1Source = kRegDsp1Rx1Source;
+    constexpr uint32_t kDsp1Rx2Source = kRegDsp1Rx2Source;
+    constexpr uint32_t kDsp1Rx3Source = kRegDsp1Rx3Source;
+    constexpr uint32_t kDsp1Rx4Source = kRegDsp1Rx4Source;
+    constexpr uint32_t kDsp1Rx5Source = kRegDsp1Rx5Source;
+    constexpr uint32_t kDsp1Rx6Source = kRegDsp1Rx6Source;
+    constexpr uint32_t kSerialPortHighImpedanceControl = kRegSerialPortHighImpedanceControl;
+    constexpr uint32_t kSerialPortEnables = kRegSerialPortEnables;
 
-constexpr uint32_t kAmplifierDigitalVolumeControl = kRegAmplifierDigitalVolumeControl;
-constexpr uint32_t kAmplifierGainControl = kRegAmplifierGainControl;
+    constexpr uint32_t kAmplifierDigitalVolumeControl = kRegAmplifierDigitalVolumeControl;
+    constexpr uint32_t kAmplifierGainControl = kRegAmplifierGainControl;
 
-constexpr uint32_t kGpio1Control1 = kRegGpio1Control1;
-constexpr uint32_t kGpio2Control1 = kRegGpio2Control1;
-constexpr uint32_t kGpioPadControl = kRegGpioPadControl;
+    constexpr uint32_t kGpio1Control1 = kRegGpio1Control1;
+    constexpr uint32_t kGpio2Control1 = kRegGpio2Control1;
+    constexpr uint32_t kGpioPadControl = kRegGpioPadControl;
 
-constexpr uint32_t kDsp1Rx1Rate = kRegDsp1Rx1Rate;
-constexpr uint32_t kDsp1Rx2Rate = kRegDsp1Rx2Rate;
-constexpr uint32_t kDsp1Rx3Rate = kRegDsp1Rx3Rate;
-constexpr uint32_t kDsp1Rx4Rate = kRegDsp1Rx4Rate;
-constexpr uint32_t kDsp1Rx5Rate = kRegDsp1Rx5Rate;
-constexpr uint32_t kDsp1Rx6Rate = kRegDsp1Rx6Rate;
-constexpr uint32_t kDsp1Rx7Rate = kRegDsp1Rx7Rate;
-constexpr uint32_t kDsp1Rx8Rate = kRegDsp1Rx8Rate;
-constexpr uint32_t kDsp1Tx1Rate = kRegDsp1Tx1Rate;
-constexpr uint32_t kDsp1Tx2Rate = kRegDsp1Tx2Rate;
-constexpr uint32_t kDsp1Tx3Rate = kRegDsp1Tx3Rate;
-constexpr uint32_t kDsp1Tx4Rate = kRegDsp1Tx4Rate;
-constexpr uint32_t kDsp1Tx5Rate = kRegDsp1Tx5Rate;
-constexpr uint32_t kDsp1Tx6Rate = kRegDsp1Tx6Rate;
-constexpr uint32_t kDsp1Tx7Rate = kRegDsp1Tx7Rate;
-constexpr uint32_t kDsp1Tx8Rate = kRegDsp1Tx8Rate;
+    constexpr uint32_t kDsp1Rx1Rate = kRegDsp1Rx1Rate;
+    constexpr uint32_t kDsp1Rx2Rate = kRegDsp1Rx2Rate;
+    constexpr uint32_t kDsp1Rx3Rate = kRegDsp1Rx3Rate;
+    constexpr uint32_t kDsp1Rx4Rate = kRegDsp1Rx4Rate;
+    constexpr uint32_t kDsp1Rx5Rate = kRegDsp1Rx5Rate;
+    constexpr uint32_t kDsp1Rx6Rate = kRegDsp1Rx6Rate;
+    constexpr uint32_t kDsp1Rx7Rate = kRegDsp1Rx7Rate;
+    constexpr uint32_t kDsp1Rx8Rate = kRegDsp1Rx8Rate;
+    constexpr uint32_t kDsp1Tx1Rate = kRegDsp1Tx1Rate;
+    constexpr uint32_t kDsp1Tx2Rate = kRegDsp1Tx2Rate;
+    constexpr uint32_t kDsp1Tx3Rate = kRegDsp1Tx3Rate;
+    constexpr uint32_t kDsp1Tx4Rate = kRegDsp1Tx4Rate;
+    constexpr uint32_t kDsp1Tx5Rate = kRegDsp1Tx5Rate;
+    constexpr uint32_t kDsp1Tx6Rate = kRegDsp1Tx6Rate;
+    constexpr uint32_t kDsp1Tx7Rate = kRegDsp1Tx7Rate;
+    constexpr uint32_t kDsp1Tx8Rate = kRegDsp1Tx8Rate;
 
-constexpr uint32_t kDsp1CcmCoreControl = kRegDsp1CcmCoreControl;
-constexpr uint32_t kDsp1CoreSoftReset = kRegDsp1CoreSoftReset;
-constexpr uint32_t kDsp1SystemId = kRegDsp1SystemId;
-constexpr uint32_t kDsp1SystemVersion = kRegDsp1SystemVersion;
-constexpr uint32_t kDsp1SystemCoreId = kRegDsp1SystemCoreId;
+    constexpr uint32_t kDsp1CcmCoreControl = kRegDsp1CcmCoreControl;
+    constexpr uint32_t kDsp1CoreSoftReset = kRegDsp1CoreSoftReset;
+    constexpr uint32_t kDsp1SystemId = kRegDsp1SystemId;
+    constexpr uint32_t kDsp1SystemVersion = kRegDsp1SystemVersion;
+    constexpr uint32_t kDsp1SystemCoreId = kRegDsp1SystemCoreId;
 
-constexpr uint32_t kDspMailbox1 = kRegDspMailbox1;
-constexpr uint32_t kDspMailbox2 = kRegDspMailbox2;
-constexpr uint32_t kDspMbox1Register = kRegDspMailbox1;
-constexpr uint32_t kDspMbox2Register = kRegDspMailbox2;
-constexpr uint32_t kDspMbox3Register = kRegDspMbox3;
-constexpr uint32_t kDspMbox4Register = kRegDspMbox4;
-constexpr uint32_t kDspVirtual1Mailbox1 = kRegDspVirtual1Mailbox1;
+    constexpr uint32_t kDspMailbox1 = kRegDspMailbox1;
+    constexpr uint32_t kDspMailbox2 = kRegDspMailbox2;
+    constexpr uint32_t kDspMbox1Register = kRegDspMailbox1;
+    constexpr uint32_t kDspMbox2Register = kRegDspMailbox2;
+    constexpr uint32_t kDspMbox3Register = kRegDspMbox3;
+    constexpr uint32_t kDspMbox4Register = kRegDspMbox4;
+    constexpr uint32_t kDspVirtual1Mailbox1 = kRegDspVirtual1Mailbox1;
 
-constexpr uint32_t kMailboxCommandResume = kCmdMailboxResume;
-constexpr uint32_t kMailboxCommandPause = kCmdMailboxPause;
-constexpr uint32_t kMailboxCommandSpeakerOutputEnable = kCmdMailboxSpeakerOutputEnable;
+    constexpr uint32_t kMailboxCommandResume = kCmdMailboxResume;
+    constexpr uint32_t kMailboxCommandPause = kCmdMailboxPause;
+    constexpr uint32_t kMailboxCommandSpeakerOutputEnable = kCmdMailboxSpeakerOutputEnable;
 
-constexpr uint32_t kMailboxStatusRunning = kStatusMailboxRunning;
-constexpr uint32_t kMailboxStatusPaused = kStatusMailboxPaused;
-constexpr uint32_t kMailboxStatusReadyForReinitialization = kStatusMailboxReadyForReinitialization;
+    constexpr uint32_t kMailboxStatusRunning = kStatusMailboxRunning;
+    constexpr uint32_t kMailboxStatusPaused = kStatusMailboxPaused;
+    constexpr uint32_t kMailboxStatusReadyForReinitialization = kStatusMailboxReadyForReinitialization;
 
-constexpr uint32_t kHaloCoreEnable = kValHaloCoreEnable;
-constexpr uint32_t kHaloCoreReset = kValHaloCoreReset;
+    constexpr uint32_t kHaloCoreEnable = kValHaloCoreEnable;
+    constexpr uint32_t kHaloCoreReset = kValHaloCoreReset;
 
-constexpr uint32_t kDsp1MpuLockConfig = kRegDsp1MpuLockConfig;
-constexpr uint32_t kDsp1MpuXmAccess0 = kRegDsp1MpuXmAccess0;
-constexpr uint32_t kDsp1MpuYmAccess0 = kRegDsp1MpuYmAccess0;
-constexpr uint32_t kDsp1MpuWndwAccess0 = kRegDsp1MpuWndwAccess0;
-constexpr uint32_t kDsp1MpuXregAccess0 = kRegDsp1MpuXregAccess0;
-constexpr uint32_t kDsp1MpuYregAccess0 = kRegDsp1MpuYregAccess0;
-constexpr uint32_t kDsp1MpuXmAccess1 = kRegDsp1MpuXmAccess1;
-constexpr uint32_t kDsp1MpuYmAccess1 = kRegDsp1MpuYmAccess1;
-constexpr uint32_t kDsp1MpuWndwAccess1 = kRegDsp1MpuWndwAccess1;
-constexpr uint32_t kDsp1MpuXregAccess1 = kRegDsp1MpuXregAccess1;
-constexpr uint32_t kDsp1MpuYregAccess1 = kRegDsp1MpuYregAccess1;
-constexpr uint32_t kDsp1MpuXmAccess2 = kRegDsp1MpuXmAccess2;
-constexpr uint32_t kDsp1MpuYmAccess2 = kRegDsp1MpuYmAccess2;
-constexpr uint32_t kDsp1MpuWndwAccess2 = kRegDsp1MpuWndwAccess2;
-constexpr uint32_t kDsp1MpuXregAccess2 = kRegDsp1MpuXregAccess2;
-constexpr uint32_t kDsp1MpuYregAccess2 = kRegDsp1MpuYregAccess2;
-constexpr uint32_t kDsp1MpuXmAccess3 = kRegDsp1MpuXmAccess3;
-constexpr uint32_t kDsp1MpuYmAccess3 = kRegDsp1MpuYmAccess3;
-constexpr uint32_t kDsp1MpuWndwAccess3 = kRegDsp1MpuWndwAccess3;
-constexpr uint32_t kDsp1MpuXregAccess3 = kRegDsp1MpuXregAccess3;
-constexpr uint32_t kDsp1MpuYregAccess3 = kRegDsp1MpuYregAccess3;
+    constexpr uint32_t kDsp1MpuLockConfig = kRegDsp1MpuLockConfig;
+    constexpr uint32_t kDsp1MpuXmAccess0 = kRegDsp1MpuXmAccess0;
+    constexpr uint32_t kDsp1MpuYmAccess0 = kRegDsp1MpuYmAccess0;
+    constexpr uint32_t kDsp1MpuWndwAccess0 = kRegDsp1MpuWndwAccess0;
+    constexpr uint32_t kDsp1MpuXregAccess0 = kRegDsp1MpuXregAccess0;
+    constexpr uint32_t kDsp1MpuYregAccess0 = kRegDsp1MpuYregAccess0;
+    constexpr uint32_t kDsp1MpuXmAccess1 = kRegDsp1MpuXmAccess1;
+    constexpr uint32_t kDsp1MpuYmAccess1 = kRegDsp1MpuYmAccess1;
+    constexpr uint32_t kDsp1MpuWndwAccess1 = kRegDsp1MpuWndwAccess1;
+    constexpr uint32_t kDsp1MpuXregAccess1 = kRegDsp1MpuXregAccess1;
+    constexpr uint32_t kDsp1MpuYregAccess1 = kRegDsp1MpuYregAccess1;
+    constexpr uint32_t kDsp1MpuXmAccess2 = kRegDsp1MpuXmAccess2;
+    constexpr uint32_t kDsp1MpuYmAccess2 = kRegDsp1MpuYmAccess2;
+    constexpr uint32_t kDsp1MpuWndwAccess2 = kRegDsp1MpuWndwAccess2;
+    constexpr uint32_t kDsp1MpuXregAccess2 = kRegDsp1MpuXregAccess2;
+    constexpr uint32_t kDsp1MpuYregAccess2 = kRegDsp1MpuYregAccess2;
+    constexpr uint32_t kDsp1MpuXmAccess3 = kRegDsp1MpuXmAccess3;
+    constexpr uint32_t kDsp1MpuYmAccess3 = kRegDsp1MpuYmAccess3;
+    constexpr uint32_t kDsp1MpuWndwAccess3 = kRegDsp1MpuWndwAccess3;
+    constexpr uint32_t kDsp1MpuXregAccess3 = kRegDsp1MpuXregAccess3;
+    constexpr uint32_t kDsp1MpuYregAccess3 = kRegDsp1MpuYregAccess3;
 
 }
 

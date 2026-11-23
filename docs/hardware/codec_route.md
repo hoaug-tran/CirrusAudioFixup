@@ -187,13 +187,17 @@ Because `alc-verb` commands are runtime-only and reset across reboots or sleep/w
 
 The following table summarizes real-world hardware where this diagnostic methodology successfully verified speaker and woofer playback:
 
-| Laptop model                                         | Codec  | Amplifier        | Tweeter pin | Woofer pin  | Active DAC  | Verified verb sequence                                                     | Status         |
-| :--------------------------------------------------- | :----- | :--------------- | :---------- | :---------- | :---------- | :------------------------------------------------------------------------- | :------------- |
-| **Alienware x17 R2 / Dell Horizon 17** (`1028:0B28`) | ALC289 | 2x CS35L41 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` | `alcid=93` (or Layout 87 + `01770100 01770500 0173b000 01770c02 01770740`) | Verified (#12) |
-| **ASUS ROG Zephyrus G16 GU605MV** (`1043:1C63`)      | ALC285 | 2x CS35L56 (SPI) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770c02 01770740`                             | Verified (#8)  |
-| **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`)        | ALC287 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x02` | `01770100 01770500 0173b000 01770740`                                      | Verified (#16) |
-| **ASUS ROG Zephyrus G14 GA403UV** (`1043:1B13`)      | ALC285 | 2x CS35L56 (I2C) | Node `0x14` | Node `0x17` | Node `0x03` | `alcid=33` (or `01770c02 01770740`)                                        | Verified (#18) |
-| **HP ENVY x360 15-ey0xxx** (`103C:8A31`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)  | Node `0x17` | Node `0x03` | Routed via Layout 13 (`01770740`, no EAPD)                                 | Verified (#14) |
+| Laptop model                                         | Codec  | Amplifier        | Tweeter pin        | Woofer pin  | Active DAC                               | Verified verb sequence                                                                                                               | Status         |
+| :--------------------------------------------------- | :----- | :--------------- | :----------------- | :---------- | :--------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :------------- |
+| **Alienware x17 R2 / Dell Horizon 17** (`1028:0B28`) | ALC289 | 2x CS35L41 (SPI) | Node `0x14`        | Node `0x17` | Node `0x02`                              | `alcid=93` (or Layout 87 + `01770100 01770500 0173b000 01770c02 01770740`)                                                           | Verified (#12) |
+| **ASUS ROG Zephyrus G16 GU605MV** (`1043:1C63`)      | ALC285 | 2x CS35L56 (SPI) | Node `0x14`        | Node `0x17` | Node `0x02`                              | `01770100 01770500 0173b000 01770c02 01770740`                                                                                       | Verified (#8)  |
+| **Lenovo ThinkBook 16p G6 IAX** (`17AA:391E`)        | ALC287 | 2x CS35L56 (I2C) | Node `0x14`        | Node `0x17` | Node `0x02`                              | `01770100 01770500 0173b000 01770740`                                                                                                | Verified (#16) |
+| **ASUS ROG Zephyrus G14 GA403UV** (`1043:1B13`)      | ALC285 | 2x CS35L56 (I2C) | Node `0x14`        | Node `0x17` | Node `0x03`                              | `alcid=33` (or `01770c02 01770740`)                                                                                                  | Verified (#18) |
+| **HP ENVY x360 15-ey0xxx** (`103C:8A31`)             | ALC245 | 2x CS35L41 (I2C) | N/A (dual)         | Node `0x17` | Node `0x03`                              | Routed via Layout 13 (`01770740`, no EAPD)                                                                                           | Verified (#14) |
+| **Lenovo Legion Slim 7 Gen 7** (`17AA:3877`)         | ALC287 | 2x CS35L41 (I2C) | N/A (dual)         | Node `0x17` | Node `0x02`                              | AppleALC Layout 21 (`alcid=21`) + Node `0x17` verbs (`01770100 01770500 0173b000 01770740`)                                          | Verified (#21) |
+| **Lenovo ThinkBook 16P G5 IRX** (`17AA:38F9`)        | ALC287 | 2x CS35L41 (I2C) | N/A (dual)         | Node `0x17` | Node `0x03` (L11) / Node `0x02` (L13/21) | AppleALC Layout 11 (`alcid=11`, recommended zero-config) or Layout 13/21 + Node `0x17` verbs (`01770100 01770500 0173b000 01770740`) | Verified (#24) |
+| **ASUS ROG Strix G17 G713P** (`1043:1D1F`)           | ALC294 | 2x CS35L41 (I2C) | Node `0x17` (dual) | N/A         | Node `0x03`                              | AppleALC Layout 13 (`alcid=13`), no extra verbs; 48 kHz required                                                                     | Verified (#22) |
+| **ASUS ROG Flow X13 GV302** (`1043:1533`)            | ALC294 | 2x CS35L41 (I2C) | Node `0x17` (dual) | N/A         | Node `0x03`                              | AppleALC Layout 13 (`alcid=13`), no extra verbs; 48 kHz required                                                                     | Verified (#26) |
 
 ### Machine notes
 
@@ -238,5 +242,54 @@ The following table summarizes real-world hardware where this diagnostic methodo
 - **Problem**: Internal speakers silent on generic layouts despite "Built-in Output" appearing in Sound Settings.
 - **Root cause**: Node `0x17` pincap (`0x0000001c`) lacks an internal EAPD widget. Output depends entirely on CS35L41 receiving power over I2C.
 - **Solution**: Layout 13 connects Node `0x17` to DAC `0x03`, allowing CS35L41 amplifiers to receive the PCM stream.
+
+#### Lenovo Legion Slim 7 Gen 7 (`17AA:3877` / `17AA:385C`, Realtek ALC287)
+
+- **AppleALC Layout**: Layout 21 (`alcid=21`). Boot-args should specify `alcid=21` to keep internal mic (Node `0x1A`) and headphone combo jack (Node `0x19`/`0x21`) fully functional.
+- **Speaker Pin**: Node `0x17` is the digital I2S audio and clock stream feeding both CS35L41 amplifiers (Node `0x14` is an unused analog pin). Because BIOS leaves Node `0x17` unconnected and AppleALC Layout 21 omits it, Node `0x17` must be initialized to DAC Node `0x02` (`01770100`) and pin widget control asserted (`01770740`) so ALC287 generates BCLK:
+    ```bash
+    alc-verb 0x17 0x701 0x00   # Select DAC Node 0x02 (connection index 0)
+    alc-verb 0x17 0x705 0x00   # Wake Pin Complex to D0
+    alc-verb 0x17 0x3b0 0x00   # Unmute amp at 0 dB gain
+    alc-verb 0x17 0x707 0x40   # Pin widget control: assert OUT to start BCLK and I2S stream
+    ```
+    _(Node `0x17` pincap `0x0000001c` lacks EAPD, so `01770c02` is omitted)._
+- **Amplifiers**: Dual CS35L41 (`CSC3551`) over I2C at addresses `0x40` (Left) and `0x41` (Right).
+- **Topology**: External boost with VSPK switch (`ExternalWithSwitch`), active-low GPIO reset (`resetResource = 0`) and ACPI D0 (`_PS0`) power transition.
+- **SSID Notes**: ACPI `_SUB` evaluates to `17AA:3877`, while audio PCI controller reports subsystem `17AA:385C`. CirrusAudioFixup automatically maps both to the verified embedded speaker protection tuning.
+
+#### Lenovo ThinkBook 16P G5 IRX (`17AA:38F9` / `17AA:3D3B`, Realtek ALC287)
+
+- **AppleALC Layout**:
+    - **Recommended (Zero-Configuration)**: AppleALC Layout 11 (`alcid=11`). In AppleALC, Layout 11 natively routes IntSpeaker to Pin Complex Node `0x17` (`0x90170110`) via DAC Node `0x03` in `Platforms11.xml` (PathMap 287), combo headphone to Node `0x21` (`0x03211020`) via DAC Node `0x02`, and combo mic to Node `0x19` (`0x03811030`). IntSpeaker audio and BCLK are generated automatically on Node `0x17` without requiring any manual `alc-verb` commands.
+    - **Alternative (Layout 13 or 21 with alc-verbs)**: If `alcid=13` or `alcid=21` is used, AppleALC routes IntSpeaker to Node `0x14` (which is unconnected/disabled on this machine, pin default `0x411111f0`) and either omits or explicitly disables Node `0x17` (Layout 13 injects ConfigData verb `01771cf0 01771d00 01771e00 01771f40` to disable Node `0x17`). To tap into DAC Node `0x02` on these layouts, Node `0x17` must be initialized manually via `alc-verb`:
+        ```bash
+        alc-verb 0x17 0x701 0x00   # Select DAC Node 0x02 (connection index 0)
+        alc-verb 0x17 0x705 0x00   # Wake Pin Complex to D0
+        alc-verb 0x17 0x3b0 0x00   # Unmute amp at 0 dB gain
+        alc-verb 0x17 0x707 0x40   # Pin widget control: assert OUT to start BCLK and I2S stream
+        ```
+        _(Node `0x17` pincap `0x0000001c` lacks EAPD, so `01770c02` is omitted)._
+- **Amplifiers**: Dual CS35L41 Rev B2 (`CSC3551`) over I2C on bus `I2C4` (PCI `8086:7A7C`) at addresses `0x41` (Right, endpoint 0) and `0x40` (Left, endpoint 1).
+- **Speaker ID & Reset**: Speaker ID is read from ACPI `_CRS` index 2 (GPIO pin 269, active-high, value `1`) on Intel GPIO controller `INTC1085` (`\_SB.GPI0`, ACPI memory index 2, Community 3 at offset `0x6B0000`). Active-low reset is on ACPI `_CRS` index 0 (GPIO pin 7 on `\_SB.GPI0`, ACPI memory index 0, Community 0).
+- **Topology**: External boost (`ExternalWithSwitch`), channels `{1, 0}` (endpoint 0 = Right, endpoint 1 = Left).
+- **Firmware & Tuning**: CS35L41 Rev B2 DSP1 firmware `halo_cspl_RAM_revB2_29.63.1.wmfw` (shared with 17AA:3877) and verified OEM tunings `cs35l41-dsp1-spk-prot-17aa38f9-spkid1-l0.bin` / `-spkid1-r0.bin` (48 kHz, +17.5 dB gain). PCI subsystem `17AA:3D3B` automatically translates to `17AA:38F9`.
+
+#### ASUS ROG Strix G17 G713P (`1043:1D1F`, Realtek ALC294)
+
+- **AppleALC Layout**: Layout 13 (`alcid=13` or `layout-id` 13 in DeviceProperties). No extra `alc-verb` sequences are required.
+- **Speaker Pin**: Node `0x17` routed to DAC Node `0x03`.
+- **Amplifiers**: Dual CS35L41 (`CSC3551`) over AMD I2C (`AMDI0010`) at `0x40` (Left) and `0x41` (Right), IRQ polling.
+- **Topology**: Internal boost, 1000 nH / 4500 mA / 24 uF. Uses the G733 (`1043:1503`) speaker protection tuning.
+- **Stream format**: 48 kHz is required. With the built-in output at 44.1 kHz the stream is rejected (`UNSUPPORTED_STREAM_FORMAT`) and the speakers stay silent; select 48 kHz in Audio MIDI Setup.
+
+#### ASUS ROG Flow X13 GV302 (`1043:1533`, Realtek ALC294)
+
+- **AppleALC Layout**: Layout 13 (`alcid=13` or `layout-id` 13 in DeviceProperties). No extra `alc-verb` sequences are required.
+- **Speaker Pin**: Node `0x17` routed to DAC Node `0x03`.
+- **Amplifiers**: Dual CS35L41 Rev B2 (`CSC3551`) over AMD I2C (`AMDI0010`) at `0x40` (Left, endpoint 0) and `0x41` (Right, endpoint 1), IRQ polling.
+- **Topology**: Internal boost, 1000 nH / 4500 mA / 24 uF, channels `{0, 1}`.
+- **Firmware & Tuning**: Embedded CS35L41 Rev B2 DSP1 firmware `halo_cspl_RAM_revB2_29.63.1.wmfw` (shared with 1043:1C9F) and verified OEM speaker protection tunings `cs35l41-dsp1-spk-prot-10431533-spkid0-l0.bin` / `-spkid0-r0.bin` (48 kHz, +17.0 dB gain, spkid 0).
+- **Stream format**: 48 kHz is required. With the built-in output at 44.1 kHz the stream is rejected (`UNSUPPORTED_STREAM_FORMAT`) and the speakers stay silent; select 48 kHz in Audio MIDI Setup.
 
 [Back to main guide](../../README.md#installation)

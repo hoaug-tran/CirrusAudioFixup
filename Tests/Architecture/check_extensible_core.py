@@ -144,9 +144,9 @@ int main(){
  RegisterIO& diagnosticPort=diagnosticBulk;
  assert(!diagnosticPort.bulkReadForDiagnostic(0,bytes,6)&&bus.calls==n);
  assert(diagnosticPort.bulkReadForDiagnostic(8,bytes,4)&&bus.calls==n+1);
- c.noIncrementReadable=precious;RegisterMap fifo(bus,c);bus.frames.clear();
+ c.noIncrementReadable=precious;c.readable=deny;RegisterMap fifo(bus,c);bus.frames.clear();
  assert(fifo.noIncrementRead(0,bytes,12)&&bus.frames.size()==2&&bus.frames[0][0]==0&&bus.frames[1][0]==0);
- n=bus.calls;assert(!fifo.noIncrementRead(8,bytes,4)&&bus.calls==n);
+ n=bus.calls;assert(!fifo.noIncrementRead(8,bytes,4)&&bus.calls==n);c.readable=nullptr;
  assert(!diag.updateBits(0,0xff,1)&&bus.calls==n);
  RegisterMap readonly(bus,c);n=bus.calls;assert(!readonly.write(0,1)&&bus.calls==n);
  Lock lock;bus.lock=&lock;RegisterMap locked(bus,c,true,&lock);

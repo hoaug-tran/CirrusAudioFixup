@@ -2,17 +2,26 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from production_source_fixture import source as production_source, chip_state
+from production_source_fixture import source as production_source, chip_state, method
 import re
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = production_source()
-method_start = SOURCE.index("bool CirrusAudioFixup::applyCalibration(")
-method_end = SOURCE.index("\n}", method_start) + 2
+apply_cal = method(SOURCE, "CirrusAudioFixup", "applyCalibration")
 crc_start = SOURCE.index("static uint32_t crc32Le(")
-crc_end = SOURCE.index("\n}", crc_start) + 2
+open_brace = SOURCE.index("{", crc_start)
+depth = 0
+for idx, ch in enumerate(SOURCE[open_brace:]):
+    if ch == "{":
+        depth += 1
+    elif ch == "}":
+        depth -= 1
+        if depth == 0:
+            crc_end = open_brace + idx + 1
+            break
+crc_func = SOURCE[crc_start:crc_end]
 efi_source = (
     ROOT / "CirrusAudioFixup/Firmware/Calibration/EFICalibrationSource.hpp"
 ).read_text()
@@ -20,7 +29,7 @@ efi_source = (
     efi_source[efi_source.index("namespace cirrus::firmware {") :]
     + "\nnamespace firmware = cirrus::firmware;\n"
 )
-calibration = SOURCE[crc_start:crc_end] + SOURCE[method_start:method_end]
+calibration = crc_func + "\n" + apply_cal
 gate_start = re.search(r"if\s*\(!applyCalibration\(amp,\s*image\)\)", SOURCE).start()
 m_boot = re.search(r"bool\s+booted\s*=\s*bringUpDSP\(amp\);", SOURCE[gate_start:])
 gate_end = gate_start + m_boot.end()

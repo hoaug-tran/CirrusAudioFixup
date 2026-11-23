@@ -120,6 +120,21 @@ for symbol, size, digest in (
         5532,
         "724fd7c9a88fb641ea3d2e4920c3bfd156126959af11982c3179ee2d474fe7e5",
     ),
+    (
+        "cs35l41_dsp1_spk_prot_17aa3877_wmfw",
+        34068,
+        "c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_17aa3877_generic_l0_bin",
+        5680,
+        "1fe9f1593beac744b44bf319ea484266d4a097fe810d29d55df73dbb031ef5f7",
+    ),
+    (
+        "cs35l41_dsp1_spk_prot_17aa3877_generic_r0_bin",
+        5680,
+        "36b22de87170b3d7f5802085b7034cc6d1dc68bd11e40fa19fd02f7f8053c55f",
+    ),
 ):
     found = re.findall(r"const uint8_t " + symbol + r"\[\] = \{(.*?)\};", header, re.S)
     assert len(found) == 1, symbol
@@ -141,6 +156,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-hp-profile-") as directory:
 #include <algorithm>
 #include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
 #include "Platform/Board/PlatformProfile.hpp"
+#include "Platform/Board/HardwareCatalog.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareData.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 struct Properties:cirrus::platform::PlatformProperties {
@@ -252,7 +268,48 @@ void profileChecks(){
   const auto& b=generic->configuration.amplifiers[0];DeviceConfiguration c;
   assert(decodeDeviceConfiguration(b.driverConfiguration,b.driverConfigurationSize,b.driverConfigurationKind,c)&&c.power.switched());
   delete generic;
-  p.values["cirrus,boost-type"]={2,2};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));
+  p.values["cirrus,boost-type"]={2,2};
+  auto* noSwitch=resolve(p,{0x1234,0x5678,"CSC3551"});assert(noSwitch);
+  const auto& b2=noSwitch->configuration.amplifiers[0];DeviceConfiguration c2;
+  assert(decodeDeviceConfiguration(b2.driverConfiguration,b2.driverConfigurationSize,b2.driverConfigurationKind,c2));
+  assert(c2.power.topology==BoostTopology::ExternalWithoutSwitch&&!c2.power.switched());
+  delete noSwitch;
+  p.values["cirrus,boost-type"]={3,3};assert(!resolve(p,{0x1234,0x5678,"CSC3551"}));
+ }
+ // Lenovo Legion Slim 7 Gen 7 issue #21: I2C dual-amp, external boost with VSPK switch, active-low GPIO reset resource 0
+ {
+  Properties p;p.values.clear();
+  core::BusEndpoint e[]={{core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x40},
+                         {core::BusTransportType::I2C,"IOService:/I2CD/SPKR",0x41}};
+  const char* reason=nullptr;
+  auto* legion=resolveBoardConfiguration({{0x17aa,0x3877,"CSC3551"},e,2,p},assets,reason);
+  assert(legion);
+  assert(legion->configuration.count==2);
+  for(size_t i=0;i<2;++i){
+   const auto& binding=legion->configuration.amplifiers[i];DeviceConfiguration config;
+   assert(decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config));
+   assert(config.power.topology==BoostTopology::ExternalWithSwitch);
+   assert(config.power.switched()&&!config.power.internal());
+   assert(config.gpio1Function==1&&config.gpio2Function==2);
+  }
+  struct Legion_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+   unsigned resets=0;
+   int32_t lastResource=-1;
+   bool hadProperty=false;
+   bool succeed=true;
+   bool read(const char*,size_t,uint32_t&) override { return false; }
+   bool reset(const char* prop,int32_t resource) override {
+    ++resets;
+    hadProperty=(prop!=nullptr);
+    lastResource=resource;
+    return succeed;
+   }
+  } gpio;
+  assert(legion->prepareHardware(gpio));
+  assert(gpio.resets==1&&gpio.lastResource==0&&!gpio.hadProperty);
+  gpio.succeed=false;
+  assert(!legion->prepareHardware(gpio));
+  delete legion;
  }
  // Native per-device speaker IDs survive reversed channel wiring.
  {Properties p;p.values["cirrus,dev-index"]={0,1};

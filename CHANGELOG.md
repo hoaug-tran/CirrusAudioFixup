@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.2.1] - 2026-11-24
+
+### CS35L41
+
+- Added Lenovo ThinkBook 16P G5 IRX support (`CSC3551`, subsystem `17AA:38F9` / PCI `17AA:3D3B`) over I2C with switched external boost topology and embedded Rev B2 speaker protection tuning ([#24](https://github.com/hoaug-tran/CirrusAudioFixup/issues/24)).
+- Added ASUS ROG Flow X13 GV302 support (`CSC3551`, subsystem `1043:1533`) over AMD I2C with internal boost topology and embedded Rev B2 speaker protection tuning ([#26](https://github.com/hoaug-tran/CirrusAudioFixup/issues/26)).
+- Added Lenovo Legion Slim 7 Gen 7 (2022) support (`CSC3551`, subsystem `17AA:3877` / PCI `17AA:385C`) over I2C with switched external boost topology ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)).
+- Added ASUS ROG Strix G17 G713PI/PU/PV/PVN support (`CSC3551`, subsystem `1043:1D1F`) over AMD I2C with internal boost topology, using the G733 (`1043:1503`) speaker protection tuning that the Cirrus Windows package assigns to the same configuration ([#22](https://github.com/hoaug-tran/CirrusAudioFixup/pull/22)).
+- Added support for external boost topologies (switched and unswitched), active-low GPIO reset (`resetResource = 0` on `17AA:3877`), and optional software-only reset fallback over I2C on CS35L41 amplifiers.
+- Corrected external boost switch playback/quiesce sequencing while preserving `CLSA0100` external boost idle and quiesce compatibility, and resolved AMD GPIO reset collisions.
+
+### Platform & Infrastructure
+
+- Added ACPI `_CID` fallback for Intel GPIO controller identification (`INTC1085`) when OEM custom `_HID` (e.g. `LEN0001`) is present, hardened Intel ACPI GPIO reset error handling, and enforced 32-bit MMIO alignment on AMD GPIO register accesses.
+- Enforced ACPI D0 (`_PS0`/`_PSC`) readiness on ACPI-backed I2C amplifier devices during setup and wake, and surfaced wake/communication failures as `COMMUNICATION_FAILED`.
+- Accepted `IoRestrictionNoneAndPreserve` ACPI `GpioIo` descriptors for shared GPIO resources and separated `NO_GPIO_RESET_REQUIRED` from `ACPI_GPIO_PREPARED` reset reporting.
+- Enforced fail-closed power management transitions on startup failure and fixed transient `FAILED_INIT` driver verdicts emitted during clean sleep transitions.
+- Hardened service lifecycle teardown idempotency, diagnostics snapshot locking, and null guards for audio event observers and HDA controller references.
+- Fixed `RegisterMap` non-incrementing FIFO transfers to properly evaluate bounds without scalar permission rejection.
+- Quietened per-transaction and per-control WMFW info logs so Debug and `-cirrusdbg` boot logs stay within `dmesg` buffer limits without dropping error reporting.
+- Improved macOS, Linux, and Windows evidence collectors: removed duplicate 49 MB `services-payload.plist` in macOS ZIPs, fixed `AppleHDADriver` and `kern.msgbuf` queries, added `CS35L56`/`CSC3556`/`CLSA010` filters and HP `SmartAmpCalibrationData` capture across platforms, and captured multi-card ALSA mixer controls on Linux.
+- Enabled develop push builds and automatic kext artifact uploads in CI workflows.
+- Added a read-only CS35L41/CS35L56 hardware candidate catalog (`Cirrus_Candidate_*` IORegistry diagnostics, `BoardProperties` upstream sync, and `Tools/Hardware/onboard_board.py` staging workflow); candidate recognition does not authorize unverified hardware or bypass protection checks.
+
+### Acknowledgments
+
+- Thanks to [@wjjkld](https://github.com/wjjkld) for contributing ASUS ROG Strix G17 G713P support ([#22](https://github.com/hoaug-tran/CirrusAudioFixup/pull/22)).
+- Thanks to [@yshen22](https://github.com/yshen22) ([#21](https://github.com/hoaug-tran/CirrusAudioFixup/issues/21)), [@zenghongfei1](https://github.com/zenghongfei1) ([#24](https://github.com/hoaug-tran/CirrusAudioFixup/issues/24)), and [@DrLinjiu](https://github.com/DrLinjiu) ([#26](https://github.com/hoaug-tran/CirrusAudioFixup/issues/26)) for hardware dumps and on-device testing.
+
 ## [1.2.0] - 2026-11-06
 
 ### CS35L41

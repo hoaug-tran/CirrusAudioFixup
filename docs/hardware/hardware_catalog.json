@@ -1,0 +1,5746 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "linux_repo": "https://github.com/torvalds/linux",
+    "linux_master_commit": "b6a9fa34ce4187cb69d3c588a4bbffc31ce5db8f",
+    "linux_master_date": "2026-11-22T22:57:40Z",
+    "linux_firmware_whence": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/WHENCE"
+  },
+  "summary": {
+    "total": 317,
+    "level_3_production_supported": 14,
+    "level_2_technically_supportable": 48,
+    "level_1_recognized_candidate": 255,
+    "cs35l41": 242,
+    "cs35l56": 75,
+    "aliases": 2
+  },
+  "aliases": [
+    {
+      "from": "17AA:385C",
+      "from_hex": "0x17AA385C",
+      "to": "17AA:3877",
+      "to_hex": "0x17AA3877"
+    },
+    {
+      "from": "17AA:3D3B",
+      "from_hex": "0x17AA3D3B",
+      "to": "17AA:38F9",
+      "to_hex": "0x17AA38F9"
+    }
+  ],
+  "entries": [
+    {
+      "subsystem": "1025:1826",
+      "subsystem_hex": "0x10251826",
+      "oem": "Acer",
+      "model": "Acer Helios ZPC",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_PREDATOR_SPK_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-1025182c-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-1025182c-r0.bin",
+        "cirrus/cs35l41/v6.83.0/halo_cspl_RAM_revB2_29.85.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1025:182C",
+      "subsystem_hex": "0x1025182C",
+      "oem": "Acer",
+      "model": "Acer Helios ZPD",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_PREDATOR_SPK_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-1025182c-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-1025182c-r0.bin",
+        "cirrus/cs35l41/v6.83.0/halo_cspl_RAM_revB2_29.85.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1025:1844",
+      "subsystem_hex": "0x10251844",
+      "oem": "Acer",
+      "model": "Acer Helios ZPS",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_PREDATOR_SPK_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-10251844-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10251844-r0.bin",
+        "cirrus/cs35l41/v6.83.0/halo_cspl_RAM_revB2_29.85.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1028:0B27",
+      "subsystem_hex": "0x10280B27",
+      "oem": "Dell",
+      "model": "Dell",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0B28",
+      "subsystem_hex": "0x10280B28",
+      "oem": "Dell",
+      "model": "Alienware x17 R2",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0BEB",
+      "subsystem_hex": "0x10280BEB",
+      "oem": "Dell",
+      "model": "Dell XPS 15 9530 (2023)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0C4D",
+      "subsystem_hex": "0x10280C4D",
+      "oem": "Dell",
+      "model": "Dell",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_4",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0C62",
+      "subsystem_hex": "0x10280C62",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0C62)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0C63",
+      "subsystem_hex": "0x10280C63",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0C63)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0C6B",
+      "subsystem_hex": "0x10280C6B",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0C6B)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CBD",
+      "subsystem_hex": "0x10280CBD",
+      "oem": "Dell",
+      "model": "Dell Oasis 13 CS MTL-U",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CBE",
+      "subsystem_hex": "0x10280CBE",
+      "oem": "Dell",
+      "model": "Dell Oasis 13 2-IN-1 MTL-U",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CBF",
+      "subsystem_hex": "0x10280CBF",
+      "oem": "Dell",
+      "model": "Dell Oasis 13 Low Weight MTU-L",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CC1",
+      "subsystem_hex": "0x10280CC1",
+      "oem": "Dell",
+      "model": "Dell Oasis 14 MTL-H/U",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CC2",
+      "subsystem_hex": "0x10280CC2",
+      "oem": "Dell",
+      "model": "Dell Oasis 14 2-in-1 MTL-H/U",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CC3",
+      "subsystem_hex": "0x10280CC3",
+      "oem": "Dell",
+      "model": "Dell Oasis 14 Low Weight MTL-U",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CC4",
+      "subsystem_hex": "0x10280CC4",
+      "oem": "Dell",
+      "model": "Dell Oasis 16 MTL-H/U",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC289_FIXUP_DELL_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CE3",
+      "subsystem_hex": "0x10280CE3",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0CE3)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CE4",
+      "subsystem_hex": "0x10280CE4",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0CE4)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CE5",
+      "subsystem_hex": "0x10280CE5",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0CE5)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CE6",
+      "subsystem_hex": "0x10280CE6",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0CE6)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0CE7",
+      "subsystem_hex": "0x10280CE7",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0CE7)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0D12",
+      "subsystem_hex": "0x10280D12",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0D12)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0D13",
+      "subsystem_hex": "0x10280D13",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0D13)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0D32",
+      "subsystem_hex": "0x10280D32",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0D32)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0D33",
+      "subsystem_hex": "0x10280D33",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0D33)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0DD6",
+      "subsystem_hex": "0x10280DD6",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0DD6)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_SILICON_REV_B2",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0E53",
+      "subsystem_hex": "0x10280E53",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0E53)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_SILICON_REV_B2",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0E54",
+      "subsystem_hex": "0x10280E54",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0E54)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_SILICON_REV_B2",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0E86",
+      "subsystem_hex": "0x10280E86",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0E86)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0E87",
+      "subsystem_hex": "0x10280E87",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0E87)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1028:0EE0",
+      "subsystem_hex": "0x10280EE0",
+      "oem": "Dell",
+      "model": "Dell CS35L56 (1028:0EE0)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_SILICON_REV_B2",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:896D",
+      "subsystem_hex": "0x103C896D",
+      "oem": "HP",
+      "model": "HP ZBook Firefly 16 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:896E",
+      "subsystem_hex": "0x103C896E",
+      "oem": "HP",
+      "model": "HP EliteBook x360 830 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8971",
+      "subsystem_hex": "0x103C8971",
+      "oem": "HP",
+      "model": "HP EliteBook 830 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8972",
+      "subsystem_hex": "0x103C8972",
+      "oem": "HP",
+      "model": "HP EliteBook 840 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8973",
+      "subsystem_hex": "0x103C8973",
+      "oem": "HP",
+      "model": "HP EliteBook 860 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8974",
+      "subsystem_hex": "0x103C8974",
+      "oem": "HP",
+      "model": "HP EliteBook 840 Aero G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8975",
+      "subsystem_hex": "0x103C8975",
+      "oem": "HP",
+      "model": "HP EliteBook x360 840 Aero G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8981",
+      "subsystem_hex": "0x103C8981",
+      "oem": "HP",
+      "model": "HP Elite Dragonfly G3",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:898E",
+      "subsystem_hex": "0x103C898E",
+      "oem": "HP",
+      "model": "HP EliteBook 835 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:898F",
+      "subsystem_hex": "0x103C898F",
+      "oem": "HP",
+      "model": "HP EliteBook 835 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8991",
+      "subsystem_hex": "0x103C8991",
+      "oem": "HP",
+      "model": "HP EliteBook 845 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8992",
+      "subsystem_hex": "0x103C8992",
+      "oem": "HP",
+      "model": "HP EliteBook 845 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8994",
+      "subsystem_hex": "0x103C8994",
+      "oem": "HP",
+      "model": "HP EliteBook 855 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8995",
+      "subsystem_hex": "0x103C8995",
+      "oem": "HP",
+      "model": "HP EliteBook 855 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:89C0",
+      "subsystem_hex": "0x103C89C0",
+      "oem": "HP",
+      "model": "HP ZBook Power 15.6 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:89C3",
+      "subsystem_hex": "0x103C89C3",
+      "oem": "HP",
+      "model": "Zbook Studio G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:89C6",
+      "subsystem_hex": "0x103C89C6",
+      "oem": "HP",
+      "model": "HP ZBook Fury 16 G9",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:89E7",
+      "subsystem_hex": "0x103C89E7",
+      "oem": "HP",
+      "model": "HP Elite x2 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8A05",
+      "subsystem_hex": "0x103C8A05",
+      "oem": "HP",
+      "model": "HP Dragonfly Folio G3 2-in-1",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:8A06",
+      "subsystem_hex": "0x103C8A06",
+      "oem": "HP",
+      "model": "HP Dragonfly Folio G3 2-in-1",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:8A28",
+      "subsystem_hex": "0x103C8A28",
+      "oem": "HP",
+      "model": "HP Envy 13",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a28-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a28-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a28-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a28-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A29",
+      "subsystem_hex": "0x103C8A29",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A2A",
+      "subsystem_hex": "0x103C8A2A",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A2B",
+      "subsystem_hex": "0x103C8A2B",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A2C",
+      "subsystem_hex": "0x103C8A2C",
+      "oem": "HP",
+      "model": "HP Envy 16",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A2D",
+      "subsystem_hex": "0x103C8A2D",
+      "oem": "HP",
+      "model": "HP Envy 16",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A2E",
+      "subsystem_hex": "0x103C8A2E",
+      "oem": "HP",
+      "model": "HP ENVY Laptop 17-cr0xxx",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A30",
+      "subsystem_hex": "0x103C8A30",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8A31",
+      "subsystem_hex": "0x103C8A31",
+      "oem": "HP",
+      "model": "HP ENVY x360 15-ey0xxx",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8A6E",
+      "subsystem_hex": "0x103C8A6E",
+      "oem": "HP",
+      "model": "HP EDNA 360",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_4",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8AB8",
+      "subsystem_hex": "0x103C8AB8",
+      "oem": "HP",
+      "model": "HP EliteBook 830 G8 Notebook PC (MB 8AB8)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:8ABB",
+      "subsystem_hex": "0x103C8ABB",
+      "oem": "HP",
+      "model": "HP ZBook Firefly 14 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:8AD1",
+      "subsystem_hex": "0x103C8AD1",
+      "oem": "HP",
+      "model": "HP EliteBook 840 14 inch G9 Notebook PC",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:8AD2",
+      "subsystem_hex": "0x103C8AD2",
+      "oem": "HP",
+      "model": "HP EliteBook 860 16 inch G9 Notebook PC",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED"
+      ]
+    },
+    {
+      "subsystem": "103C:8AD8",
+      "subsystem_hex": "0x103C8AD8",
+      "oem": "HP",
+      "model": "HP 800 G9",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B3A",
+      "subsystem_hex": "0x103C8B3A",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8B42",
+      "subsystem_hex": "0x103C8B42",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B43",
+      "subsystem_hex": "0x103C8B43",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B44",
+      "subsystem_hex": "0x103C8B44",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B45",
+      "subsystem_hex": "0x103C8B45",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B46",
+      "subsystem_hex": "0x103C8B46",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B47",
+      "subsystem_hex": "0x103C8B47",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B63",
+      "subsystem_hex": "0x103C8B63",
+      "oem": "HP",
+      "model": "HP Elite Dragonfly 13.5 inch G4",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B70",
+      "subsystem_hex": "0x103C8B70",
+      "oem": "HP",
+      "model": "HP EliteBook 835 G10",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B72",
+      "subsystem_hex": "0x103C8B72",
+      "oem": "HP",
+      "model": "HP EliteBook 845 G10",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B74",
+      "subsystem_hex": "0x103C8B74",
+      "oem": "HP",
+      "model": "HP EliteBook 845W G10",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B77",
+      "subsystem_hex": "0x103C8B77",
+      "oem": "HP",
+      "model": "HP ElieBook 865 G10",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B8F",
+      "subsystem_hex": "0x103C8B8F",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8B92",
+      "subsystem_hex": "0x103C8B92",
+      "oem": "HP",
+      "model": "HP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8BB3",
+      "subsystem_hex": "0x103C8BB3",
+      "oem": "HP",
+      "model": "HP Slim OMEN",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BB4",
+      "subsystem_hex": "0x103C8BB4",
+      "oem": "HP",
+      "model": "HP Slim OMEN",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BDD",
+      "subsystem_hex": "0x103C8BDD",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BDE",
+      "subsystem_hex": "0x103C8BDE",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BDF",
+      "subsystem_hex": "0x103C8BDF",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE0",
+      "subsystem_hex": "0x103C8BE0",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE1",
+      "subsystem_hex": "0x103C8BE1",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE2",
+      "subsystem_hex": "0x103C8BE2",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE3",
+      "subsystem_hex": "0x103C8BE3",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a29-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE5",
+      "subsystem_hex": "0x103C8BE5",
+      "oem": "HP",
+      "model": "HP Envy 16",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_I2C_2_MUTE_MICMUTE_LED",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE6",
+      "subsystem_hex": "0x103C8BE6",
+      "oem": "HP",
+      "model": "HP Envy 16",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2c-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE7",
+      "subsystem_hex": "0x103C8BE7",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE8",
+      "subsystem_hex": "0x103C8BE8",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8a2e-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8BE9",
+      "subsystem_hex": "0x103C8BE9",
+      "oem": "HP",
+      "model": "HP CSC3551 (103C:8BE9)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C15",
+      "subsystem_hex": "0x103C8C15",
+      "oem": "HP",
+      "model": "HP CSC3551 (103C:8C15)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C16",
+      "subsystem_hex": "0x103C8C16",
+      "oem": "HP",
+      "model": "HP CSC3551 (103C:8C16)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C17",
+      "subsystem_hex": "0x103C8C17",
+      "oem": "HP",
+      "model": "HP CSC3551 (103C:8C17)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C26",
+      "subsystem_hex": "0x103C8C26",
+      "oem": "HP",
+      "model": "HP CS35L41 (103C:8C26)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 0,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C46",
+      "subsystem_hex": "0x103C8C46",
+      "oem": "HP",
+      "model": "HP EliteBook 830 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C47",
+      "subsystem_hex": "0x103C8C47",
+      "oem": "HP",
+      "model": "HP EliteBook 840 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C48",
+      "subsystem_hex": "0x103C8C48",
+      "oem": "HP",
+      "model": "HP EliteBook 860 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C49",
+      "subsystem_hex": "0x103C8C49",
+      "oem": "HP",
+      "model": "HP Elite x360 830 2-in-1 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C4D",
+      "subsystem_hex": "0x103C8C4D",
+      "oem": "HP",
+      "model": "HP Omen",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8C4E",
+      "subsystem_hex": "0x103C8C4E",
+      "oem": "HP",
+      "model": "HP Omen",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bb3-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8C4F",
+      "subsystem_hex": "0x103C8C4F",
+      "oem": "HP",
+      "model": "HP Envy 15",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdf-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8C50",
+      "subsystem_hex": "0x103C8C50",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8C51",
+      "subsystem_hex": "0x103C8C51",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-103c8bdd-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "103C:8C52",
+      "subsystem_hex": "0x103C8C52",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8C52)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C53",
+      "subsystem_hex": "0x103C8C53",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8C53)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C66",
+      "subsystem_hex": "0x103C8C66",
+      "oem": "HP",
+      "model": "HP Envy 16",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C67",
+      "subsystem_hex": "0x103C8C67",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C68",
+      "subsystem_hex": "0x103C8C68",
+      "oem": "HP",
+      "model": "HP Envy 17",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C6A",
+      "subsystem_hex": "0x103C8C6A",
+      "oem": "HP",
+      "model": "HP Envy 16",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C70",
+      "subsystem_hex": "0x103C8C70",
+      "oem": "HP",
+      "model": "HP EliteBook 835 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C71",
+      "subsystem_hex": "0x103C8C71",
+      "oem": "HP",
+      "model": "HP EliteBook 845 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8C72",
+      "subsystem_hex": "0x103C8C72",
+      "oem": "HP",
+      "model": "HP EliteBook 865 G11",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CA4",
+      "subsystem_hex": "0x103C8CA4",
+      "oem": "HP",
+      "model": "HP ZBook Fury",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CA7",
+      "subsystem_hex": "0x103C8CA7",
+      "oem": "HP",
+      "model": "HP ZBook Fury",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CDD",
+      "subsystem_hex": "0x103C8CDD",
+      "oem": "HP",
+      "model": "HP CSC3551 (103C:8CDD)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CDE",
+      "subsystem_hex": "0x103C8CDE",
+      "oem": "HP",
+      "model": "HP CSC3551 (103C:8CDE)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CDF",
+      "subsystem_hex": "0x103C8CDF",
+      "oem": "HP",
+      "model": "HP SnowWhite",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CE0",
+      "subsystem_hex": "0x103C8CE0",
+      "oem": "HP",
+      "model": "HP SnowWhite",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8CF5",
+      "subsystem_hex": "0x103C8CF5",
+      "oem": "HP",
+      "model": "HP ZBook Studio 16",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_4_HP_GPIO_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D90",
+      "subsystem_hex": "0x103C8D90",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8D90)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D91",
+      "subsystem_hex": "0x103C8D91",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8D91)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D92",
+      "subsystem_hex": "0x103C8D92",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8D92)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D9B",
+      "subsystem_hex": "0x103C8D9B",
+      "oem": "HP",
+      "model": "HP 17 Turbine OmniBook 7 UMA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D9C",
+      "subsystem_hex": "0x103C8D9C",
+      "oem": "HP",
+      "model": "HP 17 Turbine OmniBook 7 DIS",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D9D",
+      "subsystem_hex": "0x103C8D9D",
+      "oem": "HP",
+      "model": "HP 17 Turbine OmniBook X UMA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D9E",
+      "subsystem_hex": "0x103C8D9E",
+      "oem": "HP",
+      "model": "HP 17 Turbine OmniBook X DIS",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8D9F",
+      "subsystem_hex": "0x103C8D9F",
+      "oem": "HP",
+      "model": "HP 14 Cadet (x360)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8DA0",
+      "subsystem_hex": "0x103C8DA0",
+      "oem": "HP",
+      "model": "HP 16 Clipper OmniBook 7(X360)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8DA1",
+      "subsystem_hex": "0x103C8DA1",
+      "oem": "HP",
+      "model": "HP 16 Clipper OmniBook X",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8DA7",
+      "subsystem_hex": "0x103C8DA7",
+      "oem": "HP",
+      "model": "HP 14 Enstrom OmniBook X",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8DA8",
+      "subsystem_hex": "0x103C8DA8",
+      "oem": "HP",
+      "model": "HP CS35L41 (103C:8DA8)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 0,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E11",
+      "subsystem_hex": "0x103C8E11",
+      "oem": "HP",
+      "model": "HP Trekker",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E12",
+      "subsystem_hex": "0x103C8E12",
+      "oem": "HP",
+      "model": "HP Trekker",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E13",
+      "subsystem_hex": "0x103C8E13",
+      "oem": "HP",
+      "model": "HP Trekker",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E1B",
+      "subsystem_hex": "0x103C8E1B",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8E1B)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E1C",
+      "subsystem_hex": "0x103C8E1C",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8E1C)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E2C",
+      "subsystem_hex": "0x103C8E2C",
+      "oem": "HP",
+      "model": "HP CS35L56 (103C:8E2C)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E36",
+      "subsystem_hex": "0x103C8E36",
+      "oem": "HP",
+      "model": "HP 14 Enstrom OmniBook X",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E37",
+      "subsystem_hex": "0x103C8E37",
+      "oem": "HP",
+      "model": "HP 16 Piston OmniBook X",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E3A",
+      "subsystem_hex": "0x103C8E3A",
+      "oem": "HP",
+      "model": "HP Agusta",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E3B",
+      "subsystem_hex": "0x103C8E3B",
+      "oem": "HP",
+      "model": "HP OmniBook 7",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_I2C_2_MUTE_MICMUTE_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E60",
+      "subsystem_hex": "0x103C8E60",
+      "oem": "HP",
+      "model": "HP OmniBook 7 Laptop 16-bh0xxx",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_I2C_2_MUTE_LED",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E61",
+      "subsystem_hex": "0x103C8E61",
+      "oem": "HP",
+      "model": "HP Trekker",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E62",
+      "subsystem_hex": "0x103C8E62",
+      "oem": "HP",
+      "model": "HP Trekker",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E75",
+      "subsystem_hex": "0x103C8E75",
+      "oem": "HP",
+      "model": "HP Trekker G7JC",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E9C",
+      "subsystem_hex": "0x103C8E9C",
+      "oem": "HP",
+      "model": "HP 16 Clipper OmniBook X X360",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E9D",
+      "subsystem_hex": "0x103C8E9D",
+      "oem": "HP",
+      "model": "HP 17 Turbine OmniBook X UMA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8E9E",
+      "subsystem_hex": "0x103C8E9E",
+      "oem": "HP",
+      "model": "HP 17 Turbine OmniBook X UMA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8F07",
+      "subsystem_hex": "0x103C8F07",
+      "oem": "HP",
+      "model": "HP Agusta G7KX",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8F2D",
+      "subsystem_hex": "0x103C8F2D",
+      "oem": "HP",
+      "model": "HP Auster 14",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8F2E",
+      "subsystem_hex": "0x103C8F2E",
+      "oem": "HP",
+      "model": "HP Auster 14",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "103C:8F57",
+      "subsystem_hex": "0x103C8F57",
+      "oem": "HP",
+      "model": "HP Trekker G7JC",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNVERIFIED_CHANNEL_COEFFICIENTS",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1024",
+      "subsystem_hex": "0x10431024",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1024)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1034",
+      "subsystem_hex": "0x10431034",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1034)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1044",
+      "subsystem_hex": "0x10431044",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1044)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1054",
+      "subsystem_hex": "0x10431054",
+      "oem": "ASUS",
+      "model": "ASUS G614FH/FM/FP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1074",
+      "subsystem_hex": "0x10431074",
+      "oem": "ASUS",
+      "model": "ASUS G614PH/PM/PP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1194",
+      "subsystem_hex": "0x10431194",
+      "oem": "ASUS",
+      "model": "ASUS UM3406KA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1264",
+      "subsystem_hex": "0x10431264",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1264)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1294",
+      "subsystem_hex": "0x10431294",
+      "oem": "ASUS",
+      "model": "ASUS B3405CVA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:12AF",
+      "subsystem_hex": "0x104312AF",
+      "oem": "ASUS",
+      "model": "ASUS UX582ZS",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:12B4",
+      "subsystem_hex": "0x104312B4",
+      "oem": "ASUS",
+      "model": "ASUS B3405CCA / P3405CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1314",
+      "subsystem_hex": "0x10431314",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1314)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1433",
+      "subsystem_hex": "0x10431433",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1433)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1444",
+      "subsystem_hex": "0x10431444",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1444)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1454",
+      "subsystem_hex": "0x10431454",
+      "oem": "ASUS",
+      "model": "ASUS PM3406CKA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1463",
+      "subsystem_hex": "0x10431463",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1463)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1464",
+      "subsystem_hex": "0x10431464",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1464)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1473",
+      "subsystem_hex": "0x10431473",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1473)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1483",
+      "subsystem_hex": "0x10431483",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1483)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1493",
+      "subsystem_hex": "0x10431493",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1493)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:14D3",
+      "subsystem_hex": "0x104314D3",
+      "oem": "ASUS",
+      "model": "ASUS G614JY/JZ/JG",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:14E3",
+      "subsystem_hex": "0x104314E3",
+      "oem": "ASUS",
+      "model": "ASUS G513PI/PU/PV",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.78.0/halo_cspl_RAM_revB2_29.80.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1043:1503",
+      "subsystem_hex": "0x10431503",
+      "oem": "ASUS",
+      "model": "ASUS G733PY/PZ/PZV/PYV",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431503-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.78.0/halo_cspl_RAM_revB2_29.80.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1043:1514",
+      "subsystem_hex": "0x10431514",
+      "oem": "ASUS",
+      "model": "ASUS ROG Flow Z13 GZ302EAC",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1533",
+      "subsystem_hex": "0x10431533",
+      "oem": "ASUS",
+      "model": "ASUS ROG Flow X13 GV302 (2023)",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1564",
+      "subsystem_hex": "0x10431564",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1564)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1573",
+      "subsystem_hex": "0x10431573",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1573)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1584",
+      "subsystem_hex": "0x10431584",
+      "oem": "ASUS",
+      "model": "ASUS UM3406GA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:15D4",
+      "subsystem_hex": "0x104315D4",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:15D4)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:15E4",
+      "subsystem_hex": "0x104315E4",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:15E4)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:15F4",
+      "subsystem_hex": "0x104315F4",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:15F4)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1634",
+      "subsystem_hex": "0x10431634",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1634)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1663",
+      "subsystem_hex": "0x10431663",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1663)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1683",
+      "subsystem_hex": "0x10431683",
+      "oem": "ASUS",
+      "model": "ASUS Zenbook 14 UM3402Y",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:16A3",
+      "subsystem_hex": "0x104316A3",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:16A3)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:16D3",
+      "subsystem_hex": "0x104316D3",
+      "oem": "ASUS",
+      "model": "ASUS UX5304VA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:16F3",
+      "subsystem_hex": "0x104316F3",
+      "oem": "ASUS",
+      "model": "ASUS UX7602VI/BZ",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:17F3",
+      "subsystem_hex": "0x104317F3",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:17F3)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1863",
+      "subsystem_hex": "0x10431863",
+      "oem": "ASUS",
+      "model": "ASUS UX6404VI/VV",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:18D3",
+      "subsystem_hex": "0x104318D3",
+      "oem": "ASUS",
+      "model": "ASUS UM3504DA",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-104318d3-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-104318d3-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-104318d3-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-104318d3-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1043:19F4",
+      "subsystem_hex": "0x104319F4",
+      "oem": "ASUS",
+      "model": "ASUS CS35L41 (1043:19F4)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1A63",
+      "subsystem_hex": "0x10431A63",
+      "oem": "ASUS",
+      "model": "ASUS CS35L41 (1043:1A63)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1A83",
+      "subsystem_hex": "0x10431A83",
+      "oem": "ASUS",
+      "model": "ASUS UM5302LA",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1043:1A8F",
+      "subsystem_hex": "0x10431A8F",
+      "oem": "ASUS",
+      "model": "ASUS UX582ZS",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1B13",
+      "subsystem_hex": "0x10431B13",
+      "oem": "ASUS",
+      "model": "ASUS ROG Zephyrus G14 GA403UV",
+      "family": "CS35L56",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "cirrusaudiofixup:cs35l56_board_props",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1B93",
+      "subsystem_hex": "0x10431B93",
+      "oem": "ASUS",
+      "model": "ASUS G614JVR/JIR",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1C03",
+      "subsystem_hex": "0x10431C03",
+      "oem": "ASUS",
+      "model": "ASUS CS35L41 (1043:1C03)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1C33",
+      "subsystem_hex": "0x10431C33",
+      "oem": "ASUS",
+      "model": "ASUS UX5304MA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1C43",
+      "subsystem_hex": "0x10431C43",
+      "oem": "ASUS",
+      "model": "ASUS UX8406MA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1C63",
+      "subsystem_hex": "0x10431C63",
+      "oem": "ASUS",
+      "model": "ASUS ROG Zephyrus G16 GU605MV",
+      "family": "CS35L56",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1C74",
+      "subsystem_hex": "0x10431C74",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1C74)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1C9F",
+      "subsystem_hex": "0x10431C9F",
+      "oem": "ASUS",
+      "model": "ASUS ROG Strix G16 G614JI",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1CAF",
+      "subsystem_hex": "0x10431CAF",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1CAF)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1CCF",
+      "subsystem_hex": "0x10431CCF",
+      "oem": "ASUS",
+      "model": "ASUS G814JU/JV/JI",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1CDF",
+      "subsystem_hex": "0x10431CDF",
+      "oem": "ASUS",
+      "model": "ASUS G814JY/JZ/JG",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1CEF",
+      "subsystem_hex": "0x10431CEF",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1CEF)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1D1F",
+      "subsystem_hex": "0x10431D1F",
+      "oem": "ASUS",
+      "model": "ASUS ROG Strix G17 G713P (2023)",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1DA2",
+      "subsystem_hex": "0x10431DA2",
+      "oem": "ASUS",
+      "model": "ASUS UP6502ZA/ZD",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1DF3",
+      "subsystem_hex": "0x10431DF3",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1DF3)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1E02",
+      "subsystem_hex": "0x10431E02",
+      "oem": "ASUS",
+      "model": "ASUS UX3402ZA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1E12",
+      "subsystem_hex": "0x10431E12",
+      "oem": "ASUS",
+      "model": "ASUS UM3402",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-10431e12-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431e12-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431e12-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431e12-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1043:1E13",
+      "subsystem_hex": "0x10431E13",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1E13)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1E63",
+      "subsystem_hex": "0x10431E63",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1E63)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1E83",
+      "subsystem_hex": "0x10431E83",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1E83)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1ED3",
+      "subsystem_hex": "0x10431ED3",
+      "oem": "ASUS",
+      "model": "ASUS HN7306W",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1EE2",
+      "subsystem_hex": "0x10431EE2",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:1EE2)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1F12",
+      "subsystem_hex": "0x10431F12",
+      "oem": "ASUS",
+      "model": "ASUS UM5302",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-10431f12-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "1043:1F1F",
+      "subsystem_hex": "0x10431F1F",
+      "oem": "ASUS",
+      "model": "ASUS H7604JI/JV/J3D",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1F43",
+      "subsystem_hex": "0x10431F43",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:1F43)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1F62",
+      "subsystem_hex": "0x10431F62",
+      "oem": "ASUS",
+      "model": "ASUS UX7602ZM",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1F63",
+      "subsystem_hex": "0x10431F63",
+      "oem": "ASUS",
+      "model": "ASUS P5405CSA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:1FB3",
+      "subsystem_hex": "0x10431FB3",
+      "oem": "ASUS",
+      "model": "ASUS ROG Flow Z13 GZ302EA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3011",
+      "subsystem_hex": "0x10433011",
+      "oem": "ASUS",
+      "model": "ASUS B5605CVA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3061",
+      "subsystem_hex": "0x10433061",
+      "oem": "ASUS",
+      "model": "ASUS B3405CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3071",
+      "subsystem_hex": "0x10433071",
+      "oem": "ASUS",
+      "model": "ASUS B5405CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:30C1",
+      "subsystem_hex": "0x104330C1",
+      "oem": "ASUS",
+      "model": "ASUS B3605CCA / P3605CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:30D1",
+      "subsystem_hex": "0x104330D1",
+      "oem": "ASUS",
+      "model": "ASUS B5405CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:30E1",
+      "subsystem_hex": "0x104330E1",
+      "oem": "ASUS",
+      "model": "ASUS B5605CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:31E1",
+      "subsystem_hex": "0x104331E1",
+      "oem": "ASUS",
+      "model": "ASUS B5605CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:31F1",
+      "subsystem_hex": "0x104331F1",
+      "oem": "ASUS",
+      "model": "ASUS B3605CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC294_FIXUP_ASUS_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3391",
+      "subsystem_hex": "0x10433391",
+      "oem": "ASUS",
+      "model": "ASUS PM3606CKA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3451",
+      "subsystem_hex": "0x10433451",
+      "oem": "ASUS",
+      "model": "ASUS CS35L56 (1043:3451)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3601",
+      "subsystem_hex": "0x10433601",
+      "oem": "ASUS",
+      "model": "ASUS PM5406CGA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3611",
+      "subsystem_hex": "0x10433611",
+      "oem": "ASUS",
+      "model": "ASUS PM5606CGA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3701",
+      "subsystem_hex": "0x10433701",
+      "oem": "ASUS",
+      "model": "ASUS P5406CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3711",
+      "subsystem_hex": "0x10433711",
+      "oem": "ASUS",
+      "model": "ASUS P5606CCA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3A20",
+      "subsystem_hex": "0x10433A20",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:3A20)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3A30",
+      "subsystem_hex": "0x10433A30",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:3A30)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3A40",
+      "subsystem_hex": "0x10433A40",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:3A40)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3A50",
+      "subsystem_hex": "0x10433A50",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:3A50)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3A60",
+      "subsystem_hex": "0x10433A60",
+      "oem": "ASUS",
+      "model": "ASUS CSC3551 (1043:3A60)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3D78",
+      "subsystem_hex": "0x10433D78",
+      "oem": "ASUS",
+      "model": "ASUS GA603KH",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3D88",
+      "subsystem_hex": "0x10433D88",
+      "oem": "ASUS",
+      "model": "ASUS GA603KM",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3E00",
+      "subsystem_hex": "0x10433E00",
+      "oem": "ASUS",
+      "model": "ASUS G814FH/FM/FP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3E20",
+      "subsystem_hex": "0x10433E20",
+      "oem": "ASUS",
+      "model": "ASUS G814PH/PM/PP",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3FD0",
+      "subsystem_hex": "0x10433FD0",
+      "oem": "ASUS",
+      "model": "ASUS B3605CVA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:3FF0",
+      "subsystem_hex": "0x10433FF0",
+      "oem": "ASUS",
+      "model": "ASUS B5405CVA",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1043:88F4",
+      "subsystem_hex": "0x104388F4",
+      "oem": "ASUS",
+      "model": "ASUS NUC14LNS",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 1,
+      "bus_hint": "SPI",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_SINGLE_AMP",
+      "provenance": [
+        "linux:alc269:ALC245_FIXUP_CS35L41_SPI_1",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:22F1",
+      "subsystem_hex": "0x17AA22F1",
+      "oem": "Lenovo",
+      "model": "Thinkpad",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:22F2",
+      "subsystem_hex": "0x17AA22F2",
+      "oem": "Lenovo",
+      "model": "Thinkpad",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:22F3",
+      "subsystem_hex": "0x17AA22F3",
+      "oem": "Lenovo",
+      "model": "Thinkpad",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2316",
+      "subsystem_hex": "0x17AA2316",
+      "oem": "Lenovo",
+      "model": "Thinkpad P1 Gen 6",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2317",
+      "subsystem_hex": "0x17AA2317",
+      "oem": "Lenovo",
+      "model": "Thinkpad P1 Gen 6",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2318",
+      "subsystem_hex": "0x17AA2318",
+      "oem": "Lenovo",
+      "model": "Thinkpad Z13 Gen2",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2319",
+      "subsystem_hex": "0x17AA2319",
+      "oem": "Lenovo",
+      "model": "Thinkpad Z16 Gen2",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:231A",
+      "subsystem_hex": "0x17AA231A",
+      "oem": "Lenovo",
+      "model": "Thinkpad Z16 Gen2",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:233B",
+      "subsystem_hex": "0x17AA233B",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:233B)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:233C",
+      "subsystem_hex": "0x17AA233C",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:233C)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2347",
+      "subsystem_hex": "0x17AA2347",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:2347)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2348",
+      "subsystem_hex": "0x17AA2348",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:2348)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:2349",
+      "subsystem_hex": "0x17AA2349",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:2349)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3806",
+      "subsystem_hex": "0x17AA3806",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3806)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:380E",
+      "subsystem_hex": "0x17AA380E",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:380E)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:382B",
+      "subsystem_hex": "0x17AA382B",
+      "oem": "Lenovo",
+      "model": "Lenovo Legion 5 Pro 16ACH6H (2021)",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware"
+      ]
+    },
+    {
+      "subsystem": "17AA:3832",
+      "subsystem_hex": "0x17AA3832",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3832)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3838",
+      "subsystem_hex": "0x17AA3838",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3838)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:383C",
+      "subsystem_hex": "0x17AA383C",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:383C)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3842",
+      "subsystem_hex": "0x17AA3842",
+      "oem": "Lenovo",
+      "model": "ThinkBook X G2 IAH",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_4_THINKPAD"
+      ]
+    },
+    {
+      "subsystem": "17AA:3845",
+      "subsystem_hex": "0x17AA3845",
+      "oem": "Lenovo",
+      "model": "Lenovo CSC3551 (17AA:3845)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3846",
+      "subsystem_hex": "0x17AA3846",
+      "oem": "Lenovo",
+      "model": "Lenovo CSC3551 (17AA:3846)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3847",
+      "subsystem_hex": "0x17AA3847",
+      "oem": "Lenovo",
+      "model": "Lenovo Legion 7 16ACHg6 (2021)",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3855",
+      "subsystem_hex": "0x17AA3855",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L41 (17AA:3855)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3856",
+      "subsystem_hex": "0x17AA3856",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L41 (17AA:3856)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_BOARD_METADATA",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3865",
+      "subsystem_hex": "0x17AA3865",
+      "oem": "Lenovo",
+      "model": "Lenovo 13X",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa3865-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa3865-r0.bin",
+        "cirrus/cs35l41/v6.63.0/halo_cspl_RAM_revB2_29.65.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:3866",
+      "subsystem_hex": "0x17AA3866",
+      "oem": "Lenovo",
+      "model": "Lenovo 13X",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa3866-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa3866-r0.bin",
+        "cirrus/cs35l41/v6.63.0/halo_cspl_RAM_revB2_29.65.0.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:386E",
+      "subsystem_hex": "0x17AA386E",
+      "oem": "Lenovo",
+      "model": "Lenovo CSC3551 (17AA:386E)",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C_OR_SPI",
+      "upstream_firmware_available": true,
+      "missing_reason": "AMBIGUOUS_BUS_TOPOLOGY",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:386F",
+      "subsystem_hex": "0x17AA386F",
+      "oem": "Lenovo",
+      "model": "Legion Pro 7i 16IAX7",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa386f-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa386f-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:3874",
+      "subsystem_hex": "0x17AA3874",
+      "oem": "Lenovo",
+      "model": "Legion 7i 16IAX7",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "MISSING_UPSTREAM_FIRMWARE",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2"
+      ]
+    },
+    {
+      "subsystem": "17AA:3877",
+      "subsystem_hex": "0x17AA3877",
+      "oem": "Lenovo",
+      "model": "Lenovo Legion Slim 7 Gen 7 (2022)",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3878",
+      "subsystem_hex": "0x17AA3878",
+      "oem": "Lenovo",
+      "model": "Lenovo Legion 7 Slim 16ARHA7",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa3878-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa3878-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38A9",
+      "subsystem_hex": "0x17AA38A9",
+      "oem": "Lenovo",
+      "model": "Thinkbook 16P",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38a9-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38a9-spkid0-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38AB",
+      "subsystem_hex": "0x17AA38AB",
+      "oem": "Lenovo",
+      "model": "Thinkbook 16P",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38ab-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38ab-spkid0-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38B4",
+      "subsystem_hex": "0x17AA38B4",
+      "oem": "Lenovo",
+      "model": "Legion Slim 7 16IRH8",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38B5",
+      "subsystem_hex": "0x17AA38B5",
+      "oem": "Lenovo",
+      "model": "Legion Slim 7 16IRH8",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38B6",
+      "subsystem_hex": "0x17AA38B6",
+      "oem": "Lenovo",
+      "model": "Legion Slim 7 16APH8",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38B7",
+      "subsystem_hex": "0x17AA38B7",
+      "oem": "Lenovo",
+      "model": "Legion Slim 7 16APH8",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid0-r0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38b4-spkid1-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:38C7",
+      "subsystem_hex": "0x17AA38C7",
+      "oem": "Lenovo",
+      "model": "Thinkbook 13x Gen 4",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:38C8",
+      "subsystem_hex": "0x17AA38C8",
+      "oem": "Lenovo",
+      "model": "Thinkbook 13x Gen 4",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:38F9",
+      "subsystem_hex": "0x17AA38F9",
+      "oem": "Lenovo",
+      "model": "Lenovo ThinkBook 16P G5 IRX",
+      "family": "CS35L41",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:38FA",
+      "subsystem_hex": "0x17AA38FA",
+      "oem": "Lenovo",
+      "model": "Thinkbook 16P Gen5",
+      "family": "CS35L41",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38fa-spkid0-l0.bin",
+        "cirrus/cs35l41-dsp1-spk-prot-17aa38fa-spkid0-r0.bin",
+        "cirrus/cs35l41/v6.61.1/halo_cspl_RAM_revB2_29.63.1.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:3905",
+      "subsystem_hex": "0x17AA3905",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3905)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:390B",
+      "subsystem_hex": "0x17AA390B",
+      "oem": "Lenovo",
+      "model": "Lenovo Yoga Book 9i (Linux cs35l56 quirk)",
+      "family": "CS35L56",
+      "level": 2,
+      "status": "TECHNICALLY_SUPPORTABLE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_EMBEDDED_FW_AND_HW_VALIDATION",
+      "provenance": [
+        "cirrusaudiofixup:cs35l56_board_props",
+        "linux:cs35l56_hda",
+        "linux-firmware:WHENCE"
+      ],
+      "upstream_firmware_files": [
+        "cirrus/cs35l56-b0-dsp1-misc-17aa390b-amp1.bin",
+        "cirrus/cs35l56-b0-dsp1-misc-17aa390b-amp2.bin",
+        "cirrus/cs35l56/CS35L56_Rev3.11.21.wmfw"
+      ]
+    },
+    {
+      "subsystem": "17AA:390C",
+      "subsystem_hex": "0x17AA390C",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:390C)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:390D",
+      "subsystem_hex": "0x17AA390D",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:390D)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3910",
+      "subsystem_hex": "0x17AA3910",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3910)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3911",
+      "subsystem_hex": "0x17AA3911",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3911)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:391B",
+      "subsystem_hex": "0x17AA391B",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:391B)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:391E",
+      "subsystem_hex": "0x17AA391E",
+      "oem": "Lenovo",
+      "model": "Lenovo ThinkBook 16p G6 IAX",
+      "family": "CS35L56",
+      "level": 3,
+      "status": "PRODUCTION_SUPPORTED",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": true,
+      "missing_reason": "NONE",
+      "provenance": [
+        "cirrusaudiofixup:readme+firmware",
+        "cirrusaudiofixup:cs35l56_board_props",
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3921",
+      "subsystem_hex": "0x17AA3921",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3921)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3929",
+      "subsystem_hex": "0x17AA3929",
+      "oem": "Lenovo",
+      "model": "Thinkbook 13x Gen 5",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD"
+      ]
+    },
+    {
+      "subsystem": "17AA:392B",
+      "subsystem_hex": "0x17AA392B",
+      "oem": "Lenovo",
+      "model": "Thinkbook 13x Gen 5",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux:cs35l41_hda_property",
+        "linux:alc269:ALC287_FIXUP_MG_RTKC_CSAMP_CS35L41_I2C_THINKPAD"
+      ]
+    },
+    {
+      "subsystem": "17AA:392C",
+      "subsystem_hex": "0x17AA392C",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:392C)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:392D",
+      "subsystem_hex": "0x17AA392D",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:392D)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:392E",
+      "subsystem_hex": "0x17AA392E",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:392E)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3932",
+      "subsystem_hex": "0x17AA3932",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3932)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 4,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": false,
+      "missing_reason": "UNSUPPORTED_QUAD_AMP",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3953",
+      "subsystem_hex": "0x17AA3953",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3953)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3956",
+      "subsystem_hex": "0x17AA3956",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3956)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:395B",
+      "subsystem_hex": "0x17AA395B",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:395B)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:395F",
+      "subsystem_hex": "0x17AA395F",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:395F)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "17AA:3960",
+      "subsystem_hex": "0x17AA3960",
+      "oem": "Lenovo",
+      "model": "Lenovo CS35L56 (17AA:3960)",
+      "family": "CS35L56",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "UNKNOWN",
+      "upstream_firmware_available": true,
+      "missing_reason": "MISSING_ACPI_DSD_OR_BOARD_PROPERTIES",
+      "provenance": [
+        "linux-firmware:WHENCE"
+      ]
+    },
+    {
+      "subsystem": "1F66:0105",
+      "subsystem_hex": "0x1F660105",
+      "oem": "AYANEO",
+      "model": "Ayaneo Portable Game Player",
+      "family": "CS35L41",
+      "level": 1,
+      "status": "RECOGNIZED_CANDIDATE",
+      "amp_count": 2,
+      "bus_hint": "I2C",
+      "upstream_firmware_available": false,
+      "missing_reason": "REQUIRES_NATIVE_ACPI_DSD_OR_METADATA",
+      "provenance": [
+        "linux:alc269:ALC287_FIXUP_CS35L41_I2C_2",
+        "linux-firmware:WHENCE"
+      ]
+    }
+  ]
+}

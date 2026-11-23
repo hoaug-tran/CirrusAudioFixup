@@ -112,6 +112,14 @@ capture() {
     return "$result"
 }
 
+capture_optional() {
+    local saved_failed="$capture_failed"
+    local result=0
+    capture "$@" || result=$?
+    capture_failed="$saved_failed"
+    return "$result"
+}
+
 capture_shell() {
     local name="$1"
     shift
@@ -126,14 +134,17 @@ extract_failed_evidence() {
     local summary="$output/failed-service-summary.txt"
     /usr/bin/sed -n '/^<?xml/,$p' "$output/services-xml.txt" >"$xml"
     if ! /usr/bin/plutil -lint "$xml" >"$output/failed-service-extraction.txt" 2>&1; then
+        /bin/rm -f "$xml"
         printf '%s\n' 'UNAVAILABLE: services XML missing, truncated or malformed; inspect services-xml.txt and status.txt.' >"$summary"
         return 1
     fi
     if ! /usr/bin/plutil -extract 'Cirrus_Failed_Service_Evidence' xml1 -o "$failed" "$xml" >>"$output/failed-service-extraction.txt" 2>&1 &&
        ! /usr/bin/plutil -extract '0.Cirrus_Failed_Service_Evidence' xml1 -o "$failed" "$xml" >>"$output/failed-service-extraction.txt" 2>&1; then
+        /bin/rm -f "$xml"
         printf '%s\n' 'NOT_PRESENT: root Cirrus_Failed_Service_Evidence was not captured. This is not a health verdict.' >"$summary"
         return 0
     fi
+    /bin/rm -f "$xml"
     if ! /usr/bin/awk '/<plist[ >]/{seen=1;next} seen && /[^[:space:]]/{exit ($0 ~ /^[[:space:]]*<dict[\/>]/ ? 0 : 1)} END {if (!seen) exit 1}' "$failed"; then
         printf '%s\n' 'INVALID: root failed-service evidence is not a dictionary; inspect failed-service-evidence.plist.' >"$summary"
         return 1
@@ -190,9 +201,12 @@ capture machine-model /usr/sbin/sysctl hw.model
 capture boot-time /usr/sbin/sysctl kern.boottime
 capture boot-args /usr/sbin/nvram boot-args
 
-capture amplifier-calibration \
+capture_optional amplifier-calibration \
     /usr/sbin/nvram \
     '02f9af02-7734-4233-b43d-93fe5aa35db3:CirrusSmartAmpCalibrationData'
+capture_optional amplifier-calibration-hp \
+    /usr/sbin/nvram \
+    '53559579-8753-4f5c-9130-e82acfb8d893:SmartAmpCalibrationData'
 
 capture loaded-kexts /usr/bin/kmutil showloaded
 if [ -x /usr/sbin/kextstat ]; then
@@ -216,15 +230,15 @@ capture cirrus-fixup-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c CirrusAudioFi
 capture cirrus-bootstrap-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c CirrusAudioBootstrap -d 1
 capture voodoo-i2c-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c VoodooI2CDeviceNub
 capture hda-controller-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c AppleHDAController
-capture hda-driver-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c AppleHDA
+capture hda-driver-ioreg /usr/sbin/ioreg -lw0 -p IOService -r -c AppleHDADriver
 
 capture_shell ioreg-cirrus '
 /usr/sbin/ioreg -lw0 |
-/usr/bin/grep -i -C 20 -E "Cirrus|CS35L41|CSC3551|AppleALC|HDA|Audio"
+/usr/bin/grep -i -C 20 -E "Cirrus|CS35L41|CS35L56|CSC3551|CSC3556|CLSA010|AppleALC|HDA|Audio"
 '
 
 capture sysctl-msgbuf /usr/sbin/sysctl -n kern.msgbuf
-capture kernel-log-settings /usr/sbin/sysctl kern.bootargs kern.msgbuf kern.msgbufsize
+capture kernel-log-settings /usr/sbin/sysctl kern.bootargs kern.msgbuf
 capture unified-log-settings /usr/bin/log config --status
 
 printf '%s\n' \
@@ -238,7 +252,7 @@ printf '%s\n' \
 kernel_log="$output/kernel-log.txt"
 boot_seconds=$(/usr/sbin/sysctl -n kern.boottime | /usr/bin/sed -E 's/.*sec = ([0-9]+),.*/\1/')
 boot_start=$(/bin/date -r "$boot_seconds" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) || boot_start=''
-log_predicate='process == "kernel" AND (eventMessage CONTAINS[c] "Cirrus" OR eventMessage CONTAINS[c] "CS35" OR eventMessage CONTAINS[c] "CSC355" OR eventMessage CONTAINS[c] "BOOT_FLOW" OR eventMessage CONTAINS[c] "AppleALC" OR eventMessage CONTAINS[c] "Lilu" OR eventMessage CONTAINS[c] "Voodoo" OR eventMessage CONTAINS[c] "AppleHDA" OR eventMessage CONTAINS[c] "SPI" OR eventMessage CONTAINS[c] "panic" OR eventMessage CONTAINS[c] "watchdog")'
+log_predicate='process == "kernel" AND (eventMessage CONTAINS[c] "Cirrus" OR eventMessage CONTAINS[c] "CS35" OR eventMessage CONTAINS[c] "CSC355" OR eventMessage CONTAINS[c] "CLSA010" OR eventMessage CONTAINS[c] "BOOT_FLOW" OR eventMessage CONTAINS[c] "AppleALC" OR eventMessage CONTAINS[c] "Lilu" OR eventMessage CONTAINS[c] "Voodoo" OR eventMessage CONTAINS[c] "AppleHDA" OR eventMessage CONTAINS[c] "SPI" OR eventMessage CONTAINS[c] "panic" OR eventMessage CONTAINS[c] "watchdog")'
 if [ -z "$boot_start" ] || ! capture kernel-log /usr/bin/log show --start "$boot_start" --style syslog --info --debug \
     --predicate "$log_predicate"; then
     capture kernel-log-fallback /usr/bin/log show --last 1h --style syslog --info --debug \
@@ -246,13 +260,13 @@ if [ -z "$boot_start" ] || ! capture kernel-log /usr/bin/log show --start "$boot
     kernel_log="$output/kernel-log-fallback.txt"
 fi
 
-printf 'collector_version=3\nstarted_boot=%s\nrecipient=%s\n' "$boot_start" "$evidence_user" >"$output/collection.txt"
+printf 'collector_version=4\nstarted_boot=%s\nrecipient=%s\n' "$boot_start" "$evidence_user" >"$output/collection.txt"
 printf '%s\n' 'Collection reads existing diagnostics only; it does not load/unload kexts or probe amplifier registers.' \
     'A service query can succeed without matching a device. Inspect IORegistry and status together.' \
     'Exit 2 means one or more optional captures failed; send the partial ZIP too.' \
     'A kext path identifies the supplied bundle, not proof that this exact binary is loaded.' >>"$output/README.txt"
 capture cirrus-audio-log /usr/bin/grep -Ei \
-    'Cirrus|CS35|CSC355|AppleALC|Lilu|Voodoo|SPKR' "$kernel_log" "$output/dmesg.txt"
+    'Cirrus|CS35|CSC355|CLSA010|AppleALC|Lilu|Voodoo|SPKR' "$kernel_log" "$output/dmesg.txt"
 
 if [ "$#" -gt 0 ]; then
     kext="$1"
@@ -278,7 +292,7 @@ if [ "$#" -gt 0 ]; then
             printf '%s\n' 'NOT_PROVIDED: supplied bundle has no CirrusBuildManifest.plist; exact source digest/dirty state unknown.' >"$output/build-manifest.txt"
             printf 'build-manifest NOT_PROVIDED\n' >>"$output/status.txt"
         fi
-        capture bundle-signature /usr/bin/codesign -dv --verbose=4 "$kext"
+        capture_optional bundle-signature /usr/bin/codesign -dv --verbose=4 "$kext"
 
         if [ -f "$binary" ]; then
             capture binary-file /usr/bin/file "$binary"

@@ -6,7 +6,7 @@
 #include "Devices/Amplifiers/CS35L56/CS35L56DriverRegistration.hpp"
 
 namespace cirrus::devices {
-inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) {
-    return amplifiers::cs35l41::registerDrivers(registry) && amplifiers::cs35l56::registerDrivers(registry);
-}
+    inline bool registerDrivers(platform::AmplifierDriverRegistry& registry) {
+        return amplifiers::cs35l41::registerDrivers(registry) && amplifiers::cs35l56::registerDrivers(registry);
+    }
 }

@@ -39,7 +39,7 @@ ioreg -lw0 -p IOService -r -c VoodooI2CDeviceNub
 
 If transfers fail, check `Cirrus_Communication_Status` in IORegistry. Ensure that:
 
-- `VoodooI2C.kext` and `VoodooI2CHID.kext` are loaded.
+- `VoodooI2C.kext` and the required platform I2C controller plugin (for your Intel/AMD I2C controller) are loaded.
 - `CirrusAudioFixup.kext` is loaded **after** `VoodooI2C.kext` in OpenCore's `Kernel → Add`.
 
 [Back to main guide](../../README.md#requirements)

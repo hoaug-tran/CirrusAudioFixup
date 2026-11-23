@@ -11,18 +11,102 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
+import re
 import subprocess
 import tempfile
 from driver_kernel_fixture import install
 from host_build import sanitizer_flags
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def verify_source_of_truth_inventory() -> None:
+    """Enforce consistency between embedded firmware tables, board metadata, and README."""
+    def parse_firmware_ssids(rel_path: str) -> set[tuple[int, int]]:
+        text = (ROOT / rel_path).read_text(encoding="utf-8", errors="ignore")
+        match = re.search(r"const FirmwareResource\s+\w+\[\]\s*=\s*\{(.*?)\};", text, re.S)
+        assert match, f"FirmwareResource table missing in {rel_path}"
+        ssids: set[tuple[int, int]] = set()
+        for entry in re.findall(r"\{([^{}]+)\}", match.group(1)):
+            parts = [p.strip() for p in " ".join(entry.split()).split(",")]
+            is_dummy = len(parts) > 11 and parts[11] == "true"
+            assert not is_dummy, f"Dummy firmware entry present in production table {rel_path}: {parts[:3]}"
+            ssids.add((int(parts[0], 16), int(parts[1], 16)))
+        return ssids
+
+    l41_fw_ssids = parse_firmware_ssids(
+        "CirrusAudioFixup/Devices/Amplifiers/CS35L41/Resources/Generated/FirmwareData.inc"
+    )
+    l56_fw_ssids = parse_firmware_ssids(
+        "CirrusAudioFixup/Devices/Amplifiers/CS35L56/Resources/Generated/FirmwareData.inc"
+    )
+
+    profile_text = (ROOT / "CirrusAudioFixup/Platform/Board/PlatformProfile.hpp").read_text(
+        encoding="utf-8"
+    )
+    legacy_clsa0100 = {
+        (int(raw, 16) >> 16, int(raw, 16) & 0xFFFF)
+        for raw in re.findall(r"pciSubsystemId\s*==\s*0x([0-9a-fA-F]{8})", profile_text)
+    }
+    assert legacy_clsa0100, "No CLSA0100 authorized SSIDs found in PlatformProfile.hpp"
+
+    fw_cpp = (ROOT / "CirrusAudioFixup/Devices/Amplifiers/CS35L41/CS35L41Firmware.cpp").read_text(
+        encoding="utf-8"
+    )
+    quirk_block = re.search(r"kSsidQuirks\[\]\s*=\s*\{(.*?)\};", fw_cpp, re.S)
+    assert quirk_block, "kSsidQuirks table missing in CS35L41Firmware.cpp"
+    ssid_aliases: dict[tuple[int, int], tuple[int, int]] = {}
+    for fv, fd, tv, td in re.findall(
+        r"\{0x([0-9a-fA-F]+),\s*0x([0-9a-fA-F]+),\s*0x([0-9a-fA-F]+),\s*0x([0-9a-fA-F]+)\}",
+        quirk_block.group(1),
+    ):
+        src = (int(fv, 16), int(fd, 16))
+        dst = (int(tv, 16), int(td, 16))
+        assert dst in l41_fw_ssids, f"SSID quirk target {dst} lacks CS35L41 firmware"
+        ssid_aliases[src] = dst
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    sec_match = re.search(r"### Supported laptops\s*(.*?)\n### ", readme, re.S)
+    assert sec_match, "Supported laptops section missing in README.md"
+    readme_l41: set[tuple[int, int]] = set()
+    readme_l56: set[tuple[int, int]] = set()
+    for line in sec_match.group(1).splitlines():
+        m = re.match(
+            r"^\|\s*[^|]+\|\s*`([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})`\s*\|\s*(CS35L41|CS35L56)\s*\|\s*(I2C|SPI)\s*\|",
+            line.strip(),
+        )
+        if not m:
+            continue
+        pair = (int(m.group(1), 16), int(m.group(2), 16))
+        if m.group(3) == "CS35L41":
+            readme_l41.add(pair)
+        else:
+            readme_l56.add(pair)
+
+    expected_l41 = l41_fw_ssids | legacy_clsa0100
+    for pair in readme_l41:
+        resolved = ssid_aliases.get(pair, pair)
+        assert resolved in l41_fw_ssids, f"README CS35L41 board {pair} lacks embedded firmware"
+    assert readme_l41 == expected_l41, (
+        f"README CS35L41 boards {sorted(readme_l41)} != source-of-truth {sorted(expected_l41)}"
+    )
+    assert readme_l56 == l56_fw_ssids, (
+        f"README CS35L56 boards {sorted(readme_l56)} != source-of-truth {sorted(l56_fw_ssids)}"
+    )
+    print(
+        f"PASS source-of-truth inventory: {len(readme_l41)} CS35L41 + {len(readme_l56)} CS35L56 supported profiles match firmware/profile tables and README"
+    )
+
+
+verify_source_of_truth_inventory()
 CPP = r"""
 #include <cassert>
 #include <cstdio>
 #include <memory>
 #include <map>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 #include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareData.hpp"
@@ -43,10 +127,10 @@ struct Properties:platform::PlatformProperties {
  }
 };
 struct GPIO:platform::BoardDiscoveryContext::GPIOAccess {
- uint32_t speaker=0;bool readable=true;unsigned resets=0;
+ uint32_t speaker=0;bool readable=true;unsigned resets=0;int32_t lastResetResource=-1;bool resetOk=true;
  ~GPIO() override = default;
  bool read(const char*,size_t,uint32_t& value)override{value=speaker;return readable;}
- bool reset(const char*,int32_t)override{++resets;return true;}
+ bool reset(const char*,int32_t resource)override{++resets;lastResetResource=resource;return resetOk;}
 };
 bool available(uint16_t vendor,uint16_t device,uint32_t speaker){
  return l41::selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,vendor,device,speaker)!=nullptr;
@@ -55,6 +139,7 @@ template<class Resource> void checkFirmware(const Resource& resource){
  auto image=std::make_unique<FirmwareImage>();auto mapped=std::make_unique<MappedImage>();
  assert(!resource.isDummy&&WMFWParser::parseWMFW(resource.wmfw,resource.wmfwSize,image.get()));
  assert(WMFWMemoryMapper::mapFirmwareImage(*image,*mapped));
+ assert(resource.bin && resource.binRight && resource.bin != resource.binRight);
  // Coefficient addresses require the live DSP algorithm table; parse both assets here.
  for(const bool right:{false,true}){
   size_t bytes=0;const auto* data=l41::selectChannelCoefficients(resource,right,bytes);
@@ -62,15 +147,31 @@ template<class Resource> void checkFirmware(const Resource& resource){
   assert(image->coefficientCount && image->totalCoeffPayloadBytes);
  }
 }
+using FirmwareKey = std::tuple<uint16_t, uint16_t, uint32_t, bool>;
 int main(){
+ std::set<FirmwareKey> verifiedL41Firmware;
+ std::set<FirmwareKey> verifiedL56Firmware;
+ auto recordL41 = [&](const auto& resource) {
+  verifiedL41Firmware.insert({resource.subsystemVendor, resource.subsystemDevice, resource.spkid, resource.genericSpeaker});
+ };
+ auto recordL56 = [&](const auto& resource) {
+  verifiedL56Firmware.insert({resource.subsystemVendor, resource.subsystemDevice, resource.spkid, resource.genericSpeaker});
+ };
  for(const uint16_t ssid:{uint16_t(0x382b),uint16_t(0x3847)}){
   const auto* profile=platform::findPlatformProfile("CLSA0100");
   assert(profile&&platform::permitsHardwareInitialization(*profile,0x17aa0000U|ssid));
   assert(profile->endpointCount==2&&profile->endpoints[0].address==0x40&&profile->endpoints[1].address==0x41);
   // Existing driver translates 382B to the verified 3847 resource; tested in check_cs35l41_driver.
   const auto* resource=l41::selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,0x17aa,0x3847,1);
-  assert(resource);checkFirmware(*resource);
+  assert(resource);checkFirmware(*resource);recordL41(*resource);
   printf("PASS Lenovo Legion board/resources: 17AA:%04X\n",unsigned(ssid));
+ }
+ // Unauthorized CLSA0100 SSID and CLSA0101 must remain rejected.
+ {
+  const auto* clsa100=platform::findPlatformProfile("CLSA0100");
+  const auto* clsa101=platform::findPlatformProfile("CLSA0101");
+  assert(clsa100&&!platform::permitsHardwareInitialization(*clsa100,0x17aa3877U));
+  assert(clsa101&&!platform::permitsHardwareInitialization(*clsa101,0x17aa3847U));
  }
  struct Board {const char* name;uint16_t vendor,device;uint32_t speaker,leftFirst;core::BusTransportType bus;};
  const Board boards[]{
@@ -78,6 +179,10 @@ int main(){
   {"ASUS G614JI speaker 0 / issue #5",0x1043,0x1c9f,0,0,core::BusTransportType::SPI},
   {"ASUS G614JI speaker 1 / issue #5",0x1043,0x1c9f,1,0,core::BusTransportType::SPI},
   {"ASUS Zenbook UM3402Y",0x1043,0x1683,1,0,core::BusTransportType::I2C},
+  {"ASUS ROG Strix G17 G713P speaker 0",0x1043,0x1d1f,0,0,core::BusTransportType::I2C},
+  {"ASUS ROG Strix G17 G713P speaker 1",0x1043,0x1d1f,1,0,core::BusTransportType::I2C},
+  {"ASUS ROG Flow X13 GV302 / issue #26",0x1043,0x1533,0,0,core::BusTransportType::I2C},
+  {"Lenovo Legion Slim 7 Gen 7 / issue #21",0x17aa,0x3877,UINT32_MAX,0,core::BusTransportType::I2C},
   {"Alienware x17 R2 speaker 0 / issue #12",0x1028,0x0b28,0,0,core::BusTransportType::SPI},
   {"Alienware x17 R2 speaker 1 / issue #12",0x1028,0x0b28,1,0,core::BusTransportType::SPI}};
  for(const auto& board:boards)for(bool reverse:{false,true}){
@@ -85,7 +190,9 @@ int main(){
    {"cirrus,boost-type",{0,0}},{"cirrus,gpio1-func",{0,0}},{"cirrus,gpio2-func",{2,2}},
    {"cirrus,boost-ind-nanohenry",{1000,1000}},{"cirrus,boost-peak-milliamp",{4500,4500}},
    {"cirrus,boost-cap-microfarad",{24,24}}};
-  if(board.bus==core::BusTransportType::I2C)p.values["cirrus,gpio1-func"]={1,1};
+  // Internal-boost boards leave GPIO1 unused (Linux generic_dsd_config); only external boost drives VSPK.
+  const auto* facts=l41::boardProperties(board.vendor,board.device);
+  if(board.bus==core::BusTransportType::I2C&&!(facts&&facts->internalBoost))p.values["cirrus,gpio1-func"]={1,1};
   if(board.speaker!=UINT32_MAX)p.values["cirrus,speaker-id"]={board.speaker,board.speaker};
   core::BusEndpoint endpoints[]={{board.bus,"controller",0x40,false,0,4000000,0},
                                 {board.bus,"controller",0x41,false,1,4000000,0}};
@@ -101,9 +208,18 @@ int main(){
    assert(binding.channelIndex==(physical?1-board.leftFirst:board.leftFirst)&&binding.speakerId==board.speaker);
    l41::DeviceConfiguration config;
    assert(l41::decodeDeviceConfiguration(binding.driverConfiguration,binding.driverConfigurationSize,binding.driverConfigurationKind,config));
-   assert(config.power.switched()==(board.bus==core::BusTransportType::I2C));
+   assert(config.power.switched() == (board.device == 0x1683 || board.device == 0x3877));
+   if (board.device == 0x3877) {
+    assert(config.power.topology == l41::BoostTopology::ExternalWithSwitch);
+    assert(config.gpio1Function == 1);
+    GPIO testGpio;
+    assert(found->prepareHardware(testGpio));
+    assert(testGpio.resets == 1 && testGpio.lastResetResource == 0);
+    testGpio.resetOk = false;
+    assert(!found->prepareHardware(testGpio));
+   }
    const auto* resource=l41::selectFirmwareResource(cs35l41Firmware,cs35l41FirmwareCount,board.vendor,board.device,binding.speakerId);
-   assert(resource);checkFirmware(*resource);
+   assert(resource);checkFirmware(*resource);recordL41(*resource);
   }
   auto wrong=identity;wrong.subsystemDevice^=1;assert(!found->configuration.permits(wrong));
   printf("PASS board/resource replay: %s order=%u\n",board.name,unsigned(reverse));
@@ -159,9 +275,11 @@ int main(){
   const auto* res0 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x103c, 0x8a31, 0);
   assert(res0 && res0->wmfw && res0->wmfwSize);
   checkFirmware(*res0);
+  recordL41(*res0);
   const auto* res1 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x103c, 0x8a31, 1);
   assert(res1 && res1->wmfw && res1->wmfwSize);
   checkFirmware(*res1);
+  recordL41(*res1);
 
   // 3. Hardware preparation triggers reset on resetResource index 0
   assert(found->prepareHardware(gpio));
@@ -189,6 +307,150 @@ int main(){
   assert(!found->configuration.permits(wrong));
   printf("PASS HP ENVY x360 15-ey0xxx issue #14: I2C dual-amp (0x40/0x41), internal boost (1000nH/4100mA/24uF), GPIO reset(0)/speaker(1)\n");
  }
+ // Lenovo ThinkBook 16P G5 IRX / issue #24 (Realtek ALC287 / CS35L41 dual-amp on I2C 0x41/0x40)
+ {
+  const auto* facts = l41::boardProperties(0x17aa, 0x38f9);
+  assert(facts && facts->count == 2 && !facts->internalBoost);
+  assert(facts->channels[0] == 1 && facts->channels[1] == 0);
+  assert(facts->resetResource == 0 && facts->speakerResource == 2 && facts->csResource == -1);
+
+  const auto* profile = platform::findPlatformProfile("CSC3551");
+  assert(profile && profile->amplifierModel == core::AmplifierModel::CS35L41);
+
+  core::BusEndpoint endpoints[] = {
+   {core::BusTransportType::I2C, "\\_SB.PC00.I2C4.SPKR", 0x41, false, 0, 400000, 0},
+   {core::BusTransportType::I2C, "\\_SB.PC00.I2C4.SPKR", 0x40, false, 0, 400000, 0}
+  };
+  struct Lenovo_GPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+   unsigned resets = 0;
+   int32_t lastReset = -1;
+   uint32_t lastResource = UINT32_MAX;
+   bool read(const char*, size_t, uint32_t& value) override { value = 1; return true; }
+   bool readResource(uint32_t resource, uint32_t pin, bool low, uint32_t& value) override {
+    (void)pin; (void)low;
+    lastResource = resource;
+    value = 1;
+    return true;
+   }
+   bool reset(const char*, int32_t resource) override {
+    ++resets;
+    lastReset = resource;
+    return true;
+   }
+  } gpio;
+
+  const platform::BoardIdentity identity{0x17aa, 0x38f9, "CSC3551"};
+  const char* reason = nullptr;
+  Properties p;
+
+  // 1. Without GPIO access, speakerResource >= 0 fails closed
+  assert(!l41::resolveBoardConfiguration({identity, endpoints, 2, p}, available, reason));
+  assert(!strcmp(reason, "CS35L41_SPEAKER_ID_REQUIRED"));
+
+  // 2. With GPIO access, discovery succeeds via production available check and BoardProperties
+  std::unique_ptr<platform::DiscoveredBoard> found(
+   l41::resolveBoardConfiguration({identity, endpoints, 2, p, &gpio}, available, reason));
+  assert(found && found->configuration.permits(identity) && found->configuration.count == 2);
+  assert(gpio.lastResource == 2); // speakerResource index 2 verified
+
+  // Verify production firmware resource for speaker ID 1
+  const auto* res1 = l41::selectFirmwareResource(cs35l41Firmware, cs35l41FirmwareCount, 0x17aa, 0x38f9, 1);
+  assert(res1 && res1->wmfw && res1->wmfwSize);
+  checkFirmware(*res1);
+  recordL41(*res1);
+
+  // 3. Hardware preparation triggers reset on resetResource index 0
+  assert(found->prepareHardware(gpio));
+  assert(gpio.resets == 1 && gpio.lastReset == 0);
+
+  // 4. Validate amplifier endpoints, channels (endpoint 0 at 0x41 is Right/ch 1, endpoint 1 at 0x40 is Left/ch 0)
+  assert(found->configuration.amplifiers[0].channelIndex == 1);
+  assert(found->configuration.amplifiers[1].channelIndex == 0);
+  assert(found->configuration.amplifiers[0].speakerId == 1);
+  assert(found->configuration.amplifiers[1].speakerId == 1);
+
+  for (size_t i = 0; i < 2; ++i) {
+   const auto& binding = found->configuration.amplifiers[i];
+   assert(binding.endpoint.transport == core::BusTransportType::I2C);
+   assert(binding.endpoint.i2cAddress == (i == 0 ? 0x41 : 0x40));
+   l41::DeviceConfiguration config;
+   assert(l41::decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize,
+                                         binding.driverConfigurationKind, config));
+   assert(!config.power.internal());
+   assert(config.gpio1Function == 1 && config.gpio2Function == 2);
+  }
+
+  // 5. Permitting and mismatch rejection
+  auto wrong = identity;
+  wrong.subsystemDevice ^= 1;
+  assert(!found->configuration.permits(wrong));
+  printf("PASS Lenovo ThinkBook 16P G5 IRX issue #24: I2C dual-amp (0x41/0x40), external boost, GPIO reset(0)/speaker(2)\n");
+ }
+ // ASUS ROG Strix G17 G713P (1043:1D1F, PR #22) & ASUS ROG Flow X13 GV302 (1043:1533, issue #26):
+ // Stock empty-_DSD I2C discovery via BoardProperties fallback, speaker GPIO resource(1), reset GPIO resource(0).
+ {
+  struct AsusI2C { const char* name; uint16_t device; std::vector<uint32_t> validSpeakers; uint32_t invalidSpeaker; };
+  const AsusI2C asusBoards[] = {
+   {"ASUS ROG Strix G17 G713P / PR #22", 0x1d1f, {0, 1}, 2},
+   {"ASUS ROG Flow X13 GV302 / issue #26", 0x1533, {0}, 1},
+  };
+  for (const auto& b : asusBoards) {
+   const auto* facts = l41::boardProperties(0x1043, b.device);
+   assert(facts && facts->count == 2 && facts->internalBoost);
+   assert(facts->channels[0] == 0 && facts->channels[1] == 1);
+   assert(facts->resetResource == 0 && facts->speakerResource == 1 && facts->csResource == -1);
+   assert(facts->inductor == 1000 && facts->peak == 4500 && facts->capacitor == 24);
+   core::BusEndpoint endpoints[] = {
+    {core::BusTransportType::I2C, "\\_SB.I2CA.SPKR", 0x40, false, 0, 400000, 0},
+    {core::BusTransportType::I2C, "\\_SB.I2CA.SPKR", 0x41, false, 0, 400000, 0},
+   };
+   struct BoardGPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+    uint32_t spk = 0; unsigned resets = 0; int32_t lastReset = -1; uint32_t lastResource = UINT32_MAX; bool resetOk = true;
+    bool read(const char*, size_t, uint32_t& value) override { value = spk; return true; }
+    bool readResource(uint32_t resource, uint32_t, bool, uint32_t& value) override { lastResource = resource; value = spk; return true; }
+    bool reset(const char*, int32_t resource) override { ++resets; lastReset = resource; return resetOk; }
+   } gpio;
+   const platform::BoardIdentity identity{0x1043, b.device, "CSC3551"};
+   const char* why = nullptr;
+   Properties emptyProps;
+   assert(!l41::resolveBoardConfiguration({identity, endpoints, 2, emptyProps}, available, why));
+   assert(!strcmp(why, "CS35L41_SPEAKER_ID_REQUIRED"));
+   for (uint32_t spk : b.validSpeakers) {
+    gpio.spk = spk; gpio.resets = 0; gpio.lastReset = -1; gpio.resetOk = true;
+    std::unique_ptr<platform::DiscoveredBoard> found(
+     l41::resolveBoardConfiguration({identity, endpoints, 2, emptyProps, &gpio}, available, why));
+    assert(found && found->configuration.permits(identity) && found->configuration.count == 2);
+    assert(gpio.lastResource == 1);
+    assert(found->prepareHardware(gpio) && gpio.resets == 1 && gpio.lastReset == 0);
+    gpio.resetOk = false;
+    assert(!found->prepareHardware(gpio));
+    for (size_t i = 0; i < 2; ++i) {
+     const auto& binding = found->configuration.amplifiers[i];
+     assert(binding.channelIndex == i && binding.speakerId == spk && binding.endpoint.i2cAddress == 0x40 + i);
+     l41::DeviceConfiguration cfg;
+     assert(l41::decodeDeviceConfiguration(binding.driverConfiguration, binding.driverConfigurationSize, binding.driverConfigurationKind, cfg));
+     assert(cfg.power.internal() && cfg.power.inductorNanohenry == 1000 && cfg.power.peakMilliamp == 4500 && cfg.power.capacitorMicrofarad == 24);
+     assert(cfg.gpio1Function == 0 && cfg.gpio2Function == 2);
+    }
+   }
+   gpio.spk = b.invalidSpeaker;
+   assert(!l41::resolveBoardConfiguration({identity, endpoints, 2, emptyProps, &gpio}, available, why));
+   assert(!strcmp(why, "CS35L41_SPEAKER_TUNING_UNAVAILABLE"));
+   printf("PASS %s: stock empty-_DSD I2C fallback, internal boost (1000nH/4500mA/24uF), GPIO reset(0)/speaker(1)\n", b.name);
+  }
+  // Metadata-only / unverified boards without embedded firmware and 4-amp boards must fail closed.
+  core::BusEndpoint i2c2[] = {{core::BusTransportType::I2C, "\\_SB.I2C0.SPKR", 0x40}, {core::BusTransportType::I2C, "\\_SB.I2C0.SPKR", 0x41}};
+  Properties emptyProps;
+  struct StaticGPIO final : platform::BoardDiscoveryContext::GPIOAccess {
+   bool read(const char*, size_t, uint32_t& v) override { v = 0; return true; }
+   bool readResource(uint32_t, uint32_t, bool, uint32_t& v) override { v = 0; return true; }
+  } staticGpio;
+  const char* why = nullptr;
+  assert(!l41::resolveBoardConfiguration({{0x103c, 0x8a28, "CSC3551"}, i2c2, 2, emptyProps, &staticGpio}, available, why));
+  assert(!strcmp(why, "CS35L41_SPEAKER_TUNING_UNAVAILABLE"));
+  assert(!l41::resolveBoardConfiguration({{0x17aa, 0x38c7, "CSC3551"}, i2c2, 2, emptyProps, &staticGpio}, available, why));
+  assert(!strcmp(why, "CS35L41_PROPERTIES_INCOMPLETE:cirrus,dev-index"));
+ }
  // Reported G614JV identity/tuning gaps must remain unauthorized.
  Properties empty;core::BusEndpoint unknown[]={{core::BusTransportType::SPI,"controller",0,false,0,4000000,0},
                                              {core::BusTransportType::SPI,"controller",0,false,1,4000000,0}};
@@ -204,7 +466,7 @@ int main(){
   assert(found&&found->configuration.permits(identity)&&!gpio.resets);
   for(size_t i=0;i<2;++i)assert(found->configuration.amplifiers[i].channelIndex==unknown[i].spiChipSelect);
   const auto* resource=l56::selectFirmwareResource(l56::cs35l56Firmware,l56::cs35l56FirmwareCount,0x1043,0x1c63,0);
-  assert(resource);checkFirmware(*resource);
+  assert(resource);checkFirmware(*resource);recordL56(*resource);
   gpio.speaker=1;assert(!l56::resolveBoardConfiguration({identity,unknown,2,p,&gpio},reason));
   gpio.readable=false;assert(!l56::resolveBoardConfiguration({identity,unknown,2,p,&gpio},reason));
  }
@@ -256,6 +518,7 @@ int main(){
   const auto* resource = l56::selectFirmwareResource(l56::cs35l56Firmware, l56::cs35l56FirmwareCount, 0x17aa, 0x391e, 0);
   assert(resource && resource->wmfw && resource->wmfwSize);
   checkFirmware(*resource);
+  recordL56(*resource);
 
   // 4. Validate amplifier endpoints and channel bindings: 0x31 is Left (channel 0), 0x30 is Right (channel 1)
   for (size_t i = 0; i < 2; ++i) {
@@ -340,6 +603,7 @@ int main(){
   const auto* resource = l56::selectFirmwareResource(l56::cs35l56Firmware, l56::cs35l56FirmwareCount, 0x1043, 0x1b13, 0);
   assert(resource && resource->wmfw && resource->wmfwSize);
   checkFirmware(*resource);
+  recordL56(*resource);
 
   // 4. Validate amplifier endpoints and channel bindings: 0x31 is Left (channel 0), 0x30 is Right (channel 1)
   for (size_t i = 0; i < 2; ++i) {
@@ -365,12 +629,43 @@ int main(){
   assert(foundSwapped->configuration.amplifiers[1].endpoint.i2cAddress == 0x30 &&
          foundSwapped->configuration.amplifiers[1].channelIndex == 1);
 
-  // 6. Permitting and mismatch rejection
+  // 6. Permitting and mismatch rejection (including wrong HID and wrong bus)
   auto wrong = identity;
   wrong.subsystemDevice ^= 1;
   assert(!found->configuration.permits(wrong));
+  assert(!l56::resolveBoardConfiguration({{0x1043, 0x1b13, "CSC3557"}, endpoints, 3, p, &gpio}, reason));
+  assert(!l56::resolveBoardConfiguration({identity, unknown, 2, p, &gpio}, reason));
 
   printf("PASS ASUS ROG Zephyrus G14 GA403UV issue #18: I2C dual-amp (0x31/0x30, 0x3A ignored), DSP software reset, firmware 1043:1B13\n");
+ }
+ // Source-of-truth completeness check: every embedded CS35L41 and CS35L56 firmware entry must have
+ // been exercised by this matrix, with valid non-dummy assets and matching board metadata.
+ {
+  std::set<FirmwareKey> expectedL41;
+  for (size_t i = 0; i < cs35l41FirmwareCount; ++i) {
+   const auto& fw = cs35l41Firmware[i];
+   assert(!fw.isDummy && fw.wmfw && fw.wmfwSize && fw.bin && fw.binSize && fw.binRight && fw.binRightSize);
+   assert(fw.bin != fw.binRight);
+   const bool inserted = expectedL41.insert({fw.subsystemVendor, fw.subsystemDevice, fw.spkid, fw.genericSpeaker}).second;
+   assert(inserted);
+   if (!(fw.subsystemVendor == 0x17aa && fw.subsystemDevice == 0x3847)) {
+    const auto* props = l41::boardProperties(fw.subsystemVendor, fw.subsystemDevice);
+    assert(props && props->count == 2);
+   }
+  }
+  assert(verifiedL41Firmware == expectedL41);
+
+  std::set<FirmwareKey> expectedL56;
+  for (size_t i = 0; i < l56::cs35l56FirmwareCount; ++i) {
+   const auto& fw = l56::cs35l56Firmware[i];
+   assert(!fw.isDummy && fw.wmfw && fw.wmfwSize && fw.bin && fw.binSize && fw.binRight && fw.binRightSize);
+   assert(fw.bin != fw.binRight);
+   const bool inserted = expectedL56.insert({fw.subsystemVendor, fw.subsystemDevice, fw.spkid, fw.genericSpeaker}).second;
+   assert(inserted);
+  }
+  assert(verifiedL56Firmware == expectedL56);
+  printf("PASS complete firmware-table coverage: %zu CS35L41 + %zu CS35L56 resource entries verified\n",
+         expectedL41.size(), expectedL56.size());
  }
 }
 """

@@ -33,6 +33,19 @@ system_profiler SPAudioDataType
 - **`Cirrus_Bus`**: Confirms the transport bus (`I2C` or `SPI`).
 - **`Cirrus_Detected_Amplifiers`**: Shows the count of active amplifiers (usually `2`).
 
+### Checking Support Status for Unlisted Laptops
+
+If your laptop is not yet supported (`Cirrus_Driver_Verdict` shows `UNSUPPORTED_PLATFORM`), CirrusAudioFixup still checks its built-in hardware catalog and publishes `Cirrus_Candidate_*` fields in IORegistry. These fields are **informational only** (they never enable an unverified laptop) and help you and the maintainers see what is missing to add support:
+
+| Property                        | What it tells you                                                                                                                                                                                                                                                                                                                    |
+| :------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cirrus_Candidate_Subsystem`    | Your laptop's detected subsystem ID (hex/uint32, e.g. `0x103C8A28`).                                                                                                                                                                                                                                                                 |
+| `Cirrus_Candidate_Status`       | Current support level: `PRODUCTION_SUPPORTED` (supported now), `TECHNICALLY_SUPPORTABLE_NO_EMBEDDED_FW` (recognized 2-amp I2C model with upstream firmware available; needs firmware import and hardware testing), `RECOGNIZED_CANDIDATE` (known model, see `Cirrus_Candidate_Missing`), or `UNKNOWN_HARDWARE` (not in catalog yet). |
+| `Cirrus_Candidate_Family`       | Expected Cirrus amplifier chip (`CS35L41`, `CS35L56`, or `UNKNOWN`).                                                                                                                                                                                                                                                                 |
+| `Cirrus_Candidate_Amp_Count`    | Expected number of physical amplifiers (`2`, `4`, or `0` if unknown).                                                                                                                                                                                                                                                                |
+| `Cirrus_Candidate_Missing`      | Why the laptop is not enabled yet (for example, `MISSING_EMBEDDED_FW_AND_HW_VALIDATION`, `SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW`, or `UNSUPPORTED_QUAD_AMP`). Shows `NONE` on supported laptops.                                                                                                                                       |
+| `Cirrus_Candidate_Match_Source` | Where the subsystem ID came from (`PRIMARY`, `PCI_FALLBACK`, `ACPI_FALLBACK`, or `NONE`).                                                                                                                                                                                                                                            |
+
 ---
 
 ## 2. Retained Logs and Live Messages
@@ -92,18 +105,23 @@ The output archive will be placed at `~/Desktop/cirrus-evidence.XXXXXX.zip`.
 
 ### Driver Verdicts
 
-| Verdict                      | Status         | Description                                                                                  |
-| :--------------------------- | :------------- | :------------------------------------------------------------------------------------------- |
-| `READY_DSP`                  | **Working**    | Amplifiers initialized successfully with validated firmware and active DSP protection.       |
-| `READ_ONLY`                  | **Inspection** | Probing mode active (`-cirrusro`). Register writes and playback are disabled.                |
-| `READY_BYPASS_EXPLICIT`      | **Warning**    | Running in direct DAC bypass mode (`-cirrusnodsp`). Speaker protection is inactive.          |
-| `WAITING_FOR_CODEC_IDENTITY` | **Pending**    | Waiting for AppleALC / AppleHDA to publish the codec subsystem ID.                           |
-| `INCOMPLETE_TOPOLOGY`        | **Error**      | One or more expected amplifier endpoints could not be discovered on the bus.                 |
-| `UNSUPPORTED_PLATFORM`       | **Error**      | The board subsystem ID does not match any authorized hardware profile.                       |
-| `DEBUG_PHASE_HALTED`         | **Debug**      | Initialization stopped early due to the `-cirrusphase` argument.                             |
-| `FAILED_INIT`                | **Error**      | General initialization failure during amplifier setup.                                       |
-| `FAULT_LATCHED`              | **Error**      | A protection fault or bus communication failure occurred; driver halted to protect hardware. |
-| `SUSPENDED`                  | **Power**      | Amplifiers are powered down in low-power sleep state.                                        |
+| Verdict                                 | Status         | Description                                                                                  |
+| :-------------------------------------- | :------------- | :------------------------------------------------------------------------------------------- |
+| `READY_DSP`                             | **Working**    | Amplifiers initialized successfully with validated firmware and active DSP protection.       |
+| `READ_ONLY`                             | **Inspection** | Probing mode active (`-cirrusro`). Register writes and playback are disabled.                |
+| `READY_BYPASS_EXPLICIT`                 | **Warning**    | Running in direct DAC bypass mode (`-cirrusnodsp`, CS35L41 only). Speaker protection is off. |
+| `READY_DSP_OUTPUT_DISABLED_CALIBRATION` | **Warning**    | CS35L56 DSP initialized, but EFI calibration is unavailable so output remains disabled.      |
+| `OUTPUT_DISABLED_DSP_UNVERIFIED`        | **Error**      | DSP firmware was not validated; speaker output remains disabled.                             |
+| `WAITING_BOARD_IDENTITY`                | **Pending**    | Waiting for HDA/PCI board subsystem identity to become available.                            |
+| `WAITING_CONTROLLER_RESOURCES`          | **Pending**    | Waiting for I2C or SPI controller resources before bring-up.                                 |
+| `WAITING_FOR_CODEC_IDENTITY`            | **Pending**    | Waiting for AppleALC / AppleHDA to publish the codec subsystem ID.                           |
+| `COMMUNICATION_FAILED`                  | **Error**      | Bus controller communication or wake reinitialization failed.                                |
+| `INCOMPLETE_TOPOLOGY`                   | **Error**      | One or more expected amplifier endpoints could not be discovered on the bus.                 |
+| `UNSUPPORTED_PLATFORM`                  | **Error**      | The board subsystem ID does not match any authorized hardware profile.                       |
+| `DEBUG_PHASE_HALTED`                    | **Debug**      | Initialization stopped early due to the `-cirrusphase` argument.                             |
+| `FAILED_INIT`                           | **Error**      | General initialization failure during amplifier setup.                                       |
+| `FAULT_LATCHED`                         | **Error**      | A protection fault or bus communication failure occurred; driver halted to protect hardware. |
+| `SUSPENDED`                             | **Power**      | Amplifiers are powered down in low-power sleep state.                                        |
 
 ### Playback Verdicts
 
@@ -144,13 +162,6 @@ Cirrus smart amplifiers require a **48 kHz** hardware clock on the serial audio 
 
 1. Open **Audio MIDI Setup** (`/Applications/Utilities/Audio MIDI Setup.app`).
 2. Select **Internal Speakers** and set **Format** to **48,000 Hz** (2 ch 16-bit or 24-bit).
-
-### Speaker Pop on Microphone Activation
-
-The driver monitors HDA output selectors, not microphone inputs. If opening an input pane causes an audible click:
-
-1. Confirm whether `Cirrus_Audio_Event_Mode` reports `IOAUDIO_FAMILY_EVENTS` or `HDA_TIMER_FALLBACK`.
-2. Inspect the AppleALC layout to ensure microphone input nodes do not toggle speaker amplifier mutes or switch the output clock.
 
 ### Sound Differences Compared to Windows
 

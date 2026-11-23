@@ -131,7 +131,7 @@ public static class WindowsAudioCalibrationReader {
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool LookupPrivilegeValue(string system,string name,out Luid id);
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool AdjustTokenPrivileges(IntPtr token,bool disable,ref Privileges requested,uint bytes,out Privileges previous,out uint returned);
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern uint GetFirmwareEnvironmentVariable(string name,string guid,byte[] data,uint bytes);
- public static byte[] Read(out int error) {
+ public static byte[] ReadNamed(string name,string guid,out int error) {
   error=0;IntPtr token;
   if(!OpenProcessToken(GetCurrentProcess(),0x28,out token)){error=Marshal.GetLastWin32Error();return null;}
   Privileges previous=new Privileges();bool changed=false;
@@ -142,7 +142,7 @@ public static class WindowsAudioCalibrationReader {
    changed=true;error=Marshal.GetLastWin32Error();if(error!=0)return null;
    for(int length=4096;length<=1048576;length*=2){
     byte[] data=new byte[length];
-    uint got=GetFirmwareEnvironmentVariable("CirrusSmartAmpCalibrationData","{02f9af02-7734-4233-b43d-93fe5aa35db3}",data,(uint)data.Length);
+    uint got=GetFirmwareEnvironmentVariable(name,guid,data,(uint)data.Length);
     if(got!=0){Array.Resize(ref data,(int)got);error=0;return data;}
     error=Marshal.GetLastWin32Error();if(error!=122)return null;
    }
@@ -152,18 +152,27 @@ public static class WindowsAudioCalibrationReader {
    CloseHandle(token);
   }
  }
+ public static byte[] Read(out int error) {
+  return ReadNamed("CirrusSmartAmpCalibrationData","{02f9af02-7734-4233-b43d-93fe5aa35db3}",out error);
+ }
 }
 '@
     }
-    $errorCode=0
-    $data=[WindowsAudioCalibrationReader]::Read([ref]$errorCode)
-    if ($null -ne $data) {
-        if (Write-Evidence 'system/CirrusSmartAmpCalibrationData.bin' $data 1048576) {
-            Mark 'Cirrus EFI calibration' 'OK' "$($data.Length) bytes; exact named variable only"
-        }
-    } elseif ($errorCode -in @(1,203)) {
-        Mark 'Cirrus EFI calibration' 'UNAVAILABLE' "Variable absent or firmware interface unavailable; Win32 $errorCode"
-    } else { Mark 'Cirrus EFI calibration' 'MISSING' "Read unavailable; Win32 $errorCode" }
+    $targets=@(
+        @{Label='Cirrus EFI calibration';Name='CirrusSmartAmpCalibrationData';Guid='{02f9af02-7734-4233-b43d-93fe5aa35db3}';File='system/CirrusSmartAmpCalibrationData.bin'},
+        @{Label='HP SmartAmp EFI calibration';Name='SmartAmpCalibrationData';Guid='{53559579-8753-4f5c-9130-e82acfb8d893}';File='system/SmartAmpCalibrationData.bin'}
+    )
+    foreach ($t in $targets) {
+        $errorCode=0
+        $data=[WindowsAudioCalibrationReader]::ReadNamed($t.Name,$t.Guid,[ref]$errorCode)
+        if ($null -ne $data) {
+            if (Write-Evidence $t.File $data 1048576) {
+                Mark $t.Label 'OK' "$($data.Length) bytes; exact named variable only"
+            }
+        } elseif ($errorCode -in @(1,203)) {
+            Mark $t.Label 'UNAVAILABLE' "Variable absent or firmware interface unavailable; Win32 $errorCode"
+        } else { Mark $t.Label 'MISSING' "Read unavailable; Win32 $errorCode" }
+    }
 }
 
 

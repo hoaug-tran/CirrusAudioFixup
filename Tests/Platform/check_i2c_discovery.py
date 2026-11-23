@@ -59,9 +59,10 @@ struct ResetService:IOService {
  bool bootArgStrEquals(const char*,const char*){return false;}
  unsigned failures=0;
  void recordAttachmentFailure(const char*,const char*,IOReturn){++failures;}
+ bool prepareDiscoveredI2CReset();
  bool performPlatformHardwareReset();
 };
-constexpr bool kOSBooleanFalse=false;
+PREPARE_RESET_METHOD
 RESET_METHOD
 struct ResetWindow {
  uint32_t value=(1U<<28)|(1U<<29)|(1U<<20);
@@ -194,8 +195,55 @@ int main(){
   ResetService service;service.mProvider=&nub;service.mDiscoveredBoard=board;
   assert(service.performPlatformHardwareReset());assert(pulses==2&&identityReturn()==0);
   assert(service.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_PREPARED");
+  assert(service.mPlatformAuthorized);
   assert(service.strings["Cirrus_I2C_Reset_Reason"]=="RESET_PULSE_COMPLETE");
   assert(memory->r[84]==((1U<<20)|(1U<<23)|(1U<<22)));
+  // ensureACPIDeviceD0 transitions _PS0, verifies _PSC==0, tolerates AppleACPIPlatform absent-method codes, and catches validation/power failures.
+  {
+   amp->values["_PS0"]=make<OSNumber>(0);amp->values["_PSC"]=make<OSNumber>(0);
+   transport::ACPIPowerTransition readyState{};
+   assert(transport::ensureACPIDeviceD0(amp,readyState)&&!strcmp(readyState.statusText(),"PS0_PSC_D0")&&readyState.deviceStatus==15);
+   amp->values.erase("_PS0");amp->values.erase("_PSC");
+   for(auto absentCode:{kIOReturnNotFound,kIOReturnUnsupported,kIOReturnError,kIOReturnLockedWrite}){
+    amp->absentValidation=absentCode;
+    transport::ACPIPowerTransition absentState{};
+    assert(transport::ensureACPIDeviceD0(amp,absentState));
+    assert(!strcmp(absentState.statusText(),"NO_PM_METHODS")&&absentState.ps0ValidationReturn==absentCode&&absentState.pscValidationReturn==absentCode);
+   }
+   amp->absentValidation=kIOReturnNoMemory;
+   transport::ACPIPowerTransition badValState{};
+   assert(!transport::ensureACPIDeviceD0(amp,badValState)&&!strcmp(badValState.statusText(),"ACPI_PS0_VALIDATION_FAILED")&&
+          badValState.ps0ValidationReturn==kIOReturnNoMemory);
+   amp->absentValidation=0;
+   transport::ACPIPowerTransition ps0FailState{};
+   assert(!transport::ensureACPIDeviceD0(amp,ps0FailState)&&!strcmp(ps0FailState.statusText(),"ACPI_PS0_FAILED"));
+   amp->absentValidation=kIOReturnNotFound;
+   amp->values["_PSC"]=make<OSNumber>(3);
+   transport::ACPIPowerTransition d3State{};
+   assert(!transport::ensureACPIDeviceD0(amp,d3State)&&!strcmp(d3State.statusText(),"ACPI_DEVICE_NOT_D0"));
+   amp->values.erase("_PSC");
+  }
+  // GPIO reset controller busy returns false cleanly for best-effort I2C fallback without clearing authorization.
+  controller->opened=true;
+  assert(!service.performPlatformHardwareReset());
+  assert(service.strings["Cirrus_Reset_Policy"]=="ACPI_GPIO_RESET_FAILED"&&service.mPlatformAuthorized);
+  controller->opened=false;
+  // A board without GPIO reset reports NO_GPIO_RESET_REQUIRED.
+  platform::DiscoveredBoard noResetBoard;
+  service.mDiscoveredBoard=&noResetBoard;
+  assert(service.performPlatformHardwareReset());
+  assert(service.strings["Cirrus_Reset_Policy"]=="NO_GPIO_RESET_REQUIRED"&&service.mPlatformAuthorized);
+  // I2CPlatformResources releases mCRSData cleanly across repeated loads.
+  {
+   auto* crsObj=amp->values["_CRS"];
+   unsigned baseRefs=crsObj->refs;
+   {
+    transport::I2CPlatformResources cached;
+    assert(cached.load(&nub,reason)&&cached.crsData()==crsObj&&crsObj->refs==baseRefs+1);
+    assert(cached.load(&nub,reason)&&cached.crsData()==crsObj&&crsObj->refs==baseRefs+1);
+   }
+   assert(crsObj->refs==baseRefs);
+  }
   delete board;fixtureSleep={};
   const uint32_t resetHigh=memory->r[84];
   controller->opened=true;assert(!automatic.reset(nullptr,0));controller->opened=false;
@@ -227,6 +275,235 @@ int main(){
 
   tuples->v[3]=make<OSNumber>(2);assert(!described.read("spk-id-gpios",0,value));
   assert(!memcmp(memory->r,before.data(),sizeof(memory->r)));
+  // ACPI IoRestrictionNoneAndPreserve (0x03/0x0b/0x1b) is legal for both reset outputs and inputs.
+  for(unsigned validResetFlags:{0x00u,0x02u,0x03u,0x08u,0x0au,0x0bu,0x13u,0x1bu}){
+   auto crsBytes=gpioDescriptor(84,validResetFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,true,true)&&out.pin==84);
+  }
+  for(unsigned invalidResetFlags:{0x01u,0x04u,0x09u,0x19u,0x20u}){
+   auto crsBytes=gpioDescriptor(84,invalidResetFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(!transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,true,true));
+  }
+  for(unsigned validInputFlags:{0x00u,0x01u,0x03u,0x08u,0x09u,0x0bu,0x19u,0x1bu}){
+   auto crsBytes=gpioDescriptor(SPEAKER_PIN,validInputFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,false,false)&&out.pin==SPEAKER_PIN);
+  }
+  for(unsigned invalidInputFlags:{0x02u,0x04u,0x0au,0x12u,0x1au,0x20u}){
+   auto crsBytes=gpioDescriptor(SPEAKER_PIN,invalidInputFlags);crsBytes.insert(crsBytes.end(),{0x79,0});
+   transport::ACPIGPIOResource out{};
+   assert(!transport::parseACPIGPIOResource(crsBytes.data(),crsBytes.size(),0,0,out,false,false));
+  }
+ }
+ {
+  // Intel GPIO Controller (INTC1085, Alder Lake / Raptor Lake)
+  auto* intelCtrl = make<IOACPIPlatformDevice>();
+  intelCtrl->path = "IOACPIPlane:/_SB/GPI0";
+  intelCtrl->values["_HID"] = make<OSString>("INTC1085");
+  auto* intelMap = make<IOMemoryMap>();
+  // Community 2 (memoryIndex = 2 for pin 269)
+  intelCtrl->maps[2] = intelMap;
+  intelMap->bytes = sizeof(intelMap->r);
+  intelMap->r[0] = 0x960000; // revision
+  intelMap->r[3] = 0x700;    // padbar
+  intelMap->r[0xac / 4] = 0; // host owned
+  const uint32_t padReg = (0x700 + 22 * 16) / 4;
+  intelMap->r[padReg] = (1U << 8) | (1U << 1); // input, physical value = 1
+
+  auto intelGpioDesc = [](unsigned pin, unsigned restriction) {
+   const char source[] = "\\_SB.GPI0";
+   std::vector<uint8_t> d(25 + sizeof(source));
+   d[0] = 0x8c; d[1] = uint8_t(d.size() - 3); d[3] = 1; d[4] = 1; d[5] = 1; d[7] = restriction;
+   d[14] = 23; d[17] = 25; d[19] = uint8_t(d.size()); d[23] = uint8_t(pin); d[24] = uint8_t(pin >> 8);
+   memcpy(d.data() + 25, source, sizeof(source));
+   return d;
+  };
+
+  auto intelCRS = captured;
+  intelCRS.resize(intelCRS.size() - 2);
+  auto d = intelGpioDesc(269, 0x19); // pin 269, unrestricted input
+  intelCRS.insert(intelCRS.end(), d.begin(), d.end());
+  intelCRS.insert(intelCRS.end(), {0x79, 0});
+  amp->values["_CRS"] = make<OSData>(intelCRS);
+  amp->values.erase("_DSD");
+  ::devices = {amp, intelCtrl};
+
+  transport::I2CPlatformResources intelResources;
+  IOService owner;
+  intelResources.setDiagnosticOwner(&owner);
+  assert(intelResources.load(&nub, reason));
+  uint32_t val = 0;
+  assert(intelResources.readResource(0, 0, false, val) && val == 1);
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "INPUT_READ_WITHOUT_WRITES");
+  assert(owner.numbers["Cirrus_GPIO_Input_Value"] == 1);
+
+  // Test activeLow inverted logic
+  assert(intelResources.readResource(0, 0, true, val) && val == 0);
+
+  // Test when bit 1 is 0
+  intelMap->r[padReg] = (1U << 8); // input, physical value = 0
+  assert(intelResources.readResource(0, 0, false, val) && val == 0);
+  assert(intelResources.readResource(0, 0, true, val) && val == 1);
+
+  // Test not GPIO input (RxDisable set)
+  intelMap->r[padReg] |= (1U << 9);
+  assert(!intelResources.readResource(0, 0, false, val));
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "PAD_NOT_GPIO_INPUT");
+
+  // Test _CID fallback when _HID is proprietary
+  intelMap->r[padReg] = (1U << 8) | (1U << 1);
+  intelCtrl->values["_HID"] = make<OSString>("LEN0001");
+  intelCtrl->values["_CID"] = make<OSString>("INTC1085");
+  assert(intelResources.readResource(0, 0, false, val) && val == 1);
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "INPUT_READ_WITHOUT_WRITES");
+
+  // Test unpowered controller (_PSC = 3)
+  intelCtrl->values["_PSC"] = make<OSNumber>(3);
+  assert(!intelResources.readResource(0, 0, false, val));
+  assert(owner.strings["Cirrus_GPIO_Input_Reason"] == "GPIO_CONTROLLER_NOT_POWERED");
+  intelCtrl->values.erase("_PSC");
+  intelCtrl->values.erase("_CID");
+  intelCtrl->values["_HID"] = make<OSString>("INTC1085");
+
+  // Test Intel GPIO output reset pulse (success, release failure, and assertion failure with best-effort release)
+  auto intelResetCRS = captured;
+  intelResetCRS.resize(intelResetCRS.size() - 2);
+  auto dIn = intelGpioDesc(269, 0x19);
+  auto dOut = intelGpioDesc(269, 0x02);
+  intelResetCRS.insert(intelResetCRS.end(), dIn.begin(), dIn.end());
+  intelResetCRS.insert(intelResetCRS.end(), dOut.begin(), dOut.end());
+  intelResetCRS.insert(intelResetCRS.end(), {0x79, 0});
+  amp->values["_CRS"] = make<OSData>(intelResetCRS);
+  assert(intelResources.load(&nub, reason));
+
+  const uint32_t lockTxReg = (0x114 + 1 * 8) / 4;
+  const uint32_t lockTxBit = 1U << (269 - 256);
+  intelMap->r[lockTxReg] = 0;
+  intelMap->r[padReg] = 0;
+  unsigned intelPulses = 0;
+  fixtureSleep = [&](unsigned ms) {
+   assert(ms == 2);
+   // Active-low assertion writes bit 0 == 0; release writes bit 0 == 1.
+   assert((intelMap->r[padReg] & 1U) == (intelPulses++ % 2));
+  };
+  assert(intelResources.reset(nullptr, 1));
+  assert(intelPulses == 2 && (intelMap->r[padReg] & 1U) == 1U);
+  assert(owner.strings["Cirrus_I2C_Reset_Reason"] == "RESET_PULSE_COMPLETE");
+
+  // Release failure after successful assertion must fail rather than reporting RESET_PULSE_COMPLETE.
+  intelMap->r[padReg] = 0;
+  intelPulses = 0;
+  fixtureSleep = [&](unsigned ms) {
+   assert(ms == 2);
+   ++intelPulses;
+   intelMap->r[lockTxReg] = lockTxBit;
+  };
+  assert(!intelResources.reset(nullptr, 1));
+  assert(intelPulses == 1 && (intelMap->r[padReg] & 1U) == 0U);
+  assert(owner.strings["Cirrus_I2C_Reset_Reason"] == "PAD_TX_LOCKED");
+
+  // Pre-bind locked pad must reject before any assertion write or sleep.
+  intelPulses = 0;
+  fixtureSleep = [&](unsigned) { assert(false); };
+  assert(!intelResources.reset(nullptr, 1));
+  assert(intelPulses == 0);
+  assert(owner.strings["Cirrus_I2C_Reset_Reason"] == "PAD_TX_LOCKED");
+
+  // Direct fault-injection against intel::pulseGPIOReset: assert/release readback and register-loss paths.
+  struct IntelResetWindow final : transport::intel::IntelGPIOWindow {
+   uint32_t r[0x1000 / 4]{};
+   std::vector<uint32_t> writes;
+   bool rejectAssertion = false, rejectRelease = false, dropBeforeWrite = false;
+   unsigned padReads = 0;
+   uint32_t padOffset = 0x700 + 22 * 16;
+   IntelResetWindow() {
+    r[0] = 0x960000;
+    r[3] = 0x700;
+   }
+   uint32_t read32(uint32_t offset) override {
+    if (offset == padOffset) {
+     ++padReads;
+     // Read 1: bind()->validate(), Read 2: setActive(true)->validate(), Read 3: setActive(true) before-write.
+     if (dropBeforeWrite && padReads == 3) {
+      return 0xffffffffU;
+     }
+    }
+    return r[offset / 4];
+   }
+   void write32(uint32_t offset, uint32_t value) override {
+    assert(offset == padOffset);
+    writes.push_back(value);
+    if ((writes.size() == 1 && rejectAssertion) || (writes.size() == 2 && rejectRelease)) {
+     return;
+    }
+    r[offset / 4] = value;
+   }
+  };
+  transport::intel::IntelGPIOPad resetPad{};
+  assert(transport::intel::lookupIntelGPIOPad("INTC1085", 269, resetPad));
+  {
+   // Assertion readback failure must still execute best-effort release and preserve assertion failure reason.
+   IntelResetWindow w;
+   w.rejectAssertion = true;
+   w.r[w.padOffset / 4] = 1U;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(!transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, true, [&](unsigned) { ++sleeps; }, why));
+   assert(sleeps == 0 && w.writes.size() == 2);
+   assert((w.writes[0] & 1U) == 0U && (w.writes[1] & 1U) == 1U);
+   assert((w.r[w.padOffset / 4] & 1U) == 1U);
+   assert(!strcmp(why, "PAD_WRITE_READBACK_FAILED"));
+  }
+  {
+   // Release readback failure must fail rather than reporting RESET_PULSE_COMPLETE.
+   IntelResetWindow w;
+   w.rejectRelease = true;
+   w.r[w.padOffset / 4] = 1U;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(!transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, true, [&](unsigned ms) { assert(ms == 2); ++sleeps; }, why));
+   assert(sleeps == 1 && w.writes.size() == 2);
+   assert((w.writes[0] & 1U) == 0U && (w.writes[1] & 1U) == 1U);
+   assert(!strcmp(why, "PAD_WRITE_READBACK_FAILED"));
+  }
+  {
+   // Register vanishing between validate() and read-before-write must report REGISTER_UNAVAILABLE (not READY).
+   IntelResetWindow w;
+   w.dropBeforeWrite = true;
+   w.r[w.padOffset / 4] = 1U;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(!transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, true, [&](unsigned) { ++sleeps; }, why));
+   assert(sleeps == 0 && w.writes.size() == 1 && (w.writes[0] & 1U) == 1U);
+   assert(!strcmp(why, "REGISTER_UNAVAILABLE"));
+  }
+  {
+   // Active-high reset asserts high then releases low.
+   IntelResetWindow w;
+   unsigned sleeps = 0;
+   const char* why = nullptr;
+   assert(transport::intel::pulseGPIOReset(w, sizeof(w.r), resetPad, false, [&](unsigned ms) { assert(ms == 2); ++sleeps; }, why));
+   assert(sleeps == 2 && w.writes.size() == 2);
+   assert((w.writes[0] & 1U) == 1U && (w.writes[1] & 1U) == 0U);
+   assert(!strcmp(why, "RESET_PULSE_COMPLETE"));
+  }
+
+  // Empty OSData _HID must safely fall back to _CID without null memcpy UB.
+  intelMap->r[lockTxReg] = 0;
+  intelMap->r[padReg] = (1U << 8) | (1U << 1);
+  intelCtrl->values["_HID"] = make<OSData>(std::vector<uint8_t>{});
+  intelCtrl->values["_CID"] = make<OSString>("INTC1085");
+  assert(intelResources.readResource(0, 0, false, val) && val == 1);
+  intelCtrl->values.erase("_CID");
+  intelCtrl->values["_HID"] = make<OSString>("INTC1085");
+
+  fixtureSleep = {};
+  assert(intelCtrl->opens == intelCtrl->closes);
+
+  // Restore amp & devices
+  ::devices = {amp, controller};
  }
  assert(memory->refs==1&&controller->refs==1&&amp->refs==1);
  nub.objects["i2cAddress"]=make<OSNumber>(0x23);
@@ -238,12 +515,18 @@ int main(){
 """
 # Execute the production reset policy through the I2C path; legacy quirk
 # implementation is outside this fixture and retains its separate coverage.
+prepare_reset = method(
+    service_source(), "CirrusAudioFixup", "prepareDiscoveredI2CReset"
+).replace("CirrusAudioFixup::", "ResetService::")
 reset = method(service_source(), "CirrusAudioFixup", "performPlatformHardwareReset")
 reset = (
     reset[: reset.index("    const cirrus::platform::ResetControllerQuirk*")]
     + "    return true;\n}"
 )
-CPP = CPP.replace("RESET_METHOD", reset.replace("CirrusAudioFixup::", "ResetService::"))
+CPP = (
+    CPP.replace("PREPARE_RESET_METHOD", prepare_reset)
+    .replace("RESET_METHOD", reset.replace("CirrusAudioFixup::", "ResetService::"))
+)
 for name, value in {
     "CAPTURED_ERROR": capture["followup"]["probe_returns"][0],
     "SPEAKER_PIN": capture["followup"]["speaker_gpio_pin"],

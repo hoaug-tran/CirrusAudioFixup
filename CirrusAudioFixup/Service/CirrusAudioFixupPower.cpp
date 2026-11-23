@@ -11,15 +11,17 @@ bool CirrusAudioFixup::setupPowerManagement(IOService* provider) {
     mPowerStates[1].inputPowerRequirement = kIOPMPowerOn;
     const IOReturn result = registerPowerDriver(this, mPowerStates, 2);
     setProperty("Cirrus_PM_Registration_Return", uint64_t(uint32_t(result)), 32);
-    if (result != kIOReturnSuccess)
+    if (result != kIOReturnSuccess) {
         CIRRUS_ERR("PM_REGISTRATION_FAILED operation=registerPowerDriver return=0x%08X; service will stop", result);
+    }
     return result == kIOReturnSuccess;
 }
 
 IOReturn CirrusAudioFixup::lifecycleAction(OSObject* owner, void* operation, void*, void*, void*) {
     auto* self = OSDynamicCast(CirrusAudioFixup, owner);
-    if (!self)
+    if (!self) {
         return kIOReturnBadArgument;
+    }
     const uintptr_t action = reinterpret_cast<uintptr_t>(operation);
     if (action == 2) {
         const bool pending = self->mResumePending;
@@ -27,19 +29,22 @@ IOReturn CirrusAudioFixup::lifecycleAction(OSObject* owner, void* operation, voi
         self->handlePowerChange(false);
         self->mResumePending = false;
         self->mStopping = true;
-        if (pending)
+        if (pending) {
             self->acknowledgeSetPowerState();
+        }
     } else if (!self->mStopping) {
         self->handlePowerChange(action != 0);
-        if (self->mResumePending)
+        if (self->mResumePending) {
             return kIOReturnNotReady;
+        }
     }
     return kIOReturnSuccess;
 }
 
 IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device) {
-    if (device != this || state > 1)
+    if (device != this || state > 1) {
         return IOPMAckImplied;
+    }
     CIRRUS_LOG("BOOT_FLOW PM_CHANGE_BEGIN state=%lu", static_cast<unsigned long>(state));
     if (mCommandGate) {
         IOReturn result = mCommandGate->runAction(lifecycleAction, reinterpret_cast<void*>(state));
@@ -47,34 +52,67 @@ IOReturn CirrusAudioFixup::setPowerState(unsigned long state, IOService* device)
             // IOKit expects an acknowledgement timeout in microseconds.
             return 35000000;
         }
-        if (result != kIOReturnSuccess)
+        if (result != kIOReturnSuccess) {
             CIRRUS_ERR("PM gate failed: 0x%08X", result);
+        }
     }
     CIRRUS_LOG("BOOT_FLOW PM_CHANGE_END state=%lu", static_cast<unsigned long>(state));
     return IOPMAckImplied;
 }
 
 void CirrusAudioFixup::handlePowerChange(bool powered) {
-    if (mStopping || (powered == mPowerAvailable && !(mResumePending && !powered)))
+    if (mStopping) {
         return;
-    if (!powered) {
-        if (mAmpInterrupt)
+    }
+
+    if (mStartupFailed) {
+        if (mAmpInterrupt) {
             mAmpInterrupt->disable();
-        if (mProbeTimer)
+        }
+
+        if (mProbeTimer) {
             mProbeTimer->cancelTimeout();
+        }
+
+        if (!powered) {
+            clearHdaCache();
+        }
+
+        mResumePending = false;
+        mWakeFailed = false;
+        mNeedsReinitialization = false;
+        mPowerAvailable = powered;
+
+        setProperty("Cirrus_PM_Powered", uint64_t(uint32_t(powered ? 1 : 0)), 32);
+        return;
+    }
+
+    if (powered == mPowerAvailable && !(mResumePending && !powered)) {
+        return;
+    }
+    if (!powered) {
+        if (mAmpInterrupt) {
+            mAmpInterrupt->disable();
+        }
+        if (mProbeTimer) {
+            mProbeTimer->cancelTimeout();
+        }
 
         if (mAmplifierManager.bound()) {
             auto stage = mAmplifierManager.stage();
             if (stage == cirrus::core::AmplifierStage::Ready || stage == cirrus::core::AmplifierStage::Playing) {
                 IOReturn ret = mAmplifierManager.suspend();
                 setProperty("Cirrus_Runtime_Suspend_Return", uint64_t(uint32_t(ret)), 32);
-                if (ret != kIOReturnSuccess)
+                if (ret != kIOReturnSuccess) {
                     CIRRUS_ERR("AMP suspend cleanup failed: ret=0x%08X; runtime fault retained", ret);
-            } else if (stage != cirrus::core::AmplifierStage::Faulted)
+                }
+            } else if (stage != cirrus::core::AmplifierStage::Faulted) {
                 releaseAmplifierDrivers();
+            }
         }
         suspendCommunication();
         mResumePending = false;
+        mWakeFailed = false;
         mPowerAvailable = false;
         clearHdaCache();
         mHdaState.streamActive = mHdaState.observed = mHdaState.converterPrepared = false;
@@ -85,17 +123,25 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
     } else {
         if (mStartupPending) {
             mPowerAvailable = true;
-            if (mProbeTimer)
+            if (mProbeTimer) {
                 mProbeTimer->setTimeoutMS(10);
+            }
             return;
         }
         if (!resumeCommunication()) {
-            if (mResumePending && mProbeTimer)
+            if (mResumePending && mProbeTimer) {
                 mProbeTimer->setTimeoutMS(10);
-            else
+                return;
+            }
+            mWakeFailed = true;
+            if (mNativeSPI.bound()) {
                 setProperty("Cirrus_SPI_Status", "WAKE_CONTROLLER_NOT_READY");
+            }
+            setProperty("Cirrus_PM_Powered", uint64_t(uint32_t(0)), 32);
+            publishDriverVerdict();
             return;
         }
+        mWakeFailed = false;
         mPowerAvailable = true;
         mNeedsReinitialization = !bootArgEnabled("-cirrusro");
         mHdaState.topologyLogged = false;
@@ -105,16 +151,20 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
             if (mAmplifierManager.bound() && mAmplifierManager.stage() == cirrus::core::AmplifierStage::Suspended) {
                 IOReturn ret = mAmplifierManager.resume();
                 setProperty("Cirrus_Runtime_Resume_Return", uint64_t(uint32_t(ret)), 32);
-                if (ret != kIOReturnSuccess)
+                if (ret != kIOReturnSuccess) {
                     CIRRUS_ERR("AMP resume not ready: stage=%u ret=0x%08X; playback blocked", unsigned(mAmplifierManager.stage()), ret);
-            } else
+                }
+            } else {
                 bringUpAmplifiers();
+            }
             mNeedsReinitialization = false;
         }
-        if (mAmpInterrupt && configureAmplifierInterrupt())
+        if (mAmpInterrupt && configureAmplifierInterrupt()) {
             mAmpInterrupt->enable();
-        if (mProbeTimer)
+        }
+        if (mProbeTimer) {
             mProbeTimer->setTimeoutMS(50);
+        }
     }
     publishDriverVerdict();
 }

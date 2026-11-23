@@ -92,7 +92,9 @@ lifecycle = "\n".join(
         "probeTimerFired",
         "lifecycleAction",
         "setPowerState",
+        "handlePowerChange",
         "stop",
+        "free",
     ]
 )
 cpp = (
@@ -108,21 +110,57 @@ constexpr int kIOReturnSuccess=0,kIOReturnNotReady=-1,kIOReturnBadArgument=-3,IO
 #define CIRRUS_ERR(...) ((void)0)
 #define OSDynamicCast(T,p) static_cast<T*>(p)
 struct OSObject {};
-struct IOService:OSObject {void stop(IOService*){}};
+struct IOService:OSObject {void stop(IOService*){} void free(){}};
 #define OSSafeReleaseNULL(p) do {p=nullptr;}while(0)
-struct IOTimerEventSource {unsigned arms=0;void setTimeoutMS(unsigned){++arms;}void cancelTimeout(){}};
+#define IOLockFree(p) ((void)0)
+namespace cirrus::core {
+enum class AmplifierStage { Unconfigured, Ready, Playing, Suspended, Faulted };
+}
+struct AmpInterrupt {
+ unsigned disables=0, enables=0;
+ void disable(){++disables;}
+ void enable(){++enables;}
+};
+struct IOTimerEventSource {unsigned arms=0, cancels=0;void setTimeoutMS(unsigned){++arms;}void cancelTimeout(){++cancels;}};
 struct CirrusAudioFixup:IOService {
  using super=IOService;
  bool mPMInitialized=false;
  struct Loop{template<class T>void removeEventSource(T*){}}loop;Loop* mWorkLoop=&loop;
  unsigned unsafeTeardowns=0;
+ AmpInterrupt irq;
+ AmpInterrupt* mAmpInterrupt=&irq;
  void teardownAmplifierInterrupt(){if(!mStopping)++unsafeTeardowns;}
  void teardownAudioEvents(){if(!mStopping)++unsafeTeardowns;}
  void PMstop(){}
  void stop(IOService*);
- bool mStopping=false,mStartupFailed=false,mStartupPending=true,mResumePending=false,mPowerAvailable=true;
+ void free();
+ void clearHdaCache(){++hdaClears;}
+ void* mTraceLock=nullptr;
+ bool mStopping=false,mStartupFailed=false,mStartupPending=true,mResumePending=false,mWakeFailed=false,mPowerAvailable=true;
  bool finishOK=true,setupOK=true,wakeReady=false;
  unsigned finishes=0,setups=0,teardowns=0,failures=0,acks=0,monitors=0,probes=0;
+ unsigned brings=0,suspendsComm=0,resumesComm=0,releases=0,hdaClears=0;
+ bool resumeCommOK=true,mNeedsReinitialization=false;
+ struct AmpManager {
+  bool boundVal=false;
+  cirrus::core::AmplifierStage stageVal=cirrus::core::AmplifierStage::Unconfigured;
+  unsigned suspends=0, resumes=0;
+  bool bound() const { return boundVal; }
+  cirrus::core::AmplifierStage stage() const { return stageVal; }
+  int suspend() { ++suspends; return 0; }
+  int resume() { ++resumes; return 0; }
+ } mAmplifierManager;
+ struct HdaState {
+  bool streamActive=false, observed=false, converterPrepared=false, topologyLogged=false;
+  uint8_t lastDescriptor=0;
+  uint16_t lastStreamTag=0, lastFormat=0;
+ } mHdaState;
+ void bringUpAmplifiers(){++brings;}
+ void releaseAmplifierDrivers(){++releases;}
+ void suspendCommunication(){++suspendsComm;}
+ bool resumeCommunication(){++resumesComm; mResumePending = !wakeReady; return resumeCommOK && wakeReady;}
+ bool configureAmplifierInterrupt(){return true;}
+ void publishDriverVerdict(){}
  IOService provider;IOService* mProvider=&provider;
  IOTimerEventSource timer;IOTimerEventSource* mProbeTimer=&timer;
  struct Native {
@@ -130,6 +168,7 @@ struct CirrusAudioFixup:IOService {
   struct Failure{const char* reason="DOMAIN_TIMEOUT";unsigned index=0;} f;
   int continueBind(){++polls;return result;}
   bool powerPending(){return pending;}
+  bool bound()const{return false;}
   const Failure& failure(){return f;}
  }mNativeSPI;
  struct Gate {CirrusAudioFixup* self;int runAction(int(*f)(OSObject*,void*,void*,void*,void*),void* a){return f(self,a,nullptr,nullptr,nullptr);}} gate{this};
@@ -137,6 +176,7 @@ struct CirrusAudioFixup:IOService {
  std::map<std::string,std::string> properties;
  void setProperty(const char* k,const char* v){properties[k]=v;}
  void setProperty(const char*,bool){}
+ void setProperty(const char*,uint64_t,unsigned){}
  void recordAttachmentFailure(const char*,const char*,int,unsigned,const char*){++failures;}
  bool setupCommunication(IOService*){assert(!mNativeSPI.pending);++setups;return setupOK;}
  bool finishStartup(){assert(!mNativeSPI.pending);++finishes;return finishOK;}
@@ -145,8 +185,8 @@ struct CirrusAudioFixup:IOService {
  void runReadOnlyProbe(){++probes;}
  void runBackgroundMonitor(){++monitors;}
  void acknowledgeSetPowerState(){++acks;}
- void handlePowerChange(bool on){if(!on){mResumePending=false;mPowerAvailable=false;}else{mResumePending=!wakeReady;mPowerAvailable=wakeReady;}}
  void continueStartup();
+ void handlePowerChange(bool);
  static void probeTimerFired(OSObject*,IOTimerEventSource*);
  static int lifecycleAction(OSObject*,void*,void*,void*,void*);
  int setPowerState(unsigned long,IOService*);
@@ -162,6 +202,11 @@ int main(){
  start.probeTimerFired(&start,&start.timer);
  assert(!start.mStartupPending&&start.setups==1&&start.finishes==1&&!start.teardowns);
  start.probeTimerFired(&start,&start.timer);assert(start.monitors==1&&start.finishes==1);
+ CirrusAudioFixup deferredFinishFail;
+ deferredFinishFail.mNativeSPI.pending=false;deferredFinishFail.mNativeSPI.result=0;
+ deferredFinishFail.finishOK=false;
+ deferredFinishFail.probeTimerFired(&deferredFinishFail,&deferredFinishFail.timer);
+ assert(deferredFinishFail.mStartupFailed&&!deferredFinishFail.mStartupPending&&!deferredFinishFail.mStopping&&deferredFinishFail.teardowns==1);
  CirrusAudioFixup timeout;timeout.mNativeSPI.pending=false;timeout.mNativeSPI.result=-4;
  timeout.probeTimerFired(&timeout,&timeout.timer);
  assert(timeout.mStartupFailed&&timeout.failures==1&&timeout.teardowns==1&&!timeout.finishes);
@@ -179,10 +224,78 @@ int main(){
  wake.probeTimerFired(&wake,&wake.timer);assert(wake.acks==1&&wake.monitors==1);
  CirrusAudioFixup shutdown;shutdown.stop(shutdown.mProvider);
  assert(shutdown.mStopping&&!shutdown.unsafeTeardowns&&shutdown.teardowns==1&&!shutdown.mProvider);
+ shutdown.free();
+ assert(!shutdown.mPMInitialized&&!shutdown.mWorkLoop&&!shutdown.mProbeTimer&&!shutdown.mCommandGate&&shutdown.teardowns==2);
  CirrusAudioFixup cancel;cancel.mStartupPending=false;cancel.mResumePending=true;cancel.mPowerAvailable=false;
  assert(cancel.lifecycleAction(&cancel,reinterpret_cast<void*>(uintptr_t(2)),nullptr,nullptr,nullptr)==0);
  cancel.probeTimerFired(&cancel,&cancel.timer);
  assert(cancel.mStopping&&!cancel.mResumePending&&cancel.acks==1&&!cancel.monitors);
+
+ // Test 1: start() == false -> free() directly without stop()
+ {
+  CirrusAudioFixup failInit;
+  failInit.mPMInitialized = true;
+  assert(failInit.mProbeTimer && failInit.mCommandGate && failInit.mWorkLoop);
+  failInit.free();
+  assert(!failInit.mPMInitialized && !failInit.mProbeTimer && !failInit.mCommandGate && !failInit.mWorkLoop);
+  assert(failInit.unsafeTeardowns == 2);
+ }
+
+ // Test 2: Deferred failure -> sleep -> wake fail-closed verification
+ {
+  CirrusAudioFixup failedPM;
+  failedPM.mNativeSPI.pending = false;
+  failedPM.mNativeSPI.result = 0;
+  failedPM.finishOK = false;
+  failedPM.probeTimerFired(&failedPM, &failedPM.timer);
+  assert(failedPM.mStartupFailed && failedPM.teardowns == 1);
+
+  // Sleep transition after startup failure
+  assert(failedPM.setPowerState(0, &failedPM) == IOPMAckImplied);
+  assert(!failedPM.mPowerAvailable);
+  assert(failedPM.hdaClears == 1);
+  assert(failedPM.timer.cancels >= 1);
+  assert(failedPM.irq.disables >= 1);
+  assert(failedPM.brings == 0);
+  assert(failedPM.resumesComm == 0);
+
+  // Wake transition after startup failure
+  assert(failedPM.setPowerState(1, &failedPM) == IOPMAckImplied);
+  assert(failedPM.mPowerAvailable);
+  assert(failedPM.brings == 0);       // MUST NOT call bringUpAmplifiers()
+  assert(failedPM.resumesComm == 0);  // MUST NOT call resumeCommunication()
+  assert(failedPM.irq.enables == 0);  // MUST NOT enable IRQ
+  assert(!failedPM.mResumePending);   // No pending wake transition left unacknowledged
+  assert(!failedPM.mNeedsReinitialization);
+ }
+
+ // Test 3: Deferred failure -> timer callback does not re-arm
+ {
+  CirrusAudioFixup failedTimer;
+  failedTimer.mStartupFailed = true;
+  const unsigned armsBefore = failedTimer.timer.arms;
+  failedTimer.probeTimerFired(&failedTimer, &failedTimer.timer);
+  assert(failedTimer.timer.arms == armsBefore);
+  assert(!failedTimer.finishes && !failedTimer.monitors && !failedTimer.probes);
+ }
+
+ // Test 4: Deferred failure before setupPowerManagement() never initializes PM
+ {
+  CirrusAudioFixup prePMFail;
+  prePMFail.mNativeSPI.pending = false;
+  prePMFail.mNativeSPI.result = -4; // SPI bind failed before PM setup
+  prePMFail.probeTimerFired(&prePMFail, &prePMFail.timer);
+  assert(prePMFail.mStartupFailed && !prePMFail.mPMInitialized);
+ }
+
+ // Test 5: Service termination after deferred failure cleans up safely
+ {
+  CirrusAudioFixup termFail;
+  termFail.mStartupFailed = true;
+  termFail.stop(termFail.mProvider);
+  termFail.free();
+  assert(!termFail.mWorkLoop && !termFail.mProbeTimer && !termFail.mCommandGate);
+ }
 }
 """
 )

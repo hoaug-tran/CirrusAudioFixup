@@ -129,7 +129,9 @@ public:
     cirrus::diagnostics::AttachmentState mAttachment{};
     void recordTrace(cirrus::diagnostics::TraceSource,uint8_t,bool,bool,uint32_t,uint32_t,IOReturn){}
     void recordAttachmentFailure(const char* s,const char* r,IOReturn e,uint32_t i=0){mAttachment.record(s,r,e,i);}
+    unsigned statsPublished=0;
     void publishAttachmentStatus(){}
+    void publishStatistics(){++statsPublished;}
     bool bootArgEnabled(const char*){return legacy;}
     template<class... T>void setProperty(T...){}
     size_t detectAmplifiers();
@@ -143,9 +145,9 @@ int main() {
     unknown.legacy=true; unknown.responsive=0;
     assert(unknown.detectAmplifiers()==0 && !unknown.mAmplifiers[0].present && !unknown.mAmplifiers[1].present);
     unknown.responsive=2;
-    assert(unknown.detectAmplifiers()==1 && unknown.mAmplifiers[0].channel==cirrus::core::AudioChannel::Right);
+    assert(unknown.detectAmplifiers()==1 && unknown.mAmplifiers[0].channel==cirrus::core::AudioChannel::Right && unknown.statsPublished==2);
     CirrusAudioFixup reference; reference.mPlatformAuthorized=true; reference.responsive=3;
-    assert(reference.detectAmplifiers()==2);
+    assert(reference.detectAmplifiers()==2 && reference.statsPublished==1);
 }
 """
 )

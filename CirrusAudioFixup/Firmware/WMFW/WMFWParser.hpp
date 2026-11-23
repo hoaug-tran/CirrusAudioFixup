@@ -230,7 +230,7 @@ inline HaloMemoryPointer decodePointer(uint32_t value) {
 }
 
 class WMFWMemoryMapper {
-public:
+  public:
     static MappingStatus mapPackedAddress(RegionType type, uint32_t wordOffset, uint32_t byteOffset, uint32_t& regAddress) {
         uint64_t base = 0, stride = 0;
         switch (type) {
@@ -258,11 +258,13 @@ public:
             return MappingStatus::UnsupportedRegion;
         }
         uint64_t address = base + uint64_t(wordOffset) * stride;
-        if (stride == 3)
+        if (stride == 3) {
             address &= ~uint64_t(3);
+        }
         address += byteOffset;
-        if (address > 0xFFFFFFFFULL)
+        if (address > 0xFFFFFFFFULL) {
             return MappingStatus::Overflow;
+        }
         regAddress = static_cast<uint32_t>(address);
         return MappingStatus::OK;
     }
@@ -270,8 +272,9 @@ public:
     static bool mapFirmwareImage(const FirmwareImage& image, MappedImage& outMapped) {
         outMapped.regionCount = 0;
         outMapped.mappingCrc = 0xFFFFFFFF;
-        if (image.regionCount > MAX_FIRMWARE_REGIONS)
+        if (image.regionCount > MAX_FIRMWARE_REGIONS) {
             return false;
+        }
 
         for (uint32_t i = 0; i < image.regionCount; i++) {
             if (outMapped.regionCount >= MAX_MAPPED_REGIONS) {
@@ -320,8 +323,9 @@ public:
     static bool mapCoefficients(const FirmwareImage& image, MappedImage& outMapped) {
         outMapped.regionCount = 0;
         outMapped.mappingCrc = 0xFFFFFFFF;
-        if (image.coefficientCount > 128 || image.algorithmCount > 64)
+        if (image.coefficientCount > 128 || image.algorithmCount > 64) {
             return false;
+        }
 
         for (uint32_t i = 0; i < image.coefficientCount; i++) {
             if (outMapped.regionCount >= MAX_MAPPED_REGIONS) {
@@ -354,7 +358,7 @@ public:
                     }
                 }
             } else if (coeff.type == (WMFW_NAME_TEXT << 8) || coeff.type == (WMFW_INFO_TEXT << 8) || coeff.type == (WMFW_METADATA << 8)) {
-                CIRRUS_LOG("Skipping non-memory coefficient block %u (ID=0x%06X type=0x%X)", i, coeff.id, type_masked);
+                // CIRRUS_LOG("Skipping non-memory coefficient block %u (ID=0x%06X type=0x%X)", i, coeff.id, type_masked);
                 continue;
             } else {
                 CIRRUS_ERR("Unsupported coefficient type 0x%X", coeff.type);
@@ -368,10 +372,11 @@ public:
 
             outReg.firmwareAddress = algorithmBase;
             MappingStatus status = mapPackedAddress(outReg.regionType, algorithmBase, byteOffset, outReg.dspRegister);
-            if (status != MappingStatus::OK)
+            if (status != MappingStatus::OK) {
                 return false;
-            CIRRUS_LOG("Coefficient %u: ID=0x%06X type=0x%X alg_base=0x%06X byte_offset=0x%08X mapped=0x%08X", i, coeff.id, type_masked,
-                       algorithmBase, byteOffset, outReg.dspRegister);
+            }
+            // CIRRUS_LOG("Coefficient %u: ID=0x%06X type=0x%X alg_base=0x%06X byte_offset=0x%08X mapped=0x%08X", i, coeff.id, type_masked,
+            //            algorithmBase, byteOffset, outReg.dspRegister);
 
             outReg.size = coeff.length;
             outReg.data.begin = coeff.data;
@@ -393,7 +398,7 @@ public:
 };
 
 class WMFWParser {
-public:
+  public:
     static uint32_t calculateCrc32(const uint8_t* data, size_t length) {
         uint32_t crc = 0xFFFFFFFF;
         for (size_t i = 0; i < length; i++) {
@@ -408,20 +413,24 @@ public:
     static inline uint32_t calculate_crc32(const uint8_t* data, size_t length) { return calculateCrc32(data, length); }
 
     static bool validateWMFW(const uint8_t* data, size_t size) {
-        if (!data || size < 40 || size > 0xFFFFFFFFULL || memcmp(data, "WMFW", 4))
+        if (!data || size < 40 || size > 0xFFFFFFFFULL || memcmp(data, "WMFW", 4)) {
             return false;
+        }
 
-        if (readLE32(data + 4) != 40 || data[10] != 4 || data[11] != 3)
+        if (readLE32(data + 4) != 40 || data[10] != 4 || data[11] != 3) {
             return false;
+        }
         size_t pos = 40;
         uint32_t count = 0;
         while (pos < size) {
-            if (size - pos < 8 || ++count > MAX_FIRMWARE_REGIONS)
+            if (size - pos < 8 || ++count > MAX_FIRMWARE_REGIONS) {
                 return false;
+            }
             uint32_t len = readLE32(data + pos + 4);
             pos += 8;
-            if (len > size - pos)
+            if (len > size - pos) {
                 return false;
+            }
             pos += len;
         }
         return count != 0;
@@ -441,15 +450,18 @@ public:
 
     static bool resolveControl(const FirmwareImage& fw, const WMFWControlRef& ref, uint32_t& reg) {
         reg = 0;
-        if (!ref.algorithm || !ref.control || fw.algorithmCount > 64)
+        if (!ref.algorithm || !ref.control || fw.algorithmCount > 64) {
             return false;
+        }
         const auto& ctl = *ref.control;
-        if (!ctl.len)
+        if (!ctl.len) {
             return false;
+        }
         for (uint32_t i = 0; i < fw.algorithmCount; ++i) {
             const auto& alg = fw.algorithms[i];
-            if (alg.id != ref.algorithm->id)
+            if (alg.id != ref.algorithm->id) {
                 continue;
+            }
             uint32_t base;
             switch (ctl.type) {
             case WMFW_ADSP2_XM:
@@ -463,8 +475,9 @@ public:
             default:
                 return false;
             }
-            if (base > 0xFFFFFFFFu - ctl.offset)
+            if (base > 0xFFFFFFFFu - ctl.offset) {
                 return false;
+            }
             return WMFWMemoryMapper::mapPackedAddress(static_cast<RegionType>(ctl.type), base + ctl.offset, 0, reg) == MappingStatus::OK;
         }
         return false;
@@ -472,12 +485,14 @@ public:
 
     static bool findControl(const FirmwareImage* fw, const char* name, WMFWControlRef& out) {
         out = {};
-        if (!fw || !name || fw->wmfwAlgorithmCount > 64 || fw->wmfwControlCount > 512)
+        if (!fw || !name || fw->wmfwAlgorithmCount > 64 || fw->wmfwControlCount > 512) {
             return false;
+        }
         for (uint32_t i = 0; i < fw->wmfwAlgorithmCount; i++) {
             const WMFWAlgorithm& alg = fw->wmfwAlgorithms[i];
-            if (alg.firstControl > fw->wmfwControlCount || alg.controlCount > fw->wmfwControlCount - alg.firstControl)
+            if (alg.firstControl > fw->wmfwControlCount || alg.controlCount > fw->wmfwControlCount - alg.firstControl) {
                 return false;
+            }
             for (uint32_t j = 0; j < alg.controlCount; j++) {
                 const WMFWControl& ctl = fw->wmfwControls[alg.firstControl + j];
                 if (strncmp(ctl.name, name, sizeof(ctl.name)) == 0) {
@@ -492,8 +507,9 @@ public:
 
     static bool parseWMFWAlgorithmData(const uint8_t* data, size_t size, FirmwareImage* outImage, size_t file_offset, uint8_t fw_version) {
         (void)file_offset;
-        if (size < 4)
+        if (size < 4) {
             return false;
+        }
 
         if (fw_version < 2) {
             CIRRUS_LOG("Warning: This parser is designed for wmfw_ver >= 2. Skipping.");
@@ -502,36 +518,42 @@ public:
 
         uint32_t pos = 0;
 
-        if (pos + 4 > size)
+        if (pos + 4 > size) {
             return false;
+        }
         uint32_t alg_id = readLE32(&data[pos]);
         pos += 4;
 
-        if (pos + 1 > size)
+        if (pos + 1 > size) {
             return false;
+        }
         uint8_t alg_name_len = data[pos];
-        if (pos + alignStringLen(alg_name_len, 1) > size)
+        if (pos + alignStringLen(alg_name_len, 1) > size) {
             return false;
+        }
         char alg_name[256] = {0};
         memcpy(alg_name, &data[pos + 1], alg_name_len);
         pos += alignStringLen(alg_name_len, 1);
 
-        if (pos + 2 > size)
+        if (pos + 2 > size) {
             return false;
+        }
         uint16_t alg_desc_len = readLE16(&data[pos]);
-        if (pos + alignStringLen(alg_desc_len, 2) > size)
+        if (pos + alignStringLen(alg_desc_len, 2) > size) {
             return false;
+        }
         pos += alignStringLen(alg_desc_len, 2);
 
-        if (pos + 4 > size)
+        if (pos + 4 > size) {
             return false;
+        }
         uint32_t ncoeff = readLE32(&data[pos]);
         pos += 4;
 
-        CIRRUS_LOG("Algorithm:");
-        CIRRUS_LOG("  id      = %u (0x%08X)", alg_id, alg_id);
-        CIRRUS_LOG("  name    = %s", alg_name);
-        CIRRUS_LOG("  coeffs  = %u", ncoeff);
+        // CIRRUS_LOG("Algorithm:");
+        // CIRRUS_LOG("  id      = %u (0x%08X)", alg_id, alg_id);
+        // CIRRUS_LOG("  name    = %s", alg_name);
+        // CIRRUS_LOG("  coeffs  = %u", ncoeff);
 
         if (outImage->wmfwAlgorithmCount >= 64) {
             CIRRUS_LOG("Warning: Maximum algorithms reached.");
@@ -555,8 +577,9 @@ public:
             uint32_t c_size = readLE32(&data[pos + 4]);
 
             uint32_t payload_start = pos + 8;
-            if (c_size > size - payload_start)
+            if (c_size > size - payload_start) {
                 return false;
+            }
             uint32_t coeff_end = payload_start + c_size;
 
             if (c_size < 8) {
@@ -570,44 +593,52 @@ public:
 
             uint32_t inner_pos = payload_start;
 
-            if (inner_pos + 1 > coeff_end)
+            if (inner_pos + 1 > coeff_end) {
                 return false;
+            }
             uint8_t c_name_len = data[inner_pos];
-            if (inner_pos + alignStringLen(c_name_len, 1) > coeff_end)
+            if (inner_pos + alignStringLen(c_name_len, 1) > coeff_end) {
                 return false;
+            }
             char c_name[256] = {0};
             memcpy(c_name, &data[inner_pos + 1], c_name_len);
             inner_pos += alignStringLen(c_name_len, 1);
 
-            if (inner_pos + 1 > coeff_end)
+            if (inner_pos + 1 > coeff_end) {
                 return false;
+            }
             uint8_t c_desc_len = data[inner_pos];
-            if (inner_pos + alignStringLen(c_desc_len, 1) > coeff_end)
+            if (inner_pos + alignStringLen(c_desc_len, 1) > coeff_end) {
                 return false;
+            }
             inner_pos += alignStringLen(c_desc_len, 1);
 
-            if (inner_pos + 2 > coeff_end)
+            if (inner_pos + 2 > coeff_end) {
                 return false;
+            }
             uint16_t c_unknown_len = readLE16(&data[inner_pos]);
-            if (inner_pos + alignStringLen(c_unknown_len, 2) > coeff_end)
+            if (inner_pos + alignStringLen(c_unknown_len, 2) > coeff_end) {
                 return false;
+            }
             inner_pos += alignStringLen(c_unknown_len, 2);
 
-            if (inner_pos + 8 > coeff_end)
+            if (inner_pos + 8 > coeff_end) {
                 return false;
+            }
             uint16_t c_ctl_type = readLE16(&data[inner_pos]);
             uint16_t c_flags = readLE16(&data[inner_pos + 2]);
             uint32_t c_len = readLE32(&data[inner_pos + 4]);
 
-            CIRRUS_LOG("  Coeff[%u] %s", i, c_name);
-            CIRRUS_LOG("    offset   = 0x%04X", c_offset);
-            CIRRUS_LOG("    type     = 0x%04X", c_type);
-            CIRRUS_LOG("    ctl_type = 0x%04X", c_ctl_type);
-            CIRRUS_LOG("    flags    = 0x%04X", c_flags);
-            CIRRUS_LOG("    len      = %u", c_len);
+            // CIRRUS_LOG("  Coeff[%u] %s", i, c_name);
+            // CIRRUS_LOG("    offset   = 0x%04X", c_offset);
+            // CIRRUS_LOG("    type     = 0x%04X", c_type);
+            // CIRRUS_LOG("    ctl_type = 0x%04X", c_ctl_type);
+            // CIRRUS_LOG("    flags    = 0x%04X", c_flags);
+            // CIRRUS_LOG("    len      = %u", c_len);
 
-            if (outImage->wmfwControlCount >= 512)
+            if (outImage->wmfwControlCount >= 512) {
                 return false;
+            }
             {
                 WMFWControl& ctl = outImage->wmfwControls[outImage->wmfwControlCount++];
                 ctl.offset = c_offset;
@@ -626,17 +657,20 @@ public:
     }
 
     static bool parseWMFW(const uint8_t* data, size_t size, FirmwareImage* outImage) {
-        if (!outImage)
+        if (!outImage) {
             return false;
-        if (parseWMFWBody(data, size, outImage))
+        }
+        if (parseWMFWBody(data, size, outImage)) {
             return true;
+        }
         memset(outImage, 0, sizeof(*outImage));
         return false;
     }
 
     static bool parseWMFWBody(const uint8_t* data, size_t size, FirmwareImage* outImage) {
-        if (!outImage)
+        if (!outImage) {
             return false;
+        }
         memset(outImage, 0, sizeof(FirmwareImage));
 
         if (!validateWMFW(data, size)) {
@@ -651,11 +685,11 @@ public:
         outImage->core = header->core;
         outImage->coreRevision = readLE16(data + 8);
 
-        CIRRUS_LOG("WMFW File Header:");
-        CIRRUS_LOG("  Magic    : 0x%08X", outImage->magic);
-        CIRRUS_LOG("  Version  : %u", outImage->version);
-        CIRRUS_LOG("  Core     : %u", outImage->core);
-        CIRRUS_LOG("  Core Rev : 0x%08X", outImage->coreRevision);
+        // CIRRUS_LOG("WMFW File Header:");
+        // CIRRUS_LOG("  Magic    : 0x%08X", outImage->magic);
+        // CIRRUS_LOG("  Version  : %u", outImage->version);
+        // CIRRUS_LOG("  Core     : %u", outImage->core);
+        // CIRRUS_LOG("  Core Rev : 0x%08X", outImage->coreRevision);
 
         size_t pos = OSSwapLittleToHostInt32(header->len);
 
@@ -694,11 +728,12 @@ public:
                     break;
                 case WMFW_ALGORITHM_DATA:
                     reg.regionType = RegionType::ALGORITHM_DATA;
-                    CIRRUS_LOG("WMFW Block Type: ALGORITHM_DATA (0xF2)");
-                    CIRRUS_LOG("WMFW Block Start Offset: 0x%08zX", pos);
-                    CIRRUS_LOG("WMFW Block Payload Size: %u bytes", len);
-                    if (!parseWMFWAlgorithmData(raw_region->data, len, outImage, pos, outImage->version))
+                    // CIRRUS_LOG("WMFW Block Type: ALGORITHM_DATA (0xF2)");
+                    // CIRRUS_LOG("WMFW Block Start Offset: 0x%08zX", pos);
+                    // CIRRUS_LOG("WMFW Block Payload Size: %u bytes", len);
+                    if (!parseWMFWAlgorithmData(raw_region->data, len, outImage, pos, outImage->version)) {
                         return false;
+                    }
                     break;
                 case WMFW_METADATA:
                     reg.regionType = RegionType::METADATA;
@@ -734,20 +769,24 @@ public:
     static bool parseAlgorithmTable(const uint8_t* vmem, size_t size, FirmwareImage& outImage) {
         outImage.algorithmCount = 0;
         outImage.firmwareId = outImage.haloFirmwareVersion = outImage.algorithmTotal = 0;
-        if (!vmem || size < 40)
+        if (!vmem || size < 40) {
             return false;
+        }
         uint32_t count = readUnpacked32BE(vmem, 9);
-        if (!count || count > 63 || size < 40 + size_t(count) * 24)
+        if (!count || count > 63 || size < 40 + size_t(count) * 24) {
             return false;
+        }
         for (uint32_t i = 0; i <= count; ++i) {
             uint32_t word = i ? 10 + (i - 1) * 6 : 3;
             uint32_t id = readUnpacked32BE(vmem, word);
-            if (!id || id > 0xFFFFFF || readUnpacked32BE(vmem, word + 2) > 0xFFFFFF || readUnpacked32BE(vmem, word + 4) > 0xFFFFFF)
+            if (!id || id > 0xFFFFFF || readUnpacked32BE(vmem, word + 2) > 0xFFFFFF || readUnpacked32BE(vmem, word + 4) > 0xFFFFFF) {
                 return false;
+            }
             for (uint32_t j = 0; j < i; ++j) {
                 uint32_t prior = j ? 10 + (j - 1) * 6 : 3;
-                if (id == readUnpacked32BE(vmem, prior))
+                if (id == readUnpacked32BE(vmem, prior)) {
                     return false;
+                }
             }
         }
         outImage.firmwareId = readUnpacked32BE(vmem, 3);
@@ -768,33 +807,40 @@ public:
     }
 
     static bool parseBIN(const uint8_t* data, size_t size, FirmwareImage* outImage) {
-        if (!outImage)
+        if (!outImage) {
             return false;
+        }
         outImage->coefficientCount = outImage->totalCoeffPayloadBytes = 0;
-        if (!data || size < 16 || size > 0xFFFFFFFFULL || memcmp(data, "WMDR", 4))
+        if (!data || size < 16 || size > 0xFFFFFFFFULL || memcmp(data, "WMDR", 4)) {
             return false;
+        }
         uint32_t headerLength = readLE32(data + 4);
-        if (headerLength < 16 || headerLength > size)
+        if (headerLength < 16 || headerLength > size) {
             return false;
+        }
 
         size_t pos = headerLength;
         uint32_t count = 0;
         while (pos < size) {
-            if (size - pos < 20 || ++count > 128)
+            if (size - pos < 20 || ++count > 128) {
                 return false;
+            }
             uint16_t type = readLE16(data + pos + 2);
             if (type != WMFW_ADSP2_XM && type != WMFW_ADSP2_YM && type != WMFW_HALO_XM_PACKED && type != WMFW_HALO_YM_PACKED &&
-                type != (WMFW_NAME_TEXT << 8) && type != (WMFW_INFO_TEXT << 8) && type != (WMFW_METADATA << 8))
+                type != (WMFW_NAME_TEXT << 8) && type != (WMFW_INFO_TEXT << 8) && type != (WMFW_METADATA << 8)) {
                 return false;
+            }
             uint32_t length = readLE32(data + pos + 16);
             pos += 20;
             uint64_t padded = (uint64_t(length) + 3) & ~uint64_t(3);
-            if (padded > size - pos)
+            if (padded > size - pos) {
                 return false;
+            }
             pos += static_cast<size_t>(padded);
         }
-        if (!count)
+        if (!count) {
             return false;
+        }
         pos = headerLength;
         for (uint32_t i = 0; i < count; ++i) {
             auto& coeff = outImage->coefficients[i];

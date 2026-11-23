@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Fixtures"))
-from production_source_fixture import service_source
+from production_source_fixture import service_source, method
 import re
 import subprocess
 import tempfile
@@ -106,12 +106,10 @@ assert '"-cirrusprobe"' not in driver and "CirrusBootArgParsed" not in driver
 assert "os_log" not in readme and "100% Working" not in readme
 
 for name in ("stopPlayback", "pollRegisterBit", "sendMailboxCommand"):
-    match = re.search(r"(?:bool|void) CirrusAudioFixup::" + name + r"\(", driver)
-    function = driver[match.start() : driver.index("\n}", match.start())]
+    function = method(driver, "CirrusAudioFixup", name)
     assert "IODelay(1000)" not in function and "IOSleep(1)" in function, name
 
-monitor_start = driver.index("void CirrusAudioFixup::runBackgroundMonitor()")
-monitor = driver[monitor_start : driver.index("\n}", monitor_start)]
+monitor = method(driver, "CirrusAudioFixup", "runBackgroundMonitor")
 assert "IOSleep(" not in monitor and "IODelay(" not in monitor
 assert (
     "mAmplifierManager.runtimeTick" in monitor

@@ -21,7 +21,8 @@ assert bash, "bash is required for the release gate fixture"
 workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 triggers = workflow.split("\njobs:", 1)[0]
 assert re.search(
-    r"  push:\n    branches: \[(?:main|'main')\]\n    tags: \['v\*'\]", triggers
+    r"  push:\n    branches: \[(?:main, develop|'main', 'develop')\]\n    tags: \['v\*'\]",
+    triggers,
 )
 assert re.search(
     r"  pull_request:\n    branches: \[(?:main, develop|'main', 'develop')\]\n  workflow_dispatch:",
@@ -31,23 +32,14 @@ assert "cancel-in-progress: true" in triggers
 build_job, release_job = workflow.split("\n  release:\n", 1)
 assert "needs: [build]" in release_job
 for name in (
-    "Package kext bundles",
-    "Upload Release artifact",
-    "Upload Debug artifact",
-):
-    step = build_job.split("      - name: " + name + "\n", 1)[1].split(
-        "\n      - name:", 1
-    )[0]
-    conditions = re.findall(r"^        if: (.+)$", step, re.M)
-    assert conditions == ["github.event_name != 'pull_request'"], (
-        name + " must skip PRs and run on pushes/manual runs"
-    )
-for name in (
     "Record build source identity",
     "Build Release kext",
     "Build Debug kext",
     "Verify build artifacts",
     "Run host regression test suite",
+    "Package kext bundles",
+    "Upload Release artifact",
+    "Upload Debug artifact",
 ):
     step = build_job.split("      - name: " + name + "\n", 1)[1].split(
         "\n      - name:", 1

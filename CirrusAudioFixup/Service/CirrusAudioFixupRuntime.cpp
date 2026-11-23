@@ -64,14 +64,15 @@ bool CirrusAudioFixup::configureAmplifierInterrupt() {
     bool ok = mAmplifierManager.bound();
     for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
         IOReturn ret = mAmplifierManager.configureInterrupt(i, true);
-        if (ret != kIOReturnSuccess)
-            CIRRUS_ERR("AMP IRQ configuration unavailable/failed: index=%lu ret=0x%08X; using polling",
-                       static_cast<unsigned long>(i), ret);
+        if (ret != kIOReturnSuccess) {
+            CIRRUS_ERR("AMP IRQ configuration unavailable/failed: index=%lu ret=0x%08X; using polling", static_cast<unsigned long>(i), ret);
+        }
         ok = (ret == kIOReturnSuccess) && ok;
     }
     if (!ok) {
-        for (size_t i = 0; i < mAmplifierManager.count(); ++i)
+        for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
             mAmplifierManager.configureInterrupt(i, false);
+        }
         setProperty("Cirrus_Amp_IRQ_Mode", "POLLING_IRQ_SETUP_FAILED");
         setProperty("Cirrus_Amp_IRQ_Fallback", "DRIVER_INTERRUPT_CONFIGURATION_FAILED");
     }
@@ -80,8 +81,9 @@ bool CirrusAudioFixup::configureAmplifierInterrupt() {
 
 void CirrusAudioFixup::amplifierInterruptReceived(OSObject* owner, IOInterruptEventSource* source, int) {
     auto* self = OSDynamicCast(CirrusAudioFixup, owner);
-    if (!self || self->mStopping || !self->mPowerAvailable)
+    if (!self || self->mStopping || !self->mPowerAvailable) {
         return;
+    }
     // A shared level interrupt must be serviced for both amps. On any fault
     // or I/O failure leave delivery disabled and latch the existing cleanup
     // policy. Do not acknowledge/release speaker protection automatically.
@@ -93,32 +95,36 @@ void CirrusAudioFixup::amplifierInterruptReceived(OSObject* owner, IOInterruptEv
             char key[64]{};
             snprintf(key, sizeof(key), "Cirrus_Runtime_%lu_IRQ_Return", static_cast<unsigned long>(i));
             self->setProperty(key, uint64_t(uint32_t(result)), 32);
-            CIRRUS_ERR("AMP IRQ handling failed: index=%lu return=0x%08X; delivery disabled",
-                       static_cast<unsigned long>(i), result);
+            CIRRUS_ERR("AMP IRQ handling failed: index=%lu return=0x%08X; delivery disabled", static_cast<unsigned long>(i), result);
         }
         healthy = (result == kIOReturnSuccess) && healthy;
     }
     if (!healthy) {
         self->setProperty("Cirrus_Amp_IRQ_Mode", "FAULT_LATCHED_IRQ_DISABLED");
-        for (size_t i = 0; i < self->mAmplifierManager.count(); ++i)
+        for (size_t i = 0; i < self->mAmplifierManager.count(); ++i) {
             self->mAmplifierManager.cancelPlayback(i);
+        }
     }
     // No enabled protection source was observed. Fall back instead of
     // repeatedly re-enabling an unexplained asserted shared level line.
-    if (healthy)
+    if (healthy) {
         self->setProperty("Cirrus_Amp_IRQ_Mode", "POLLING_UNEXPLAINED_IRQ_DISABLED");
+    }
     self->mAmplifierManager.refreshPlaybackState();
-    if (!healthy || self->publishRuntimeStatus())
+    if (!healthy || self->publishRuntimeStatus()) {
         self->publishDriverVerdict();
+    }
     CIRRUS_LOG("AMP IRQ disabled: reason=%s; polling remains active", healthy ? "UNEXPLAINED_LEVEL" : "FAULT_OR_TRANSFER_ERROR");
 }
 
 void CirrusAudioFixup::teardownAmplifierInterrupt() {
-    if (!mAmpInterrupt)
+    if (!mAmpInterrupt) {
         return;
+    }
     mAmpInterrupt->disable();
-    if (mWorkLoop)
+    if (mWorkLoop) {
         mWorkLoop->removeEventSource(mAmpInterrupt);
+    }
     OSSafeReleaseNULL(mAmpInterrupt);
 }
 
@@ -169,24 +175,28 @@ void CirrusAudioFixup::probeTimerFired(OSObject* owner, IOTimerEventSource* send
     (void)sender;
     CirrusAudioFixup* self = OSDynamicCast(CirrusAudioFixup, owner);
     if (self) {
-        if (self->mStopping || self->mStartupFailed)
+        if (self->mStopping || self->mStartupFailed) {
             return;
-        if (!self->mPowerAvailable && !self->mResumePending)
+        }
+        if (!self->mPowerAvailable && !self->mResumePending) {
             return;
+        }
         if (self->mStartupPending) {
             self->continueStartup();
             return;
         }
         if (self->mResumePending) {
             self->handlePowerChange(true);
-            if (self->mResumePending)
+            if (self->mResumePending) {
                 self->mProbeTimer->setTimeoutMS(10);
-            else
+            } else {
                 self->acknowledgeSetPowerState();
+            }
             return;
         }
-        if (!self->mPowerAvailable)
+        if (!self->mPowerAvailable) {
             return;
+        }
         self->setProperty("CirrusTimerFired", kOSBooleanTrue);
         if (self->bootArgEnabled("-cirrusro")) {
             self->runReadOnlyProbe();
@@ -228,8 +238,9 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
     const auto previous = mHdaState;
     const bool wasPrepared = mHdaState.converterPrepared;
     auto publishStatus = [&](const char* text) {
-        if (mHdaStatus && strcmp(mHdaStatus, text) == 0)
+        if (mHdaStatus && strcmp(mHdaStatus, text) == 0) {
             return;
+        }
         OSString* status = OSString::withCString(text);
         if (status) {
             setProperty("Cirrus_HDA_Status", status);
@@ -242,10 +253,12 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
     mHdaState.lastDescriptor = 0xFF;
     mHdaState.lastStreamTag = 0;
     mHdaState.lastFormat = 0;
-    if (!mPowerAvailable || mStopping)
+    if (!mPowerAvailable || mStopping) {
         return false;
-    if (mHdaPci && (mHdaPci->isInactive() || mHdaPci->configRead16(kIOPCIConfigVendorID) == 0xFFFF))
+    }
+    if (mHdaPci && (mHdaPci->isInactive() || mHdaPci->configRead16(kIOPCIConfigVendorID) == 0xFFFF)) {
         clearHdaCache();
+    }
     const bool usingCachedController = mHdaPci != nullptr;
     IOService* audioCtrl = usingCachedController ? mHdaPci : getAudioController();
     if (!audioCtrl) {
@@ -272,18 +285,20 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
         ;
     if (!pciDev) {
         publishStatus("NOT_A_PCI_CONTROLLER");
-        if (usingCachedController)
+        if (usingCachedController) {
             clearHdaCache();
-        else
+        } else {
             audioCtrl->release();
+        }
         return false;
     }
     if (pciDev->isInactive() || pciDev->configRead16(kIOPCIConfigVendorID) == 0xFFFF) {
         publishStatus("CONTROLLER_UNAVAILABLE");
-        if (usingCachedController)
+        if (usingCachedController) {
             clearHdaCache();
-        else
+        } else {
             audioCtrl->release();
+        }
         return false;
     }
 
@@ -364,9 +379,8 @@ bool CirrusAudioFixup::synchronizeHdaStream() {
                                previous.lastFormat != activeFormat || previous.observed != mHdaState.observed;
     if (streamChanged) {
         char text[192]{};
-        snprintf(text, sizeof(text), "descriptor=%u tag=%u format=0x%04X rate_hz=%u bits=%u channels=%u compatible=%u",
-                 activeDescriptor, activeStream, activeFormat,
-                 outputRunning ? cirrus::platform::hda::HDAStreamWatcher::decodeSampleRate(activeFormat) : 0,
+        snprintf(text, sizeof(text), "descriptor=%u tag=%u format=0x%04X rate_hz=%u bits=%u channels=%u compatible=%u", activeDescriptor,
+                 activeStream, activeFormat, outputRunning ? cirrus::platform::hda::HDAStreamWatcher::decodeSampleRate(activeFormat) : 0,
                  outputRunning ? cirrus::platform::hda::HDAStreamWatcher::decodeBitsPerSample(activeFormat) : 0,
                  outputRunning ? unsigned((activeFormat & 15) + 1) : 0, unsigned(converterPrepared));
         if (auto* summary = OSString::withCString(text)) {
@@ -407,11 +421,13 @@ bool CirrusAudioFixup::setupAudioEvents() {
         setProperty("Cirrus_Audio_Event_Mode", mAudioState.routeKnown ? "IOAUDIO_FAMILY_EVENTS" : "IOAUDIO_HOOKS_WAITING_FOR_OUTPUT");
         return true;
     }
-    if (!mHdaPci || !cirrus::platform::hda::AudioEventSource::hooksReady())
+    if (!mHdaPci || !cirrus::platform::hda::AudioEventSource::hooksReady()) {
         return false;
+    }
     auto* source = cirrus::platform::hda::AudioEventSource::create(this, mHdaPci, audioEventReceived);
-    if (!source)
+    if (!source) {
         return false;
+    }
     if (mWorkLoop->addEventSource(source) != kIOReturnSuccess) {
         source->release();
         return false;
@@ -430,8 +446,9 @@ bool CirrusAudioFixup::setupAudioEvents() {
 void CirrusAudioFixup::teardownAudioEvents() {
     if (mAudioEvents) {
         mAudioEvents->detach();
-        if (mWorkLoop)
+        if (mWorkLoop) {
             mWorkLoop->removeEventSource(mAudioEvents);
+        }
         OSSafeReleaseNULL(mAudioEvents);
     }
     mAudioState = {};
@@ -440,25 +457,30 @@ void CirrusAudioFixup::teardownAudioEvents() {
 
 void CirrusAudioFixup::audioEventReceived(OSObject* owner, const cirrus::platform::hda::AudioEventState& state) {
     auto* self = OSDynamicCast(CirrusAudioFixup, owner);
-    if (!self || self->mStopping || !self->mPowerAvailable)
+    if (!self || self->mStopping || !self->mPowerAvailable) {
         return;
+    }
     self->mAudioState = state;
-    if (state.routeKnown)
+    if (state.routeKnown) {
         self->setProperty("Cirrus_Audio_Event_Mode", "IOAUDIO_FAMILY_EVENTS");
+    }
     self->mAudioPrepareRetries = state.routeKnown && state.speakers ? 40 : 0;
-    if (self->mProbeTimer)
+    if (self->mProbeTimer) {
         self->mProbeTimer->cancelTimeout();
+    }
     self->runBackgroundMonitor();
 }
 
 bool CirrusAudioFixup::retryPlatformIdentity() {
-    if (!mPlatformIdentityPending)
+    if (!mPlatformIdentityPending) {
         return false;
+    }
     resolvePlatformProfile();
     if (!mPlatformSubsystemId) {
         if (playbackTimeMilliseconds() < mPlatformIdentityDeadlineMs) {
-            if (mProbeTimer)
+            if (mProbeTimer) {
                 mProbeTimer->setTimeoutMS(100);
+            }
             return true;
         }
         mPlatformIdentityPending = false;
@@ -487,8 +509,9 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
     if (mNativeSPI.powerPending()) {
         mStartupPending = true;
         setProperty("Cirrus_Driver_Verdict", "WAITING_CONTROLLER_RESOURCES");
-        if (mProbeTimer)
+        if (mProbeTimer) {
             mProbeTimer->setTimeoutMS(10);
+        }
         return true;
     }
     if (!performPlatformHardwareReset() && mNativeSPI.bound()) {
@@ -496,62 +519,76 @@ bool CirrusAudioFixup::retryPlatformIdentity() {
         return true;
     }
     IOSleep(15);
-    if (mNativeSPI.bound())
+    if (mNativeSPI.bound()) {
         detectNativeSPIAmplifiers();
-    else
+    } else {
         detectAmplifiers();
+    }
     bringUpAmplifiers();
     setupAmplifierInterrupt();
-    if (mProbeTimer)
+    if (mProbeTimer) {
         mProbeTimer->setTimeoutMS(50);
+    }
     return true;
 }
 
 bool CirrusAudioFixup::retryBringUpResources() {
-    if (mAmplifierManager.stage() != cirrus::core::AmplifierStage::Waiting)
+    if (mAmplifierManager.stage() != cirrus::core::AmplifierStage::Waiting) {
         return false;
+    }
     mAmplifierManager.retryBringUp(playbackTimeMilliseconds());
     publishDriverVerdict();
     const bool waiting = mAmplifierManager.stage() == cirrus::core::AmplifierStage::Waiting;
-    if (waiting && mProbeTimer)
+    if (waiting && mProbeTimer) {
         mProbeTimer->setTimeoutMS(100);
+    }
     return waiting;
 }
 
 void CirrusAudioFixup::runBackgroundMonitor() {
-    if (mStopping || !mPowerAvailable || mNeedsReinitialization || mDebugPhaseHalted)
+    if (mStopping || !mPowerAvailable || mNeedsReinitialization || mDebugPhaseHalted) {
         return;
-    if (retryPlatformIdentity())
+    }
+    if (retryPlatformIdentity()) {
         return;
+    }
     // Diagnostic-only/failed attachments do not acquire HDA mappings or rearm
     // polling. Pending resources still have a bound Waiting runtime.
     if (!mPlatformAuthorized || !mAmplifierManager.bound() || mAmplifierManager.stage() == cirrus::core::AmplifierStage::Faulted ||
-        mAmplifierManager.stage() == cirrus::core::AmplifierStage::Suspended)
+        mAmplifierManager.stage() == cirrus::core::AmplifierStage::Suspended) {
         return;
-    if (mStopping || !mPowerAvailable || mNeedsReinitialization || mDebugPhaseHalted)
+    }
+    if (mStopping || !mPowerAvailable || mNeedsReinitialization || mDebugPhaseHalted) {
         return;
-    if (retryBringUpResources())
+    }
+    if (retryBringUpResources()) {
         return;
+    }
     bool hdaStreamActive = synchronizeHdaStream();
     setupAudioEvents();
-    if (mAudioEvents)
+    if (mAudioEvents) {
         mAudioState = mAudioEvents->snapshot();
+    }
     const uint32_t routeGeneration = mAudioState.generation;
     const bool eventRoute = mAudioState.routeKnown;
     // A DMA stream may belong to headphones/HDMI. An unknown output is not
     // permission to unmute board speakers, even when its format is compatible.
     const bool routePermitsPlayback = eventRoute && mAudioState.speakers && mAudioState.engineKnown && mAudioState.engineRunning;
-    setProperty("Cirrus_Playback_Route_Policy", !eventRoute ? "UNKNOWN_OUTPUT_ROUTE"
-                : !mAudioState.speakers ? "NON_SPEAKER_OUTPUT"
-                : !mAudioState.engineKnown ? "UNKNOWN_OUTPUT_ENGINE"
-                : !routePermitsPlayback ? "OUTPUT_ENGINE_STOPPED" : "SPEAKER_OUTPUT_SELECTED");
+    setProperty("Cirrus_Playback_Route_Policy", !eventRoute                ? "UNKNOWN_OUTPUT_ROUTE"
+                                                : !mAudioState.speakers    ? "NON_SPEAKER_OUTPUT"
+                                                : !mAudioState.engineKnown ? "UNKNOWN_OUTPUT_ENGINE"
+                                                : !routePermitsPlayback    ? "OUTPUT_ENGINE_STOPPED"
+                                                                           : "SPEAKER_OUTPUT_SELECTED");
     bool hasAudio = mHdaState.observed && hdaStreamActive && routePermitsPlayback;
     if (!mAmplifierManager.bound() || (mAmplifierManager.stage() != cirrus::core::AmplifierStage::Ready &&
-                                       mAmplifierManager.stage() != cirrus::core::AmplifierStage::Playing))
+                                       mAmplifierManager.stage() != cirrus::core::AmplifierStage::Playing)) {
         return;
-    for (size_t i = 0; i < mAmplifierManager.count(); ++i)
-        if (mAmplifierManager.playbackFaulted(i))
+    }
+    for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
+        if (mAmplifierManager.playbackFaulted(i)) {
             hasAudio = false;
+        }
+    }
     uint64_t nowMs = 0;
     absolutetime_to_nanoseconds(mach_absolute_time(), &nowMs);
     nowMs /= 1000000;
@@ -562,8 +599,8 @@ void CirrusAudioFixup::runBackgroundMonitor() {
         if (ret != kIOReturnSuccess) {
             setProperty("Cirrus_Runtime_Tick_Return", uint64_t(uint32_t(ret)), 32);
             setProperty("Cirrus_Runtime_Tick_Index", uint64_t(uint32_t(i)), 32);
-            CIRRUS_ERR("AMP runtime failure: index=%lu ret=0x%08X stage=%u; group playback blocked",
-                       static_cast<unsigned long>(i), ret, unsigned(mAmplifierManager.stage()));
+            CIRRUS_ERR("AMP runtime failure: index=%lu ret=0x%08X stage=%u; group playback blocked", static_cast<unsigned long>(i), ret,
+                       unsigned(mAmplifierManager.stage()));
             break;
         }
     }
@@ -575,29 +612,36 @@ void CirrusAudioFixup::runBackgroundMonitor() {
     }
     if (allPrepared && mAmplifierManager.stage() == cirrus::core::AmplifierStage::Ready) {
         bool valid = synchronizeHdaStream() && mHdaState.observed;
-        for (size_t i = 0; i < mAmplifierManager.count() && valid; ++i)
+        for (size_t i = 0; i < mAmplifierManager.count() && valid; ++i) {
             valid = mAmplifierManager.validatePlayback(i, context);
+        }
         if (valid) {
             IOReturn ret = mAmplifierManager.startPlayback();
             valid = ret == kIOReturnSuccess;
             setProperty("Cirrus_Runtime_Start_Return", uint64_t(uint32_t(ret)), 32);
-            if (!valid && mAmplifierManager.stage() == cirrus::core::AmplifierStage::Faulted)
+            if (!valid && mAmplifierManager.stage() == cirrus::core::AmplifierStage::Faulted) {
                 CIRRUS_ERR("AMP group start failed: ret=0x%08X; peers rolled back", ret);
+            }
         }
         // A route can change while register operations sleep. Revalidate the
         // complete group after its final commit and cancel every participant.
-        if (valid && mAudioEvents)
+        if (valid && mAudioEvents) {
             valid = mAudioEvents->unchanged(routeGeneration);
-        if (!valid)
-            for (size_t i = 0; i < mAmplifierManager.count(); ++i)
+        }
+        if (!valid) {
+            for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
                 mAmplifierManager.cancelPlayback(i);
+            }
+        }
     } else if (anyFault) {
-        for (size_t i = 0; i < mAmplifierManager.count(); ++i)
+        for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
             mAmplifierManager.cancelPlayback(i);
+        }
     }
     mAmplifierManager.refreshPlaybackState();
-    if (publishRuntimeStatus())
+    if (publishRuntimeStatus()) {
         publishDriverVerdict();
+    }
     bool pending = false, needsPreparation = false;
     for (size_t i = 0; i < mAmplifierManager.count(); ++i) {
         pending |= mAmplifierManager.playbackPending(i);
@@ -648,16 +692,18 @@ IOService* CirrusAudioFixup::audioController() {
                         const char* name = pci->getName();
                         uint16_t vendor = pci->configRead16(kIOPCIConfigVendorID);
                         int score = 0;
-                        if (name && strcmp(name, "HDEF") == 0)
+                        if (name && strcmp(name, "HDEF") == 0) {
                             score += 100;
-                        else if (name && strcmp(name, "HDAS") == 0)
+                        } else if (name && strcmp(name, "HDAS") == 0) {
                             score += 80;
-                        else if (name && strcmp(name, "HDAU") == 0)
+                        } else if (name && strcmp(name, "HDAU") == 0) {
                             score -= 100;
-                        if (vendor == 0x10DE)
+                        }
+                        if (vendor == 0x10DE) {
                             score -= 80;
-                        else
+                        } else {
                             score += 50;
+                        }
                         if (score > bestHdaScore) {
                             bestHdaScore = score;
                             bestHdaPci = pci;
@@ -667,22 +713,26 @@ IOService* CirrusAudioFixup::audioController() {
                     parent = parent->getParentEntry(gIOServicePlane);
                 }
             }
-            if (bestHdaPci && bestHdaScore >= 0)
+            if (bestHdaPci && bestHdaScore >= 0) {
                 bestHdaPci->retain();
+            }
             hdaIter->release();
-            if (bestHdaPci && bestHdaScore >= 0)
+            if (bestHdaPci && bestHdaScore >= 0) {
                 return bestHdaPci;
+            }
         }
     }
 
     OSDictionary* matching = serviceMatching("IOPCIDevice");
-    if (!matching)
+    if (!matching) {
         return nullptr;
+    }
 
     OSIterator* iter = getMatchingServices(matching);
     matching->release();
-    if (!iter)
+    if (!iter) {
         return nullptr;
+    }
 
     IOService* service;
     IOService* bestController = nullptr;
@@ -722,18 +772,20 @@ IOService* CirrusAudioFixup::audioController() {
 
         const char* name = service->getName();
         if (name) {
-            if (strcmp(name, "HDEF") == 0)
+            if (strcmp(name, "HDEF") == 0) {
                 score += 50;
-            else if (strcmp(name, "HDAS") == 0)
+            } else if (strcmp(name, "HDAS") == 0) {
                 score += 40;
-            else if (strcmp(name, "HDAU") == 0)
+            } else if (strcmp(name, "HDAU") == 0) {
                 score -= 100;
+            }
         }
 
-        if (pciVendor == 0x10DE)
+        if (pciVendor == 0x10DE) {
             score -= 50;
-        else if (pciVendor == 0x1022 || pciVendor == 0x8086)
+        } else if (pciVendor == 0x1022 || pciVendor == 0x8086) {
             score += 30;
+        }
 
         if (score >= 40 && score > bestScore) {
             bestScore = score;
@@ -741,8 +793,9 @@ IOService* CirrusAudioFixup::audioController() {
         }
     }
 
-    if (bestScore >= 40 && bestController)
+    if (bestScore >= 40 && bestController) {
         bestController->retain();
+    }
     iter->release();
     return bestScore >= 40 ? bestController : nullptr;
 }

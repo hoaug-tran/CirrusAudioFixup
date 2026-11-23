@@ -26,8 +26,9 @@ extern bool gCirrusDebug;
 #ifndef CIRRUS_LOG
 #define CIRRUS_LOG(fmt, ...)                                                                                                               \
     do {                                                                                                                                   \
-        if (gCirrusDebug)                                                                                                                  \
+        if (gCirrusDebug) {                                                                                                                \
             IOLog(CIRRUS_LOG_PREFIX fmt "\n", ##__VA_ARGS__);                                                                              \
+        }                                                                                                                                  \
     } while (0)
 #endif
 

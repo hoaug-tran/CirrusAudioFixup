@@ -33,6 +33,7 @@ suites = (
     "Drivers/check_cs35l41_driver",
     "Drivers/check_cs35l41_power",
     "Platform/check_platform_configuration",
+    "Platform/check_hardware_catalog",
     "Platform/check_platform_discovery",
     "Platform/check_i2c_discovery",
     "Platform/check_acpi_probe_filtering",

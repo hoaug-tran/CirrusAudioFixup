@@ -841,12 +841,19 @@
 			path = PlatformProfile.hpp;
 			sourceTree = "<group>";
 		};
+		D1DEE96129AE7010800B6327 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = HardwareCatalog.hpp;
+			sourceTree = "<group>";
+		};
 		8CCCC6A730958B508D279C40 = {
 			isa = PBXGroup;
 			children = (
 				1E4FC108153F3B68092EDD67,
 				614937864310FDEE840D627B,
 				D1DEE96129AE7010800B6326,
+				D1DEE96129AE7010800B6327,
 			);
 			sourceTree = "<group>";
 			path = Board;

@@ -446,6 +446,42 @@ void CirrusAudioFixup::resolvePlatformProfile() {
     setProperty("Cirrus_Platform_ACPI_SSID", uint64_t(acpiSubsystemId), 32);
     setProperty("Cirrus_Platform_Identity_Source",
                 (mPlatformProfile->identitySource == cirrus::platform::BoardIdentitySource::ACPI && acpi) ? "ACPI_SUB" : "AUDIO_PCI");
+    {
+        const uint32_t primaryCandidateId = mPlatformSubsystemId;
+        const uint32_t fallbackCandidateId = acpiSubsystemId ? acpiSubsystemId : pciSubsystemId;
+        const char* matchSource = "NONE";
+        const auto* candidate = cirrus::platform::catalog::lookupCandidate(primaryCandidateId);
+        if (candidate) {
+            matchSource = "PRIMARY";
+        } else if (fallbackCandidateId && fallbackCandidateId != primaryCandidateId) {
+            candidate = cirrus::platform::catalog::lookupCandidate(fallbackCandidateId);
+            if (candidate) {
+                matchSource = (fallbackCandidateId == pciSubsystemId && !acpiSubsystemId) ? "PCI_FALLBACK" : "ACPI_FALLBACK";
+            }
+        }
+        if (!candidate && pciSubsystemId && pciSubsystemId != primaryCandidateId && pciSubsystemId != fallbackCandidateId) {
+            candidate = cirrus::platform::catalog::lookupCandidate(pciSubsystemId);
+            if (candidate) {
+                matchSource = "PCI_FALLBACK";
+            }
+        }
+        const uint32_t reportedSubsystem =
+            candidate ? candidate->subsystem : (primaryCandidateId ? primaryCandidateId : fallbackCandidateId);
+        const auto candidateLevel =
+            candidate ? candidate->level : cirrus::platform::catalog::SupportLevel::Unknown;
+        const auto candidateFamily =
+            candidate ? candidate->family : cirrus::platform::catalog::AmplifierFamily::Unknown;
+        const auto missingReason =
+            candidate ? candidate->missingReason
+                      : (reportedSubsystem ? cirrus::platform::catalog::MissingReason::UnrecognizedSubsystemId
+                                           : cirrus::platform::catalog::MissingReason::NoSubsystemId);
+        setProperty("Cirrus_Candidate_Subsystem", uint64_t(reportedSubsystem), 32);
+        setProperty("Cirrus_Candidate_Status", cirrus::platform::catalog::supportLevelName(candidateLevel));
+        setProperty("Cirrus_Candidate_Family", cirrus::platform::catalog::familyName(candidateFamily));
+        setProperty("Cirrus_Candidate_Amp_Count", uint64_t(candidate ? candidate->ampCount : 0), 32);
+        setProperty("Cirrus_Candidate_Missing", cirrus::platform::catalog::missingReasonName(missingReason));
+        setProperty("Cirrus_Candidate_Match_Source", matchSource);
+    }
     if (!previousProfile || previousProfile != mPlatformProfile || previousSubsystemId != mPlatformSubsystemId) {
         setProperty("Cirrus_Platform_PCI_SSID", uint64_t(uint32_t(pciSubsystemId)), 32);
         setProperty("Cirrus_Platform_Authorized", mPlatformAuthorized ? kOSBooleanTrue : kOSBooleanFalse);

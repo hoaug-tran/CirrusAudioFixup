@@ -33,6 +33,17 @@ system_profiler SPAudioDataType
 - **`Cirrus_Bus`**: Confirms the transport bus (`I2C` or `SPI`).
 - **`Cirrus_Detected_Amplifiers`**: Shows the count of active amplifiers (usually `2`).
 
+### Read-Only Candidate Catalog Properties
+
+For board identification and onboarding triage, `resolvePlatformProfile()` also publishes six read-only diagnostic properties derived from `HardwareCatalog.hpp` (these never alter `Cirrus_Platform_Authorized` or allow unverified hardware initialization):
+
+- **`Cirrus_Candidate_Subsystem`**: Resolved subsystem ID (`uint32_t`).
+- **`Cirrus_Candidate_Status`**: `PRODUCTION_SUPPORTED`, `TECHNICALLY_SUPPORTABLE_NO_EMBEDDED_FW`, `RECOGNIZED_CANDIDATE`, or `UNKNOWN_HARDWARE`.
+- **`Cirrus_Candidate_Family`**: `CS35L41`, `CS35L56`, or `UNKNOWN`.
+- **`Cirrus_Candidate_Amp_Count`**: Cataloged amplifier count (`uint32_t`, `0` if unknown).
+- **`Cirrus_Candidate_Missing`**: Reason hardware is not authorized (e.g., `NONE`, `MISSING_EMBEDDED_FW_AND_HW_VALIDATION`, `SPI_REQUIRES_NATIVE_ACPI_DSD_AND_FW`, `UNSUPPORTED_QUAD_AMP`).
+- **`Cirrus_Candidate_Match_Source`**: Lookup path (`PRIMARY`, `PCI_FALLBACK`, `ACPI_FALLBACK`, or `NONE`).
+
 ---
 
 ## 2. Retained Logs and Live Messages

@@ -156,6 +156,7 @@ with tempfile.TemporaryDirectory(prefix="cirrus-hp-profile-") as directory:
 #include <algorithm>
 #include "Devices/Amplifiers/CS35L41/Board/CS35L41BoardDiscovery.hpp"
 #include "Platform/Board/PlatformProfile.hpp"
+#include "Platform/Board/HardwareCatalog.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareData.hpp"
 #include "Devices/Amplifiers/CS35L41/Resources/FirmwareSelection.hpp"
 struct Properties:cirrus::platform::PlatformProperties {

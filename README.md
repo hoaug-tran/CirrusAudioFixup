@@ -422,7 +422,7 @@ Add `-IncludeDriverFiles` on Windows or `--include-firmware` on Linux when match
 
 ## Adding hardware support
 
-For a new board or amplifier family, follow [the contribution requirements](CONTRIBUTING.md). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support.
+For a new board or amplifier family, follow [the contribution requirements](CONTRIBUTING.md). Include matching Linux/Windows data, firmware and board wiring. Importing firmware alone does not add hardware support. To check candidate readiness or stage verified upstream I2C assets for testing, inspect [docs/hardware/hardware_catalog.json](docs/hardware/hardware_catalog.json) with `python3 Tools/Hardware/onboard_board.py --inspect <SSID>` (catalog recognition and staging are strictly diagnostic/preparatory and never authorize unverified hardware).
 
 ## Build from source
 

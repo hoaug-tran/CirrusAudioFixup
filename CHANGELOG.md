@@ -19,6 +19,7 @@
 - Hardened service lifecycle teardown idempotency and added null guards for audio event observers and HDA controller references.
 - Fixed `RegisterMap` non-incrementing FIFO transfers to properly evaluate bounds without scalar permission rejection.
 - Enabled develop push builds and automatic kext artifact uploads in CI workflows.
+- Added a read-only CS35L41/CS35L56 hardware candidate catalog (`Cirrus_Candidate_*` IORegistry diagnostics, `BoardProperties` upstream sync, and `Tools/Hardware/onboard_board.py` staging workflow); candidate recognition does not authorize unverified hardware or bypass protection checks.
 
 ## [1.2.0] - 2026-11-06
 

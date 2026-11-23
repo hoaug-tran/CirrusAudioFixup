@@ -115,7 +115,22 @@ try:
             if f.is_file(): read(f,'alsa/codec/'+card.name+'_'+f.name+'.txt',131072)
     run('alsa/aplay-list.txt',['aplay','-l'],cap=16384)
     run('alsa/arecord-list.txt',['arecord','-l'],cap=16384)
-    run('alsa/mixer-controls.txt',['amixer','-c','0','contents'],cap=98304)
+    cards_found=sorted(P('/proc/asound').glob('card[0-9]*'))
+    if cards_found:
+        for card in cards_found[:4]:
+            cid=card.name[4:]
+            if cid.isdigit():
+                run('alsa/mixer-controls-card'+cid+'.txt',['amixer','-c',cid,'contents'],cap=98304)
+    else:
+        run('alsa/mixer-controls.txt',['amixer','-c','0','contents'],cap=98304)
+    # Read only the two exact named Cirrus/HP smart-amp EFI calibration variables if exposed.
+    efivars=P('/sys/firmware/efi/efivars')
+    if efivars.is_dir():
+        for var in ('CirrusSmartAmpCalibrationData-02f9af02-7734-4233-b43d-93fe5aa35db3',
+                    'SmartAmpCalibrationData-53559579-8753-4f5c-9130-e82acfb8d893'):
+            vf=efivars/var
+            if vf.is_file():
+                read(vf,'system/efi-calibration/'+var+'.bin',65536)
     # Cross-platform Linux sysfs buses. No kernel-specific bus is mandatory.
     nodes=[]; seen=set(); controllers=[]
     for bus in ('spi','i2c','sdw','soundwire','hdaudio','platform','acpi','pci'):

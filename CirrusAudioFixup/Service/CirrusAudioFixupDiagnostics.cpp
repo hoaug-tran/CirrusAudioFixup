@@ -432,6 +432,8 @@ void CirrusAudioFixup::publishDriverVerdict() {
     }
     bool allInitialized = (mAmplifierCount > 0);
     bool anyFaulted = false, identityPending = false;
+    bool anySuspending = mAmplifierManager.stage() == cirrus::core::AmplifierStage::Suspended ||
+                         mAmplifierManager.stage() == cirrus::core::AmplifierStage::Shutdown;
     const char* readyVerdict = nullptr;
     const char* waitingVerdict = "WAITING_FOR_RESOURCES";
     for (size_t i = 0; i < mAmplifierCount; ++i) {
@@ -441,6 +443,8 @@ void CirrusAudioFixup::publishDriverVerdict() {
             status && (status->stage == cirrus::core::AmplifierStage::Ready || status->stage == cirrus::core::AmplifierStage::Playing);
         allInitialized &= ready && (!report.managed || report.initialized);
         anyFaulted |= mAmplifiers[i].playbackFaulted || report.faulted;
+        anySuspending |=
+            status && (status->stage == cirrus::core::AmplifierStage::Suspended || status->stage == cirrus::core::AmplifierStage::Shutdown);
         identityPending |= report.waiting;
         if (report.waitingVerdict) {
             waitingVerdict = report.waitingVerdict;
@@ -464,6 +468,7 @@ void CirrusAudioFixup::publishDriverVerdict() {
                           : communicationFailed         ? "COMMUNICATION_FAILED"
                           : !mPlatformAuthorized        ? "UNSUPPORTED_PLATFORM"
                           : anyFaulted                  ? "FAULT_LATCHED"
+                          : anySuspending               ? "SUSPENDED"
                           : !topologyComplete && !strcmp(mAttachment.latest.stage, "COMMUNICATION") ? "COMMUNICATION_FAILED"
                           : !topologyComplete                                                       ? "INCOMPLETE_TOPOLOGY"
                           : identityPending                                                         ? waitingVerdict

@@ -163,7 +163,7 @@ def parse_archive(path):
             pm=r"Power|PMCSR|Capability|Wait",
             reset=r"Reset|GPIO_Group",
             spi=r"Transaction|Transfer|FirstFrame|_ID_|SPI_MMIO|SPI_Engine|SPI_CS",
-            id=r"DeviceID|Revision|REVID|Speaker|Discovery|Authorized|Detected",
+            id=r"DeviceID|Revision|REVID|Speaker|Discovery|Authorized|Detected|Candidate",
             firmware=r"Firmware|Tuning|Calibration|WMFW|Coeff",
             dsp=r"DSP|HALO",
             hda=r"HDA|Stream|Audio_Event",

@@ -30,6 +30,10 @@ namespace cirrus::transport::amd {
             return result;
         }
         SPIController& controller() override { return mController; }
+        bool accessible() override {
+            uint32_t power = 0;
+            return mTarget && mTarget->evaluateInteger("_PSC", &power) == kIOReturnSuccess && power == 0;
+        }
         void suspend() override { mController.suspend(); }
         IOReturn resume(NativeSPIControllerFailure& failure) override {
             uint32_t power = 0;

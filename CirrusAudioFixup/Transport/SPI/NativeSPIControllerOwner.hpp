@@ -17,6 +17,7 @@ namespace cirrus::transport {
         NativeSPIControllerOwner& operator=(const NativeSPIControllerOwner&) = delete;
         virtual ~NativeSPIControllerOwner() = default;
         virtual SPIController& controller() = 0;
+        virtual bool accessible() { return true; }
         virtual bool powerPending() const { return false; }
         virtual IOReturn continueBind(NativeSPIControllerFailure&) { return kIOReturnSuccess; }
         virtual IOReturn prepareGPIOGroup(IOACPIPlatformDevice*, const char*) { return kIOReturnUnsupported; }

@@ -113,6 +113,7 @@ namespace cirrus::transport::intel {
         uint32_t preparedClock() const { return mController.preparedClock(); }
         uint32_t initialClockGate() const { return mController.initialClockGate(); }
         SPIController& controller() override { return mController; }
+        bool accessible() override { return mController.accessible(); }
         void suspend() override { mController.suspend(); }
         IOReturn resume(NativeSPIControllerFailure& failure) override {
             const auto result = mController.resume();

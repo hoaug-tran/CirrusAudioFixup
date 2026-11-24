@@ -823,6 +823,27 @@ namespace cirrus::transport::intel {
         return result;
     }
 
+    bool IntelLPSSSPIController::accessible() {
+        if (!mLock || !mPCI) {
+            return false;
+        }
+#if defined(KERNEL)
+        // Firmware evaluation may sleep or acquire the ACPI interpreter lock.
+        if (mChipSelects.validatePower() != kIOReturnSuccess) {
+            return false;
+        }
+#endif
+        IOLockLock(mLock);
+        bool ready = mWindow.base && pciIsD0() && (mPCI->configRead16(kIOPCIConfigCommand) & 2U) && mEngine.accessible();
+#if defined(KERNEL)
+        if (ready && mChipSelects.validateOutputs() != kIOReturnSuccess) {
+            ready = false;
+        }
+#endif
+        IOLockUnlock(mLock);
+        return ready;
+    }
+
     void IntelLPSSSPIController::suspend() {
         if (!mLock) {
             return;

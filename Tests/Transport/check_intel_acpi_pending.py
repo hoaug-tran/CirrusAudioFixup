@@ -36,7 +36,7 @@ virtual IOReturn continueBind(NativeSPIControllerFailure&)=0;
 virtual IOReturn prepareGPIOGroup(IOACPIPlatformDevice*,const char*)=0;
 virtual IOReturn writeGPIOGroup(bool)=0;
 virtual IOReturn readGPIO(IOACPIPlatformDevice*,const char*,size_t,uint32_t&)=0;
-virtual SPIController& controller()=0;virtual void suspend()=0;
+virtual SPIController& controller()=0;virtual bool accessible(){return true;}virtual void suspend()=0;
 virtual IOReturn resume(NativeSPIControllerFailure&)=0;
 };
 bool pciPending=false;unsigned csBinds=0;int csResult=0;
@@ -51,6 +51,7 @@ IOReturn configureChipSelects(IOACPIPlatformDevice*,IOService*){++csBinds;return
 IOReturn prepareGPIOGroup(IOACPIPlatformDevice*,const char*){return 0;}
 IOReturn writeGPIOGroup(bool){return 0;}
 IOReturn readGPIO(IOACPIPlatformDevice*,const char*,size_t,uint32_t&){return 0;}
+bool accessible(){return !pciPending;}
 void suspend(){} IOReturn resume(){return 0;}
 };
 bool nativePropertiesReady=false;

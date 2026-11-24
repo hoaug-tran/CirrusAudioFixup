@@ -999,10 +999,12 @@ void CirrusAudioFixup::bringUpAmplifiers() {
         if (status) {
             mAmplifiers[i].initialized =
                 status->stage == cirrus::core::AmplifierStage::Ready || status->stage == cirrus::core::AmplifierStage::Playing;
-            if (status->stage == cirrus::core::AmplifierStage::Faulted) {
+            if (mAmplifiers[i].initialized) {
+                mAmplifiers[i].playbackFaulted = false;
+            } else if (status->stage == cirrus::core::AmplifierStage::Faulted) {
                 mAmplifiers[i].playbackFaulted = true;
             }
-            if (status->firstFailure != kIOReturnSuccess) {
+            if (status->firstFailure != kIOReturnSuccess && !mAmplifiers[i].initialized) {
                 CIRRUS_ERR("AMP driver failure: index=%lu stage=%u first=0x%08X cleanup=0x%08X", static_cast<unsigned long>(i),
                            unsigned(status->firstFailureStage), status->firstFailure, status->cleanupResult);
             }

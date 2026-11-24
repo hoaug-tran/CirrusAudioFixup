@@ -144,11 +144,12 @@ struct CirrusAudioFixup:IOService {
  struct AmpManager {
   bool boundVal=false;
   cirrus::core::AmplifierStage stageVal=cirrus::core::AmplifierStage::Unconfigured;
-  unsigned suspends=0, resumes=0;
+  unsigned suspends=0, resumes=0, powerLosses=0;
   bool bound() const { return boundVal; }
   cirrus::core::AmplifierStage stage() const { return stageVal; }
   int suspend() { ++suspends; return 0; }
   int resume() { ++resumes; return 0; }
+  void powerLost() { ++powerLosses; }
  } mAmplifierManager;
  struct HdaState {
   bool streamActive=false, observed=false, converterPrepared=false, topologyLogged=false;
@@ -169,6 +170,7 @@ struct CirrusAudioFixup:IOService {
   int continueBind(){++polls;return result;}
   bool powerPending(){return pending;}
   bool bound()const{return false;}
+  bool accessible(){return true;}
   const Failure& failure(){return f;}
  }mNativeSPI;
  struct Gate {CirrusAudioFixup* self;int runAction(int(*f)(OSObject*,void*,void*,void*,void*),void* a){return f(self,a,nullptr,nullptr,nullptr);}} gate{this};

@@ -39,6 +39,7 @@ namespace cirrus::transport::intel {
         IOReturn readGPIO(IOACPIPlatformDevice* source, const char* property, size_t index, uint32_t& value) {
             return selects.readGPIO(source, property, index, value);
         }
+        bool accessible() { return ready && !pending && selects.validatePower() == kIOReturnSuccess; }
         void suspend() { ready = false; }
         IOReturn resume() { return kIOReturnSuccess; }
         size_t maxTransferBytes() const override { return 262; }

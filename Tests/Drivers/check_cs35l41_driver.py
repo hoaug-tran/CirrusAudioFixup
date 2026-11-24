@@ -18,6 +18,7 @@ CPP = r"""
 #include "Devices/Amplifiers/CS35L41/CS35L41DriverFactory.hpp"
 #include "Devices/Amplifiers/CS35L41/CS35L41Driver.hpp"
 #include "Devices/Amplifiers/CS35L41/DeviceConfiguration.hpp"
+#include "Devices/Amplifiers/CS35L41/DSPControl.hpp"
 #include "Devices/AmplifierDriverModules.hpp"
 #include "Runtime/AmplifierManager.hpp"
 #include <cassert>
@@ -307,6 +308,17 @@ int main(){
     bad.binding.endpoint=bad.endpoint;bad.context.bindingIndex=1;assert(!createDriver(bad.context) && bad.port.calls==0);
     bad.context.bindingIndex=0;bad.board.wiringVerified=false;assert(!createDriver(bad.context) && bad.port.calls==0);
     bad.board.wiringVerified=true;bad.board.amplifiers=nullptr;assert(!createDriver(bad.context) && bad.port.calls==0);
+
+    {
+        Port port;
+        RuntimeState state;
+        port.values[registers::kRegDsp1CcmCoreControl] = registers::kValHaloCoreEnable;
+        bool halted = DSPControl::halt(port, state, [](uint32_t){});
+        assert(halted);
+        assert(!state.dspAlive);
+        assert((port.values[registers::kRegDsp1CcmCoreControl] & registers::kValHaloCoreEnable) == 0);
+        assert((port.values[registers::kRegDsp1CoreSoftReset] & 1U) == 1U);
+    }
 
     printf("PASS complete owned CS35L41 driver: %u transfer fault positions, reset/OTP/errata/idle, native identity errors, wait timeout, debug phases, PM and teardown/rebind\n",total);
 }

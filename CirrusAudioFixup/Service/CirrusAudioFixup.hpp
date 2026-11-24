@@ -192,10 +192,13 @@ class CirrusAudioFixup : public IOService {
             publishAttachmentStatus();
             if (ret != kIOReturnSuccess) {
                 recordAttachmentFailure("CONTROLLER_PM", failure.reason, ret, uint32_t(failure.index), "CONTROLLER_SLOT");
-            }
-            if (ret != kIOReturnSuccess) {
                 CIRRUS_ERR("SPI wake blocked: reason=%s controller=%lu detail=0x%08X ret=0x%08X; amplifiers remain suspended",
                            failure.reason, static_cast<unsigned long>(failure.index), failure.detail, ret);
+            } else if (mPlatformAuthorized && !bootArgEnabled("-cirrusro") && !bootArgStrEquals("-cirrusphase", "probe")) {
+                if (!performPlatformHardwareReset()) {
+                    CIRRUS_ERR("SPI wake hardware reset failed; amplifiers remain suspended");
+                    return false;
+                }
             }
         }
         if (!mNativeSPI.bound()) {

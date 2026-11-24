@@ -57,6 +57,7 @@ namespace cirrus::transport::intel {
         uint32_t preparedClock() const { return mEngine.preparedClock(); }
         uint32_t initialClockGate() const { return mEngine.initialClockGate(); }
         void shutdown();
+        bool accessible();
         void suspend();
         IOReturn resume();
         size_t maxTransferBytes() const override { return LPSSSPIEngine::kMaxFrameBytes; }

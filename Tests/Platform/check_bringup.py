@@ -73,7 +73,7 @@ public:
     void suspendCommunication() {}
     bool resumeCommOK=true;
     bool resumeCommunication() { return resumeCommOK; }
-    struct NativeSPI { bool spiBound=false; bool bound() const { return spiBound; } } mNativeSPI;
+    struct NativeSPI { bool spiBound=false, spiAccessible=true; bool bound() const { return spiBound; } bool accessible() { return spiAccessible; } } mNativeSPI;
     cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
     uint32_t mPublishedRuntimeStage=UINT32_MAX,mPublishedRuntimeCount=UINT32_MAX;
     void publishStatistics(){}
@@ -374,6 +374,43 @@ int main() {
         check(!wakeFail.mPowerAvailable && wakeFail.mWakeFailed &&
               wakeFail.properties["Cirrus_SPI_Status"]=="WAKE_CONTROLLER_NOT_READY",
               "failed SPI wake preserves WAKE_CONTROLLER_NOT_READY diagnostic property");
+    }
+    {
+        // Regression (#25): Intel LPSS SPI / GPIO enters D3 before CirrusAudioFixup
+        // suspend runs. Must defer to full wake rebind/bringUp without latching fault.
+        CirrusAudioFixup spiD3Sleep;
+        spiD3Sleep.mNativeSPI.spiBound=true;
+        spiD3Sleep.mNativeSPI.spiAccessible=true;
+        spiD3Sleep.bringUpAmplifiers();
+        check(spiD3Sleep.uploads==2 && spiD3Sleep.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
+              "SPI initial bringup reaches READY_DSP");
+        const unsigned stopsBefore=spiD3Sleep.stops[0], haltsBefore=spiD3Sleep.halts[0];
+        spiD3Sleep.mNativeSPI.spiAccessible=false;
+        spiD3Sleep.handlePowerChange(false);
+        check(spiD3Sleep.stops[0]==stopsBefore && spiD3Sleep.halts[0]==haltsBefore,
+              "offline SPI controller on suspend avoids doomed register traffic");
+        check(!spiD3Sleep.mAmplifierManager.bound() && spiD3Sleep.properties["Cirrus_Driver_Verdict"]=="SUSPENDED",
+              "offline SPI suspend releases drivers cleanly without latching fault");
+        spiD3Sleep.mNativeSPI.spiAccessible=true;
+        spiD3Sleep.handlePowerChange(true);
+        check(spiD3Sleep.uploads==4 && spiD3Sleep.mAmplifiers[0].initialized && spiD3Sleep.mAmplifiers[1].initialized &&
+              !spiD3Sleep.mAmplifiers[0].playbackFaulted && !spiD3Sleep.mAmplifiers[1].playbackFaulted &&
+              spiD3Sleep.properties["Cirrus_Driver_Verdict"]=="READY_DSP",
+              "wake after SPI D3 suspend rebinds and restores READY_DSP");
+
+        // Online SPI real hardware cleanup fault must still fail-closed (FAULT_LATCHED).
+        CirrusAudioFixup spiRealFault;
+        spiRealFault.mNativeSPI.spiBound=true;
+        spiRealFault.mNativeSPI.spiAccessible=true;
+        spiRealFault.bringUpAmplifiers();
+        spiRealFault.cleanupError=true;
+        spiRealFault.handlePowerChange(false);
+        check(spiRealFault.mAmplifierManager.stage()==cirrus::core::AmplifierStage::Faulted,
+              "online SPI real shutdown failure still latches Faulted");
+        spiRealFault.cleanupError=false;
+        spiRealFault.handlePowerChange(true);
+        check(spiRealFault.properties["Cirrus_Driver_Verdict"]=="FAULT_LATCHED",
+              "online SPI real shutdown failure stays FAULT_LATCHED across wake");
     }
     if(failures) { printf("FAIL bringup assertions=%u\n",failures); return 1; }
     printf("PASS codec init single-I/O fault sweep (%u positions)\n",codec.io);

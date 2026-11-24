@@ -5,6 +5,9 @@ namespace cirrus::devices::amplifiers::cs35l41 {
         auto& amp = mAmplifier;
         amp.bringUpDisposition = cirrus::core::BringUpDisposition::Continue;
         amp.initialized = amp.firmwareValidated = amp.dspAlive = false;
+        amp.playbackFaulted = false;
+        amp.pllRecoveryPending = false;
+        amp.pllRecoveryAttempts = 0;
         amp.monitorCount = 0;
         amp.haloStateRegister = amp.haloHeartbeatRegister = 0;
         amp.diagnosticControlCount = amp.firmwareIdVersion = 0;
@@ -333,6 +336,8 @@ namespace cirrus::devices::amplifiers::cs35l41 {
         const auto r = shutdownFlow();
         if (r != kIOReturnSuccess) {
             mAmplifier.playbackFaulted = true;
+        } else {
+            mAmplifier.playbackFaulted = false;
         }
         return r;
     }

@@ -193,8 +193,13 @@ int main(){
     IOPCIDevice cold;cold.state=0x810b;cold.wakeAllowed=true;
     {IntelLPSSSPIController bus;assert(bus.bind(&cold,&owner)==0);
      assert(cold.requests==1&&cold.state==0x8108&&cold.memory&&cold.writes==1);
-     bus.suspend();cold.state=0xb;assert(bus.resume()==0&&cold.state==8);
-     bus.shutdown();}
+     assert(bus.accessible());
+     cold.state=0xb;assert(!bus.accessible());cold.state=0x8108;
+     cold.memory=false;assert(!bus.accessible());cold.memory=true;
+     assert(bus.accessible());
+     bus.suspend();assert(!bus.accessible());
+     cold.state=0xb;assert(bus.resume()==0&&cold.state==8&&bus.accessible());
+     bus.shutdown();assert(!bus.accessible());}
     assert(cold.refs==1&&!cold.opened&&!cold.memory);
     // Delayed grants keep ownership without accessing the BAR.
     for(unsigned delay:{100U,600U,5000U,31000U}){

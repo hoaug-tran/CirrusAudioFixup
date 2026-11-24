@@ -166,6 +166,7 @@ namespace cirrus::transport::intel {
         uint32_t selectCount() const { return mSelectCount; }
         uint32_t actualClockHz() const { return mActualClockHz; }
         bool online() const { return mInitialized && mOnline; }
+        bool accessible() { return online() && hardwareReady(); }
 
         void suspend() {
             if (online() && mTouched && hardwareReady()) {

@@ -101,10 +101,25 @@ void CirrusAudioFixup::handlePowerChange(bool powered) {
         if (mAmplifierManager.bound()) {
             auto stage = mAmplifierManager.stage();
             if (stage == cirrus::core::AmplifierStage::Ready || stage == cirrus::core::AmplifierStage::Playing) {
-                IOReturn ret = mAmplifierManager.suspend();
-                setProperty("Cirrus_Runtime_Suspend_Return", uint64_t(uint32_t(ret)), 32);
-                if (ret != kIOReturnSuccess) {
-                    CIRRUS_ERR("AMP suspend cleanup failed: ret=0x%08X; runtime fault retained", ret);
+                if (mNativeSPI.bound() && !mNativeSPI.accessible()) {
+                    CIRRUS_LOG("SPI controller already powered down on suspend; deferring amplifier reset and re-init to wake");
+                    setProperty("Cirrus_Runtime_Suspend_Return", uint64_t(uint32_t(kIOReturnSuccess)), 32);
+                    mAmplifierManager.powerLost();
+                    releaseAmplifierDrivers();
+                } else {
+                    IOReturn ret = mAmplifierManager.suspend();
+                    setProperty("Cirrus_Runtime_Suspend_Return", uint64_t(uint32_t(ret)), 32);
+                    if (ret != kIOReturnSuccess) {
+                        if (mNativeSPI.bound() && !mNativeSPI.accessible()) {
+                            CIRRUS_LOG(
+                                "SPI controller lost power during suspend (ret=0x%08X); deferring amplifier reset and re-init to wake",
+                                ret);
+                            mAmplifierManager.powerLost();
+                            releaseAmplifierDrivers();
+                        } else {
+                            CIRRUS_ERR("AMP suspend cleanup failed: ret=0x%08X; runtime fault retained", ret);
+                        }
+                    }
                 }
             } else if (stage != cirrus::core::AmplifierStage::Faulted) {
                 releaseAmplifierDrivers();

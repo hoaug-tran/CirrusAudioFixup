@@ -323,6 +323,17 @@ namespace cirrus::transport {
             IOSleep(reset.settleMs);
             return kIOReturnSuccess;
         }
+        bool accessible() {
+            if (!bound() || powerPending()) {
+                return false;
+            }
+            for (size_t i = 0; i < mControllers; ++i) {
+                if (!mOwners[i] || !mOwners[i]->accessible()) {
+                    return false;
+                }
+            }
+            return true;
+        }
         void suspend() {
             mResumeSlot = 0;
             for (size_t i = 0; i < mControllers; ++i) {

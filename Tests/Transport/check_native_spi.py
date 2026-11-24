@@ -135,6 +135,7 @@ public:
  size_t maxTransferBytes() const override {{return 262;}}
  IOReturn exchange(const SPIEndpoint&,const uint8_t*,uint8_t*,size_t) override {{return kIOReturnUnsupported;}}
  IOReturn command(const SPIEndpoint& ep,const uint8_t* tx,size_t tn,uint8_t* rx,size_t n) override {{if(!active)return kIOReturnNotReady;if(!n){{++writeTransfers;writes.emplace_back(tx,tx+tn);}}for(size_t i=0;i<n;++i)rx[i]=n==4?uint8_t(probeIDs[ep.chipSelect]>>(24-8*i)):0;return 0;}}
+ bool accessible(){{return active;}}
  void suspend(){{++suspends;active=false;}}
  IOReturn resume(){{++resumes;active=!resumeFailure;return active?0:kIOReturnNotReady;}}
 }};
@@ -257,6 +258,8 @@ public:
         + " void publishI2CResourceDebugEvidence(const cirrus::transport::I2CPlatformResources&){}\n"
         + " bool ensureACPIDeviceReady(IOACPIPlatformDevice*,const char*,const char*);\n"
         + " bool prepareDiscoveredI2CReset();\n"
+        + " bool resetCalled = false, resetOK = true;\n"
+        + " bool performPlatformHardwareReset() { resetCalled = true; return resetOK; }\n"
         + " bool resumeI2CCommunication();\n"
         + power_wrapper("suspendCommunication")
         + power_wrapper("resumeCommunication")
@@ -522,6 +525,12 @@ int main(){
  assert(!strcmp(customSPI.mAttachment.first.stage,"CONTROLLER_PM") && !strcmp(customSPI.mAttachment.first.indexKind,"CONTROLLER_SLOT") && customSPI.mAttachment.first.result==kIOReturnNotReady);
  assert(!strcmp(customSPI.mNativeSPI.failure().reason,"CUSTOM_OWNER_RESUME_FAILED") && resumes==originalIntelResumes);
  failNativeResume=false;assert(customSPI.resumeCommunication() && nativeResumes==3 && customSPI.mAttachment.first.result==kIOReturnNotReady);
+ assert(!customSPI.resetCalled);
+ customSPI.mPlatformAuthorized=true;customSPI.resetCalled=false;
+ assert(customSPI.resumeCommunication() && customSPI.resetCalled);
+ customSPI.resetCalled=false;customSPI.resetOK=false;
+ assert(!customSPI.resumeCommunication() && customSPI.resetCalled);
+ customSPI.resetOK=true;
  customSPI.teardownCommunication();assert(nativeCreates==nativeDestroys && a.refs==1 && b.refs==1);
  rejectNative=true;const auto createdBefore=nativeCreates;
  assert(!customSPI.setupCommunication(&amp) && nativeCreates==createdBefore && !liveControllers && !customSPI.mNativeSPI.bound());

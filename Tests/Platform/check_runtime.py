@@ -324,7 +324,7 @@ public:
     + r"""
     void suspendCommunication() {}
     bool resumeCommunication() {return true;}
-    struct NativeSPI { bool spiBound=false; bool bound() const { return spiBound; } } mNativeSPI;
+    struct NativeSPI { bool spiBound=false, spiAccessible=true; bool bound() const { return spiBound; } bool accessible() { return spiAccessible; } } mNativeSPI;
 public:
     bool retryPlatformIdentity(){return false;}
     cirrus::diagnostics::RuntimeDiagnosticSnapshot mRuntimePublished[16]{};
